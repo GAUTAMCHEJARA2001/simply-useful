@@ -328,7 +328,7 @@ const InventoryManagement: React.FC = () => {
         }
       }
       setModal(null); setForm({}); setLineItems([]);
-      loadAll();
+      // refresh handled by state
     } catch (e: any) {
       toast({ title: 'Error', description: e.message || 'Something went wrong', variant: 'destructive' });
     } finally { setLoading(false); }
@@ -339,7 +339,7 @@ const InventoryManagement: React.FC = () => {
     try {
       await inv.del(`${group}/${type}/${id}`);
       toast({ title: 'Deleted' });
-      loadAll();
+      // refresh handled by state
     } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }); }
   };
 
@@ -377,11 +377,11 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleApprove = async (id: string) => {
-    try { await inv.post(`transactions/approvals/${id}/approve`, {}); toast({ title: 'Approved and effect given' }); loadAll(); } 
+    try { await inv.post(`transactions/approvals/${id}/approve`, {}); toast({ title: 'Approved and effect given' });  } 
     catch (e: any) { toast({ title: 'Approval failed', description: e.message, variant: 'destructive' }); }
   };
   const handleReject = async (id: string) => {
-    try { await inv.post(`transactions/approvals/${id}/reject`, {}); toast({ title: 'Rejected' }); loadAll(); } 
+    try { await inv.post(`transactions/approvals/${id}/reject`, {}); toast({ title: 'Rejected' });  } 
     catch (e: any) { toast({ title: 'Rejection failed', description: e.message, variant: 'destructive' }); }
   };
 
@@ -1214,7 +1214,7 @@ const InventoryManagement: React.FC = () => {
                     });
                     toast({ title: 'Approved and effect given' });
                     setModal(null); setForm({});
-                    loadAll();
+                    // refresh handled by state
                   } catch (e: any) { toast({ title: 'Approval failed', description: e.message, variant: 'destructive' }); }
               }}>Give Effect</Button>
             </div>
