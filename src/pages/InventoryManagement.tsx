@@ -38,7 +38,7 @@ import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 
 // ─── Type Definitions ─────────────────────────────────────────────────────────
 type Tab = 'dashboard' | 'products' | 'categories' | 'sub_categories' | 'brands' | 'units' | 'suppliers' | 'labour' |
-  'purchases' | 'sales' | 'productions' | 'adjustments' | 'attendance' | 'approvals' | 'returns' | 'reports' | 'settings' | 'stock_ledger' | 'purchase_orders' | 'total_stock';
+  'purchases' | 'sales' | 'productions' | 'adjustments' | 'attendance' | 'approvals' | 'returns' | 'reports' | 'settings' | 'stock_ledger' | 'purchase_orders' | 'total_stock' | 'bom';
 
 interface StockItem { product_id: string; product_name: string; sku: string; unit: string; current_stock: number; minimum_stock: number; warehouse_name: string; }
 interface KPIs { total_stock_value: number; month_revenue: number; month_profit: number; month_sales_count: number; low_stock_count: number; top_products: { name: string; qty: number }[]; }
