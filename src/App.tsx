@@ -1,12 +1,51 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { DataProvider } from "@/contexts/DataContext";
+import { getRoleDashboard } from "@/contexts/AuthContext";
+import React from "react";
+
+import Login from "./pages/Login";
+import AppLayout from "./components/AppLayout";
+import SalesDashboard from "./pages/SalesDashboard";
+import OrderPage from "./pages/OrderPage";
+import MyOrders from "./pages/MyOrders";
+import AdminDashboard from "./pages/AdminDashboard";
+import DealerManagement from "./pages/DealerManagement";
+import DistributorManagement from "./pages/DistributorManagement";
+import UserManagement from "./pages/UserManagement";
+import HRDashboard from "./pages/HRDashboard";
+import InventoryDashboard from "./pages/InventoryDashboard";
+import InventoryManagement from "./pages/InventoryManagement";
+import WarehouseManagement from "./pages/WarehouseManagement";
+import VisitTracking from "./pages/VisitTracking";
+import ExpenseEntry from "./pages/ExpenseEntry";
+import Reports from "./pages/Reports";
+import SettingsPage from "./pages/SettingsPage";
+import NotFound from "./pages/NotFound";
+import BOMManagement from "./pages/BOMManagement";
+import ReturnedOrders from "./pages/ReturnedOrders";
+import RejectedOrders from "./pages/RejectedOrders";
+import CreatePurchaseOrder from "./pages/CreatePurchaseOrder";
 
 const queryClient = new QueryClient();
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <AppLayout>{children}</AppLayout>;
+};
+
+const HomeRedirect: React.FC = () => {
+  const { user, isAuthenticated, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <Navigate to={getRoleDashboard(user!.role)} replace />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -14,11 +53,46 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <DataProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/" element={<HomeRedirect />} />
+
+              {/* Sales */}
+              <Route path="/sales" element={<ProtectedRoute><SalesDashboard /></ProtectedRoute>} />
+              <Route path="/sales/order" element={<ProtectedRoute><OrderPage /></ProtectedRoute>} />
+              <Route path="/sales/order/:id" element={<ProtectedRoute><OrderPage /></ProtectedRoute>} />
+              <Route path="/sales/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
+              <Route path="/sales/visits" element={<ProtectedRoute><VisitTracking /></ProtectedRoute>} />
+              <Route path="/sales/expenses" element={<ProtectedRoute><ExpenseEntry /></ProtectedRoute>} />
+
+              {/* Admin */}
+              <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin/rejected" element={<ProtectedRoute><RejectedOrders /></ProtectedRoute>} />
+              <Route path="/admin/dealers" element={<ProtectedRoute><DealerManagement /></ProtectedRoute>} />
+              <Route path="/admin/distributors" element={<ProtectedRoute><DistributorManagement /></ProtectedRoute>} />
+              <Route path="/admin/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+              <Route path="/admin/warehouses" element={<ProtectedRoute><WarehouseManagement /></ProtectedRoute>} />
+              <Route path="/admin/bom" element={<ProtectedRoute><BOMManagement /></ProtectedRoute>} />
+              <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+
+              {/* HR */}
+              <Route path="/hr" element={<ProtectedRoute><HRDashboard /></ProtectedRoute>} />
+
+              {/* Inventory */}
+              <Route path="/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />
+              <Route path="/inventory/manage" element={<ProtectedRoute><InventoryManagement /></ProtectedRoute>} />
+              <Route path="/inventory/purchase-orders/new" element={<ProtectedRoute><CreatePurchaseOrder /></ProtectedRoute>} />
+              <Route path="/inventory/returns" element={<ProtectedRoute><ReturnedOrders /></ProtectedRoute>} />
+
+              {/* Reports */}
+              <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </DataProvider>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
