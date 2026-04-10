@@ -44,7 +44,7 @@ const SalesDashboard: React.FC = () => {
       {
         label: 'Revenue',
         value: `₹${(myOrders.reduce((sum, order) => {
-          const orderTotal = Number(order.total) || (order.items || []).reduce((iSum: number, item: any) => iSum + ((Number(item.qty) || 0) * (Number(item.rate) || 0)), 0);
+          const orderTotal = Number(order.grand_total) || (order.items || []).reduce((iSum: number, item: any) => iSum + ((Number(item.qty) || 0) * (Number(item.rate) || 0)), 0);
           return sum + (orderTotal || 0);
         }, 0) / 1000).toFixed(1)}K`,
         subtext: 'Monthly actuals',

@@ -24,13 +24,13 @@ export const mockDistributors: Distributor[] = [
 ];
 
 export const mockProducts: Product[] = [
-  { product_code: 'TA-001', product_name: 'TileFix Standard', bag_size: '20 KG', rate: 350, gst: 18 },
-  { product_code: 'TA-002', product_name: 'TileFix Premium', bag_size: '20 KG', rate: 520, gst: 18 },
-  { product_code: 'TA-003', product_name: 'TileFix Rapid Set', bag_size: '25 KG', rate: 680, gst: 18 },
-  { product_code: 'TA-004', product_name: 'TileFix Waterproof', bag_size: '20 KG', rate: 750, gst: 18 },
-  { product_code: 'TA-005', product_name: 'GroutMaster White', bag_size: '5 KG', rate: 280, gst: 18 },
-  { product_code: 'TA-006', product_name: 'GroutMaster Color', bag_size: '5 KG', rate: 320, gst: 18 },
-  { product_code: 'TA-007', product_name: 'TileFix Heavy Duty', bag_size: '30 KG', rate: 950, gst: 18 },
+  { product_code: 'TA-001', product_name: 'TileFix Standard', category: 'Adhesive', bag_size: '20 KG', rate: 350, gst: 18 },
+  { product_code: 'TA-002', product_name: 'TileFix Premium', category: 'Adhesive', bag_size: '20 KG', rate: 520, gst: 18 },
+  { product_code: 'TA-003', product_name: 'TileFix Rapid Set', category: 'Adhesive', bag_size: '25 KG', rate: 680, gst: 18 },
+  { product_code: 'TA-004', product_name: 'TileFix Waterproof', category: 'Adhesive', bag_size: '20 KG', rate: 750, gst: 18 },
+  { product_code: 'TA-005', product_name: 'GroutMaster White', category: 'Grout', bag_size: '5 KG', rate: 280, gst: 18 },
+  { product_code: 'TA-006', product_name: 'GroutMaster Color', category: 'Grout', bag_size: '5 KG', rate: 320, gst: 18 },
+  { product_code: 'TA-007', product_name: 'TileFix Heavy Duty', category: 'Adhesive', bag_size: '30 KG', rate: 950, gst: 18 },
 ];
 
 export const mockOrders: Order[] = [
