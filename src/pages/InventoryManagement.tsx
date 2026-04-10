@@ -57,12 +57,12 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
   </div>
 );
 
-// ─── INV API Helper ───────────────────────────────────────────────────────────
+// ─── INV API Helper (Mock - returns empty data since no backend) ──────────────
 const inv = {
-  get: <T,>(path: string) => apiClient<T>(`/inv/${path}`),
-  post: <T,>(path: string, data: any) => apiClient<T>(`/inv/${path}`, { method: 'POST', data }),
-  del: (path: string) => apiClient(`/inv/${path}`, { method: 'DELETE' }),
-  put: <T,>(path: string, data: any) => apiClient<T>(`/inv/${path}`, { method: 'PUT', data }),
+  get: <T,>(_path: string): Promise<T> => Promise.resolve([] as unknown as T),
+  post: <T,>(_path: string, _data: any): Promise<T> => Promise.resolve({} as T),
+  del: (_path: string): Promise<any> => Promise.resolve({}),
+  put: <T,>(_path: string, _data: any): Promise<T> => Promise.resolve({} as T),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
