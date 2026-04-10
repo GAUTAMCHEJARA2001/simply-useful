@@ -1283,7 +1283,7 @@ const InventoryManagement: React.FC = () => {
                   </div>
                   <div className="col-span-2 pt-4 flex gap-3">
                     <PDFGenerator 
-                      type={viewDetails.type === 'purchase' ? 'PURCHASE_ORDER' : 'SALES_ORDER'} 
+                      type={viewDetails.type === 'PURCHASE_ORDER' ? 'PURCHASE_ORDER' : 'SALES_ORDER'} 
                       data={{
                         orderNo: viewDetails.data.po_number || viewDetails.data.challan_number || viewDetails.data.order_id || viewDetails.data.id || '—',
                         date: new Date(viewDetails.data.created_at || new Date()).toLocaleDateString('en-IN'),
