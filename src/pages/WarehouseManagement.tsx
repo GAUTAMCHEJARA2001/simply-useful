@@ -1,15 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { apiClient } from '@/api/client';
+import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
-import { Warehouse, Plus, Trash2, RefreshCw, X, Users, MapPin, Building2 } from 'lucide-react';
+import { Warehouse, Plus, RefreshCw, X, Users, MapPin, Building2 } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
 
-// ─── Reusable Modal ───────────────────────────────────────────────────────────
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -23,70 +21,41 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
   </div>
 );
 
-const inv = {
-  get: <T,>(path: string) => apiClient<T>(`/inv/${path}`),
-  post: <T,>(path: string, data: any) => apiClient<T>(`/inv/${path}`, { method: 'POST', data }),
-  del: (path: string) => apiClient(`/inv/${path}`, { method: 'DELETE' }),
-  put: <T,>(path: string, data: any) => apiClient<T>(`/inv/${path}`, { method: 'PUT', data }),
-};
+const initialWarehouses = [
+  { id: '1', name: 'Main Warehouse', location: 'Jaipur, Rajasthan', gst_number: '08AAAAA0000A1Z5' },
+  { id: '2', name: 'South Depot', location: 'Chennai, Tamil Nadu', gst_number: '33BBBBB0000B1Z9' },
+  { id: '3', name: 'West Distribution Center', location: 'Mumbai, Maharashtra', gst_number: '27CCCCC0000C1Z3' },
+];
 
 const WarehouseManagement: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [warehouses, setWarehouses] = useState<any[]>(initialWarehouses);
   const [modal, setModal] = useState<string | null>(null);
   const [form, setForm] = useState<any>({});
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [w, p] = await Promise.all([
-        inv.get<any[]>('masters/warehouses'),
-        apiClient<any[]>('/users'), // Corrected: user profiles are in user-service
-      ]);
-      setWarehouses(w);
-      setProfiles(p);
-    } catch (e: any) {
-      toast({ title: 'Load failed', description: e.message, variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  useEffect(() => { loadData(); }, [loadData]);
-
   if (user?.role !== 'SUPERADMIN') return <Navigate to="/" replace />;
 
-  const handleSave = async () => {
-    try {
-      setLoading(true);
-      const isEdit = !!form.id;
-      let path = 'masters/warehouses';
-      if (isEdit) path += `/${form.id}`;
-      
-      await (isEdit ? inv.put(path, form) : inv.post(path, form));
-      toast({ title: `Warehouse ${isEdit ? 'updated' : 'created'} successfully` });
-      setModal(null);
-      setForm({});
-      loadData();
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
-    } finally {
-      setLoading(false);
+  const handleSave = () => {
+    if (!form.name) {
+      toast({ title: 'Validation Error', description: 'Name is required', variant: 'destructive' });
+      return;
     }
+    if (form.id) {
+      setWarehouses(prev => prev.map(w => w.id === form.id ? { ...w, ...form } : w));
+      toast({ title: 'Warehouse updated successfully' });
+    } else {
+      setWarehouses(prev => [...prev, { ...form, id: String(Date.now()) }]);
+      toast({ title: 'Warehouse created successfully' });
+    }
+    setModal(null);
+    setForm({});
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!confirm('Are you sure you want to delete this warehouse?')) return;
-    try {
-      await inv.del(`masters/warehouses/${id}`);
-      toast({ title: 'Warehouse deleted' });
-      loadData();
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
-    }
+    setWarehouses(prev => prev.filter(w => w.id !== id));
+    toast({ title: 'Warehouse deleted' });
   };
 
   return (
@@ -131,9 +100,9 @@ const WarehouseManagement: React.FC = () => {
               <p className="text-sm text-muted-foreground">Total Warehouses</p>
               <p className="text-3xl font-bold text-primary">{warehouses.length}</p>
             </div>
-            <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10">
+            <div className="p-4 rounded-xl bg-accent/50 border border-border">
               <p className="text-sm text-muted-foreground">Active Locations</p>
-              <p className="text-3xl font-bold text-orange-600">
+              <p className="text-3xl font-bold text-foreground">
                 {new Set(warehouses.map(w => w.location)).size}
               </p>
             </div>
@@ -168,8 +137,7 @@ const WarehouseManagement: React.FC = () => {
             </div>
             <div className="flex justify-end gap-2 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>
-              <Button onClick={handleSave} disabled={loading}>
-                {loading ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+              <Button onClick={handleSave}>
                 {form.id ? 'Update Warehouse' : 'Create Warehouse'}
               </Button>
             </div>
