@@ -76,29 +76,134 @@ const InventoryManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   // Data states
-  const [kpis, setKpis] = useState<KPIs | null>(null);
-  const [stock, setStock] = useState<StockItem[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [brands, setBrands] = useState<any[]>([]);
-  const [units, setUnits] = useState<any[]>([]);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [labours, setLabours] = useState<any[]>([]);
-  const [purchases, setPurchases] = useState<any[]>([]);
-  const [sales, setSales] = useState<any[]>([]);
-  const [productions, setProductions] = useState<any[]>([]);
-  const [adjustments, setAdjustments] = useState<any[]>([]);
-  const [attendance, setAttendance] = useState<any[]>([]);
-  const [approvals, setApprovals] = useState<any[]>([]);
-  const [returns, setReturns] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [settings, setSettings] = useState<any>(null);
-  const [lowStock, setLowStock] = useState<any[]>([]);
-  const [salesSummary, setSalesSummary] = useState<any[]>([]);
-  const [boms, setBoms] = useState<any[]>([]);
-  const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
-  const [aggregateStock, setAggregateStock] = useState<any[]>([]);
+  const [kpis, setKpis] = useState<KPIs | null>({
+    total_stock_value: 2450000,
+    month_revenue: 890000,
+    month_profit: 178000,
+    month_sales_count: 47,
+    low_stock_count: 3,
+    top_products: [
+      { name: 'TileFix Premium', qty: 320 },
+      { name: 'TileFix Standard', qty: 280 },
+      { name: 'GroutMaster White', qty: 195 },
+      { name: 'TileFix Waterproof', qty: 150 },
+    ],
+  });
+  const [stock, setStock] = useState<StockItem[]>([
+    { product_id: '1', product_name: 'TileFix Standard', sku: 'TFS-001', unit: 'Bags', current_stock: 450, minimum_stock: 100, warehouse_name: 'Main Warehouse' },
+    { product_id: '2', product_name: 'TileFix Premium', sku: 'TFP-002', unit: 'Bags', current_stock: 320, minimum_stock: 80, warehouse_name: 'Main Warehouse' },
+    { product_id: '3', product_name: 'TileFix Rapid Set', sku: 'TFR-003', unit: 'Bags', current_stock: 60, minimum_stock: 50, warehouse_name: 'South Depot' },
+    { product_id: '4', product_name: 'TileFix Waterproof', sku: 'TFW-004', unit: 'Bags', current_stock: 180, minimum_stock: 60, warehouse_name: 'Main Warehouse' },
+    { product_id: '5', product_name: 'GroutMaster White', sku: 'GMW-005', unit: 'Bags', current_stock: 30, minimum_stock: 40, warehouse_name: 'East Hub' },
+    { product_id: '6', product_name: 'GroutMaster Color', sku: 'GMC-006', unit: 'Bags', current_stock: 25, minimum_stock: 30, warehouse_name: 'South Depot' },
+    { product_id: '7', product_name: 'TileFix Heavy Duty', sku: 'TFH-007', unit: 'Bags', current_stock: 200, minimum_stock: 70, warehouse_name: 'Main Warehouse' },
+  ]);
+  const [products, setProducts] = useState<any[]>([
+    { id: '1', name: 'TileFix Standard', sku: 'TFS-001', category_name: 'Adhesive', brand_name: 'TileFix', unit_name: 'Bags', rate: 350, gst: 18, opening_stock: 500 },
+    { id: '2', name: 'TileFix Premium', sku: 'TFP-002', category_name: 'Adhesive', brand_name: 'TileFix', unit_name: 'Bags', rate: 520, gst: 18, opening_stock: 350 },
+    { id: '3', name: 'TileFix Rapid Set', sku: 'TFR-003', category_name: 'Adhesive', brand_name: 'TileFix', unit_name: 'Bags', rate: 680, gst: 18, opening_stock: 100 },
+    { id: '4', name: 'TileFix Waterproof', sku: 'TFW-004', category_name: 'Adhesive', brand_name: 'TileFix', unit_name: 'Bags', rate: 750, gst: 18, opening_stock: 200 },
+    { id: '5', name: 'GroutMaster White', sku: 'GMW-005', category_name: 'Grout', brand_name: 'GroutMaster', unit_name: 'Bags', rate: 280, gst: 18, opening_stock: 150 },
+    { id: '6', name: 'GroutMaster Color', sku: 'GMC-006', category_name: 'Grout', brand_name: 'GroutMaster', unit_name: 'Bags', rate: 320, gst: 18, opening_stock: 80 },
+    { id: '7', name: 'TileFix Heavy Duty', sku: 'TFH-007', category_name: 'Adhesive', brand_name: 'TileFix', unit_name: 'Bags', rate: 950, gst: 18, opening_stock: 250 },
+  ]);
+  const [categories, setCategories] = useState<any[]>([
+    { id: '1', name: 'Adhesive' },
+    { id: '2', name: 'Grout' },
+    { id: '3', name: 'Primer' },
+    { id: '4', name: 'Waterproofing' },
+  ]);
+  const [brands, setBrands] = useState<any[]>([
+    { id: '1', name: 'TileFix' },
+    { id: '2', name: 'GroutMaster' },
+    { id: '3', name: 'AquaShield' },
+  ]);
+  const [units, setUnits] = useState<any[]>([
+    { id: '1', name: 'Bags' },
+    { id: '2', name: 'Kg' },
+    { id: '3', name: 'Litre' },
+    { id: '4', name: 'Piece' },
+  ]);
+  const [warehouses, setWarehouses] = useState<any[]>([
+    { id: '1', name: 'Main Warehouse', location: 'Mumbai', gst_number: '27AABCT1234F1ZN' },
+    { id: '2', name: 'South Depot', location: 'Hyderabad', gst_number: '36AABCT5678G2ZP' },
+    { id: '3', name: 'East Hub', location: 'Kolkata', gst_number: '19AABCT9012H3ZQ' },
+  ]);
+  const [suppliers, setSuppliers] = useState<any[]>([
+    { id: '1', name: 'RawChem Industries', contact_info: '9876543210', address: 'MIDC Pune', gst_number: '27ABCDE1234F1ZQ', balance: 125000 },
+    { id: '2', name: 'Polymer World', contact_info: '9123456789', address: 'Vapi Industrial Area', gst_number: '24FGHIJ5678G2ZR', balance: 78000 },
+    { id: '3', name: 'Cement Corp', contact_info: '9988776655', address: 'Surat GIDC', gst_number: '24KLMNO9012H3ZS', balance: 230000 },
+  ]);
+  const [labours, setLabours] = useState<any[]>([
+    { id: '1', name: 'Ramesh Yadav', contact: '9111222333', daily_wage: 800, role: 'Mixer Operator' },
+    { id: '2', name: 'Sunil Sharma', contact: '9444555666', daily_wage: 700, role: 'Packing' },
+    { id: '3', name: 'Anil Kumar', contact: '9777888999', daily_wage: 900, role: 'Loader' },
+  ]);
+  const [purchases, setPurchases] = useState<any[]>([
+    { id: '1', challan_number: 'PUR-001', supplier_name: 'RawChem Industries', warehouse_name: 'Main Warehouse', net_amount: 185000, created_at: '2026-03-10T10:00:00Z' },
+    { id: '2', challan_number: 'PUR-002', supplier_name: 'Polymer World', warehouse_name: 'South Depot', net_amount: 92000, created_at: '2026-03-15T14:30:00Z' },
+    { id: '3', challan_number: 'PUR-003', supplier_name: 'Cement Corp', warehouse_name: 'Main Warehouse', net_amount: 310000, created_at: '2026-03-22T09:15:00Z' },
+  ]);
+  const [sales, setSales] = useState<any[]>([
+    { id: '1', challan_number: 'SAL-001', customer_name: 'Sharma Tiles', warehouse_name: 'Main Warehouse', net_amount: 45000, created_at: '2026-03-12T11:00:00Z' },
+    { id: '2', challan_number: 'SAL-002', customer_name: 'Patel Hardware', warehouse_name: 'Main Warehouse', net_amount: 78000, created_at: '2026-03-18T16:00:00Z' },
+    { id: '3', challan_number: 'SAL-003', customer_name: 'Singh Building Materials', warehouse_name: 'South Depot', net_amount: 120000, created_at: '2026-03-25T13:45:00Z' },
+  ]);
+  const [productions, setProductions] = useState<any[]>([
+    { id: '1', product_name: 'TileFix Standard', quantity: 200, warehouse_name: 'Main Warehouse', status: 'Completed', created_at: '2026-03-08T08:00:00Z' },
+    { id: '2', product_name: 'TileFix Premium', quantity: 150, warehouse_name: 'Main Warehouse', status: 'Completed', created_at: '2026-03-14T07:30:00Z' },
+    { id: '3', product_name: 'GroutMaster White', quantity: 100, warehouse_name: 'East Hub', status: 'In Progress', created_at: '2026-04-01T09:00:00Z' },
+  ]);
+  const [adjustments, setAdjustments] = useState<any[]>([
+    { id: '1', product_name: 'TileFix Standard', type: 'Decrease', quantity: 5, reason: 'Damaged in transit', warehouse_name: 'Main Warehouse', created_at: '2026-03-20T10:00:00Z' },
+    { id: '2', product_name: 'GroutMaster Color', type: 'Increase', quantity: 10, reason: 'Found in audit', warehouse_name: 'South Depot', created_at: '2026-03-28T15:00:00Z' },
+  ]);
+  const [attendance, setAttendance] = useState<any[]>([
+    { id: '1', labour_name: 'Ramesh Yadav', date: '2026-04-10', status: 'Present', hours: 8 },
+    { id: '2', labour_name: 'Sunil Sharma', date: '2026-04-10', status: 'Present', hours: 8 },
+    { id: '3', labour_name: 'Anil Kumar', date: '2026-04-10', status: 'Absent', hours: 0 },
+  ]);
+  const [approvals, setApprovals] = useState<any[]>([
+    { id: '1', reference_id: 'ORD-001', customer_name: 'Sharma Tiles', so_name: 'Rajesh Kumar', status: 'Pending', grand_total: 23100, created_at: '2026-04-05T12:00:00Z' },
+    { id: '2', reference_id: 'ORD-002', customer_name: 'Patel Hardware', so_name: 'Rajesh Kumar', status: 'Approved', grand_total: 15600, created_at: '2026-04-06T10:30:00Z' },
+  ]);
+  const [returns, setReturns] = useState<any[]>([
+    { id: '1', type: 'Purchase Return', challan_number: 'PR-001', net_amount: 12000, created_at: '2026-03-30T11:00:00Z' },
+    { id: '2', type: 'Sales Return', challan_number: 'SR-001', net_amount: 8500, created_at: '2026-04-02T14:00:00Z' },
+  ]);
+  const [customers, setCustomers] = useState<any[]>([
+    { id: '1', name: 'Sharma Tiles', contact: '9876500001', address: 'Mumbai' },
+    { id: '2', name: 'Patel Hardware', contact: '9876500002', address: 'Ahmedabad' },
+    { id: '3', name: 'Singh Building Materials', contact: '9876500003', address: 'Delhi' },
+  ]);
+  const [settings, setSettings] = useState<any>({ company_name: 'TileCo Industries', gst_number: '27AABCT1234F1ZN', currency: 'INR' });
+  const [lowStock, setLowStock] = useState<any[]>([
+    { product_name: 'GroutMaster White', current_stock: 30, minimum_stock: 40 },
+    { product_name: 'GroutMaster Color', current_stock: 25, minimum_stock: 30 },
+    { product_name: 'TileFix Rapid Set', current_stock: 60, minimum_stock: 50 },
+  ]);
+  const [salesSummary, setSalesSummary] = useState<any[]>([
+    { month: 'Jan', total: 520000 },
+    { month: 'Feb', total: 680000 },
+    { month: 'Mar', total: 890000 },
+  ]);
+  const [boms, setBoms] = useState<any[]>([
+    { id: '1', product_name: 'TileFix Standard', materials_count: 4 },
+    { id: '2', product_name: 'TileFix Premium', materials_count: 5 },
+  ]);
+  const [purchaseOrders, setPurchaseOrders] = useState<any[]>([
+    { id: '1', po_number: 'PO-001', supplier_name: 'RawChem Industries', status: 'Approved', total_amount: 250000, created_at: '2026-03-05T09:00:00Z' },
+    { id: '2', po_number: 'PO-002', supplier_name: 'Cement Corp', status: 'Pending', total_amount: 180000, created_at: '2026-04-01T10:00:00Z' },
+  ]);
+  const [aggregateStock, setAggregateStock] = useState<any[]>([
+    { product_name: 'TileFix Standard', total_stock: 450, unit: 'Bags' },
+    { product_name: 'TileFix Premium', total_stock: 320, unit: 'Bags' },
+    { product_name: 'TileFix Rapid Set', total_stock: 60, unit: 'Bags' },
+    { product_name: 'TileFix Waterproof', total_stock: 180, unit: 'Bags' },
+    { product_name: 'GroutMaster White', total_stock: 30, unit: 'Bags' },
+    { product_name: 'GroutMaster Color', total_stock: 25, unit: 'Bags' },
+    { product_name: 'TileFix Heavy Duty', total_stock: 200, unit: 'Bags' },
+  ]);
 
   // Modal state
   const [modal, setModal] = useState<string | null>(null);
