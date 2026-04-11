@@ -425,83 +425,33 @@ const InventoryManagement: React.FC = () => {
             <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading…
           </div>
         )}
-        <div className={tab === 'dashboard' ? '' : 'hidden'}><DashboardTab /></div>
-        <div className={tab === 'products' ? '' : 'hidden'}><ProductsTab /></div>
-        <div className={tab === 'categories' ? '' : 'hidden'}><CategoriesTab /></div>
-        <div className={tab === 'sub_categories' ? '' : 'hidden'}><SubCategoriesTab /></div>
-        <div className={tab === 'brands' ? '' : 'hidden'}><BrandsTab /></div>
+        {tab === 'dashboard' && <DashboardTab />}
+        {tab === 'products' && <ProductsTab />}
+        {tab === 'categories' && <CategoriesTab />}
+        {tab === 'sub_categories' && <SubCategoriesTab />}
+        {tab === 'brands' && <BrandsTab />}
 
-        <div className={tab === 'dashboard' ? '' : 'hidden'}><DashboardTab /></div>
-        <div className={tab === 'products' ? '' : 'hidden'}><ProductsTab /></div>
-        <div className={tab === 'categories' ? '' : 'hidden'}><CategoriesTab /></div>
-        <div className={tab === 'sub_categories' ? '' : 'hidden'}><SubCategoriesTab /></div>
-        <div className={tab === 'brands' ? '' : 'hidden'}><BrandsTab /></div>
-
-        <div className={tab === 'total_stock' ? '' : 'hidden'}>
-          <TotalStockTab aggregateStock={aggregateStock} stock={stock} />
-        </div>
-
-        <div className={tab === 'units' ? '' : 'hidden'}>
-          <UnitsTab units={units} userRole={user?.role || ''} onAdd={() => { setForm({}); setModal('unit'); }} onEdit={u => handleEdit('unit', u)} onDelete={id => handleDelete('masters', 'units', id)} onRowClick={u => handleRowClick('unit', u)} />
-        </div>
-
-        <div className={tab === 'suppliers' ? '' : 'hidden'}>
-          <SuppliersTab suppliers={suppliers} onAdd={() => { setForm({}); setModal('supplier'); }} onEdit={s => handleEdit('supplier', s)} onDelete={id => handleDelete('masters', 'suppliers', id)} onRowClick={s => handleRowClick('supplier', s)} Currency={Currency} />
-        </div>
-
-        <div className={tab === 'stock_ledger' ? '' : 'hidden'}>
-          <StockLedgerTab onViewTransaction={(type, refId) => handleRowClick(type, { id: refId })} />
-        </div>
-
-        <div className={tab === 'labour' ? '' : 'hidden'}>
-          <LabourTab labours={labours} onAdd={() => { setForm({}); setModal('labour'); }} onEdit={l => handleEdit('labour', l)} onDelete={id => handleDelete('masters', 'labours', id)} onRowClick={l => handleRowClick('labour', l)} Currency={Currency} />
-        </div>
-
-        <div className={tab === 'settings' ? '' : 'hidden'}>
-          <SettingsTab settings={settings} setSettings={setSettings} onSave={() => { setForm(settings); setModal('settings'); handleSave(); }} />
-        </div>
-
-        <div className={tab === 'purchase_orders' ? '' : 'hidden'}>
-          <PurchaseOrdersTab purchaseOrders={purchaseOrders} onAdd={() => navigate('/inventory/purchase-orders/new')} onRowClick={po => handleRowClick('PURCHASE_ORDER', po)} Currency={Currency} />
-        </div>
-
-        <div className={tab === 'purchases' ? '' : 'hidden'}>
-          <PurchasesTab purchases={purchases} onAdd={() => { setForm({}); setLineItems([{ product_id: '', quantity: 1, rate: 0, tax_percent: 0 }]); setModal('purchase'); }} onEdit={async p => {
+        {tab === 'total_stock' && <TotalStockTab aggregateStock={aggregateStock} stock={stock} />}
+        {tab === 'units' && <UnitsTab units={units} userRole={user?.role || ''} onAdd={() => { setForm({}); setModal('unit'); }} onEdit={u => handleEdit('unit', u)} onDelete={id => handleDelete('masters', 'units', id)} onRowClick={u => handleRowClick('unit', u)} />}
+        {tab === 'suppliers' && <SuppliersTab suppliers={suppliers} onAdd={() => { setForm({}); setModal('supplier'); }} onEdit={s => handleEdit('supplier', s)} onDelete={id => handleDelete('masters', 'suppliers', id)} onRowClick={s => handleRowClick('supplier', s)} Currency={Currency} />}
+        {tab === 'stock_ledger' && <StockLedgerTab onViewTransaction={(type, refId) => handleRowClick(type, { id: refId })} />}
+        {tab === 'labour' && <LabourTab labours={labours} onAdd={() => { setForm({}); setModal('labour'); }} onEdit={l => handleEdit('labour', l)} onDelete={id => handleDelete('masters', 'labours', id)} onRowClick={l => handleRowClick('labour', l)} Currency={Currency} />}
+        {tab === 'settings' && <SettingsTab settings={settings} setSettings={setSettings} onSave={() => { setForm(settings); setModal('settings'); handleSave(); }} />}
+        {tab === 'purchase_orders' && <PurchaseOrdersTab purchaseOrders={purchaseOrders} onAdd={() => navigate('/inventory/purchase-orders/new')} onRowClick={po => handleRowClick('PURCHASE_ORDER', po)} Currency={Currency} />}
+        {tab === 'purchases' && <PurchasesTab purchases={purchases} onAdd={() => { setForm({}); setLineItems([{ product_id: '', quantity: 1, rate: 0, tax_percent: 0 }]); setModal('purchase'); }} onEdit={async p => {
             const s = suppliers.find(sup => sup.id === p.supplier_id);
             setForm({ ...p, supplier_contact_person: s ? s.contact_person : '', supplier_contact: s ? s.contact_info : '', supplier_email: s ? s.email : '', supplier_address: s ? s.address : '' });
             const items = await inv.get<any[]>(`transactions/purchases/${p.id}/items`);
             setLineItems(items.map(it => ({ product_id: it.product_id, quantity: parseFloat(it.quantity), rate: parseFloat(it.rate), tax_percent: parseFloat(it.tax_percent || 0), remark: it.remark || '' })));
             setModal('purchase');
-          }} onDelete={id => handleDelete('transactions', 'purchases', id)} onRowClick={p => handleRowClick('purchase', p)} Currency={Currency} />
-        </div>
-
-        <div className={tab === 'sales' ? '' : 'hidden'}>
-          <SalesTab sales={sales} onAdd={() => { setForm({}); setLineItems([{ product_id: '', quantity: 1, selling_rate: 0, tax_percent: 0 }]); setModal('sale'); }} onDelete={id => handleDelete('transactions', 'sales', id)} onRowClick={s => handleRowClick('sale', s)} Currency={Currency} />
-        </div>
-
-        <div className={tab === 'productions' ? '' : 'hidden'}>
-          <ProductionsTab productions={productions} onAdd={() => { setForm({}); setLineItems([{ product_id: '', quantity_used: 1 }]); setModal('production'); }} onRowClick={p => handleRowClick('production', p)} />
-        </div>
-
-        <div className={tab === 'adjustments' ? '' : 'hidden'}>
-          <AdjustmentsTab adjustments={adjustments} onAdd={() => { setForm({}); setModal('adjustment'); }} onRowClick={a => handleRowClick('adjustment', a)} />
-        </div>
-
-        <div className={tab === 'attendance' ? '' : 'hidden'}>
-          <AttendanceTab attendance={attendance} onAdd={() => { setForm({ date: new Date().toISOString().split('T')[0], status: 'PRESENT' }); setModal('attendance'); }} onRowClick={a => handleRowClick('attendance', a)} Currency={Currency} />
-        </div>
-
-        <div className={tab === 'approvals' ? '' : 'hidden'}>
-          <ApprovalsTab approvals={approvals} onApprove={id => { setForm({ id }); setModal('approve_warehouse'); }} onReject={handleReject} onRowClick={a => handleRowClick('approval', a)} />
-        </div>
-
-        <div className={tab === 'returns' ? '' : 'hidden'}>
-          <ReturnsTab returns={returns} onRowClick={r => handleRowClick('return', r)} Currency={Currency} />
-        </div>
-
-        <div className={tab === 'reports' ? '' : 'hidden'}>
-          <ReportsTab stock={stock} salesSummary={salesSummary} Currency={Currency} />
-        </div>
+          }} onDelete={id => handleDelete('transactions', 'purchases', id)} onRowClick={p => handleRowClick('purchase', p)} Currency={Currency} />}
+        {tab === 'sales' && <SalesTab sales={sales} onAdd={() => { setForm({}); setLineItems([{ product_id: '', quantity: 1, selling_rate: 0, tax_percent: 0 }]); setModal('sale'); }} onDelete={id => handleDelete('transactions', 'sales', id)} onRowClick={s => handleRowClick('sale', s)} Currency={Currency} />}
+        {tab === 'productions' && <ProductionsTab productions={productions} onAdd={() => { setForm({}); setLineItems([{ product_id: '', quantity_used: 1 }]); setModal('production'); }} onRowClick={p => handleRowClick('production', p)} />}
+        {tab === 'adjustments' && <AdjustmentsTab adjustments={adjustments} onAdd={() => { setForm({}); setModal('adjustment'); }} onRowClick={a => handleRowClick('adjustment', a)} />}
+        {tab === 'attendance' && <AttendanceTab attendance={attendance} onAdd={() => { setForm({ date: new Date().toISOString().split('T')[0], status: 'PRESENT' }); setModal('attendance'); }} onRowClick={a => handleRowClick('attendance', a)} Currency={Currency} />}
+        {tab === 'approvals' && <ApprovalsTab approvals={approvals} onApprove={id => { setForm({ id }); setModal('approve_warehouse'); }} onReject={handleReject} onRowClick={a => handleRowClick('approval', a)} />}
+        {tab === 'returns' && <ReturnsTab returns={returns} onRowClick={r => handleRowClick('return', r)} Currency={Currency} />}
+        {tab === 'reports' && <ReportsTab stock={stock} salesSummary={salesSummary} Currency={Currency} />}
       </div>
 
       {/* ─── MODALS ─── */}
