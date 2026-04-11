@@ -425,17 +425,11 @@ const InventoryManagement: React.FC = () => {
             <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading…
           </div>
         )}
-        <div className={tab === 'dashboard' ? '' : 'hidden'}><DashboardTab /></div>
-        <div className={tab === 'products' ? '' : 'hidden'}><ProductsTab /></div>
-        <div className={tab === 'categories' ? '' : 'hidden'}><CategoriesTab /></div>
-        <div className={tab === 'sub_categories' ? '' : 'hidden'}><SubCategoriesTab /></div>
-        <div className={tab === 'brands' ? '' : 'hidden'}><BrandsTab /></div>
-
-        <div className={tab === 'dashboard' ? '' : 'hidden'}><DashboardTab /></div>
-        <div className={tab === 'products' ? '' : 'hidden'}><ProductsTab /></div>
-        <div className={tab === 'categories' ? '' : 'hidden'}><CategoriesTab /></div>
-        <div className={tab === 'sub_categories' ? '' : 'hidden'}><SubCategoriesTab /></div>
-        <div className={tab === 'brands' ? '' : 'hidden'}><BrandsTab /></div>
+        {tab === 'dashboard' && <DashboardTab />}
+        {tab === 'products' && <ProductsTab />}
+        {tab === 'categories' && <CategoriesTab />}
+        {tab === 'sub_categories' && <SubCategoriesTab />}
+        {tab === 'brands' && <BrandsTab />}
 
         <div className={tab === 'total_stock' ? '' : 'hidden'}>
           <TotalStockTab aggregateStock={aggregateStock} stock={stock} />
