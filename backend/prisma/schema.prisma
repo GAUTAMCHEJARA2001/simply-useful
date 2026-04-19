@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SALES
+  ADMIN
+  HR
+  INVENTORY
+  SUPERADMIN
+}
+
+enum OrderStatus {
+  Pending
+  Approved
+  Dispatched
+  Completed
+  Cancelled
+  Returned
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String?
+  hashedPassword String
+  role           UserRole @default(SALES)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  orders         Order[]  @relation("SalesOfficerOrders")
+  visits         Visit[]
+  expenses       Expense[]
+}
+
+model Product {
+  id           String      @id @default(cuid())
+  productCode  String      @unique
+  name         String
+  category     String
+  bagSize      String
+  rate         Float
+  gst          Float
+  stockQty     Int         @default(0)
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  orderItems   OrderItem[]
+}
+
+model Dealer {
+  id                String   @id @default(cuid())
+  dealerCode        String   @unique
+  dealerName        String
+  city              String
+  assignedSoEmail   String
+  distributorName   String
+  creditLimit       Float    @default(0)
+  outstanding       Float    @default(0)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Distributor {
+  id                String   @id @default(cuid())
+  distributorName   String   @unique
+  area              String
+  assignedSoEmail   String
+  creditLimit       Float    @default(0)
+  outstanding       Float    @default(0)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  orderId     String      @unique
+  date        DateTime    @default(now())
+  soEmail     String
+  salesOfficer User        @relation("SalesOfficerOrders", fields: [soEmail], references: [email])
+  partyType   String      // Dealer or Distributor
+  partyName   String
+  distributor String
+  narration   String?
+  status      OrderStatus @default(Pending)
+  grandTotal  Float
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  items       OrderItem[]
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  order      Order   @relation(fields: [orderId], references: [id])
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  qty        Int
+  price      Float
+  total      Float
+  itemRemark String?
+}
+
+model Visit {
+  id            String   @id @default(cuid())
+  date          DateTime @default(now())
+  soEmail       String
+  user          User     @relation(fields: [soEmail], references: [email])
+  dealerName    String
+  remarks       String
+  nextFollowup  DateTime?
+  nextVisitTime DateTime?
+  gpsLocation   String?
+  photo         String?   @db.Text
+  createdAt     DateTime @default(now())
+}
+
+model Expense {
+  id           String   @id @default(cuid())
+  date         DateTime @default(now())
+  soEmail      String
+  user          User     @relation(fields: [soEmail], references: [email])
+  category     String
+  amount       Float
+  remarks      String
+  status       String   @default("Pending")
+  photo        String?  @db.Text
+  rejectReason String?
+  declaration  String?
+  createdAt    DateTime @default(now())
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
