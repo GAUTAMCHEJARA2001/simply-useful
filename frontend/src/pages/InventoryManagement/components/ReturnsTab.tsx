@@ -19,9 +19,9 @@ export const ReturnsTab: React.FC<ReturnsTabProps> = ({
         columns={['Type', 'Challan', 'Net Amount', 'Date']}
         rows={returns.map(r => [
           r.type, 
-          r.challan_number, 
-          Currency(r.net_amount), 
-          new Date(r.created_at).toLocaleDateString('en-IN')
+          r.challanNumber, 
+          Currency(r.netAmount), 
+          new Date(r.createdAt).toLocaleDateString('en-IN')
         ])}
         onRowClick={i => onRowClick(returns[i])} 
       />

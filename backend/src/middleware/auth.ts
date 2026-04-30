@@ -1,15 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { UserRole } from '../types';
-import configSettings from '../config';
-
-interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: UserRole;
-  };
-}
+import { UserRole, AuthRequest } from '../types';
+import env from '../config/env';
+import { logger } from '../config/logger';
 
 export const protect = (req: AuthRequest, res: Response, next: NextFunction) => {
   let token;
@@ -22,19 +15,20 @@ export const protect = (req: AuthRequest, res: Response, next: NextFunction) => 
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(
         token,
-        configSettings.jwtSecret
-      ) as any;
+        env.JWT_SECRET
+      ) as { userId: string; email: string; role: UserRole; companyId?: string | null };
 
       req.user = {
-        id: decoded.id,
+        userId: decoded.userId,
         email: decoded.email,
         role: decoded.role,
+        companyId: decoded.companyId,
       };
 
-      next();
+      return next();
     } catch (error) {
-      console.error(error);
-      res.status(401).json({
+      logger.error({ msg: 'Auth token verification failed', error });
+      return res.status(401).json({
         success: false,
         data: null,
         message: 'Not authorized, token failed',
@@ -43,7 +37,7 @@ export const protect = (req: AuthRequest, res: Response, next: NextFunction) => 
   }
 
   if (!token) {
-    res.status(401).json({
+    return res.status(401).json({
       success: false,
       data: null,
       message: 'Not authorized, no token',

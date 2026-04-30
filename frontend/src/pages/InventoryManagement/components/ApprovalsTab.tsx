@@ -16,9 +16,7 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({
   approvals, 
   onApprove, 
   onReject, 
-  onRowClick,
-  userRole,
-  Currency
+  onRowClick
 }) => {
 
   return (
@@ -28,8 +26,8 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({
         columns={['Type', 'Ref ID', 'Created At', 'Action']}
         rows={approvals.map(a => [
           a.type, 
-          a.reference_id || '—', 
-          new Date(a.created_at).toLocaleString('en-IN'),
+          a.referenceId || '—', 
+          new Date(a.createdAt).toLocaleString('en-IN'),
           <div className="flex gap-2" key={a.id}>
             <Button 
               size="sm" 

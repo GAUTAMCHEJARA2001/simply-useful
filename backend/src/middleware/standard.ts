@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import pinoHttp from 'pino-http';
 import { logger } from '../config/logger';
 
@@ -28,41 +28,47 @@ export const metrics = {
 // 1. ELITE PINO-HTTP INTEGRATION
 export const httpLogger = pinoHttp({
   logger,
-  genReqId: (req) => (req as any).id || uuidv4(),
+  genReqId: (req) => (req as Request & { id?: string }).id || crypto.randomUUID(),
   customSuccessMessage: (req, res) => `Request ${req.method} ${req.url} completed with ${res.statusCode}`,
   customErrorMessage: (req, res) => `Request ${req.method} ${req.url} failed with ${res.statusCode}`,
 });
 
 export const observe = (req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
-  const requestId = uuidv4();
-  
-  // Traceability
-  (req as any).id = requestId;
-  res.setHeader('X-Request-ID', requestId);
-  
-  metrics.totalRequests++;
+  const requestId = crypto.randomUUID();
 
-  // Request Path for metrics (canonicalized)
+  (req as Request & { id: string }).id = requestId;
+  res.setHeader('X-Request-ID', requestId);
+
+  metrics.totalRequests++;
   const path = req.route?.path || req.path;
 
-  res.on('finish', () => {
+  const originalEnd = res.end;
+
+  (res as Response).end = function (this: Response, ...args: any[]) {
     const duration = Date.now() - start;
-    res.setHeader('X-Response-Time', `${duration}ms`);
+
+    // ✅ SAFE: headers not sent yet
+    if (!res.headersSent) {
+      res.setHeader('X-Response-Time', `${duration}ms`);
+    }
 
     if (res.statusCode >= 400) metrics.totalErrors++;
 
-    // Update Per-Route Metrics
     if (!metrics.routes[path]) {
       metrics.routes[path] = { count: 0, errors: 0, avgResponseTime: 0 };
     }
-    
+
     const route = metrics.routes[path];
     const newCount = route.count + 1;
-    route.avgResponseTime = (route.avgResponseTime * route.count + duration) / newCount;
+    route.avgResponseTime =
+      (route.avgResponseTime * route.count + duration) / newCount;
     route.count = newCount;
+
     if (res.statusCode >= 400) route.errors++;
-  });
+
+    return originalEnd.apply(this, args as any);
+  };
 
   next();
 };

@@ -33,7 +33,7 @@ const CAT_COLORS: Record<string, string> = {
 };
 const getCatColor = (cat: string) => CAT_COLORS[cat] || 'bg-indigo-100 text-indigo-700';
 
-const emptyProduct: Product = { product_code: '', product_name: '', category: '', bag_size: '', rate: 0, gst: 18, opening_stock: 0 };
+const emptyProduct: Product = { productCode: '', productName: '', category: '', bagSize: '', rate: 0, gst: 18, openingStock: 0 };
 
 const ProductManagement: React.FC = () => {
   const { user } = useAuth();
@@ -55,24 +55,24 @@ const ProductManagement: React.FC = () => {
   const isAdmin = can('manage_products');
 
   const filtered = products.filter(p => {
-    const matchSearch = p.product_name.toLowerCase().includes(search.toLowerCase()) || p.product_code.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = p.productName.toLowerCase().includes(search.toLowerCase()) || p.productCode.toLowerCase().includes(search.toLowerCase());
     const matchCat = categoryFilter === 'All' || p.category === categoryFilter;
     return matchSearch && matchCat;
   });
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ ...emptyProduct, product_code: `PRD${String(Date.now()).slice(-4)}`, category: categories[0] || 'Other' });
+    setForm({ ...emptyProduct, productCode: `PRD${String(Date.now()).slice(-4)}`, category: categories[0] || 'Other' });
     setDialogOpen(true);
   };
   const openEdit = (p: Product) => { setEditing(p); setForm({ ...p }); setDialogOpen(true); };
 
   const handleSave = () => {
-    if (!form.product_name || !form.bag_size || !form.rate || !form.category) {
+    if (!form.productName || !form.bagSize || !form.rate || !form.category) {
       toast({ title: 'Missing Fields', variant: 'destructive' }); return;
     }
-    if (editing) { updateProduct(editing.product_code, form); toast({ title: 'Product Updated', description: form.product_name }); }
-    else { addProduct(form); toast({ title: 'Product Added', description: form.product_name }); }
+    if (editing) { updateProduct(editing.productCode, form); toast({ title: 'Product Updated', description: form.productName }); }
+    else { addProduct(form); toast({ title: 'Product Added', description: form.productName }); }
     setDialogOpen(false);
   };
 
@@ -139,12 +139,12 @@ const ProductManagement: React.FC = () => {
       {/* Mobile Cards */}
       <div className="lg:hidden space-y-3">
         {filtered.map(p => (
-          <Card key={p.product_code}>
+          <Card key={p.productCode}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="font-semibold text-sm">{p.product_name}</p>
-                  <p className="text-xs text-muted-foreground">{p.product_code} · {p.bag_size}</p>
+                  <p className="font-semibold text-sm">{p.productName}</p>
+                  <p className="text-xs text-muted-foreground">{p.productCode} · {p.bagSize}</p>
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${getCatColor(p.category)}`}>{p.category || 'Other'}</span>
               </div>
@@ -155,7 +155,7 @@ const ProductManagement: React.FC = () => {
               {isAdmin && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                   <Button size="sm" variant="outline" onClick={() => openEdit(p)} className="flex-1"><Edit className="w-3.5 h-3.5 mr-1" /> Edit</Button>
-                  <Button size="sm" variant="destructive" onClick={() => { setDeleteTarget(p.product_code); setDeleteDialogOpen(true); }} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
+                  <Button size="sm" variant="destructive" onClick={() => { setDeleteTarget(p.productCode); setDeleteDialogOpen(true); }} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
                 </div>
               )}
             </CardContent>
@@ -176,20 +176,20 @@ const ProductManagement: React.FC = () => {
             </thead>
             <tbody>
               {filtered.map(p => (
-                <tr key={p.product_code} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs">{p.product_code}</td>
-                  <td className="px-4 py-3 font-medium">{p.product_name}</td>
+                <tr key={p.productCode} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs">{p.productCode}</td>
+                  <td className="px-4 py-3 font-medium">{p.productName}</td>
                   <td className="px-4 py-3">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${getCatColor(p.category)}`}>{p.category || 'Other'}</span>
                   </td>
-                  <td className="px-4 py-3">{p.bag_size}</td>
+                  <td className="px-4 py-3">{p.bagSize}</td>
                   <td className="px-4 py-3">₹{p.rate}</td>
                   <td className="px-4 py-3">{p.gst}%</td>
                   {isAdmin && (
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><Edit className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => { setDeleteTarget(p.product_code); setDeleteDialogOpen(true); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => { setDeleteTarget(p.productCode); setDeleteDialogOpen(true); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </td>
                   )}
@@ -244,8 +244,8 @@ const ProductManagement: React.FC = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Code</Label><Input value={form.product_code} onChange={e => uf('product_code', e.target.value)} disabled={!!editing} /></div>
-              <div className="space-y-2"><Label>Name *</Label><Input value={form.product_name} onChange={e => uf('product_name', e.target.value)} /></div>
+              <div className="space-y-2"><Label>Code</Label><Input value={form.productCode} onChange={e => uf('productCode', e.target.value)} disabled={!!editing} /></div>
+              <div className="space-y-2"><Label>Name *</Label><Input value={form.productName} onChange={e => uf('productName', e.target.value)} /></div>
             </div>
             <div className="space-y-2">
               <Label>Category *</Label>
@@ -255,7 +255,7 @@ const ProductManagement: React.FC = () => {
               </Select>
             </div>
             <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2 col-span-1"><Label>Bag Size *</Label><Input value={form.bag_size} onChange={e => uf('bag_size', e.target.value)} placeholder="20 KG" /></div>
+              <div className="space-y-2 col-span-1"><Label>Bag Size *</Label><Input value={form.bagSize} onChange={e => uf('bagSize', e.target.value)} placeholder="20 KG" /></div>
               <div className="space-y-2 col-span-1"><Label>Rate (₹) *</Label><Input type="number" value={form.rate || ''} onChange={e => uf('rate', Number(e.target.value))} /></div>
               <div className="space-y-2 col-span-1"><Label>GST %</Label><Input type="number" value={form.gst} onChange={e => uf('gst', Number(e.target.value))} /></div>
             </div>

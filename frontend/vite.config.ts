@@ -1,15 +1,20 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
+/**
+ * VITE STABLE CONFIGURATION (BATTLE-TESTED)
+ * Features: 
+ * - Standard React Plugin (Stable & Reliable)
+ * - Hardened Dependency Pre-Bundling
+ * - Absolute Path Aliasing (@)
+ */
 export default defineConfig(({ mode }) => ({
   server: {
-    host: "::",
+    host: "0.0.0.0",
     port: 8080,
-    hmr: {
-      overlay: false,
-    },
+    strictPort: true,
   },
   plugins: [
     react(),
@@ -19,6 +24,6 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-    dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
+    dedupe: ["react", "react-dom", "@tanstack/react-query", "@tanstack/query-core"],
   },
 }));

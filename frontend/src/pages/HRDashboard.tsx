@@ -29,7 +29,7 @@ const HRDashboard: React.FC = () => {
 
   const salesUsers = users.filter(u => u.role === 'SALES');
   const completedOrders = orders.filter(o => o.status === 'Completed');
-  const totalRevenue = completedOrders.reduce((s, o) => s + o.grand_total, 0);
+  const totalRevenue = completedOrders.reduce((s, o) => s + (o.grand_total ?? o.grandTotal ?? 0), 0);
 
   // Per-SO stats
   const soStats = salesUsers.map(u => {
@@ -37,7 +37,7 @@ const HRDashboard: React.FC = () => {
     const soCompleted = soOrders.filter(o => o.status === 'Completed');
     const soVisits = visits.filter(v => v.so_email === u.email);
     const soExpenses = expenses.filter(e => e.so_email === u.email);
-    const achieved = soCompleted.reduce((s, o) => s + o.grand_total, 0);
+    const achieved = soCompleted.reduce((s, o) => s + (o.grand_total ?? o.grandTotal ?? 0), 0);
     const expTotal = soExpenses.reduce((s, e) => s + e.amount, 0);
     const soDealers = dealers.filter(d => d.assigned_so_email === u.email && d.active).length;
     const target = Number(u.monthly_target) || 500000;

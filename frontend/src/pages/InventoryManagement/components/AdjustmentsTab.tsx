@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
-import { Library, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 interface AdjustmentsTabProps {
   adjustments: any[];
@@ -31,11 +31,11 @@ export const AdjustmentsTab: React.FC<AdjustmentsTabProps> = ({
       <DataTable 
         columns={['Product', 'Warehouse', 'Change', 'Reason', 'Date']}
         rows={adjustments.map(a => [
-          a.product_name, 
-          a.warehouse_name, 
-          a.quantity_change > 0 ? `+${a.quantity_change}` : a.quantity_change, 
+          a.productName, 
+          a.warehouseName, 
+          (a.quantityChange > 0 ? `+${a.quantityChange}` : a.quantityChange) || 0, 
           a.reason, 
-          a.created_at ? new Date(a.created_at).toLocaleDateString('en-IN') : '—'
+          a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-IN') : '—'
         ])}
         onEdit={i => onEdit(adjustments[i])}
         onDelete={i => onDelete(adjustments[i].id)}

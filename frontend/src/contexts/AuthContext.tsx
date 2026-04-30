@@ -1,20 +1,16 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { authApi } from '@/api/auth.api';
-import { setAuthToken, removeAuthToken, getAuthToken } from '@/api/client';
+import { authService as authApi } from '@/api/services/auth.service';
+import { setTokens, getAccessToken, clearTokens } from '@/api/client';
+import { User, RegisterInput } from '@/types';
 
 export type UserRole = 'SALES' | 'ADMIN' | 'HR' | 'INVENTORY' | 'SUPERADMIN';
 
-export interface AppUser {
-  id: string;
-  email: string;
-  name: string;
-  role: UserRole;
-  active: boolean;
-}
+export interface AppUser extends User {}
 
 interface AuthContextType {
   user: AppUser | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (data: RegisterInput) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
   loading: boolean;
@@ -41,18 +37,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AppUser | null>(() => {
     try {
       const saved = localStorage.getItem('app_user');
-      return saved ? JSON.parse(saved) : null;
+      const token = localStorage.getItem('token');
+      // Only return user if a token also exists
+      return (saved && token) ? JSON.parse(saved) : null;
     } catch { return null; }
   });
+
   const [loading, setLoading] = useState(true);
 
   // Initialize: Check for existing token and fetch user if needed
   React.useEffect(() => {
     const initAuth = async () => {
-      const token = getAuthToken();
+      const token = getAccessToken();
       if (token && !user) {
-        // Here we could add a /api/auth/me endpoint to verify token
-        // For now, if we have a user in localStorage, we trust it
+        // Here we could verify token if needed
       }
       setLoading(false);
     };
@@ -63,30 +61,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await authApi.login({ email, password });
 
-      if (response.error) {
-        return { success: false, error: response.error };
+      if (!response.success) {
+        return { success: false, error: response.message };
       }
 
-      const { user, token } = response.data;
+      const { user, accessToken, refreshToken } = response.data;
 
       setUser(user);
-      setAuthToken(token);
+      setTokens(accessToken, refreshToken);
       localStorage.setItem('app_user', JSON.stringify(user));
       
       return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message || 'Invalid credentials' };
+    } catch (error: unknown) {
+      const err = error as Error;
+      return { success: false, error: err.message || 'Invalid credentials' };
+    }
+  }, []);
+
+  const register = useCallback(async (data: RegisterInput) => {
+    try {
+      const response = await authApi.register(data);
+
+      if (!response.success) {
+        return { success: false, error: response.message };
+      }
+
+      if (!response.data) {
+        return { success: false, error: 'Authorization failed' };
+      }
+
+      const { user, accessToken, refreshToken } = response.data;
+
+      setUser(user);
+      setTokens(accessToken, refreshToken);
+      localStorage.setItem('app_user', JSON.stringify(user));
+      
+      return { success: true };
+    } catch (error: unknown) {
+      const err = error as Error;
+      return { success: false, error: err.message || 'Registration failed' };
     }
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
-    removeAuthToken();
+    clearTokens();
     localStorage.removeItem('app_user');
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, loading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isAuthenticated: !!user && !!localStorage.getItem('token'), loading }}>
+
       {children}
     </AuthContext.Provider>
   );

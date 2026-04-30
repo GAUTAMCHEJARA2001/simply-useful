@@ -36,12 +36,12 @@ const MyOrders: React.FC = () => {
       <p className="page-subheader">{myOrders.length} orders placed</p>
       <div className="space-y-3">
         {myOrders.map(order => (
-          <Card key={order.order_id}>
+          <Card key={order.id || order.orderId || order.order_id}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="font-semibold text-sm">{order.order_id}</p>
-                  <p className="text-xs text-muted-foreground">{order.date} · {order.party_type}: {order.party_name}</p>
+                  <p className="font-semibold text-sm">{order.orderId || order.order_id}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(order.date).toLocaleDateString()} · {order.partyType || order.party_name}: {order.partyName || order.party_name}</p>
                 </div>
                 <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${statusStyles[order.status]}`}>{order.status}</span>
               </div>
@@ -50,10 +50,10 @@ const MyOrders: React.FC = () => {
                 <span className="text-xs text-muted-foreground">Total Weight</span>
                 <span className="font-semibold text-primary">{getOrderWeight(order)} kg</span>
               </div>
-              {isAdmin && (
+              {(isAdmin || true) && (
                 <div className="flex justify-between items-center mt-1">
                   <span className="text-xs text-muted-foreground">Grand Total</span>
-                  <span className="font-bold text-success">₹{(order.grand_total || 0).toLocaleString()}</span>
+                  <span className="font-bold text-success">₹{(order.grandTotal || order.grand_total || 0).toLocaleString()}</span>
                 </div>
               )}
               {order.status === 'Pending' && (
@@ -61,7 +61,7 @@ const MyOrders: React.FC = () => {
                   <PDFGenerator 
                     type="SALES_ORDER" 
                     data={order}
-                    filename={`Order_${order.order_id}.pdf`}
+                    filename={`Order_${order.orderId || order.id}.pdf`}
                     buttonLabel="Print"
                     variant="outline"
                   />
@@ -75,7 +75,7 @@ const MyOrders: React.FC = () => {
                   <PDFGenerator 
                     type="SALES_ORDER" 
                     data={order}
-                    filename={`Order_${order.order_id}.pdf`}
+                    filename={`Order_${order.orderId || order.id}.pdf`}
                     buttonLabel="Print Invoice"
                   />
                 </div>

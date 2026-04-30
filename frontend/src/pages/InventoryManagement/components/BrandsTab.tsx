@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus, RefreshCw, X } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
-import { apiClient } from '@/api/client';
+import apiClient from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
@@ -91,15 +91,14 @@ export const BrandsTab: React.FC = () => {
         error={error}
         onRetry={loadData}
         emptyMessage="No brands found"
-        renderItem={() => (
-          <DataTable
-            columns={['Name']}
-            rows={brands.map(b => [b.name])}
-            onEdit={['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '') ? i => { setForm(brands[i]); setModal(true); } : undefined}
-            onDelete={['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '') ? i => handleDelete(brands[i].id) : undefined} 
-          />
-        )}
-      />
+      >
+        <DataTable
+          columns={['Name']}
+          rows={brands.map(b => [b.name])}
+          onEdit={['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '') ? i => { setForm(brands[i]); setModal(true); } : undefined}
+          onDelete={['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '') ? i => handleDelete(brands[i].id) : undefined} 
+        />
+      </SafeDataView>
 
 
       {modal && (

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus, RefreshCw, X, Search, Trash2 } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
-import { apiClient } from '@/api/client';
+import apiClient from '@/api/client';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,7 +29,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
   const [products, setProducts] = useState<any[]>([]);
   const [search, setSearch] = useState<string>('');
   const [modal, setModal] = useState<boolean>(false);
-  const [form, setForm] = useState<any>({ name: '', product_id: '', output_quantity: 1, items: [] });
+  const [form, setForm] = useState<any>({ name: '', productId: '', outputQuantity: 1, items: [] });
   const [productSearch, setProductSearch] = useState<string>('');
   const [ingSearch, setIngSearch] = useState<string>('');
 
@@ -48,12 +48,12 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const filteredRecipes = recipes.filter(r => 
-    !search || r.name.toLowerCase().includes(search.toLowerCase())
+  const filteredRecipes = (recipes || []).filter(r => 
+    !search || (r.name && r.name.toLowerCase().includes(search.toLowerCase()))
   );
 
   const handleSave = async () => {
-    if (!form.name || !form.product_id || (form.items || []).length === 0) {
+    if (!form.name || !form.productId || (form.items || []).length === 0) {
         toast({ title: 'Validation Error', description: 'Please fill in all required fields and add at least one ingredient.', variant: 'destructive' });
         return;
     }
@@ -65,7 +65,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
         await apiClient('/inv/bom', { method: 'POST', data: form });
         toast({ title: 'Recipe created' });
       }
-      setModal(false); setForm({ name: '', product_id: '', output_quantity: 1, items: [] });
+      setModal(false); setForm({ name: '', productId: '', outputQuantity: 1, items: [] });
       loadData();
       if (onRefresh) onRefresh();
     } catch (e: any) {
@@ -74,11 +74,11 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
   };
 
   const addIngredient = (p: any) => {
-    if (form.items.some((i: any) => i.product_id === p.id)) {
+    if (form.items.some((i: any) => i.productId === p.id)) {
         toast({ title: 'Duplicate Item', description: 'This product is already in the ingredient list.' });
         return;
     }
-    setForm({ ...form, items: [...form.items, { product_id: p.id, product_name: p.name, quantity: 1, unit: p.unit }] });
+    setForm({ ...form, items: [...form.items, { productId: p.id, productName: p.name, quantity: 1, unit: p.unit }] });
     setIngSearch('');
   };
 
@@ -124,22 +124,22 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
         columns={['Recipe Name', 'Finished Product', 'Yield Qty', 'Actions']}
         rows={filteredRecipes.map((r: any) => [
           r.name,
-          r.product_name || '—',
-          r.output_quantity,
+          r.productName || '—',
+          r.outputQuantity,
           <div className="flex justify-end pr-2">
             <PDFGenerator
               type="PRODUCTION_ORDER"
               data={{
-                order_id: `BOM-${r.id?.slice(-4) || '0000'}`,
+                orderId: `BOM-${r.id?.slice(-4) || '0000'}`,
                 date: new Date().toISOString().split('T')[0],
-                product_name: r.product_name,
-                target_qty: r.output_quantity,
+                productName: r.productName,
+                targetQty: r.outputQuantity,
                 unit: r.unit || 'Bags',
                 remarks: r.remarks || `Standard Production for ${r.name}`,
-                bom_items: (r.items || []).map((i: any) => ({
-                  id: i.product_id,
-                  name: i.product_name,
-                  code: i.product_code || 'RAW',
+                bomItems: (r.items || []).map((i: any) => ({
+                  id: i.productId,
+                  name: i.productName,
+                  code: i.productCode || 'RAW',
                   qty: i.quantity,
                   unit: i.unit
                 }))
@@ -191,19 +191,19 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                 <input 
                   type="text"
                   placeholder="Search finished product..."
-                  value={form.product_name || productSearch}
+                  value={form.productName || productSearch}
                   onChange={e => {
                     setProductSearch(e.target.value);
-                    setForm({ ...form, product_id: '', product_name: '' });
+                    setForm({ ...form, productId: '', productName: '' });
                   }}
                   className="w-full border border-border rounded-lg pl-9 pr-3 py-2 bg-background text-sm"
                 />
               </div>
-              {productSearch && !form.product_id && (
+              {productSearch && !form.productId && (
                 <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                    {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
-                        <button key={p.id} onClick={() => { setForm({ ...form, product_id: p.id, product_name: p.name }); setProductSearch(''); }}
-                            className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors">
+                    {products.filter(p => !productSearch || (p.name && p.name.toLowerCase().includes(productSearch.toLowerCase()))).map(p => (
+                        <button key={p.id} onClick={() => { setForm({ ...form, productId: p.id, productName: p.name }); setProductSearch(''); }}
+                             className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors">
                             {p.name} <span className="text-[10px] text-muted-foreground ml-2">({p.sku})</span>
                         </button>
                     ))}
@@ -213,8 +213,8 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
 
             <div>
               <label className="text-sm font-medium block mb-1">Yield Quantity (Output)</label>
-              <input type="number" value={form.output_quantity || 1} onChange={e => setForm({ ...form, output_quantity: e.target.value })}
-                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm" />
+              <input type="number" value={form.outputQuantity || 1} onChange={e => setForm({ ...form, outputQuantity: e.target.value })}
+                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm" />
             </div>
 
             <div className="border-t border-border pt-4">
@@ -234,7 +234,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                 />
                 {ingSearch && (
                     <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                        {products.filter(p => p.name.toLowerCase().includes(ingSearch.toLowerCase())).map(p => (
+                        {products.filter(p => !ingSearch || (p.name && p.name.toLowerCase().includes(ingSearch.toLowerCase()))).map(p => (
                             <button key={p.id} onClick={() => addIngredient(p)}
                                 className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors">
                                 {p.name} <span className="text-[10px] text-muted-foreground ml-2">({p.sku})</span>
@@ -248,7 +248,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                 {(form.items || []).map((item: any, idx: number) => (
                     <div key={idx} className="flex items-center gap-3 bg-muted/30 p-2 rounded-lg border border-border/40">
                         <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold truncate">{item.product_name}</p>
+                            <p className="text-xs font-semibold truncate">{item.productName}</p>
                             <p className="text-[10px] text-muted-foreground">{item.unit || '—'}</p>
                         </div>
                         <div className="w-24">

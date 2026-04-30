@@ -30,7 +30,7 @@ export const SuppliersTab: React.FC<SuppliersTabProps> = ({
       </div>
       <DataTable 
         columns={['Name', 'Contact', 'Address', 'GST', 'Balance']}
-        rows={suppliers.map(s => [s.name, s.contact_info, s.address, s.gst_number, Currency(s.balance)])}
+        rows={suppliers.map(s => [s.name, s.contactInfo, s.address, s.gstNumber, Currency(s.balance)])}
         onEdit={i => onEdit(suppliers[i])}
         onDelete={i => onDelete(suppliers[i].id)}
         onRowClick={i => onRowClick(suppliers[i])} 

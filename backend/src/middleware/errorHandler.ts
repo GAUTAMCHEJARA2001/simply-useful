@@ -25,7 +25,7 @@ export class AppError extends Error {
  * - Safe error message leaking prevention
  */
 export const errorHandler = (
-  err: any,
+  err: Error & { statusCode?: number },
   req: Request,
   res: Response,
   _next: NextFunction
@@ -35,7 +35,7 @@ export const errorHandler = (
 
   // Professional Logger Integration
   logger.error({
-    requestId: (req as any).id,
+    requestId: (req as Request & { id?: string }).id,
     msg: message,
     stack: err.stack,
     path: req.path,

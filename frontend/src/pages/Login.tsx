@@ -46,8 +46,8 @@ const Login: React.FC = () => {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-primary mb-4">
               <Building2 className="w-8 h-8 text-primary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">TileAdhesive ERP</h1>
-            <p className="text-muted-foreground text-sm mt-1">Manufacturing & Distribution</p>
+            <h1 className="text-2xl font-bold text-foreground">Tile Sales System</h1>
+            <p className="text-muted-foreground text-sm mt-1">Factory & Delivery</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -81,12 +81,12 @@ const Login: React.FC = () => {
             )}
 
             <Button type="submit" disabled={loading} className="w-full h-12 text-base font-semibold">
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            Contact your administrator for account access.
+            Need help? Ask your manager for account access.
           </p>
         </div>
       </motion.div>

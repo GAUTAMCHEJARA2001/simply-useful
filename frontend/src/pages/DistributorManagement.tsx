@@ -12,7 +12,7 @@ import { Search, Plus, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 
-const emptyDist: Distributor = { distributor_name: '', area: '', assigned_so_email: '', credit_limit: 0, outstanding: 0, active: true };
+const emptyDist: Distributor = { distributorName: '', area: '', assignedSoEmail: '', creditLimit: 0, outstanding: 0, active: true };
 
 const DistributorManagement: React.FC = () => {
   const { distributors, users, addDistributor, updateDistributor, deleteDistributor } = useData();
@@ -27,22 +27,22 @@ const DistributorManagement: React.FC = () => {
 
   const salesUsers = users.filter(u => u.role === 'SALES' && u.active);
   const filtered = distributors.filter(d =>
-    d.distributor_name.toLowerCase().includes(search.toLowerCase()) || d.area.toLowerCase().includes(search.toLowerCase())
+    d.distributorName.toLowerCase().includes(search.toLowerCase()) || d.area.toLowerCase().includes(search.toLowerCase())
   );
 
   const openAdd = () => { setEditing(null); setForm(emptyDist); setDialogOpen(true); };
   const openEdit = (d: Distributor) => { setEditing(d); setForm({ ...d }); setDialogOpen(true); };
 
   const handleSave = () => {
-    if (!form.distributor_name || !form.area || !form.assigned_so_email) {
+    if (!form.distributorName || !form.area || !form.assignedSoEmail) {
       toast({ title: 'Missing Fields', description: 'Fill all required fields.', variant: 'destructive' }); return;
     }
     if (editing) {
-      updateDistributor(editing.distributor_name, form);
-      toast({ title: 'Updated', description: `${form.distributor_name} updated.` });
+      updateDistributor(editing.distributorName, form);
+      toast({ title: 'Updated', description: `${form.distributorName} updated.` });
     } else {
       addDistributor(form);
-      toast({ title: 'Added', description: `${form.distributor_name} added.` });
+      toast({ title: 'Added', description: `${form.distributorName} added.` });
     }
     setDialogOpen(false);
   };
@@ -72,24 +72,24 @@ const DistributorManagement: React.FC = () => {
 
       <div className="lg:hidden space-y-3">
         {filtered.map(d => (
-          <Card key={d.distributor_name}>
+          <Card key={d.distributorName}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="font-semibold text-sm">{d.distributor_name}</p>
+                  <p className="font-semibold text-sm">{d.distributorName}</p>
                   <p className="text-xs text-muted-foreground">{d.area}</p>
                 </div>
                 <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">{d.active ? 'Active' : 'Blocked'}</Badge>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs mt-3">
-                <div><span className="text-muted-foreground">Credit:</span> ₹{d.credit_limit.toLocaleString()}</div>
+                <div><span className="text-muted-foreground">Credit:</span> ₹{d.creditLimit.toLocaleString()}</div>
                 <div><span className="text-muted-foreground">Outstanding:</span> ₹{d.outstanding.toLocaleString()}</div>
-                <div><span className="text-muted-foreground">SO:</span> {d.assigned_so_email.split('@')[0]}</div>
+                <div><span className="text-muted-foreground">SO:</span> {d.assignedSoEmail?.split('@')[0] || 'Unknown'}</div>
               </div>
               {can('manage_distributors') && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                   <Button size="sm" variant="outline" onClick={() => openEdit(d)} className="flex-1"><Edit className="w-3.5 h-3.5 mr-1" /> Edit</Button>
-                  <Button size="sm" variant="destructive" onClick={() => { setDeleteTarget(d.distributor_name); setDeleteDialogOpen(true); }} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
+                  <Button size="sm" variant="destructive" onClick={() => { setDeleteTarget(d.distributorName); setDeleteDialogOpen(true); }} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
                 </div>
               )}
             </CardContent>
@@ -109,18 +109,18 @@ const DistributorManagement: React.FC = () => {
             </thead>
             <tbody>
               {filtered.map(d => (
-                <tr key={d.distributor_name} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-3 font-medium">{d.distributor_name}</td>
+                <tr key={d.distributorName} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-3 font-medium">{d.distributorName}</td>
                   <td className="px-4 py-3">{d.area}</td>
-                  <td className="px-4 py-3 text-xs">{d.assigned_so_email.split('@')[0]}</td>
-                  <td className="px-4 py-3">₹{d.credit_limit.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-xs">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</td>
+                  <td className="px-4 py-3">₹{d.creditLimit.toLocaleString()}</td>
                   <td className="px-4 py-3">₹{d.outstanding.toLocaleString()}</td>
                   <td className="px-4 py-3"><Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">{d.active ? 'Active' : 'Blocked'}</Badge></td>
                   {can('manage_distributors') && (
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => openEdit(d)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><Edit className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => { setDeleteTarget(d.distributor_name); setDeleteDialogOpen(true); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => { setDeleteTarget(d.distributorName); setDeleteDialogOpen(true); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </td>
                   )}
@@ -140,18 +140,18 @@ const DistributorManagement: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2"><Label>Name *</Label><Input value={form.distributor_name} onChange={e => uf('distributor_name', e.target.value)} disabled={!!editing} /></div>
+            <div className="space-y-2"><Label>Name *</Label><Input value={form.distributorName} onChange={e => uf('distributorName', e.target.value)} disabled={!!editing} /></div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Area *</Label><Input value={form.area} onChange={e => uf('area', e.target.value)} /></div>
               <div className="space-y-2"><Label>Assigned SO *</Label>
-                <Select value={form.assigned_so_email} onValueChange={v => uf('assigned_so_email', v)}>
+                <Select value={form.assignedSoEmail} onValueChange={v => uf('assignedSoEmail', v)}>
                   <SelectTrigger><SelectValue placeholder="Select SO" /></SelectTrigger>
                   <SelectContent>{salesUsers.filter(u => u.email).map(u => <SelectItem key={u.email} value={u.email}>{u.name} ({u.email})</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Credit Limit</Label><Input type="number" value={form.credit_limit} onChange={e => uf('credit_limit', Number(e.target.value))} /></div>
+              <div className="space-y-2"><Label>Credit Limit</Label><Input type="number" value={form.creditLimit} onChange={e => uf('creditLimit', Number(e.target.value))} /></div>
               <div className="space-y-2"><Label>Status</Label>
                 <Select value={form.active ? 'active' : 'blocked'} onValueChange={v => uf('active', v === 'active')}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

@@ -32,6 +32,61 @@ const options: swaggerJsdoc.Options = {
           bearerFormat: 'JWT',
         },
       },
+      schemas: {
+        RegisterInput: {
+          type: 'object',
+          required: ['email', 'password', 'name'],
+          properties: {
+            email: { type: 'string', format: 'email' },
+            password: { type: 'string', minLength: 6 },
+            name: { type: 'string' },
+            role: { type: 'string', enum: ['SALES', 'ADMIN', 'HR', 'INVENTORY', 'SUPERADMIN'] },
+          },
+        },
+        LoginInput: {
+          type: 'object',
+          required: ['email', 'password'],
+          properties: {
+            email: { type: 'string', format: 'email' },
+            password: { type: 'string' },
+          },
+        },
+        ProductInput: {
+          type: 'object',
+          required: ['productCode', 'name', 'rate', 'stockQty'],
+          properties: {
+            productCode: { type: 'string' },
+            name: { type: 'string' },
+            category: { type: 'string' },
+            rate: { type: 'number' },
+            gst: { type: 'number' },
+            stockQty: { type: 'number' },
+          },
+        },
+        SaleInput: {
+          type: 'object',
+          required: ['partyType', 'partyName', 'items', 'grandTotal'],
+          properties: {
+            partyType: { type: 'string' },
+            partyName: { type: 'string' },
+            distributor: { type: 'string' },
+            narration: { type: 'string' },
+            grandTotal: { type: 'number' },
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  productId: { type: 'string' },
+                  qty: { type: 'number' },
+                  price: { type: 'number' },
+                  total: { type: 'number' },
+                },
+              },
+            },
+          },
+        },
+      },
     },
     security: [
       {

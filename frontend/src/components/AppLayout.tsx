@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { UserRole } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, ShoppingCart, Users, MapPin, Receipt,
   Package, BarChart3, Settings, LogOut, Menu, X, Building2,
-  UserCheck, ClipboardList, Warehouse, ChevronDown, RefreshCw, XCircle
+  ClipboardList, Warehouse, RefreshCw, XCircle, Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/hooks/usePermissions';
 
 interface NavItem {
@@ -19,22 +17,23 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', path: '/sales', icon: LayoutDashboard, feature: 'view_sales_dashboard' },
+  { label: 'Main Overview', path: '/sales', icon: LayoutDashboard, feature: 'view_sales_dashboard' },
   { label: 'New Order', path: '/sales/order', icon: ShoppingCart, feature: 'create_order' },
-  { label: 'My Orders', path: '/sales/orders', icon: ClipboardList, feature: 'view_own_orders' },
-  { label: 'Visit Tracking', path: '/sales/visits', icon: MapPin, feature: 'track_visits' },
-  { label: 'Expenses', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses' },
-  { label: 'Admin Dashboard', path: '/admin', icon: Settings, feature: 'view_admin_dashboard' },
-  { label: 'Rejected Orders', path: '/admin/rejected', icon: XCircle, feature: 'view_admin_dashboard' },
-  { label: 'Dealers', path: '/admin/dealers', icon: Users, feature: 'manage_customers' },
-  { label: 'Distributors', path: '/admin/distributors', icon: Users, feature: 'manage_customers' },
-  { label: 'HR Dashboard', path: '/hr', icon: Users, feature: 'view_reports' },
-  { label: 'Inventory', path: '/inventory', icon: Package, feature: 'view_inventory_dashboard' },
-  { label: 'Inv. Management', path: '/inventory/manage', icon: Package, feature: 'view_inventory_dashboard' },
-  { label: 'Returned Orders', path: '/inventory/returns', icon: RefreshCw, feature: 'view_inventory_dashboard' },
-  { label: 'Warehouse Master', path: '/admin/warehouses', icon: Warehouse, feature: 'access_settings' },
-  { label: 'Reports', path: '/reports', icon: BarChart3, feature: 'view_reports' },
-  { label: 'Settings', path: '/admin/settings', icon: Settings, feature: 'access_settings' },
+  { label: 'My Order List', path: '/sales/orders', icon: ClipboardList, feature: 'view_own_orders' },
+  { label: 'Customer Visits', path: '/sales/visits', icon: MapPin, feature: 'track_visits' },
+  { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses' },
+  { label: 'Admin Panels', path: '/admin', icon: Settings, feature: 'view_admin_dashboard' },
+  { label: 'Global Stock', path: '/admin/global-inventory', icon: Globe, feature: 'view_admin_dashboard' },
+  { label: 'Cancelled Orders', path: '/admin/rejected', icon: XCircle, feature: 'view_admin_dashboard' },
+  { label: 'Retailers', path: '/admin/dealers', icon: Users, feature: 'manage_customers' },
+  { label: 'Suppliers', path: '/admin/distributors', icon: Users, feature: 'manage_customers' },
+  { label: 'Staff Dashboard', path: '/hr', icon: Users, feature: 'view_reports' },
+  { label: 'Stock Room', path: '/inventory', icon: Package, feature: 'view_inventory_dashboard' },
+  { label: 'Manage Stock', path: '/inventory/manage', icon: Package, feature: 'view_inventory_dashboard' },
+  { label: 'Returns', path: '/inventory/returns', icon: RefreshCw, feature: 'view_inventory_dashboard' },
+  { label: 'Warehouse List', path: '/admin/warehouses', icon: Warehouse, feature: 'access_settings' },
+  { label: 'Sales Reports', path: '/reports', icon: BarChart3, feature: 'view_reports' },
+  { label: 'App Settings', path: '/admin/settings', icon: Settings, feature: 'access_settings' },
 ];
 
 const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -45,7 +44,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   if (!user) return null;
 
-  const filteredNav = navItems.filter(item => can(item.feature));
+  const filteredNav = navItems.filter(item => {
+    if (item.path === '/admin/global-inventory') return user.role === 'SUPERADMIN';
+    return can(item.feature);
+  });
 
   // Group nav items
   const groups: { label: string; items: NavItem[] }[] = [];
@@ -53,9 +55,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const adminItems = filteredNav.filter(i => i.path.startsWith('/admin'));
   const otherItems = filteredNav.filter(i => !i.path.startsWith('/sales') && !i.path.startsWith('/admin'));
 
-  if (salesItems.length > 0) groups.push({ label: 'Sales', items: salesItems });
-  if (adminItems.length > 0) groups.push({ label: 'Administration', items: adminItems });
-  if (otherItems.length > 0) groups.push({ label: 'Other', items: otherItems });
+  if (salesItems.length > 0) groups.push({ label: 'Sales & Orders', items: salesItems });
+  if (adminItems.length > 0) groups.push({ label: 'Admin Tools', items: adminItems });
+  if (otherItems.length > 0) groups.push({ label: 'More Options', items: otherItems });
 
   const handleLogout = async () => {
     await logout();
@@ -85,7 +87,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <Building2 className="w-5 h-5 text-sidebar-primary-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-bold text-sidebar-foreground truncate">TileAdhesive ERP</h2>
+            <h2 className="text-sm font-bold text-sidebar-foreground truncate">Tile System</h2>
             <p className="text-[10px] text-sidebar-muted truncate">{user.role}</p>
           </div>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-sidebar-foreground">

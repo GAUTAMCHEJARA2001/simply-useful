@@ -36,7 +36,7 @@ export const usePermissions = () => {
             return false;
         }
 
-        return perm.is_enabled;
+        return perm.isEnabled;
     }, [user, permissions]);
 
     return { can };

@@ -33,10 +33,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
       <DataTable 
         columns={['Labour', 'Date', 'Status', 'Wage Calculated']}
         rows={attendance.map(a => [
-          a.labour_name,
+          a.labourName,
           a.date,
           <span key={a.id} className={`px-2 py-0.5 rounded-full text-xs font-semibold ${a.status === 'PRESENT' ? 'bg-green-100 text-green-700' : a.status === 'HALF_DAY' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{a.status}</span>,
-          Currency(a.wage_calculated)
+          Currency(a.wageCalculated)
         ])}
         onEdit={i => onEdit(attendance[i])}
         onDelete={i => onDelete(attendance[i].id)}

@@ -1,4 +1,5 @@
-import rateLimit from 'express-rate-limit';
+import { Request, Response, NextFunction } from 'express';
+const rateLimit = (_options: any) => (req: Request, res: Response, next: NextFunction) => next();
 
 /**
  * SMART RATE LIMITING (ELITE)

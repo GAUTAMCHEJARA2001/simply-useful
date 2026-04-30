@@ -1,7 +1,7 @@
 import * as authService from '../features/auth/auth.service';
 import jwt from 'jsonwebtoken';
 import env from '../config/env';
-import prisma from '../lib/prisma';
+import { prisma } from '../lib/prisma';
 
 /**
  * AUTH SERVICE UNIT TESTS (11/10 ABSOLUTE PERFECTION)
@@ -12,7 +12,7 @@ import prisma from '../lib/prisma';
 // 1. MOCK PRISMA (Isolation)
 jest.mock('../lib/prisma', () => ({
   __esModule: true,
-  default: {
+  prisma: {
     refreshToken: {
       create: jest.fn().mockResolvedValue({ id: 'rt123' }),
     },

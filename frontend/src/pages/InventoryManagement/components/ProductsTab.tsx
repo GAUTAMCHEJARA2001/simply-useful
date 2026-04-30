@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, RefreshCw, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
-import { Badge } from '@/components/ui/badge';
-import { apiClient } from '@/api/client';
+import apiClient from '@/api/client';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { SafeDataView } from '@/components/SafeDataView';
+import { Product } from '@/types';
 
 
-const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -38,6 +38,7 @@ export const ProductsTab: React.FC = () => {
   const [settings, setSettings] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
 
   const [modal, setModal] = useState<boolean>(false);
   const [form, setForm] = useState<any>({});
@@ -52,28 +53,28 @@ export const ProductsTab: React.FC = () => {
   );
 
   useEffect(() => {
-    if (modal && form.category_id && categories.length > 0) {
-      const cat = categories.find(c => c.id === form.category_id);
-      if (cat?.parent_id) {
-        setParentCatId(cat.parent_id);
+    if (modal && form.categoryId && categories.length > 0) {
+      const cat = categories.find(c => c.id === form.categoryId);
+      if (cat?.parentId) {
+        setParentCatId(cat.parentId);
       } else {
-        setParentCatId(form.category_id);
+        setParentCatId(form.categoryId);
       }
-    } else if (modal && !form.category_id) {
+    } else if (modal && !form.categoryId) {
       setParentCatId('');
     }
-  }, [modal, form.category_id, categories]);
+  }, [modal, form.categoryId, categories]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, c, b, w, u, s] = await Promise.all([
-        apiClient<any[]>('/inv/masters/products').catch(() => []),
-        apiClient<any[]>('/inv/masters/categories').catch(() => []),
-        apiClient<any[]>('/inv/masters/brands').catch(() => []),
-        apiClient<any[]>('/inv/masters/warehouses').catch(() => []),
-        apiClient<any[]>('/inv/masters/units').catch(() => []),
-        apiClient<any>('/inv/masters/settings').catch(() => null)
+      const [{ data: p }, { data: c }, { data: b }, { data: w }, { data: u }, { data: s }] = await Promise.all([
+        apiClient<any[]>('/inv/masters/products').catch(() => ({ data: [] })),
+        apiClient<any[]>('/inv/masters/categories').catch(() => ({ data: [] })),
+        apiClient<any[]>('/inv/masters/brands').catch(() => ({ data: [] })),
+        apiClient<any[]>('/inv/masters/warehouses').catch(() => ({ data: [] })),
+        apiClient<any[]>('/inv/masters/units').catch(() => ({ data: [] })),
+        apiClient<any>('/inv/masters/settings').catch(() => ({ data: null }))
       ]);
       setProducts(p || []);
       setCategories(c || []);
@@ -90,8 +91,8 @@ export const ProductsTab: React.FC = () => {
   useEffect(() => {
     if (modal && !form.id && !form.sku) {
       try {
-        const initials = settings?.company_name && typeof settings.company_name === 'string'
-          ? settings.company_name.split(' ').filter(Boolean).map((w: string) => w[0]?.toUpperCase()).join('').substring(0, 4) 
+        const initials = settings?.companyName && typeof settings.companyName === 'string'
+          ? settings.companyName.split(' ').filter(Boolean).map((w: string) => w[0]?.toUpperCase()).join('').substring(0, 4) 
           : 'KCPL';
         const nextNum = products ? (products.length + 1) : 1;
         setForm((f: any) => ({ ...f, sku: `${initials}-${nextNum.toString().padStart(4, '0')}` }));
@@ -135,13 +136,6 @@ export const ProductsTab: React.FC = () => {
     }
   };
 
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadData().catch(err => setError(err.message));
-  }, [loadData]);
-
-
   const canManage = ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '');
 
   return (
@@ -171,24 +165,35 @@ export const ProductsTab: React.FC = () => {
         error={error}
         onRetry={loadData}
         emptyMessage={search ? "No products match your search" : "No products found"}
-        renderItem={() => (
-          <DataTable
-            columns={['SKU', 'Name', 'Unit', 'Min Stock', 'Price']}
-            rows={filtered.map((p: any) => [p.sku, p.name, p.unit || '—', p.minimum_stock, Currency(p.default_price)])}
-            onEdit={canManage ? (i: number) => { setForm(filtered[i]); setModal(true); } : undefined}
-            onDelete={canManage ? (i: number) => handleDeleteClick(filtered[i].id) : undefined} 
-            onRowClick={(i: number) => setViewProduct(filtered[i])}
-          />
-        )}
-      />
+      >
+        <DataTable
+          columns={['SKU', 'Name', 'Category', 'Unit', 'Stock', 'Price']}
+          rows={filtered.map((p: any) => [
+            p.productCode || p.sku || '—', 
+            p.name || p.productName || '—', 
+            p.categoryName || p.category?.name || '—',
+            p.unit?.name || p.unit || '—', 
+            <span className={`font-bold ${p.availableStock <= (p.minimumStock || 0) ? 'text-destructive' : 'text-success'}`}>
+              {p.availableStock || p.stockQty || 0}
+            </span>, 
+            Currency(p.rate || p.defaultPrice || 0)
+          ])}
+          onEdit={canManage ? (i: number) => { setForm(filtered[i]); setModal(true); } : undefined}
+          onDelete={canManage ? (i: number) => handleDeleteClick(filtered[i].id) : undefined} 
+          onRowClick={(i: number) => setViewProduct(filtered[i])}
+        />
+      </SafeDataView>
 
 
       {modal && (
         <Modal title={form.id ? "Edit Product" : "Add Product"} onClose={() => setModal(false)}>
+          <DialogDescription className="sr-only">
+            {form.id ? 'Edit existing product details' : 'Create a new product record in the system'}
+          </DialogDescription>
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium block mb-1">Brand</label>
-              <select value={form.brand_id || ''} onChange={e => setForm({ ...form, brand_id: e.target.value })}
+              <select value={form.brandId || ''} onChange={e => setForm({ ...form, brandId: e.target.value })}
                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm">
                 <option value="">-- Select Brand --</option>
                 {(brands || []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -197,30 +202,30 @@ export const ProductsTab: React.FC = () => {
 
             <div>
               <label className="text-sm font-medium block mb-1">Category</label>
-              <select value={parentCatId} onChange={e => { setParentCatId(e.target.value); setForm({ ...form, category_id: e.target.value }); }}
+              <select value={parentCatId} onChange={e => { setParentCatId(e.target.value); setForm({ ...form, categoryId: e.target.value }); }}
                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm">
                 <option value="">-- Select Category --</option>
-                {(categories || []).filter((c: any) => !c.parent_id).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {(categories || []).filter((c: any) => !c.parentId).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
 
             <div>
               <label className="text-sm font-medium block mb-1">Sub Category</label>
-              <select value={form.category_id || ''} onChange={e => setForm({ ...form, category_id: e.target.value })}
+              <select value={form.categoryId || ''} onChange={e => setForm({ ...form, categoryId: e.target.value })}
                 disabled={!parentCatId}
                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm disabled:opacity-50">
                 <option value="">-- Select Sub Category --</option>
-                {(categories || []).filter((c: any) => c.parent_id === parentCatId).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {(categories || []).filter((c: any) => c.parentId === parentCatId).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
 
-            {[['sku', 'SKU', 'text'], ['name', 'Product Name', 'text'], ['minimum_stock', 'Minimum Stock', 'number']].map(([k, lbl, type]) => (
+            {[['productCode', 'SKU', 'text'], ['name', 'Product Name', 'text'], ['minimumStock', 'Minimum Stock', 'number'], ['rate', 'Price', 'number']].map(([k, lbl, type]) => (
               <div key={k as string}>
                 <label className="text-sm font-medium block mb-1">{lbl as string}</label>
                 <input type={type as string} value={form[k as string] || ''} onChange={e => setForm({ ...form, [k as string]: e.target.value })}
                   onWheel={type === 'number' ? e => e.currentTarget.blur() : undefined}
-                  readOnly={k === 'sku'}
-                  className={`w-full border border-border rounded-lg px-3 py-2 bg-background text-sm ${k === 'sku' ? 'bg-muted cursor-not-allowed font-mono' : ''}`} />
+                  readOnly={k === 'productCode'}
+                  className={`w-full border border-border rounded-lg px-3 py-2 bg-background text-sm ${k === 'productCode' ? 'bg-muted cursor-not-allowed font-mono' : ''}`} />
               </div>
             ))}
 
@@ -235,7 +240,7 @@ export const ProductsTab: React.FC = () => {
 
             <div>
               <label className="text-sm font-medium block mb-1">Warehouse</label>
-              <select value={form.default_warehouse_id || ''} onChange={e => setForm({ ...form, default_warehouse_id: e.target.value })}
+              <select value={form.defaultWarehouseId || ''} onChange={e => setForm({ ...form, defaultWarehouseId: e.target.value })}
                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm">
                 <option value="">-- None --</option>
                 {(warehouses || []).map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -254,7 +259,7 @@ export const ProductsTab: React.FC = () => {
           <DialogContent className="max-w-sm" aria-describedby="delete-product-desc">
             <DialogHeader>
               <DialogTitle>Delete Product?</DialogTitle>
-              <DialogDescription id="delete-product-desc" className="sr-only">
+              <DialogDescription id="delete-product-desc">
                 Confirm permanent removal of this product from the inventory master.
               </DialogDescription>
             </DialogHeader>
@@ -269,14 +274,14 @@ export const ProductsTab: React.FC = () => {
       {viewProduct && (
         <Modal title="Product Details" onClose={() => setViewProduct(null)}>
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div><span className="font-semibold text-muted-foreground">SKU:</span> {viewProduct.sku}</div>
-            <div><span className="font-semibold text-muted-foreground">Name:</span> {viewProduct.name}</div>
-            <div><span className="font-semibold text-muted-foreground">Brand:</span> {brands.find(b => b.id === viewProduct.brand_id)?.name || '—'}</div>
-            <div><span className="font-semibold text-muted-foreground">Category:</span> {categories.find(c => c.id === viewProduct.category_id)?.name || '—'}</div>
-            <div><span className="font-semibold text-muted-foreground">Unit:</span> {viewProduct.unit || '—'}</div>
-            <div><span className="font-semibold text-muted-foreground">Minimum Stock:</span> {viewProduct.minimum_stock}</div>
-            <div><span className="font-semibold text-muted-foreground">Default Price:</span> {Currency(viewProduct.default_price)}</div>
-            <div><span className="font-semibold text-muted-foreground">Warehouse:</span> {warehouses.find(w => w.id === viewProduct.default_warehouse_id)?.name || '—'}</div>
+            <div><span className="font-semibold text-muted-foreground">SKU:</span> {viewProduct.productCode || viewProduct.sku}</div>
+            <div><span className="font-semibold text-muted-foreground">Name:</span> {viewProduct.name || viewProduct.productName}</div>
+            <div><span className="font-semibold text-muted-foreground">Brand:</span> {viewProduct.brand?.name || viewProduct.brandName || '—'}</div>
+            <div><span className="font-semibold text-muted-foreground">Category:</span> {viewProduct.category?.name || viewProduct.categoryName || '—'}</div>
+            <div><span className="font-semibold text-muted-foreground">Unit:</span> {viewProduct.unit?.name || viewProduct.unit || '—'}</div>
+            <div><span className="font-semibold text-muted-foreground">Stock:</span> {viewProduct.availableStock || viewProduct.stockQty || 0}</div>
+            <div><span className="font-semibold text-muted-foreground">Default Price:</span> {Currency(viewProduct.defaultPrice)}</div>
+            <div><span className="font-semibold text-muted-foreground">Warehouse:</span> {warehouses.find(w => w.id === viewProduct.defaultWarehouseId)?.name || '—'}</div>
           </div>
         </Modal>
       )}

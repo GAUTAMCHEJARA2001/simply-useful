@@ -36,7 +36,44 @@ export const createSaleSchema = z.object({
   partyType: z.string(),
   partyName: z.string(),
   distributor: z.string().optional(),
+  warehouseId: z.number().int().positive(), // Added for multi-warehouse support
   items: z.array(saleItemSchema).nonempty(),
   narration: z.string().optional(),
   grandTotal: z.number().positive(),
 });
+
+export const dealerSchema = z.object({
+  dealerCode: z.string().min(2),
+  dealerName: z.string().min(2),
+  city: z.string(),
+  assignedSoEmail: z.string().email(),
+  distributorName: z.string(),
+  creditLimit: z.number().min(0).optional(),
+});
+
+export const visitSchema = z.object({
+  soEmail: z.string().email(),
+  dealerName: z.string(),
+  remarks: z.string(),
+  nextFollowup: z.string().datetime().optional(),
+  nextVisitTime: z.string().datetime().optional(),
+  gpsLocation: z.string().optional(),
+});
+
+export const expenseSchema = z.object({
+  soEmail: z.string().email(),
+  category: z.string(),
+  amount: z.number().positive(),
+  remarks: z.string(),
+  photo: z.string().optional(),
+  declaration: z.string().optional(),
+});
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type ProductInput = z.infer<typeof productSchema>;
+export type SaleItemInput = z.infer<typeof saleItemSchema>;
+export type CreateSaleInput = z.infer<typeof createSaleSchema>;
+export type DealerInput = z.infer<typeof dealerSchema>;
+export type VisitInput = z.infer<typeof visitSchema>;
+export type ExpenseInput = z.infer<typeof expenseSchema>;

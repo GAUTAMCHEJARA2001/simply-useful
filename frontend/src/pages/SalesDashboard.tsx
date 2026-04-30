@@ -2,10 +2,10 @@ import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { motion } from 'framer-motion';
-import { ShoppingCart, TrendingUp, Clock, Users, ArrowUpRight, ArrowDownRight, IndianRupee } from 'lucide-react';
+import { ShoppingCart, Clock, Users, ArrowUpRight, ArrowDownRight, IndianRupee } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '@/hooks/usePermissions';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { SafeDataView } from '@/components/SafeDataView';
@@ -31,40 +31,41 @@ const SalesDashboard: React.FC = () => {
 
   const isSalesOnly = user?.role === 'SALES';
   const myOrders = orders;
-  const myDealers = isSalesOnly ? dealers.filter(d => (d.assigned_so_email || '').toLowerCase() === (user?.email || '').toLowerCase() && d.active) : dealers.filter(d => d.active);
+  const myDealers = isSalesOnly ? dealers.filter(d => (d.assignedSoEmail || '').toLowerCase() === (user?.email || '').toLowerCase() && d.active) : dealers.filter(d => d.active);
   const pendingOrders = myOrders.filter(o => o.status === 'Pending');
     const productCounts = new Map<string, number>();
     myOrders.forEach(order => {
-      (order.items || []).forEach((item: any) => {
-        const current = productCounts.get(item.product_name) || 0;
-        productCounts.set(item.product_name, current + (Number(item.qty) || 0));
+      (order.items || []).forEach((item) => {
+        const productName = item.productName || 'Unknown';
+        const current = productCounts.get(productName) || 0;
+        productCounts.set(productName, current + (Number(item.qty) || 0));
       });
     });
 
-    const productMixData = Array.from(productCounts.entries()).map(([name, value]) => ({ name, value }));
+
 
     const kpis = [
       {
-        label: 'Revenue',
+        label: 'Money Made',
         value: `₹${(myOrders.reduce((sum, order) => {
-          const orderTotal = Number(order.grand_total) || (order.items || []).reduce((iSum: number, item: any) => iSum + ((Number(item.qty) || 0) * (Number(item.rate) || 0)), 0);
+          const orderTotal = Number(order.grandTotal) || (order.items || []).reduce((iSum: number, item) => iSum + ((Number(item.qty) || 0) * (Number(item.price) || 0)), 0);
           return sum + (orderTotal || 0);
         }, 0) / 1000).toFixed(1)}K`,
-        subtext: 'Monthly actuals',
+        subtext: 'Monthly sales',
         icon: IndianRupee,
         trend: '+12.5%',
         trendUp: true,
       },
       {
-        label: 'Total Orders',
+        label: 'Number of Orders',
         value: myOrders.length.toString(),
-        subtext: 'Across all dealers',
+        subtext: 'From all your shops',
         icon: ShoppingCart,
         trend: '+3',
         trendUp: true,
       },
-      { label: 'Pending Orders', value: pendingOrders.length.toString(), subtext: 'Awaiting approval', icon: Clock, trend: pendingOrders.length > 2 ? 'High' : 'Normal', trendUp: false },
-      { label: 'Active Dealers', value: myDealers.length.toString(), subtext: 'Assigned to you', icon: Users },
+      { label: 'Waiting Orders', value: pendingOrders.length.toString(), subtext: 'Waiting for approval', icon: Clock, trend: pendingOrders.length > 2 ? 'High' : 'Normal', trendUp: false },
+      { label: 'Active Shops', value: myDealers.length.toString(), subtext: 'Shops assigned to you', icon: Users },
     ];
 
   const productMix = Array.from(productCounts.entries()).map(([name, value]) => ({ 
@@ -86,7 +87,7 @@ const SalesDashboard: React.FC = () => {
     myOrders.forEach(o => {
       if (map[o.date]) {
         map[o.date].orders += 1;
-        map[o.date].amount += o.grand_total;
+        map[o.date].amount += o.grandTotal;
       }
     });
     return Object.values(map);
@@ -96,8 +97,8 @@ const SalesDashboard: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="page-header">Sales Dashboard</h1>
-          <p className="page-subheader">Welcome back, {user?.name || 'Sales Officer'}</p>
+          <h1 className="page-header">Sales Overview</h1>
+          <p className="page-subheader">Hello {user?.name || 'Sales Officer'}, welcome back!</p>
         </div>
         <Button onClick={() => navigate('/sales/order')} className="action-button">
           <ShoppingCart className="w-5 h-5 mr-2" /> New Order
@@ -125,7 +126,7 @@ const SalesDashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Weekly Orders</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Orders This Week</CardTitle></CardHeader>
           <CardContent>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -140,7 +141,7 @@ const SalesDashboard: React.FC = () => {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Product Mix</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Popular Products</CardTitle></CardHeader>
           <CardContent>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -159,7 +160,7 @@ const SalesDashboard: React.FC = () => {
       </div>
 
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Recent Orders</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-base">Last 5 Orders</CardTitle></CardHeader>
         <CardContent className="p-0">
           <SafeDataView
             data={myOrders}
@@ -168,31 +169,30 @@ const SalesDashboard: React.FC = () => {
             onRetry={refreshAll}
             emptyMessage="No recent orders found"
             className="overflow-x-auto"
-            renderItem={() => (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left px-4 py-3 text-muted-foreground font-medium">Order ID</th>
-                    <th className="text-left px-4 py-3 text-muted-foreground font-medium">Party</th>
-                    <th className="text-left px-4 py-3 text-muted-foreground font-medium hidden sm:table-cell">Date</th>
-                    <th className="text-right px-4 py-3 text-muted-foreground font-medium">Amount</th>
-                    <th className="text-center px-4 py-3 text-muted-foreground font-medium">Status</th>
+          >
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left px-4 py-3 text-muted-foreground font-medium">Order ID</th>
+                  <th className="text-left px-4 py-3 text-muted-foreground font-medium">Party</th>
+                  <th className="text-left px-4 py-3 text-muted-foreground font-medium hidden sm:table-cell">Date</th>
+                  <th className="text-right px-4 py-3 text-muted-foreground font-medium">Amount</th>
+                  <th className="text-center px-4 py-3 text-muted-foreground font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myOrders.slice(0, 5).map(order => (
+                  <tr key={order.orderId} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3 font-medium">{order.orderId}</td>
+                    <td className="px-4 py-3">{order.partyName}</td>
+                    <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground">{order.date}</td>
+                    <td className="px-4 py-3 text-right font-medium">₹{order.grandTotal.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-center"><StatusBadge status={order.status} /></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {myOrders.slice(0, 5).map(order => (
-                    <tr key={order.order_id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 font-medium">{order.order_id}</td>
-                      <td className="px-4 py-3">{order.party_name}</td>
-                      <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground">{order.date}</td>
-                      <td className="px-4 py-3 text-right font-medium">₹{order.grand_total.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center"><StatusBadge status={order.status} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          />
+                ))}
+              </tbody>
+            </table>
+          </SafeDataView>
         </CardContent>
 
       </Card>

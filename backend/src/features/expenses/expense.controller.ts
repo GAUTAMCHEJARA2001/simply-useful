@@ -17,6 +17,14 @@ export const createExpense = async (req: Request, res: Response, next: NextFunct
   } catch (e) { next(e); }
 };
 
+export const updateExpense = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const data = await expenseService.updateExpense(id, req.body);
+    sendSuccess(res, data, 'Expense updated');
+  } catch (e) { next(e); }
+};
+
 export const updateStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;

@@ -1,5 +1,6 @@
-import prisma from '../../lib/prisma';
+import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
+import { ExpenseInput } from '../../validation/schemas';
 
 /**
  * EXPENSE REPOSITORY (ELITE)
@@ -17,9 +18,10 @@ const safeQuery = async <T>(fn: () => Promise<T>): Promise<T> => {
     const result = await fn();
     failureCount = 0;
     return result;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as Error;
     failureCount++;
-    console.error(`📊 EXPENSE DB FAILURE [${failureCount}]:`, err.message);
+    console.error(`📊 EXPENSE DB FAILURE [${failureCount}]:`, error.message);
     throw new AppError('Database operation failed', 500);
   }
 };
@@ -34,16 +36,10 @@ export const expenseRepository = {
     orderBy: { createdAt: 'desc' }
   })),
 
-  create: (data: any) => safeQuery(() => prisma.expense.create({
+  create: (data: ExpenseInput) => safeQuery(() => prisma.expense.create({
     data: {
-      date: new Date(data.date),
-      soEmail: data.so_email,
-      category: data.category,
-      amount: data.amount,
-      remarks: data.remarks,
-      status: 'Pending',
-      photo: data.photo,
-      declaration: data.declaration
+      ...data,
+      status: 'Pending'
     }
   })),
 
@@ -52,7 +48,7 @@ export const expenseRepository = {
     data: { status, rejectReason }
   })),
 
-  update: (id: string, data: any) => safeQuery(() => prisma.expense.update({
+  update: (id: string, data: Partial<ExpenseInput>) => safeQuery(() => prisma.expense.update({
     where: { id },
     data
   }))

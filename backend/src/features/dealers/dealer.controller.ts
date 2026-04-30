@@ -29,3 +29,11 @@ export const deleteDealer = async (req: Request, res: Response, next: NextFuncti
     sendSuccess(res, data, 'Dealer removed');
   } catch (e) { next(e); }
 };
+
+export const getDistributors = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dealers = await dealerService.getAllDealers();
+    const distributors = Array.from(new Set(dealers.map(d => d.distributorName)));
+    sendSuccess(res, distributors, 'Distributors fetched');
+  } catch (e) { next(e); }
+};

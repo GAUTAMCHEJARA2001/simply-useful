@@ -43,13 +43,13 @@ const VisitTracking: React.FC = () => {
   
   const [form, setForm] = useState<Visit>({ 
     date: new Date().toISOString().split('T')[0], 
-    so_email: user?.email || '', 
-    dealer_name: '', 
+    soEmail: user?.email || '', 
+    dealerName: '', 
     remarks: '', 
-    next_followup: '',
-    next_visit_time: '',
+    nextFollowup: '',
+    nextVisitTime: '',
     photo: '',
-    gps_location: ''
+    gpsLocation: ''
   });
 
   const startGpsWatcher = useCallback(() => {
@@ -90,7 +90,7 @@ const VisitTracking: React.FC = () => {
       if (!gps) {
         try {
           const data = await externalApi.getIpLocation();
-          if (data.latitude) {
+          if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
             setGps({ lat: data.latitude, lng: data.longitude, accuracy: 5000, source: 'IP Fallback' });
             setGpsStatus('📍 Network-based location');
           }
@@ -113,7 +113,7 @@ const VisitTracking: React.FC = () => {
   }, [dialogOpen, startGpsWatcher]);
 
   useEffect(() => {
-    if (gps) setForm(prev => ({ ...prev, gps_location: `${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}` }));
+    if (gps) setForm(prev => ({ ...prev, gpsLocation: `${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}` }));
   }, [gps]);
 
   const startCamera = async () => {
@@ -196,7 +196,7 @@ const VisitTracking: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.dealer_name || !form.remarks || !form.next_visit_time) {
+    if (!form.dealerName || !form.remarks || !form.nextVisitTime) {
       toast({ title: 'Missing Information', description: 'Dealer and next follow-up details are mandatory.', variant: 'destructive' });
       return;
     }
@@ -206,10 +206,10 @@ const VisitTracking: React.FC = () => {
     }
     setSavingLoading(true);
     try {
-      await addVisit({ ...form, so_email: user?.email || '', date: new Date().toISOString().split('T')[0] });
+      await addVisit({ ...form, soEmail: user?.email || '', date: new Date().toISOString().split('T')[0] });
       toast({ title: 'Visit Record Stored', description: 'Check-in verified and history updated.' });
       setDialogOpen(false);
-      setForm({ date: new Date().toISOString().split('T')[0], so_email: user?.email || '', dealer_name: '', remarks: '', next_followup: '', next_visit_time: '', photo: '', gps_location: '' });
+      setForm({ date: new Date().toISOString().split('T')[0], soEmail: user?.email || '', dealerName: '', remarks: '', nextFollowup: '', nextVisitTime: '', photo: '', gpsLocation: '' });
     } catch (e: any) { 
       toast({ title: 'Sync Error', description: 'Visit data couldn\'t be saved.', variant: 'destructive' }); 
     } finally { 
@@ -218,7 +218,7 @@ const VisitTracking: React.FC = () => {
   };
 
   const isSalesOnly = user?.role === 'SALES';
-  const myDealers = isSalesOnly ? dealers.filter(d => (d.assigned_so_email || '').toLowerCase() === (user?.email || '').toLowerCase() && d.active) : dealers.filter(d => d.active);
+  const myDealers = isSalesOnly ? dealers.filter(d => (d.assignedSoEmail || '').toLowerCase() === (user?.email || '').toLowerCase() && d.active) : dealers.filter(d => d.active);
 
   return (
     <div className="space-y-6">
@@ -234,13 +234,13 @@ const VisitTracking: React.FC = () => {
                {v.photo && <img src={v.photo} alt="Visit Signature" className="w-full aspect-video object-cover" />}
               <div className="p-4 space-y-2">
                 <div className="flex justify-between items-start">
-                  <div><h3 className="font-bold text-sm">{v.dealer_name}</h3></div>
+                  <div><h3 className="font-bold text-sm">{v.dealerName}</h3></div>
                   <span className="text-[10px] bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">{v.date}</span>
                 </div>
                 <p className="text-xs text-muted-foreground line-clamp-2">"{v.remarks}"</p>
                 <div className="flex justify-between items-center text-[10px] text-muted-foreground pt-2 border-t">
-                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {v.next_visit_time ? new Date(v.next_visit_time).toLocaleString() : '—'}</span>
-                  {v.gps_location && <span className="text-green-600 font-bold border border-green-600/30 px-1 rounded uppercase tracking-widest text-[8px]">Verified</span>}
+                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {v.nextVisitTime ? new Date(v.nextVisitTime).toLocaleString() : '—'}</span>
+                  {v.gpsLocation && <span className="text-green-600 font-bold border border-green-600/30 px-1 rounded uppercase tracking-widest text-[8px]">Verified</span>}
                 </div>
               </div>
             </CardContent>
@@ -265,18 +265,18 @@ const VisitTracking: React.FC = () => {
               <div className="space-y-6">
                  <div className="space-y-2">
                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-bold">Interacted With *</Label>
-                   <Tabs value={visitType} onValueChange={(v: any) => { setVisitType(v); setForm(p => ({ ...p, dealer_name: '' })); }} className="w-full">
+                   <Tabs value={visitType} onValueChange={(v: any) => { setVisitType(v); setForm(p => ({ ...p, dealerName: '' })); }} className="w-full">
                      <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="Dealer">Dealer</TabsTrigger><TabsTrigger value="External">Person / Site</TabsTrigger></TabsList>
                    </Tabs>
                  </div>
                  {visitType === 'Dealer' ? (
                    <div className="space-y-2"><Label>Dealer Name *</Label>
-                     <Select value={form.dealer_name} onValueChange={v => setForm(p => ({ ...p, dealer_name: v }))}><SelectTrigger><SelectValue placeholder="Select Client" /></SelectTrigger><SelectContent>{myDealers.map(d => <SelectItem key={d.dealer_code} value={d.dealer_name}>{d.dealer_name}</SelectItem>)}</SelectContent></Select>
+                     <Select value={form.dealerName} onValueChange={v => setForm(p => ({ ...p, dealerName: v }))}><SelectTrigger><SelectValue placeholder="Select Client" /></SelectTrigger><SelectContent>{myDealers.map(d => <SelectItem key={d.dealerCode} value={d.dealerName}>{d.dealerName}</SelectItem>)}</SelectContent></Select>
                    </div>
                  ) : (
-                   <div className="space-y-2"><Label>Person / Meeting Name *</Label><Input value={form.dealer_name} onChange={e => setForm(p => ({ ...p, dealer_name: e.target.value }))} placeholder="Type Name..." /></div>
+                   <div className="space-y-2"><Label>Person / Meeting Name *</Label><Input value={form.dealerName} onChange={e => setForm(p => ({ ...p, dealerName: e.target.value }))} placeholder="Type Name..." /></div>
                  )}
-                 <div className="space-y-2"><Label>Next Visit Schedule *</Label><Input type="datetime-local" value={form.next_visit_time} onChange={e => setForm(p => ({ ...p, next_visit_time: e.target.value }))} /></div>
+                 <div className="space-y-2"><Label>Next Visit Schedule *</Label><Input type="datetime-local" value={form.nextVisitTime} onChange={e => setForm(p => ({ ...p, nextVisitTime: e.target.value }))} /></div>
                  <div className="space-y-2"><Label>Notes / Discussion *</Label><Textarea value={form.remarks} onChange={e => setForm(p => ({ ...p, remarks: e.target.value }))} rows={4} placeholder="Summary of meeting..." /></div>
               </div>
 

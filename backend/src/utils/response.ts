@@ -1,15 +1,16 @@
 import { Response } from 'express';
+import { logger } from '../config/logger';
 
 /**
  * Standard API Response Format:
  * {
  *   success: boolean,
- *   data: any,
+ *   data: T,
  *   message: string
  * }
  */
 
-export const sendSuccess = (res: Response, data: any = null, message = 'Done', statusCode = 200) => {
+export const sendSuccess = <T>(res: Response, data: T | null = null, message = 'Done', statusCode = 200) => {
   return res.status(statusCode).json({
     success: true,
     data,
@@ -17,9 +18,9 @@ export const sendSuccess = (res: Response, data: any = null, message = 'Done', s
   });
 };
 
-export const sendError = (res: Response, message = 'Internal Server Error', statusCode = 500, error: any = null) => {
+export const sendError = (res: Response, message = 'Internal Server Error', statusCode = 500, error: unknown = null) => {
   if (error) {
-    console.error(`[API Error] ${statusCode} - ${message}`, error);
+    logger.error({ msg: `[API Error] ${statusCode} - ${message}`, error });
   }
 
   return res.status(statusCode).json({

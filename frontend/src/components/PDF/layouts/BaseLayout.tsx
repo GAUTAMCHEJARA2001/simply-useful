@@ -55,7 +55,7 @@ export const BaseLayout: React.FC<BaseLayoutProps> = ({
       <View style={styles.footer} fixed>
         <View>
           <Text style={styles.footerInfo}>Generated on: {new Date().toLocaleString()}</Text>
-          <Text style={styles.pageNumber} render={({ pageNumber, totalPages }) => (
+          <Text style={styles.pageNumber} render={({ pageNumber, totalPages }: { pageNumber: number; totalPages: number }) => (
             `Page ${pageNumber} of ${totalPages}`
           )} />
         </View>

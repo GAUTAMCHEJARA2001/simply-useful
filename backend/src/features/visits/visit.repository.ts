@@ -1,5 +1,6 @@
-import prisma from '../../lib/prisma';
+import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
+import { VisitInput } from '../../validation/schemas';
 
 /**
  * VISIT REPOSITORY (ELITE)
@@ -17,9 +18,10 @@ const safeQuery = async <T>(fn: () => Promise<T>): Promise<T> => {
     const result = await fn();
     failureCount = 0;
     return result;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as Error;
     failureCount++;
-    console.error(`📊 VISIT DB FAILURE [${failureCount}]:`, err.message);
+    console.error(`📊 VISIT DB FAILURE [${failureCount}]:`, error.message);
     throw new AppError('Database operation failed', 500);
   }
 };
@@ -34,15 +36,11 @@ export const visitRepository = {
     orderBy: { createdAt: 'desc' }
   })),
 
-  create: (data: any) => safeQuery(() => prisma.visit.create({
+  create: (data: VisitInput) => safeQuery(() => prisma.visit.create({
     data: {
-      soEmail: data.so_email,
-      dealerName: data.dealer_name,
-      remarks: data.remarks,
-      nextFollowup: data.next_followup ? new Date(data.next_followup) : null,
-      nextVisitTime: data.next_visit_time ? new Date(data.next_visit_time) : null,
-      gpsLocation: data.gps_location,
-      photo: data.photo
+      ...data,
+      nextFollowup: data.nextFollowup ? new Date(data.nextFollowup) : undefined,
+      nextVisitTime: data.nextVisitTime ? new Date(data.nextVisitTime) : undefined,
     }
   }))
 };

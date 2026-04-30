@@ -25,10 +25,10 @@ export const ProductionsTab: React.FC<ProductionsTabProps> = ({
       <DataTable 
         columns={['Finished Product', 'Qty Produced', 'Warehouse', 'Date']}
         rows={productions.map(p => [
-          p.finished_product_name, 
-          p.quantity_produced, 
-          p.warehouse_name, 
-          p.created_at ? new Date(p.created_at).toLocaleDateString('en-IN') : '—'
+          p.finishedProductName, 
+          p.quantityProduced, 
+          p.warehouseName, 
+          p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—'
         ])}
         onRowClick={i => onRowClick(productions[i])} 
       />

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus, RefreshCw, X } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
-import { apiClient } from '@/api/client';
+import apiClient from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { SafeDataView } from '@/components/SafeDataView';
 
@@ -98,15 +98,14 @@ export const SubCategoriesTab: React.FC = () => {
         error={error}
         onRetry={loadData}
         emptyMessage="No sub-categories found"
-        renderItem={() => (
-          <DataTable
-            columns={['Name', 'Parent Category']}
-            rows={filtered.map(c => [c.name, categories.find(p => p.id === c.parent_id)?.name || '—'])}
-            onEdit={['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '') ? i => { setForm(filtered[i]); setModal(true); } : undefined}
-            onDelete={['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '') ? i => handleDelete(filtered[i].id) : undefined} 
-          />
-        )}
-      />
+      >
+        <DataTable
+          columns={['Name', 'Parent Category']}
+          rows={filtered.map(c => [c.name, categories.find(p => p.id === c.parent_id)?.name || '—'])}
+          onEdit={['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '') ? i => { setForm(filtered[i]); setModal(true); } : undefined}
+          onDelete={['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '') ? i => handleDelete(filtered[i].id) : undefined} 
+        />
+      </SafeDataView>
 
 
       {modal && (

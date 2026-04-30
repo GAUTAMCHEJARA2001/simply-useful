@@ -20,7 +20,7 @@ const ExpenseEntry: React.FC = () => {
   const { expenses, addExpense, updateExpenseStatus, updateExpense } = useData();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState<Expense>({ date: new Date().toISOString().split('T')[0], so_email: user?.email || '', category: '', amount: 0, remarks: '' });
+  const [form, setForm] = useState<Expense>({ date: new Date().toISOString().split('T')[0], soEmail: user?.email || '', category: '', amount: 0, remarks: '', status: 'PENDING' });
 
   const isHr = user?.role === 'HR' || user?.role === 'SUPERADMIN' || user?.role === 'ADMIN';
   
@@ -46,12 +46,12 @@ const ExpenseEntry: React.FC = () => {
        updateExpense(form.id, form);
        toast({ title: 'Expense Updated', description: 'Resubmitted to HR for Approval' });
     } else {
-       addExpense({ ...form, so_email: user?.email || '' });
+       addExpense({ ...form, soEmail: user?.email || '' });
        toast({ title: 'Expense Submitted', description: `₹${form.amount} for ${form.category}` });
     }
     
     setDialogOpen(false);
-    setForm({ date: new Date().toISOString().split('T')[0], so_email: user?.email || '', category: '', amount: 0, remarks: '' });
+    setForm({ date: new Date().toISOString().split('T')[0], soEmail: user?.email || '', category: '', amount: 0, remarks: '', status: 'PENDING' });
   };
 
   return (
@@ -107,15 +107,15 @@ const ExpenseEntry: React.FC = () => {
                        </span>
                     </div>
                     <p className="text-xs text-muted-foreground">{e.date}{e.remarks ? ` · ${e.remarks}` : ''}</p>
-                    {isHr && <p className="text-[10px] text-muted-foreground">Officer: {e.so_email}</p>}
+                    {isHr && <p className="text-[10px] text-muted-foreground">Officer: {e.soEmail}</p>}
                     
-                    {e.reject_reason && (
-                      <p className="text-xs text-destructive bg-destructive/5 p-1.5 rounded mt-1">Reason: {e.reject_reason}</p>
+                    {e.rejectReason && (
+                      <p className="text-xs text-destructive bg-destructive/5 p-1.5 rounded mt-1">Reason: {e.rejectReason}</p>
                     )}
                     {e.declaration && (
                       <p className="text-xs text-muted-foreground bg-muted/40 p-1.5 rounded mt-1 border">Declaration: {e.declaration}</p>
                     )}
-                    {e.status === 'REJECTED' && e.so_email?.toLowerCase() === user?.email?.toLowerCase() && (
+                    {e.status === 'REJECTED' && e.soEmail?.toLowerCase() === user?.email?.toLowerCase() && (
                       <Button size="sm" variant="outline" className="h-7 text-[10px] mt-1 flex items-center gap-1" onClick={() => {
                          setForm({ ...e });
                          setDialogOpen(true);
@@ -141,7 +141,7 @@ const ExpenseEntry: React.FC = () => {
 
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         setDialogOpen(open);
-        if (!open) setForm({ date: new Date().toISOString().split('T')[0], so_email: user?.email || '', category: '', amount: 0, remarks: '' });
+        if (!open) setForm({ date: new Date().toISOString().split('T')[0], soEmail: user?.email || '', category: '', amount: 0, remarks: '', status: 'PENDING' });
       }}>
         <DialogContent className="max-w-lg" aria-describedby="expense-entry-desc">
           <DialogHeader>

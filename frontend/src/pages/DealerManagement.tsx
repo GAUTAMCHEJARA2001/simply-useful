@@ -13,8 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 
 const emptyDealer: Dealer = {
-  dealer_code: '', dealer_name: '', city: '', assigned_so_email: '',
-  distributor_name: '', credit_limit: 0, outstanding: 0, active: true,
+  dealerCode: '', dealerName: '', city: '', assignedSoEmail: '',
+  distributorName: '', creditLimit: 0, outstanding: 0, active: true,
 };
 
 const DealerManagement: React.FC = () => {
@@ -31,14 +31,14 @@ const DealerManagement: React.FC = () => {
   const salesUsers = users.filter(u => u.role === 'SALES' && u.active);
 
   const filtered = dealers.filter(d =>
-    d.dealer_name.toLowerCase().includes(search.toLowerCase()) ||
+    d.dealerName.toLowerCase().includes(search.toLowerCase()) ||
     d.city.toLowerCase().includes(search.toLowerCase()) ||
-    d.dealer_code.toLowerCase().includes(search.toLowerCase())
+    d.dealerCode.toLowerCase().includes(search.toLowerCase())
   );
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ ...emptyDealer, dealer_code: `DL${Date.now().toString().slice(-5)}` });
+    setForm({ ...emptyDealer, dealerCode: `DL${Date.now().toString().slice(-5)}` });
     setDialogOpen(true);
   };
 
@@ -54,16 +54,16 @@ const DealerManagement: React.FC = () => {
   };
 
   const handleSave = () => {
-    if (!form.dealer_name || !form.city || !form.assigned_so_email || !form.distributor_name) {
+    if (!form.dealerName || !form.city || !form.assignedSoEmail || !form.distributorName) {
       toast({ title: 'Missing Fields', description: 'Please fill all required fields.', variant: 'destructive' });
       return;
     }
     if (editing) {
-      updateDealer(editing.dealer_code, form);
-      toast({ title: 'Dealer Updated', description: `${form.dealer_name} updated successfully.` });
+      updateDealer(editing.dealerCode, form);
+      toast({ title: 'Dealer Updated', description: `${form.dealerName} updated successfully.` });
     } else {
       addDealer(form);
-      toast({ title: 'Dealer Added', description: `${form.dealer_name} added successfully.` });
+      toast({ title: 'Dealer Added', description: `${form.dealerName} added successfully.` });
     }
     setDialogOpen(false);
   };
@@ -94,27 +94,27 @@ const DealerManagement: React.FC = () => {
       {/* Mobile cards */}
       <div className="lg:hidden space-y-3">
         {filtered.map(d => (
-          <Card key={d.dealer_code}>
+          <Card key={d.dealerCode}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="font-semibold text-sm">{d.dealer_name}</p>
-                  <p className="text-xs text-muted-foreground">{d.dealer_code} · {d.city}</p>
+                  <p className="font-semibold text-sm">{d.dealerName}</p>
+                  <p className="text-xs text-muted-foreground">{d.dealerCode} · {d.city}</p>
                 </div>
                 <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">
                   {d.active ? 'Active' : 'Blocked'}
                 </Badge>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs mt-3">
-                <div><span className="text-muted-foreground">Credit Limit:</span> <span className="font-medium">₹{d.credit_limit.toLocaleString()}</span></div>
+                <div><span className="text-muted-foreground">Credit Limit:</span> <span className="font-medium">₹{d.creditLimit.toLocaleString()}</span></div>
                 <div><span className="text-muted-foreground">Outstanding:</span> <span className="font-medium">₹{d.outstanding.toLocaleString()}</span></div>
-                <div><span className="text-muted-foreground">SO:</span> <span className="font-medium">{d.assigned_so_email.split('@')[0]}</span></div>
-                <div><span className="text-muted-foreground">Distributor:</span> <span className="font-medium">{d.distributor_name}</span></div>
+                <div><span className="text-muted-foreground">SO:</span> <span className="font-medium">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</span></div>
+                <div><span className="text-muted-foreground">Distributor:</span> <span className="font-medium">{d.distributorName}</span></div>
               </div>
               {can('manage_dealers') && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                   <Button size="sm" variant="outline" onClick={() => openEdit(d)} className="flex-1"><Edit className="w-3.5 h-3.5 mr-1" /> Edit</Button>
-                  <Button size="sm" variant="destructive" onClick={() => openDelete(d.dealer_code)} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
+                  <Button size="sm" variant="destructive" onClick={() => openDelete(d.dealerCode)} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
                 </div>
               )}
             </CardContent>
@@ -136,13 +136,13 @@ const DealerManagement: React.FC = () => {
               </thead>
               <tbody>
                 {filtered.map(d => (
-                  <tr key={d.dealer_code} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs">{d.dealer_code}</td>
-                    <td className="px-4 py-3 font-medium">{d.dealer_name}</td>
+                  <tr key={d.dealerCode} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs">{d.dealerCode}</td>
+                    <td className="px-4 py-3 font-medium">{d.dealerName}</td>
                     <td className="px-4 py-3">{d.city}</td>
-                    <td className="px-4 py-3 text-xs">{d.assigned_so_email.split('@')[0]}</td>
-                    <td className="px-4 py-3 text-xs">{d.distributor_name}</td>
-                    <td className="px-4 py-3">₹{d.credit_limit.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-xs">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</td>
+                    <td className="px-4 py-3 text-xs">{d.distributorName}</td>
+                    <td className="px-4 py-3">₹{d.creditLimit.toLocaleString()}</td>
                     <td className="px-4 py-3">₹{d.outstanding.toLocaleString()}</td>
                     <td className="px-4 py-3">
                       <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">{d.active ? 'Active' : 'Blocked'}</Badge>
@@ -151,7 +151,7 @@ const DealerManagement: React.FC = () => {
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
                           <button onClick={() => openEdit(d)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><Edit className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => openDelete(d.dealer_code)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => openDelete(d.dealerCode)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       </td>
                     )}
@@ -176,11 +176,11 @@ const DealerManagement: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Dealer Code</Label>
-                <Input value={form.dealer_code} onChange={e => updateForm('dealer_code', e.target.value)} disabled={!!editing} />
+                <Input value={form.dealerCode} onChange={e => updateForm('dealerCode', e.target.value)} disabled={!!editing} />
               </div>
               <div className="space-y-2">
                 <Label>Dealer Name *</Label>
-                <Input value={form.dealer_name} onChange={e => updateForm('dealer_name', e.target.value)} />
+                <Input value={form.dealerName} onChange={e => updateForm('dealerName', e.target.value)} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -190,7 +190,7 @@ const DealerManagement: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <Label>Assigned SO *</Label>
-                <Select value={form.assigned_so_email} onValueChange={v => updateForm('assigned_so_email', v)}>
+                <Select value={form.assignedSoEmail} onValueChange={v => updateForm('assignedSoEmail', v)}>
                   <SelectTrigger><SelectValue placeholder="Select SO" /></SelectTrigger>
                   <SelectContent>
                     {salesUsers.filter(u => u.email).map(u => <SelectItem key={u.email} value={u.email}>{u.name} ({u.email})</SelectItem>)}
@@ -201,16 +201,16 @@ const DealerManagement: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Distributor *</Label>
-                <Select value={form.distributor_name} onValueChange={v => updateForm('distributor_name', v)}>
+                <Select value={form.distributorName} onValueChange={v => updateForm('distributorName', v)}>
                   <SelectTrigger><SelectValue placeholder="Select Distributor" /></SelectTrigger>
                   <SelectContent>
-                    {distributors.filter(d => d.distributor_name).map(d => <SelectItem key={d.distributor_name} value={d.distributor_name}>{d.distributor_name}</SelectItem>)}
+                    {distributors.filter(d => d.distributorName).map(d => <SelectItem key={d.distributorName} value={d.distributorName}>{d.distributorName}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Credit Limit</Label>
-                <Input type="number" value={form.credit_limit} onChange={e => updateForm('credit_limit', Number(e.target.value))} />
+                <Input type="number" value={form.creditLimit} onChange={e => updateForm('creditLimit', Number(e.target.value))} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

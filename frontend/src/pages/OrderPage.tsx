@@ -20,7 +20,7 @@ import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 
 const OrderPage: React.FC = () => {
   const { user } = useAuth();
-  const { dealers, distributors, products, orders, addOrder, updateOrderItems, settings, refreshAll } = useData();
+  const { dealers, distributors, products, orders, warehouses, addOrder, updateOrderItems, settings, refreshAll } = useData();
   const { toast } = useToast();
 
   const { id } = useParams<{ id?: string }>();
@@ -29,23 +29,31 @@ const OrderPage: React.FC = () => {
   const [partyType, setPartyType] = useState<'Dealer' | 'Distributor'>('Dealer');
   const [selectedParty, setSelectedParty] = useState('');
   const [items, setItems] = useState<OrderItem[]>([
-    { product: '', qty: 0, price: 0, total: 0, item_remark: '' },
+    { product: '', qty: 0, price: 0, total: 0, itemRemark: '' },
   ]);
   const [narration, setNarration] = useState('');
+  const [warehouseId, setWarehouseId] = useState<string | number>(1);
   const [showSummary, setShowSummary] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     if (id && orders.length > 0) {
-      const existing = orders.find(o => o.order_id === id);
+      const existing = orders.find(o => o.orderId === id);
       if (existing) {
-        setPartyType(existing.party_type);
-        setSelectedParty(existing.party_name);
-        setItems(existing.items);
+        setPartyType(existing.partyType);
+        setSelectedParty(existing.partyName);
+        setItems(existing.items.map((item: any) => ({
+          ...item,
+          product: typeof item.product === 'object' ? item.product.id : (item.productId || item.product)
+        })));
         setNarration(existing.narration);
       }
     }
-  }, [id, orders]);
+    // Fallback warehouse if 1 is not present
+    if (warehouses && warehouses.length > 0 && !warehouses.find(w => w.id === warehouseId)) {
+        setWarehouseId(warehouses[0].id);
+    }
+  }, [id, orders, warehouses, warehouseId]);
 
   // Force re-fetch shared states/settings when visiting form view
   useEffect(() => {
@@ -58,24 +66,24 @@ const OrderPage: React.FC = () => {
   // These are now purely data-driven based on what DataContext fetches (which is role-aware)
   const myDealers = dealers.filter(d => d.active);
   const myDistributors = distributors.filter(d => d.active);
-  const parties = partyType === 'Dealer' ? myDealers.map(d => d.dealer_name) : myDistributors.map(d => d.distributor_name);
+  const parties = partyType === 'Dealer' ? myDealers.map(d => d.dealerName) : myDistributors.map(d => d.distributorName);
 
-  const selectedDealerInfo = partyType === 'Dealer' ? dealers.find(d => d.dealer_name === selectedParty) : null;
+  const selectedDealerInfo = partyType === 'Dealer' ? dealers.find(d => d.dealerName === selectedParty) : null;
   const selectedDistInfo = partyType === 'Distributor'
-    ? distributors.find(d => d.distributor_name === selectedParty)
-    : distributors.find(d => d.distributor_name === selectedDealerInfo?.distributor_name);
+    ? distributors.find(d => d.distributorName === selectedParty)
+    : distributors.find(d => d.distributorName === selectedDealerInfo?.distributorName);
 
   const creditWarning = useMemo(() => {
     // Check if credit warnings are enabled in global settings
-    if (settings.show_credit_warnings === false) return null;
+    if (settings.showCreditWarnings === false) return null;
 
     const grandTotal = items.reduce((s, i) => s + i.total, 0);
     if (partyType === 'Dealer' && selectedDealerInfo) {
-      const remaining = selectedDealerInfo.credit_limit - selectedDealerInfo.outstanding;
+      const remaining = selectedDealerInfo.creditLimit - selectedDealerInfo.outstanding;
       if (grandTotal > remaining) return `Dealer credit limit exceeded! Available: ₹${remaining.toLocaleString()}`;
     }
     if (selectedDistInfo) {
-      const remaining = selectedDistInfo.credit_limit - selectedDistInfo.outstanding;
+      const remaining = selectedDistInfo.creditLimit - selectedDistInfo.outstanding;
       if (grandTotal > remaining) return `Distributor credit limit exceeded! Available: ₹${remaining.toLocaleString()}`;
     }
     return null;
@@ -89,10 +97,10 @@ const OrderPage: React.FC = () => {
   };
 
   const getItemWeight = (item: OrderItem) => {
-    const prod = products.find(p => p.product_name === item.product);
+    const prod = products.find(p => p.id === item.product);
     if (!prod) return 0;
     if (prod.weight && prod.weight > 0) return prod.weight * item.qty;
-    return getBagWeight(prod.bag_size) * item.qty;
+    return getBagWeight(prod.bagSize) * item.qty;
   };
 
   const getTotalWeight = () => {
@@ -106,7 +114,7 @@ const OrderPage: React.FC = () => {
     (updated[index] as any)[field] = value;
     if (field === 'qty' || field === 'price' || field === 'product') {
       if (field === 'product') {
-        const prod = products.find(p => p.product_name === value);
+        const prod = products.find(p => p.id === value);
         if (prod) updated[index].price = prod.rate;
       }
       updated[index].total = updated[index].qty * updated[index].price;
@@ -114,14 +122,14 @@ const OrderPage: React.FC = () => {
     setItems(updated);
   };
 
-  const addItem = () => setItems([...items, { product: '', qty: 0, price: 0, total: 0, item_remark: '' }]);
+  const addItem = () => setItems([...items, { product: '', qty: 0, price: 0, total: 0, itemRemark: '' }]);
   const removeItem = (index: number) => { if (items.length === 1) return; setItems(items.filter((_, i) => i !== index)); };
   const canSubmit = selectedParty && items.every(i => i.product && i.qty > 0 && i.price > 0);
 
   const groupedProducts = useMemo(() => {
     const groups: Record<string, typeof products> = {};
-    products.filter(p => p.product_name).forEach(p => {
-      const cat = p.category_name || p.category || 'Other';
+    products.filter(p => (p.productName || p.name)).forEach(p => {
+      const cat = p.categoryName || p.category?.name || p.category || 'Other';
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
     });
@@ -129,12 +137,21 @@ const OrderPage: React.FC = () => {
   }, [products]);
 
   const handleSubmit = async () => {
+    const payloadItems = items.filter(i => i.product).map(i => ({
+      productId: i.product,
+      qty: Number(i.qty),
+      price: Number(i.price),
+      total: Number(i.total),
+      itemRemark: i.itemRemark || ''
+    }));
+
     const updatedOrder = {
-      items: items.filter(i => i.product),
+      items: payloadItems,
       narration,
-      grand_total: grandTotal,
-      party_name: selectedParty,
-      distributor: selectedDistInfo?.distributor_name || selectedParty,
+      grandTotal,
+      partyName: selectedParty,
+      distributor: selectedDistInfo?.distributorName || selectedParty,
+      warehouseId: Number(warehouseId) || 1,
     };
 
     try {
@@ -144,23 +161,26 @@ const OrderPage: React.FC = () => {
       } else {
         const newOrder = {
           date: new Date().toISOString().split('T')[0],
-          order_id: `ORD-${Date.now().toString().slice(-6)}`,
-          so_email: user?.email || '',
-          party_type: partyType,
-          party_name: selectedParty,
-          distributor: selectedDistInfo?.distributor_name || selectedParty,
-          items: items.filter(i => i.product),
+          orderId: `ORD-${Date.now().toString().slice(-6)}`,
+          soEmail: user?.email || '',
+          partyType,
+          partyName: selectedParty,
+          distributor: selectedDistInfo?.distributorName || selectedParty,
+          items: payloadItems,
           narration,
-          status: 'Pending' as const,
-          grand_total: grandTotal,
+          status: 'Pending',
+          totalAmount: grandTotal,
+          grandTotal: grandTotal,
+          warehouseId: Number(warehouseId) || 1, 
         };
-        await addOrder(newOrder);
-        toast({ title: 'Order Placed Successfully!', description: `Order ${newOrder.order_id} for ${selectedParty}` });
+        await addOrder(newOrder as any);
+        toast({ title: 'Order Placed Successfully!', description: `Order ${newOrder.orderId} for ${selectedParty}` });
       }
       setShowSummary(false);
       setSubmitted(true);
-    } catch (err: any) {
-      toast({ title: 'Operation Failed', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast({ title: 'Operation Failed', description: error.message, variant: 'destructive' });
     }
   };
 
@@ -171,7 +191,7 @@ const OrderPage: React.FC = () => {
         navigate('/sales/orders');
       } else {
         setSelectedParty('');
-        setItems([{ product: '', qty: 0, price: 0, total: 0, item_remark: '' }]);
+        setItems([{ product: '', qty: 0, price: 0, total: 0, itemRemark: '' }]);
         setNarration('');
       }
     };
@@ -201,10 +221,10 @@ const OrderPage: React.FC = () => {
           <PDFGenerator 
             type="SALES_ORDER" 
             data={{
-              order_id: id,
+              orderId: id,
               date: new Date().toISOString().split('T')[0],
-              party_name: selectedParty,
-              grand_total: grandTotal,
+              partyName: selectedParty,
+              grandTotal: grandTotal,
               items: items.filter(i => i.product)
             }}
             filename={`Order_${id}.pdf`}
@@ -240,9 +260,9 @@ const OrderPage: React.FC = () => {
           {selectedParty && selectedDistInfo && (
             <div className="bg-secondary rounded-lg p-3 text-sm">
               <span className="text-muted-foreground">Distributor: </span>
-              <span className="font-medium">{selectedDistInfo.distributor_name}</span>
+              <span className="font-medium">{selectedDistInfo.distributorName}</span>
               <span className="text-muted-foreground ml-4">Credit Available: </span>
-              <span className="font-medium">₹{(selectedDistInfo.credit_limit - selectedDistInfo.outstanding).toLocaleString()}</span>
+              <span className="font-medium">₹{(selectedDistInfo.creditLimit - selectedDistInfo.outstanding).toLocaleString()}</span>
             </div>
           )}
         </CardContent>
@@ -268,7 +288,9 @@ const OrderPage: React.FC = () => {
                     <PopoverTrigger asChild>
                       <Button variant="outline" role="combobox" className="w-full justify-between font-normal text-left h-11 px-3">
                         {item.product ? (
-                          <span className="truncate">{item.product}</span>
+                          <span className="truncate">
+                            {products.find(p => p.id === item.product)?.productName || item.product}
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">Search and select product...</span>
                         )}
@@ -284,16 +306,16 @@ const OrderPage: React.FC = () => {
                             <CommandGroup key={category} heading={category}>
                               {prods.map((p) => (
                                 <CommandItem
-                                  key={p.product_code}
-                                  value={`${p.product_name} ${category}`}
+                                  key={p.id}
+                                  value={`${p.productName} ${category}`}
                                   onSelect={() => {
-                                    updateItem(idx, 'product', p.product_name);
+                                    updateItem(idx, 'product', p.id!);
                                   }}
                                 >
-                                  <Check className={`mr-2 h-4 w-4 shrink-0 ${item.product === p.product_name ? "opacity-100" : "opacity-0"}`} />
+                                  <Check className={`mr-2 h-4 w-4 shrink-0 ${item.product === p.id ? "opacity-100" : "opacity-0"}`} />
                                   <div className="flex flex-col overflow-hidden">
-                                    <span className="truncate font-medium">{p.product_name}</span>
-                                    <span className="text-[10px] text-muted-foreground">({p.bag_size}) - ₹{p.rate}</span>
+                                    <span className="truncate font-medium">{p.productName}</span>
+                                    <span className="text-[10px] text-muted-foreground">({p.bagSize}) - ₹{p.rate}</span>
                                   </div>
                                 </CommandItem>
                               ))}
@@ -317,13 +339,13 @@ const OrderPage: React.FC = () => {
                     value={item.price || ''}
                     onChange={e => updateItem(idx, 'price', Number(e.target.value))}
                     placeholder="0"
-                    disabled={!isAdmin && !can('edit_order_price') && settings.allow_price_edit_sales !== true && settings.allow_price_edit_sales !== 'true'}
+                    disabled={!isAdmin && !can('edit_order_price') && settings.allowPriceEditSales !== true && settings.allowPriceEditSales !== 'true'}
                   />
 
                 </div>
               </div>
               <div className="flex items-center justify-between">
-                <Input placeholder="Item remark (optional)" className="h-9 text-xs flex-1 mr-3" value={item.item_remark} onChange={e => updateItem(idx, 'item_remark', e.target.value)} />
+                <Input placeholder="Item remark (optional)" className="h-9 text-xs flex-1 mr-3" value={item.itemRemark} onChange={e => updateItem(idx, 'itemRemark', e.target.value)} />
 
                 <div className="flex flex-col items-end">
                   <span className="text-sm font-bold text-foreground whitespace-nowrap">{getItemWeight(item)} kg</span>
@@ -377,7 +399,7 @@ const OrderPage: React.FC = () => {
             <div className="grid grid-cols-2 gap-2 text-sm">
               <span className="text-muted-foreground">Party Type:</span><span className="font-medium">{partyType}</span>
               <span className="text-muted-foreground">Party:</span><span className="font-medium">{selectedParty}</span>
-              <span className="text-muted-foreground">Distributor:</span><span className="font-medium">{selectedDistInfo?.distributor_name || '-'}</span>
+              <span className="text-muted-foreground">Distributor:</span><span className="font-medium">{selectedDistInfo?.distributorName || '-'}</span>
             </div>
             <div className="border border-border rounded-lg overflow-hidden">
               <table className="w-full text-sm">
@@ -418,10 +440,10 @@ const OrderPage: React.FC = () => {
               <PDFGenerator 
                 type="SALES_ORDER" 
                 data={{
-                  order_id: id || 'NEW',
+                  orderId: id || 'NEW',
                   date: new Date().toISOString().split('T')[0],
-                  party_name: selectedParty,
-                  grand_total: grandTotal,
+                  partyName: selectedParty,
+                  grandTotal: grandTotal,
                   items: items.filter(i => i.product)
                 }}
                 filename={`Order_${id || 'New'}.pdf`}

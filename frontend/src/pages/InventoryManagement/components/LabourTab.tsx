@@ -30,7 +30,7 @@ export const LabourTab: React.FC<LabourTabProps> = ({
       </div>
       <DataTable 
         columns={['Name', 'Daily Wage']}
-        rows={labours.map(l => [l.name, Currency(l.daily_wage)])}
+        rows={labours.map(l => [l.name, Currency(l.dailyWage)])}
         onEdit={i => onEdit(labours[i])}
         onDelete={i => onDelete(labours[i].id)}
         onRowClick={i => onRowClick(labours[i])} 

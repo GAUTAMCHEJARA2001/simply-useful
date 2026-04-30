@@ -16,17 +16,42 @@ const Reports: React.FC = () => {
   const getChartData = () => {
     switch (reportType) {
       case 'so-wise':
-        return Object.entries(completedOrders.reduce((acc, o) => { acc[o.so_email.split('@')[0]] = (acc[o.so_email.split('@')[0]] || 0) + o.grand_total; return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
+        return Object.entries(completedOrders.reduce((acc, o: any) => { 
+          const email = o.so_email || o.soEmail || 'unknown@company.com';
+          const name = email.split('@')[0];
+          acc[name] = (acc[name] || 0) + (o.grand_total || o.grandTotal || 0); 
+          return acc; 
+        }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
       case 'dealer-wise':
-        return Object.entries(orders.filter(o => o.party_type === 'Dealer').reduce((acc, o) => { acc[o.party_name] = (acc[o.party_name] || 0) + o.grand_total; return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
+        return Object.entries(orders.filter(o => ((o as any).party_type || (o as any).partyType) === 'Dealer').reduce((acc, o: any) => { 
+          const name = o.party_name || o.partyName || 'Unknown Dealer';
+          acc[name] = (acc[name] || 0) + (o.grand_total || o.grandTotal || 0); 
+          return acc; 
+        }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
       case 'distributor-wise':
-        return Object.entries(orders.reduce((acc, o) => { acc[o.distributor] = (acc[o.distributor] || 0) + o.grand_total; return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
+        return Object.entries(orders.reduce((acc, o: any) => { 
+          const dist = o.distributor || 'No Distributor';
+          acc[dist] = (acc[dist] || 0) + (o.grand_total || o.grandTotal || 0); 
+          return acc; 
+        }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
       case 'product-wise':
-        return Object.entries(orders.flatMap(o => o.items).reduce((acc, i) => { acc[i.product] = (acc[i.product] || 0) + i.total; return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name: name.replace('TileFix ', '').replace('GroutMaster ', ''), value }));
+        return Object.entries(orders.flatMap(o => o.items || []).reduce((acc, i: any) => { 
+          const prod = i.productName || (typeof i.product === 'object' ? i.product.name : i.product) || 'Unknown Product';
+          acc[prod] = (acc[prod] || 0) + (i.total || (i.qty * i.price) || 0); 
+          return acc; 
+        }, {} as Record<string, number>)).map(([name, value]) => ({ name: name.replace('TileFix ', '').replace('GroutMaster ', ''), value }));
       case 'pending':
-        return pendingOrders.map(o => ({ name: o.order_id, value: o.grand_total }));
+        return pendingOrders.map((o: any) => ({ 
+          name: o.order_id || o.orderId || 'Order', 
+          value: o.grand_total || o.grandTotal || 0 
+        }));
       case 'monthly':
-        return Object.entries(orders.reduce((acc, o) => { const m = o.date.substring(0, 7); acc[m] = (acc[m] || 0) + o.grand_total; return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
+        return Object.entries(orders.reduce((acc, o: any) => { 
+          const d = o.date || o.createdAt || new Date().toISOString();
+          const m = typeof d === 'string' ? d.substring(0, 7) : 'Invalid Date';
+          acc[m] = (acc[m] || 0) + (o.grand_total || o.grandTotal || 0); 
+          return acc; 
+        }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }));
       default:
         return [];
     }

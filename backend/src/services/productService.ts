@@ -20,11 +20,12 @@ export const createProduct = async (data: any) => {
     data: {
       productCode: data.productCode,
       name: data.name,
-      category: data.category,
+      categoryId: Number(data.categoryId) || 1,
       bagSize: data.bagSize,
-      rate: data.rate,
-      gst: data.gst,
-      stockQty: data.stockQty || 0,
+      brandId: data.brandId ? Number(data.brandId) : undefined,
+      unitId: data.unitId ? Number(data.unitId) : undefined,
+      rate: Number(data.rate),
+      gst: Number(data.gst),
     },
   });
 };

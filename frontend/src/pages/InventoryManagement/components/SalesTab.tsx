@@ -29,11 +29,11 @@ export const SalesTab: React.FC<SalesTabProps> = ({
       <DataTable 
         columns={['Customer', 'Challan', 'Net Amount', 'Profit', 'Date']}
         rows={sales.map(s => [
-            s.customer_name, 
-            s.challan_number, 
-            Currency(s.net_amount), 
-            Currency(s.total_profit), 
-            s.created_at ? new Date(s.created_at).toLocaleDateString('en-IN') : '—'
+            s.customerName, 
+            s.challanNumber, 
+            Currency(s.netAmount), 
+            Currency(s.totalProfit), 
+            s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN') : '—'
         ])}
         onDelete={i => onDelete(sales[i].id)}
         onRowClick={i => onRowClick(sales[i])} 

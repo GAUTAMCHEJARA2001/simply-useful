@@ -50,17 +50,18 @@ export const createSale = async (data: any, soEmail: string) => {
 
     // 2. Process each item
     for (const item of items) {
-      const product = await tx.product.findUnique({
-        where: { id: item.productId },
+      // Find current stock in default warehouse (ID 1)
+      const stock = await tx.inventory.findUnique({
+        where: {
+          productId_warehouseId: {
+            productId: item.productId,
+            warehouseId: data.warehouseId || 1
+          }
+        }
       });
 
-      if (!product) {
-        throw new Error(`Product with ID ${item.productId} not found`);
-      }
-
-      // 3. Check stock levels (Edge case handling)
-      if (product.stockQty < item.qty) {
-        throw new Error(`Insufficient stock for product: ${product.name}. Available: ${product.stockQty}, Requested: ${item.qty}`);
+      if (!stock || stock.quantity < item.qty) {
+        throw new Error(`Insufficient stock for product. Available: ${stock?.quantity || 0}`);
       }
 
       // 4. Create OrderItem
@@ -75,13 +76,16 @@ export const createSale = async (data: any, soEmail: string) => {
         },
       });
 
-      // 5. Decrement Product Stock (Atomic)
-      await tx.product.update({
-        where: { id: item.productId },
+      // 5. Decrement Inventory Stock (Atomic)
+      await tx.inventory.update({
+        where: {
+          productId_warehouseId: {
+            productId: item.productId,
+            warehouseId: data.warehouseId || 1
+          }
+        },
         data: {
-          stockQty: {
-            decrement: item.qty,
-          },
+          quantity: { decrement: item.qty },
         },
       });
     }

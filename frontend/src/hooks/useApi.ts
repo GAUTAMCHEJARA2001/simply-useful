@@ -31,7 +31,7 @@ export function useApi<T = any>(apiFunc: (...args: any[]) => Promise<ApiResponse
         if (result.success) {
           setData(result.data);
         } else {
-          setError(result.message);
+          setError(result.message || 'Request failed');
         }
       }
       return result;

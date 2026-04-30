@@ -2,11 +2,11 @@
   "name": "simply-useful-root",
   "private": true,
   "scripts": {
-    "frontend:dev": "npm run dev --prefix frontend",
-    "backend:dev": "npm run dev --prefix backend",
+    "frontend:dev": "cd frontend && npm run dev",
+    "backend:dev": "cd backend && npm run dev",
     "dev": "npx concurrently \"npm run frontend:dev\" \"npm run backend:dev\"",
-    "install:all": "npm install && npm install --prefix frontend && npm install --prefix backend",
-    "build": "npm run build --prefix frontend"
+    "install:all": "npm install && cd frontend && npm install && cd .. && cd backend && npm install",
+    "build": "cd frontend && npm run build"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

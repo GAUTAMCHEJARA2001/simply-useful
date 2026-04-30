@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiClient } from '@/api/client';
+import apiClient from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
@@ -53,13 +53,13 @@ const CreatePurchaseOrder: React.FC = () => {
     const loadData = async () => {
       try {
         const [s, w, p] = await Promise.all([
-          apiClient<any[]>('/inv/masters/suppliers'),
-          apiClient<any[]>('/inv/masters/warehouses'),
-          apiClient<any[]>('/inv/masters/products')
+          apiClient<any[]>('/inv/masters/suppliers').then(r => r.success ? r.data : []),
+          apiClient<any[]>('/inv/masters/warehouses').then(r => r.success ? r.data : []),
+          apiClient<any[]>('/inv/masters/products').then(r => r.success ? r.data : [])
         ]);
-        setSuppliers(s);
-        setWarehouses(w);
-        setProducts(p);
+        setSuppliers(s as any[]);
+        setWarehouses(w as any[]);
+        setProducts(p as any[]);
       } catch (err: any) {
         toast({ title: 'Load failed', description: err.message, variant: 'destructive' });
       } finally {
@@ -129,8 +129,12 @@ const CreatePurchaseOrder: React.FC = () => {
           items: items.filter(i => i.product_id)
         }
       });
-      setSubmittedPO(res);
-      toast({ title: 'Success', description: `Purchase Order ${res.po_number} created!` });
+      if (res.success) {
+        setSubmittedPO(res.data);
+        toast({ title: 'Success', description: `Purchase Order ${res.data.po_number || ''} created!` });
+      } else {
+        throw new Error(res.message);
+      }
     } catch (err: any) {
       toast({ title: 'Failed', description: err.message, variant: 'destructive' });
     } finally {

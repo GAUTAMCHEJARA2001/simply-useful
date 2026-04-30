@@ -9,11 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Edit, Trash2, Shield, Lock, Key, Users, Settings2, CheckCircle2, XCircle } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Shield, Lock, Key, Users, Settings2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
-import { usePermissions } from '@/hooks/usePermissions';
-import { apiClient } from '@/api/client';
+import apiService from '@/api/apiService';
 
 const roles: UserRole[] = ['SALES', 'ADMIN', 'HR', 'INVENTORY', 'SUPERADMIN'];
 
@@ -57,24 +56,24 @@ const UserManagement: React.FC = () => {
     setAssignUser(u);
     setAssignmentsOpen(true);
     setLoadingAssignments(true);
-    setSelectedParentCat(null); // Reset
-    setSearchProd(''); // Reset
-    setUserAssignments({ brands: [], categories: [], warehouses: [], products: [] }); // Reset to empty slate
+    setSelectedParentCat(null);
+    setSearchProd('');
+    setUserAssignments({ brands: [], categories: [], warehouses: [], products: [] });
     try {
       if (allBrands.length === 0) {
         const [b, c, w, p] = await Promise.all([
-          apiClient<any[]>('/inv/masters/brands').catch(() => []),
-          apiClient<any[]>('/inv/masters/categories').catch(() => []),
-          apiClient<any[]>('/inv/masters/warehouses').catch(() => []),
-          apiClient<any[]>('/inv/masters/products').catch(() => [])
+          apiService.inventory.getBrands().then(({ data }) => data.success ? data.data || [] : []),
+          apiService.inventory.getCategories().then(({ data }) => data.success ? data.data || [] : []),
+          apiService.inventory.getWarehouses().then(({ data }) => data.success ? data.data || [] : []),
+          apiService.inventory.getProductsMaster().then(({ data }) => data.success ? data.data || [] : [])
         ]);
         setAllBrands(b);
         setAllCategories(c);
         setAllWarehouses(w);
         setAllProducts(p);
       }
-      const res = await apiClient<any>(`/inv/masters/users/${u.id}/assignments`);
-      setUserAssignments(res || { brands: [], categories: [], warehouses: [], products: [] });
+      const res = await apiService.users.getAssignments(u.id);
+      setUserAssignments(res.data.success ? res.data.data : { brands: [], categories: [], warehouses: [], products: [] });
     } catch (e) { /* ignore */ }
     finally { setLoadingAssignments(false); }
   };
@@ -82,7 +81,7 @@ const UserManagement: React.FC = () => {
   const saveAssignments = async () => {
     if (!assignUser) return;
     try {
-      await apiClient(`/inv/masters/users/${assignUser.id}/assignments`, { method: 'POST', data: userAssignments });
+      await apiService.users.saveAssignments(assignUser.id, userAssignments);
       toast({ title: 'Assignments saved' });
       setAssignmentsOpen(false);
     } catch (e: any) { 
@@ -308,14 +307,25 @@ const UserManagement: React.FC = () => {
                             <td key={role} className="px-4 py-3">
                               <div className="flex justify-center">
                                 <Switch
-                                  checked={perm.is_enabled}
-                                  onCheckedChange={(checked) => {
-                                    updatePermission(perm.id, checked);
-                                    toast({
-                                      title: `Permission Updated`,
-                                      description: `${feature} is now ${checked ? 'enabled' : 'disabled'} for ${role}.`,
-                                      variant: checked ? 'default' : 'destructive'
-                                    });
+                                  checked={perm.isEnabled}
+                                  onCheckedChange={async (checked) => {
+                                    try {
+                                      const res = await apiService.settings.updatePermission(perm.id, checked);
+                                      if (res.data.success) {
+                                        updatePermission(perm.id, checked);
+                                        toast({
+                                          title: `Permission Updated`,
+                                          description: `${feature} is now ${checked ? 'enabled' : 'disabled'} for ${role}.`,
+                                          variant: checked ? 'default' : 'destructive'
+                                        });
+                                      }
+                                    } catch (err) {
+                                      toast({
+                                        title: "Error",
+                                        description: "Failed to update permission",
+                                        variant: "destructive"
+                                      });
+                                    }
                                   }}
                                 />
                               </div>
@@ -350,12 +360,12 @@ const UserManagement: React.FC = () => {
               {editing ? 'Update existing user profile and roles.' : 'Create a new user account with specified role and status.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2"><Label>Name *</Label><Input value={form.name} onChange={e => uf('name', e.target.value)} /></div>
+          <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-4">
+            <div className="space-y-2"><Label>Name *</Label><Input value={form.name} onChange={e => uf('name', e.target.value)} required /></div>
             {!editing && (
               <>
-                <div className="space-y-2"><Label>Email *</Label><Input type="email" value={form.email} onChange={e => uf('email', e.target.value)} /></div>
-                <div className="space-y-2"><Label>Password *</Label><Input type="password" value={form.password} onChange={e => uf('password', e.target.value)} minLength={6} /></div>
+                <div className="space-y-2"><Label>Email *</Label><Input type="email" value={form.email} onChange={e => uf('email', e.target.value)} required /></div>
+                <div className="space-y-2"><Label>Password *</Label><Input type="password" value={form.password} onChange={e => uf('password', e.target.value)} minLength={6} required /></div>
               </>
             )}
             <div className="grid grid-cols-2 gap-4">
@@ -372,11 +382,11 @@ const UserManagement: React.FC = () => {
                 </Select>
               </div>
             </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>{editing ? 'Update' : 'Create'}</Button>
-          </DialogFooter>
+            <DialogFooter className="gap-2 pt-4">
+              <Button variant="outline" onClick={() => setDialogOpen(false)} type="button">Cancel</Button>
+              <Button type="submit">{editing ? 'Update' : 'Create'}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -515,8 +525,8 @@ const UserManagement: React.FC = () => {
                             const ch = e.target.checked;
                             setUserAssignments(f => ({ ...f, products: ch ? [...(f.products || []), p.id] : (f.products || []).filter((id: any) => id !== p.id) }));
                           }} /> 
-                          <span className="flex-1">{p.name} <span className="text-[10px] text-muted-foreground ml-1">({p.sku})</span></span>
-                          {allBrands.find(b => b.id === p.brand_id) && <Badge variant="secondary" className="text-[9px] px-1 h-4">{allBrands.find(b => b.id === p.brand_id)?.name}</Badge>}
+                          <span className="flex-1">{p.name} <span className="text-[10px] text-muted-foreground ml-1">({p.sku || p.productCode || 'N/A'})</span></span>
+                          {allBrands.find(b => b.id === (p.brandId ?? p.brand_id)) && <Badge variant="secondary" className="text-[9px] px-1 h-4">{allBrands.find(b => b.id === (p.brandId ?? p.brand_id))?.name}</Badge>}
                         </label>
                       ))}
                     </div>

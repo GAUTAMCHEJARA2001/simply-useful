@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Package, Clock, CheckCircle, AlertTriangle, Truck, ShoppingBag } from 'lucide-react';
+import { Package, CheckCircle, AlertTriangle, Truck, ShoppingBag } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -46,16 +45,30 @@ const InventoryDashboard: React.FC = () => {
   const pendingOrders = orders.filter(o => o.status === 'Pending' || o.status === 'Approved');
   const completedOrders = orders.filter(o => o.status === 'Completed');
 
-  const productDemand = orders
+  const productDemand = (orders || [])
     .filter(o => o.status !== 'Cancelled' && o.status !== 'Completed')
-    .flatMap(o => o.items)
+    .flatMap(o => o.items || [])
     .reduce((acc, item) => {
-      const e = acc.find(a => a.product === item.product);
-      if (e) { e.qty += item.qty; e.orders++; }
-      else acc.push({ product: item.product, qty: item.qty, orders: 1 });
+      // Use name if object, or the string itself
+      const productName = (item.product as any)?.name || item.productName || item.product;
+
+      const existing = acc.find(a => a.product === productName);
+      if (existing) {
+        existing.qty += item.qty;
+        existing.orders++;
+      } else {
+        acc.push({
+          product: productName,
+          qty: item.qty,
+          orders: 1
+        });
+      }
       return acc;
     }, [] as { product: string; qty: number; orders: number }[])
     .sort((a, b) => b.qty - a.qty);
+
+  // Debug log as requested by user
+  console.log('Product Demand Data:', productDemand);
 
   const handleAction = async () => {
     if (!confirmOrder) return;
@@ -77,10 +90,10 @@ const InventoryDashboard: React.FC = () => {
   };
 
   const actionLabel = (status: string) => {
-    if (status === 'Approved') return [{ next: 'Dispatched' as OrderStatus, label: 'Mark Dispatched', icon: Truck, color: 'bg-purple-600 hover:bg-purple-700 text-white' }];
+    if (status === 'Approved') return [{ next: 'Dispatched' as OrderStatus, label: 'Send Out Now', icon: Truck, color: 'bg-purple-600 hover:bg-purple-700 text-white' }];
     if (status === 'Dispatched') return [
-      { next: 'Completed' as OrderStatus, label: 'Mark Completed', icon: CheckCircle, color: 'bg-green-600 hover:bg-green-700 text-white' },
-      { next: 'Returned' as OrderStatus, label: 'Return Order', icon: AlertTriangle, color: 'bg-red-600 hover:bg-red-700 text-white' }
+      { next: 'Completed' as OrderStatus, label: 'Finish Order', icon: CheckCircle, color: 'bg-green-600 hover:bg-green-700 text-white' },
+      { next: 'Returned' as OrderStatus, label: 'Return Items', icon: AlertTriangle, color: 'bg-red-600 hover:bg-red-700 text-white' }
     ];
     return null;
   };
@@ -89,12 +102,12 @@ const InventoryDashboard: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-header">Inventory Dashboard</h1>
-          <p className="page-subheader">Stock management &amp; order fulfillment</p>
+          <h1 className="page-header">Stock Room Overview</h1>
+          <p className="page-subheader">Track your products and send out orders</p>
         </div>
         <Link to="/inventory/manage">
           <button className="px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors flex items-center gap-2">
-            <Package className="w-4 h-4" /> Inventory Management →
+            <Package className="w-4 h-4" /> Manage Stock Room →
           </button>
         </Link>
       </div>
@@ -102,10 +115,10 @@ const InventoryDashboard: React.FC = () => {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Ready to Dispatch', value: approvedOrders.length, icon: ShoppingBag, color: 'bg-blue-500/10 text-blue-600' },
-          { label: 'Dispatched', value: dispatchedOrders.length, icon: Truck, color: 'bg-purple-500/10 text-purple-600' },
+          { label: 'Ready to Send', value: approvedOrders.length, icon: ShoppingBag, color: 'bg-blue-500/10 text-blue-600' },
+          { label: 'Sent Out', value: dispatchedOrders.length, icon: Truck, color: 'bg-purple-500/10 text-purple-600' },
           { label: 'Completed', value: completedOrders.length, icon: CheckCircle, color: 'bg-success/10 text-success' },
-          { label: 'Total Products', value: products.length, icon: Package, color: 'bg-primary/10 text-primary' },
+          { label: 'Total Items', value: products.length, icon: Package, color: 'bg-primary/10 text-primary' },
         ].map((kpi, i) => (
           <motion.div key={kpi.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
             <div className="kpi-card">
@@ -120,7 +133,7 @@ const InventoryDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Product Demand Table */}
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Product Demand (Active Orders)</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">What Customers Need (Active Orders)</CardTitle></CardHeader>
           <CardContent className="p-0">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-border bg-muted/30">
@@ -146,7 +159,7 @@ const InventoryDashboard: React.FC = () => {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              Order Fulfillment Queue
+              Orders to Pack & Send
               {approvedOrders.length > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{approvedOrders.length} ready</span>}
             </CardTitle>
           </CardHeader>
@@ -156,16 +169,17 @@ const InventoryDashboard: React.FC = () => {
             )}
             {[...pendingOrders, ...dispatchedOrders].map(o => {
               const action = actionLabel(o.status);
+              const orderId = o.orderId || (o as any).order_id;
               return (
-                <div key={o.order_id} className="p-3 rounded-lg border border-border bg-card">
+                <div key={orderId} className="p-3 rounded-lg border border-border bg-card">
                   <div className="flex items-center justify-between mb-2">
                     <div>
-                      <p className="text-sm font-semibold">{o.order_id}</p>
-                      <p className="text-xs text-muted-foreground">{o.party_name} · {o.date}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{o.items.map(i => `${i.product} ×${i.qty}`).join(', ')}</p>
+                      <p className="text-sm font-semibold">{orderId}</p>
+                      <p className="text-xs text-muted-foreground">{o.partyName || (o as any).party_name} · {o.date}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{(o.items || []).map((i: any) => `${i.productName || (typeof i.product === 'object' ? i.product.name : i.product)} ×${i.qty}`).join(', ')}</p>
                     </div>
                     <div className="text-right space-y-1">
-                      <p className="text-sm font-bold">₹{o.grand_total.toLocaleString()}</p>
+                      <p className="text-sm font-bold">₹{(o.grandTotal || (o as any).grand_total || 0).toLocaleString()}</p>
                       <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${statusStyles[o.status]}`}>{o.status}</span>
                     </div>
                   </div>
@@ -174,7 +188,7 @@ const InventoryDashboard: React.FC = () => {
                       {action.map((a: any) => (
                         <button
                           key={a.next}
-                          onClick={() => setConfirmOrder({ id: o.order_id, action: a.next, action_date: new Date().toISOString().split('T')[0] })}
+                          onClick={() => setConfirmOrder({ id: orderId, action: a.next, action_date: new Date().toISOString().split('T')[0] })}
                           className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${a.color}`}
                         >
                           <a.icon className="w-3.5 h-3.5" /> {a.label}

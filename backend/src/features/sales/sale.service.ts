@@ -1,5 +1,6 @@
 import { orderRepository } from './order.repository';
 import { AppError } from '../../middleware/errorHandler';
+import { CreateSaleInput } from '../../validation/schemas';
 
 /**
  * SALE SERVICE (ELITE - SYNCED WITH SCHEMA)
@@ -10,7 +11,7 @@ export const getSales = async () => {
   return await orderRepository.findAll();
 };
 
-export const createSale = async (data: any, soEmail: string) => {
+export const createSale = async (data: CreateSaleInput, soEmail: string) => {
   const { partyType, partyName, distributor, items, grandTotal } = data;
 
   // 1. Validation
@@ -25,6 +26,19 @@ export const createSale = async (data: any, soEmail: string) => {
     partyName,
     distributor,
     grandTotal,
+    warehouseId: data.warehouseId,
     items
   });
+};
+
+export const updateStatus = async (id: string, status: any) => {
+  return await orderRepository.updateStatus(id, status);
+};
+
+export const getSaleById = async (id: string) => {
+  return await orderRepository.findById(id);
+};
+
+export const updateItems = async (id: string, items: any) => {
+  return await orderRepository.updateItems(id, items);
 };

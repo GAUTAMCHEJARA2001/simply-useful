@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Users, ShoppingCart, TrendingUp, Package, CheckCircle, XCircle, Clock, Truck, Star, Warehouse, ClipboardList } from 'lucide-react';
+import { Users, ShoppingCart, TrendingUp, CheckCircle, XCircle, Clock, Truck, Star, Warehouse, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { motion } from 'framer-motion';
@@ -12,6 +12,8 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { Navigate } from 'react-router-dom';
 import { Order } from '@/types';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
+import { reportService } from '@/api/services/report.service';
+import { useQuery } from '@tanstack/react-query';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700',
@@ -32,6 +34,13 @@ const AdminDashboard: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
+  // Fetch real KPIs from backend
+  const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
+    queryKey: ['dashboard-kpis'],
+    queryFn: () => reportService.dashboard().then(res => res.data.data),
+    staleTime: 30000,
+  });
+
   // Pipeline counts
   const pipeline = {
     Pending: orders.filter(o => o.status === 'Pending').length,
@@ -42,15 +51,15 @@ const AdminDashboard: React.FC = () => {
   };
   const pendingOrders = orders.filter(o => o.status === 'Pending');
   const totalDealers = dealers.filter(d => d.active).length;
-  const totalRevenue = orders.filter(o => o.status === 'Completed').reduce((s, o) => s + (o.grand_total || 0), 0);
+  const totalRevenue = dashboardData?.revenue || 0;
   const formattedRevenue = totalRevenue >= 100000 ? `₹${(totalRevenue / 100000).toFixed(2)}L` : `₹${(totalRevenue / 1000).toFixed(0)}K`;
   const completionRate = orders.length > 0 ? Math.round((pipeline.Completed / orders.length) * 100) : 0;
 
   const kpis = [
-    { label: 'Total Orders', value: orders.length, icon: ShoppingCart, color: 'bg-primary/10 text-primary' },
-    { label: 'Active Dealers', value: totalDealers, icon: Users, color: 'bg-success/10 text-success' },
+    { label: 'Total Orders', value: dashboardData?.orders || orders.length, icon: ShoppingCart, color: 'bg-primary/10 text-primary' },
+    { label: 'Active Dealers', value: dashboardData?.dealers || totalDealers, icon: Users, color: 'bg-success/10 text-success' },
     { label: 'Revenue', value: formattedRevenue, icon: TrendingUp, color: 'bg-accent/10 text-accent' },
-    { label: 'Completion Rate', value: `${completionRate}%`, icon: Star, color: 'bg-purple-500/10 text-purple-600' },
+    { label: 'Total Products', value: dashboardData?.products || 0, icon: Warehouse, color: 'bg-purple-500/10 text-purple-600' },
   ];
 
   const pipelineItems = [
@@ -64,15 +73,15 @@ const AdminDashboard: React.FC = () => {
   const salesUsers = users.filter(u => u.role === 'SALES');
   const soData = salesUsers.map(u => ({
     name: (u.name || '').split(' ')[0] || 'User',
-    orders: orders.filter(o => o.so_email === u.email).length,
-    revenue: orders.filter(o => o.so_email === u.email && o.status === 'Completed').reduce((s, o) => s + o.grand_total, 0),
+    orders: orders.filter(o => o.soEmail === u.email).length,
+    revenue: orders.filter(o => o.soEmail === u.email && o.status === 'Completed').reduce((s, o) => s + o.grandTotal, 0),
   }));
 
   const quickLinks = [
-    { label: 'Warehouse Master', path: '/admin/warehouses', icon: Warehouse },
-    { label: 'Manage Dealers', path: '/admin/dealers', icon: Users },
-    { label: 'User Management', path: '/admin/users', icon: Users },
-    { label: 'BOM (Recipes)', path: '/admin/bom', icon: ClipboardList },
+    { label: 'Warehouse List', path: '/admin/warehouses', icon: Warehouse },
+    { label: 'Manage Shops', path: '/admin/dealers', icon: Users },
+    { label: 'Manage Staff', path: '/admin/users', icon: Users },
+    { label: 'Product Recipes', path: '/admin/bom', icon: ClipboardList },
   ];
 
   const handleAction = async () => {
@@ -87,18 +96,18 @@ const AdminDashboard: React.FC = () => {
         return;
       }
     }
-    await updateOrderStatus(confirmOrder.order.order_id, confirmOrder.action, confirmOrder.reason, confirmOrder.action_date);
+    await updateOrderStatus(confirmOrder.order.orderId, confirmOrder.action, confirmOrder.reason, confirmOrder.action_date);
     toast({
       title: confirmOrder.action === 'Approved' ? '✅ Order Approved' : '❌ Order Cancelled',
-      description: `${confirmOrder.order.order_id} — ${confirmOrder.order.party_name} has been ${confirmOrder.action.toLowerCase()}. Inventory team notified.`,
+      description: `${confirmOrder.order.orderId} — ${confirmOrder.order.partyName} has been ${confirmOrder.action.toLowerCase()}. Inventory team notified.`,
     });
     setConfirmOrder(null);
   };
 
   return (
     <div className="space-y-6">
-      <h1 className="page-header">Admin Dashboard</h1>
-      <p className="page-subheader">System overview and order pipeline management</p>
+      <h1 className="page-header">Admin Overview</h1>
+      <p className="page-subheader">See all orders and manage the system</p>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -115,7 +124,7 @@ const AdminDashboard: React.FC = () => {
 
       {/* ── Order Pipeline ─────────────────────────────────── */}
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">📦 Order Pipeline</CardTitle></CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">📦 Order Flow</CardTitle></CardHeader>
         <CardContent>
           <div className="grid grid-cols-5 gap-3 mb-4">
             {pipelineItems.map((item, i) => (
@@ -159,25 +168,25 @@ const AdminDashboard: React.FC = () => {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-              Pending Approval ({pendingOrders.length})
+              Orders Waiting for Approval ({pendingOrders.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {pendingOrders.map(o => (
-              <div key={o.order_id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-card border border-border">
+              <div key={o.orderId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-card border border-border">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm">{o.order_id}</span>
+                    <span className="font-semibold text-sm">{o.orderId}</span>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusStyles[o.status]}`}>{o.status}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{o.party_name} · SO: {o.so_email}</p>
-                  <p className="text-xs text-muted-foreground">{o.items.map(i => `${i.product} ×${i.qty}`).join(' | ')}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{o.partyName} · SO: {o.soEmail}</p>
+                  <p className="text-xs text-muted-foreground">{o.items.map(i => `${i.productName || (typeof i.product === 'object' ? (i.product as any).name : i.product)} ×${i.qty}`).join(' | ')}</p>
                   {o.narration && (
                     <p className="text-[11px] text-yellow-700 bg-yellow-500/10 px-1.5 py-0.5 rounded mt-1 w-fit border border-yellow-500/20">
                       📝 General Narration: {o.narration}
                     </p>
                   )}
-                  <p className="text-xs font-semibold text-primary mt-1">₹{o.grand_total.toLocaleString()}</p>
+                  <p className="text-xs font-semibold text-primary mt-1">₹{o.grandTotal.toLocaleString()}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
                   <Button
@@ -205,7 +214,7 @@ const AdminDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* SO Performance Chart */}
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">SO Performance</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Sales Staff Performance</CardTitle></CardHeader>
           <CardContent>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -223,7 +232,7 @@ const AdminDashboard: React.FC = () => {
 
         {/* Quick Actions */}
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Quick Actions</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Quick Shortcuts</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {quickLinks.map(link => (
               <button key={link.path} onClick={() => navigate(link.path)} className="w-full flex items-center gap-3 p-4 rounded-xl bg-secondary hover:bg-muted transition-colors text-left">
@@ -240,15 +249,15 @@ const AdminDashboard: React.FC = () => {
           <DialogHeader>
             <DialogTitle>{confirmOrder?.action === 'Approved' ? '✅ Approve Order?' : '❌ Reject Order?'}</DialogTitle>
             <DialogDescription id="order-approval-desc" className="sr-only">
-              Review order details, items, and total amount for {confirmOrder?.order.order_id} before finalizing approval or rejection.
+              Review order details, items, and total amount for {confirmOrder?.order.orderId} before finalizing approval or rejection.
             </DialogDescription>
           </DialogHeader>
           {confirmOrder && (
             <div className="text-sm text-muted-foreground space-y-1">
-              <p><span className="font-semibold text-foreground">{confirmOrder.order.order_id}</span></p>
-              <p>Party: {confirmOrder.order.party_name}</p>
-              <p>SO: {confirmOrder.order.so_email}</p>
-              <p>Amount: <span className="font-bold text-primary">₹{confirmOrder.order.grand_total.toLocaleString()}</span></p>
+              <p><span className="font-semibold text-foreground">{confirmOrder.order.orderId}</span></p>
+              <p>Party: {confirmOrder.order.partyName}</p>
+              <p>SO: {confirmOrder.order.soEmail}</p>
+              <p>Amount: <span className="font-bold text-primary">₹{confirmOrder.order.grandTotal.toLocaleString()}</span></p>
               
               {confirmOrder.order.narration && (
                 <div className="mt-2 p-2 bg-secondary/50 rounded-lg text-foreground text-xs">
@@ -269,10 +278,10 @@ const AdminDashboard: React.FC = () => {
                   <tbody className="divide-y divide-border bg-card">
                     {confirmOrder.order.items.map((it, idx) => (
                       <tr key={idx}>
-                        <td className="px-2 py-1.5 font-medium text-foreground">{it.product}</td>
+                        <td className="px-2 py-1.5 font-medium text-foreground">{it.productName || (typeof it.product === 'object' ? (it.product as any).name : it.product)}</td>
                         <td className="px-2 py-1.5 text-center">{it.qty}</td>
                         <td className="px-2 py-1.5 text-right">₹{(it.price || 0).toLocaleString()}</td>
-                        <td className="px-2 py-1.5 text-muted-foreground truncate max-w-[100px]" title={it.item_remark}>{it.item_remark || '-'}</td>
+                        <td className="px-2 py-1.5 text-muted-foreground truncate max-w-[100px]" title={it.itemRemark}>{it.itemRemark || '-'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -306,16 +315,16 @@ const AdminDashboard: React.FC = () => {
                 <PDFGenerator 
                   type="SALES_ORDER" 
                   data={{
-                    orderNo: confirmOrder.order.order_id,
-                    date: new Date(confirmOrder.order.created_at || new Date()).toLocaleDateString('en-IN'),
+                    orderNo: confirmOrder.order.orderId,
+                    date: new Date(confirmOrder.order.createdAt || new Date()).toLocaleDateString('en-IN'),
                     party: {
-                      name: confirmOrder.order.party_name || '—',
+                      name: confirmOrder.order.partyName || '—',
                       address: confirmOrder.order.address || '—',
                       contact: confirmOrder.order.contact || '—',
                       gst: confirmOrder.order.gst || '—',
                     },
                     items: confirmOrder.order.items.map((it: any) => ({
-                      product_name: it.product,
+                      product_name: it.productName || (typeof it.product === 'object' ? (it.product as any).name : it.product),
                       qty: it.qty,
                       unit: it.unit || 'Bags',
                       rate: it.price || it.rate || 0,
@@ -323,11 +332,11 @@ const AdminDashboard: React.FC = () => {
                       remark: it.item_remark || it.remark
                     })),
                     totals: {
-                      subtotal: confirmOrder.order.grand_total,
-                      grandTotal: confirmOrder.order.grand_total
+                      subtotal: confirmOrder.order.grandTotal,
+                      grandTotal: confirmOrder.order.grandTotal
                     }
                   }}
-                  filename={`Order_${confirmOrder.order.order_id}.pdf`}
+                  filename={`Order_${confirmOrder.order.orderId}.pdf`}
                   buttonLabel="Preview PDF"
                 />
               )}

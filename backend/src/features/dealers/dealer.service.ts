@@ -1,4 +1,5 @@
 import { dealerRepository } from './dealer.repository';
+import { DealerInput } from '../../validation/schemas';
 import { AppError } from '../../middleware/errorHandler';
 
 export const getAllDealers = async () => dealerRepository.findAll();
@@ -7,6 +8,6 @@ export const getDealerByCode = async (code: string) => {
   if (!dealer) throw new AppError('Dealer not found', 404);
   return dealer;
 };
-export const createDealer = async (data: any) => dealerRepository.create(data);
-export const updateDealer = async (code: string, data: any) => dealerRepository.update(code, data);
+export const createDealer = async (data: DealerInput) => dealerRepository.create(data);
+export const updateDealer = async (code: string, data: Partial<DealerInput>) => dealerRepository.update(code, data);
 export const deleteDealer = async (code: string) => dealerRepository.delete(code);

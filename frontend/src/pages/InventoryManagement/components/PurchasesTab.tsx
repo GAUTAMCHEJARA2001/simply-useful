@@ -31,12 +31,12 @@ export const PurchasesTab: React.FC<PurchasesTabProps> = ({
       <DataTable 
         columns={['Supplier', 'Challan', 'Vehicle', 'Tax', 'Net Amount', 'Date']}
         rows={purchases.map(p => [
-          p.supplier_name, 
-          p.challan_number, 
-          p.vehicle_number, 
-          Currency(p.total_tax), 
-          Currency(p.net_amount), 
-          p.created_at ? new Date(p.created_at).toLocaleDateString('en-IN') : '—'
+          p.supplierName, 
+          p.challanNumber, 
+          p.vehicleNumber, 
+          Currency(p.totalTax), 
+          Currency(p.netAmount), 
+          p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—'
         ])}
         onEdit={i => onEdit(purchases[i])}
         onDelete={i => onDelete(purchases[i].id)}

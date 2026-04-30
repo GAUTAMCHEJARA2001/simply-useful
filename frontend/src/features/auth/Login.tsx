@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth, getRoleDashboard } from '@/contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Building2, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -84,8 +84,11 @@ const Login: React.FC = () => {
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            Contact your administrator for account access.
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Don't have an account?{' '}
+            <Link to="/signup" className="text-primary hover:underline font-medium">
+              Create one
+            </Link>
           </p>
         </div>
       </motion.div>

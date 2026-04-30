@@ -3,7 +3,9 @@ import bcrypt from 'bcryptjs';
 import env from '../../config/env';
 import * as authRepository from './auth.repository';
 import { AppError } from '../../middleware/errorHandler';
-import prisma from '../../lib/prisma';
+import { prisma } from '../../lib/prisma';
+import { RegisterInput } from '../../validation/schemas';
+import { UserRole } from '../../types';
 
 /**
  * ELITE AUTH SERVICE (11/10 ABSOLUTE PERFECTION)
@@ -13,9 +15,9 @@ import prisma from '../../lib/prisma';
  * - Revocable tokens
  */
 
-export const generateTokens = async (userId: string, email: string, role: string) => {
+export const generateTokens = async (userId: string, email: string, role: string, companyId?: string | null) => {
   const accessToken = jwt.sign(
-    { userId, email, role },
+    { userId, email, role, companyId },
     env.JWT_SECRET,
     { expiresIn: '15m' } // Short-lived
   );
@@ -38,7 +40,7 @@ export const generateTokens = async (userId: string, email: string, role: string
   return { accessToken, refreshToken };
 };
 
-export const register = async (data: any) => {
+export const register = async (data: RegisterInput) => {
   const existing = await authRepository.findByEmail(data.email);
   if (existing) throw new AppError('User already exists', 400);
 
@@ -48,7 +50,7 @@ export const register = async (data: any) => {
     hashedPassword,
   });
 
-  const { accessToken, refreshToken } = await generateTokens(user.id, user.email, user.role);
+  const { accessToken, refreshToken } = await generateTokens(user.id, user.email, user.role, user.companyId);
   return { user, accessToken, refreshToken };
 };
 
@@ -58,13 +60,13 @@ export const login = async (password: string, email: string) => {
     throw new AppError('Invalid credentials', 401);
   }
 
-  const { accessToken, refreshToken } = await generateTokens(user.id, user.email, user.role);
+  const { accessToken, refreshToken } = await generateTokens(user.id, user.email, user.role, user.companyId);
   return { user, accessToken, refreshToken };
 };
 
 export const refreshAccessToken = async (oldRefreshToken: string) => {
   try {
-    const payload = jwt.verify(oldRefreshToken, env.JWT_SECRET) as any;
+    const payload = jwt.verify(oldRefreshToken, env.JWT_SECRET) as { userId: string };
     
     const storedToken = await prisma.refreshToken.findUnique({
       where: { token: oldRefreshToken }
@@ -83,8 +85,16 @@ export const refreshAccessToken = async (oldRefreshToken: string) => {
     const user = await prisma.user.findUnique({ where: { id: payload.userId } });
     if (!user) throw new AppError('User not found', 401);
 
-    return await generateTokens(user.id, user.email, user.role);
+    return await generateTokens(user.id, user.email, user.role, user.companyId);
   } catch (e) {
     throw new AppError('Session expired. Please login again.', 401);
   }
+};
+
+export const getAllUsers = async () => {
+  return await authRepository.findAll();
+};
+
+export const updateUserStatus = async (id: string, active: boolean) => {
+  return await authRepository.updateStatus(id, active);
 };

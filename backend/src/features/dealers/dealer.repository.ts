@@ -1,5 +1,6 @@
-import prisma from '../../lib/prisma';
+import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
+import { DealerInput } from '../../validation/schemas';
 
 /**
  * DEALER REPOSITORY (ELITE)
@@ -17,9 +18,10 @@ const safeQuery = async <T>(fn: () => Promise<T>): Promise<T> => {
     const result = await fn();
     failureCount = 0;
     return result;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as Error;
     failureCount++;
-    console.error(`📊 DEALER DB FAILURE [${failureCount}]:`, err.message);
+    console.error(`📊 DEALER DB FAILURE [${failureCount}]:`, error.message);
     throw new AppError('Database operation failed', 500);
   }
 };
@@ -33,11 +35,15 @@ export const dealerRepository = {
     where: { dealerCode }
   })),
 
-  create: (data: any) => safeQuery(() => prisma.dealer.create({
-    data
+  create: (data: DealerInput) => safeQuery(() => prisma.dealer.create({
+    data: {
+      ...data,
+      creditLimit: data.creditLimit || 0,
+      active: true
+    }
   })),
 
-  update: (dealerCode: string, data: any) => safeQuery(() => prisma.dealer.update({
+  update: (dealerCode: string, data: Partial<DealerInput>) => safeQuery(() => prisma.dealer.update({
     where: { dealerCode },
     data
   })),

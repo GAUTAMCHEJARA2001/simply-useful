@@ -1,6 +1,11 @@
 import { User } from '@prisma/client';
-import prisma from '../../lib/prisma';
+import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
+import { RegisterInput } from '../../validation/schemas';
+
+interface CreateUserData extends RegisterInput {
+  hashedPassword: string;
+}
 
 /**
  * AUTH REPOSITORY (ELITE - 11/10)
@@ -22,9 +27,10 @@ const safeQuery = async <T>(fn: () => Promise<T>): Promise<T> => {
     const result = await fn();
     failureCount = 0;
     return result;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as Error;
     failureCount++;
-    console.error(`📊 AUTH DB FAILURE [${failureCount}]:`, err.message);
+    console.error(`📊 AUTH DB FAILURE [${failureCount}]:`, error.message);
     throw new AppError('Database operation failed', 500);
   }
 };
@@ -35,13 +41,13 @@ export const findByEmail = (email: string): Promise<User | null> =>
 export const findById = (id: string): Promise<User | null> => 
   safeQuery(() => prisma.user.findUnique({ where: { id } }));
 
-export const createUser = (data: any): Promise<User> => 
+export const createUser = (data: CreateUserData): Promise<User> => 
   safeQuery(() => prisma.user.create({
     data: {
       email: data.email,
       name: data.name,
       hashedPassword: data.hashedPassword,
-      role: data.role,
+      role: data.role || 'SALES',
       active: true
     }
   }));
@@ -50,4 +56,9 @@ export const updateStatus = (id: string, active: boolean): Promise<User> =>
   safeQuery(() => prisma.user.update({
     where: { id },
     data: { active }
+  }));
+
+export const findAll = (): Promise<User[]> => 
+  safeQuery(() => prisma.user.findMany({
+    orderBy: { createdAt: 'desc' }
   }));

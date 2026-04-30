@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "allowImportingTsExtensions": true,
-    "isolatedModules": true,
     "jsx": "react-jsx",
     "lib": [
       "ES2020",
@@ -12,25 +11,26 @@
     "moduleDetection": "force",
     "moduleResolution": "bundler",
     "noEmit": true,
-    "noFallthroughCasesInSwitch": false,
-    "noImplicitAny": false,
+    "strict": true,
+    "noImplicitAny": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    },
     "skipLibCheck": true,
-    "strict": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@react-pdf/renderer": ["./src/types/react-pdf-renderer"]
+    },
     "target": "ES2020",
     "types": [
-      "node",
-      "vitest/globals"
+      "node"
     ],
     "useDefineForClassFields": true
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "src/test"
   ]
 }

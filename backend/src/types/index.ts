@@ -20,3 +20,13 @@ export interface AuthResponse {
   user: UserResponse;
   token: string;
 }
+
+import { Request } from 'express';
+export interface AuthRequest extends Request {
+  user?: {
+    userId: string;
+    email: string;
+    role: UserRole;
+    companyId?: string | null;
+  };
+}

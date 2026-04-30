@@ -7,7 +7,8 @@ interface SafeDataViewProps<T> {
   isLoading: boolean;
   error: Error | string | null;
   onRetry?: () => void;
-  renderItem: (item: T, index: number) => React.ReactNode;
+  renderItem?: (item: T, index: number) => React.ReactNode;
+  children?: React.ReactNode;
   emptyMessage?: string;
   loadingMessage?: string;
   className?: string;
@@ -16,7 +17,7 @@ interface SafeDataViewProps<T> {
 /**
  * THE UNIVERSAL SAFE RENDER COMPONENT
  * Handles Loading, Error, and Empty states automatically.
- * Follows Rule 1: Always Safe Render and Rule 2: Handle Empty + Error.
+ * Supports Iteration (renderItem) OR Single Container (children).
  */
 export function SafeDataView<T>({
   data,
@@ -24,6 +25,7 @@ export function SafeDataView<T>({
   error,
   onRetry,
   renderItem,
+  children,
   emptyMessage = "No data found",
   loadingMessage = "Loading...",
   className = ""
@@ -66,9 +68,21 @@ export function SafeDataView<T>({
     );
   }
 
+  // Mode A: Single Container (Preffered for Tables/Grids)
+  if (children) {
+    return <div className={className}>{children}</div>;
+  }
+
+  // Mode B: Iterative Rendering (Mapped)
+  if (!renderItem) return null;
+
   return (
     <div className={className}>
-      {data.map((item, index) => renderItem(item, index))}
+      {data.map((item, index) => (
+        <React.Fragment key={(item as any).id || (item as any).orderId || (item as any).productCode || (item as any).sku || index}>
+          {renderItem(item, index)}
+        </React.Fragment>
+      ))}
     </div>
   );
 }
