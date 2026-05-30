@@ -1,4 +1,5 @@
 import axios, { type AxiosRequestConfig } from 'axios';
+import { healApiPath } from './routeHealing';
 
 /**
  * STANDARD API RESPONSE STRUCTURE
@@ -42,23 +43,6 @@ export const api = axios.create({
 // 🔥 Debug (VERY IMPORTANT)
 console.log('🌐 API BASE URL:', API_BASE_URL);
 
-const normalizeLegacyPath = (path: string) => {
-  let normalized = path.startsWith('/') ? path : `/${path}`;
-
-  // Older screens still prefix app routes with /inv even though the API base
-  // is already /api/v1.
-  if (normalized === '/inv') {
-    normalized = '/';
-  } else if (normalized.startsWith('/inv/')) {
-    normalized = normalized.slice(4);
-  }
-
-  // Keep legacy UI routes working against the current backend shape.
-  normalized = normalized.replace(/^\/transactions\/sales(?=\/|$)/, '/sales');
-
-  return normalized;
-};
-
 /**
  * DEFAULT EXPORT (apiClient)
  * Used by legacy modules and newer service wrappers.
@@ -69,7 +53,7 @@ const apiClient = async <T = any>(
 ): Promise<ApiResponse<T>> => {
   const response = await api.request<ApiResponse<T>>({
     ...config,
-    url: normalizeLegacyPath(path),
+    url: healApiPath(path),
   });
 
   return response.data;

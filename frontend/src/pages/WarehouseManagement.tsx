@@ -7,6 +7,8 @@ import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
 import { Warehouse, Plus, RefreshCw, X, Users, MapPin, Building2 } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
+import { useWarehouses, useWarehouseMutations } from '@/hooks/inventory/useMasters';
+import { SafeDataView } from '@/components/SafeDataView';
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -21,41 +23,46 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
   </div>
 );
 
-const initialWarehouses = [
-  { id: '1', name: 'Main Warehouse', location: 'Jaipur, Rajasthan', gst_number: '08AAAAA0000A1Z5' },
-  { id: '2', name: 'South Depot', location: 'Chennai, Tamil Nadu', gst_number: '33BBBBB0000B1Z9' },
-  { id: '3', name: 'West Distribution Center', location: 'Mumbai, Maharashtra', gst_number: '27CCCCC0000C1Z3' },
-];
-
 const WarehouseManagement: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [warehouses, setWarehouses] = useState<any[]>(initialWarehouses);
+  const { data: warehouses = [], isLoading, error, refetch } = useWarehouses();
+  const { saveWarehouse, isSaving, deleteWarehouse } = useWarehouseMutations();
   const [modal, setModal] = useState<string | null>(null);
   const [form, setForm] = useState<any>({});
 
   if (user?.role !== 'SUPERADMIN') return <Navigate to="/" replace />;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name) {
       toast({ title: 'Validation Error', description: 'Name is required', variant: 'destructive' });
       return;
     }
-    if (form.id) {
-      setWarehouses(prev => prev.map(w => w.id === form.id ? { ...w, ...form } : w));
-      toast({ title: 'Warehouse updated successfully' });
-    } else {
-      setWarehouses(prev => [...prev, { ...form, id: String(Date.now()) }]);
-      toast({ title: 'Warehouse created successfully' });
+
+    try {
+      const payload = {
+        id: form.id || undefined,
+        name: form.name,
+        location: form.location || '',
+        gstNumber: form.gstNumber || form.gst_number || '',
+        active: form.active !== undefined ? form.active : true,
+      };
+
+      await saveWarehouse(payload);
+      setModal(null);
+      setForm({});
+    } catch (err: any) {
+      // Error handled by mutation toast
     }
-    setModal(null);
-    setForm({});
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this warehouse?')) return;
-    setWarehouses(prev => prev.filter(w => w.id !== id));
-    toast({ title: 'Warehouse deleted' });
+    try {
+      await deleteWarehouse(id);
+    } catch (err) {
+      // Error handled by mutation toast
+    }
   };
 
   return (
@@ -65,9 +72,11 @@ const WarehouseManagement: React.FC = () => {
           <h1 className="text-2xl font-bold tracking-tight">Warehouse Management</h1>
           <p className="text-muted-foreground">Administer warehouses and manage user access permissions.</p>
         </div>
-        <Button onClick={() => { setForm({}); setModal('warehouse'); }}>
-          <Plus className="w-4 h-4 mr-2" /> Add Warehouse
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => { setForm({}); setModal('warehouse'); }}>
+            <Plus className="w-4 h-4 mr-2" /> Add Warehouse
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -79,12 +88,14 @@ const WarehouseManagement: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <DataTable 
-              columns={['Name', 'Location', 'GST Number']}
-              rows={warehouses.map(w => [w.name, w.location, w.gst_number])}
-              onEdit={i => { setForm(warehouses[i]); setModal('warehouse'); }}
-              onDelete={i => handleDelete(warehouses[i].id)}
-            />
+            <SafeDataView data={warehouses} isLoading={isLoading} error={error} onRetry={() => refetch()}>
+              <DataTable 
+                columns={['Name', 'Location', 'GST Number']}
+                rows={warehouses.map(w => [w.name, w.location, w.gstNumber || w.gst_number || '-'])}
+                onEdit={i => { setForm(warehouses[i]); setModal('warehouse'); }}
+                onDelete={i => handleDelete(warehouses[i].id)}
+              />
+            </SafeDataView>
           </CardContent>
         </Card>
 
@@ -131,14 +142,14 @@ const WarehouseManagement: React.FC = () => {
             </div>
             <div>
               <label className="text-sm font-medium block mb-1">GST Number</label>
-              <input value={form.gst_number || ''} onChange={e => setForm({ ...form, gst_number: e.target.value })}
+              <input value={form.gstNumber || form.gst_number || ''} onChange={e => setForm({ ...form, gstNumber: e.target.value })}
                 placeholder="22AAAAA0000A1Z5"
                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm" />
             </div>
             <div className="flex justify-end gap-2 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>
-              <Button onClick={handleSave}>
-                {form.id ? 'Update Warehouse' : 'Create Warehouse'}
+              <Button onClick={handleSave} disabled={isSaving}>
+                {isSaving ? 'Saving...' : form.id ? 'Update Warehouse' : 'Create Warehouse'}
               </Button>
             </div>
           </div>

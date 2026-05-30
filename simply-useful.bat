@@ -48,18 +48,19 @@ taskkill /F /IM node.exe /T >nul 2>&1
 
 :: BACKEND
 echo.
-echo Starting Backend Service...
+echo Starting Backend Service (Django)...
 if not exist "%BASE_DIR%backend" (
     echo ERROR: Backend directory missing at "%BASE_DIR%backend"
     pause
     goto MENU
 )
-if not exist "%BASE_DIR%backend\node_modules" (
-    echo [!] Dependencies missing. Synchronizing...
-    cd /d "%BASE_DIR%backend" && npm install
+if not exist "%BASE_DIR%backend\venv" (
+    echo ERROR: Python Virtual Environment missing at "%BASE_DIR%backend\venv"
+    pause
+    goto MENU
 )
-:: PRO-LEVEL START: Escaped chaining prevents quote-parsing failure
-start "Backend" cmd /k cd /d "%BASE_DIR%backend" ^&^& npm run dev
+:: PRO-LEVEL START: Run Python Django server on port 4000
+start "Backend" cmd /k cd /d "%BASE_DIR%backend" ^&^& venv\Scripts\python manage.py runserver 4000
 
 :: FRONTEND
 echo.
@@ -84,6 +85,7 @@ goto HEALTH
 echo.
 echo Stopping all platform processes...
 taskkill /F /IM node.exe /T >nul 2>&1
+taskkill /F /IM python.exe /T >nul 2>&1
 echo Done.
 pause
 goto MENU
@@ -109,9 +111,9 @@ goto MENU
 
 :TEST
 echo.
-echo Running logic verification...
+echo Running logic verification (Django)...
 if exist "%BASE_DIR%backend" (
-    cd /d "%BASE_DIR%backend" && npm test
+    cd /d "%BASE_DIR%backend" && venv\Scripts\python manage.py test
 ) else (
     echo ERROR: Backend folder not found.
 )
@@ -120,6 +122,6 @@ goto MENU
 
 :SWAGGER
 echo.
-echo Opening OpenAPI documentation...
-start http://localhost:4000/api-docs
+echo Opening Browsable API Explorer...
+start http://localhost:4000/api/v1/
 goto MENU

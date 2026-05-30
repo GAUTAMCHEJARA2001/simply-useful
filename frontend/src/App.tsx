@@ -35,11 +35,30 @@ import CreatePurchaseOrder from "./pages/CreatePurchaseOrder";
 import ErrorBoundary from "./components/ErrorBoundary";
 import GlobalInventory from "./pages/GlobalInventory";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 1000 * 60, // 1 minute
+      gcTime: 1000 * 60 * 5, // 5 minutes
+    },
+  },
+});
+
+import { useApiHealth } from './hooks/useApiHealth';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <AppLayout>{children}</AppLayout>;
 };
@@ -93,6 +112,7 @@ const App = () => {
                   <Route path="/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />
                   <Route path="/inventory/manage" element={<ProtectedRoute><InventoryManagement /></ProtectedRoute>} />
                   <Route path="/inventory/purchase-orders/new" element={<ProtectedRoute><CreatePurchaseOrder /></ProtectedRoute>} />
+                  <Route path="/inventory/purchase-orders/edit/:id" element={<ProtectedRoute><CreatePurchaseOrder /></ProtectedRoute>} />
                   <Route path="/inventory/returns" element={<ProtectedRoute><ReturnedOrders /></ProtectedRoute>} />
 
                   {/* Reports */}

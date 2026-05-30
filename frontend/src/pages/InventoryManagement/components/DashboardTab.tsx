@@ -17,36 +17,21 @@ import {
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const Num = (v: number | string) => Number(v || 0).toLocaleString('en-IN');
 
+import { 
+  useDashboardKPIs, 
+  useSalesSummary, 
+  useLowStock, 
+  useDailyReport 
+} from '@/hooks/inventory/useDashboard';
+
 export const DashboardTab: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [kpis, setKpis] = useState<KPIs | null>(null);
-  const [salesSummary, setSalesSummary] = useState<any[]>([]);
-  const [lowStock, setLowStock] = useState<StockItem[]>([]);
-  const [daily, setDaily] = useState<any | null>(null);
+  const { data: kpis, isLoading: kpisLoading, error: kpisError } = useDashboardKPIs();
+  const { data: salesSummary = [], isLoading: salesLoading } = useSalesSummary();
+  const { data: lowStock = [], isLoading: lowLoading } = useLowStock();
+  const { data: daily, isLoading: dailyLoading } = useDailyReport();
 
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [k, s, ls, d] = await Promise.all([
-        apiClient<KPIs>('/inv/reports/dashboard-kpis'),
-        apiClient<any[]>('/inv/reports/sales-summary'),
-        apiClient<StockItem[]>('/inv/reports/low-stock'),
-        apiClient<any>('/inv/reports/daily')
-      ]);
-      setKpis(k.data);
-      setSalesSummary(s.data || []);
-      setLowStock(ls.data || []);
-      setDaily(d.data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+  const loading = kpisLoading || salesLoading || lowLoading || dailyLoading;
+  const error = kpisError ? (kpisError as any).message : null;
 
   // Mock data for Category Distribution (Pie Chart) if kpis doesn't have it yet
   const categoryData = [
@@ -57,7 +42,7 @@ export const DashboardTab: React.FC = () => {
   ];
 
   return (
-    <SafeDataView data={kpis ? [kpis] : []} isLoading={loading} error={error} onRetry={loadDashboard}>
+    <SafeDataView data={kpis ? [kpis] : []} isLoading={loading} error={error}>
       <div className="space-y-8 pb-10">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

@@ -151,7 +151,7 @@ const GlobalInventory: React.FC = () => {
               <span key={`cat-${idx}`} className="text-xs text-muted-foreground font-medium">{item.categoryName}</span>,
               <div key={`stock-${idx}`} className="flex items-center gap-2">
                  <span className="font-black text-sm">{Math.round(item.quantity)}</span>
-                 <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">{item.unit}</span>
+                 <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">{item.unit?.name || (typeof item.unit === 'string' ? item.unit : '') || '—'}</span>
               </div>,
               <div key={`wh-${idx}`} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                  <Warehouse className="w-3 h-3" /> {item.warehouseName}

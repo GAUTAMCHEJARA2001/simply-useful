@@ -78,7 +78,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
         toast({ title: 'Duplicate Item', description: 'This product is already in the ingredient list.' });
         return;
     }
-    setForm({ ...form, items: [...form.items, { productId: p.id, productName: p.name, quantity: 1, unit: p.unit }] });
+    setForm({ ...form, items: [...form.items, { productId: p.id, productName: p.name, quantity: 1, unit: p.unit?.name || p.unit }] });
     setIngSearch('');
   };
 
@@ -249,7 +249,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                     <div key={idx} className="flex items-center gap-3 bg-muted/30 p-2 rounded-lg border border-border/40">
                         <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold truncate">{item.productName}</p>
-                            <p className="text-[10px] text-muted-foreground">{item.unit || '—'}</p>
+                            <p className="text-[10px] text-muted-foreground">{item.unit?.name || (typeof item.unit === 'string' ? item.unit : '') || '—'}</p>
                         </div>
                         <div className="w-24">
                             <input 

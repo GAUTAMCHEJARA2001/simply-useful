@@ -1,0 +1,9 @@
+{
+    "stock_method": "FIFO",
+    "allow_negative_stock": true,
+    "company_name": "KAMLA INDUSTRIES",
+    "currency_symbol": "₹",
+    "sku_prefix": "KCPL",
+    "stockMethod": "FIFO",
+    "skuPrefix": "KCPL"
+}

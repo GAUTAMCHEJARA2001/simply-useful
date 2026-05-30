@@ -60,21 +60,30 @@ export interface Distributor {
 export interface Product {
   id?: string;
   productCode: string;
-  productName: string;
-  category: string;
+  sku?: string;
+  product_code?: string;
+  name: string;
+  productName?: string;
+  product_name?: string;
+  category?: string | { id: number | string; name: string } | null;
+  categoryId?: string | number;
   categoryName?: string;
+  categoryRef?: { id: number | string; name: string } | null;
   bagSize: string;
+  bag_size?: string;
   rate: number;
   gst: number;
   weight?: number;
   openingStock?: number;
-  unit?: string;
-  product_code?: string;
-  product_name?: string;
-  bag_size?: string;
-  stockQty?: number;
+  minimumStock?: number;
+  unit?: string | { id: number | string; name: string } | null;
+  unitId?: string | number;
+  brand?: { id: number | string; name: string } | null;
   brandId?: number;
   brand_id?: number;
+  stockQty?: number;
+  availableStock?: number;
+  defaultWarehouseId?: string | number | null;
 }
 
 export type OrderStatus = 'Pending' | 'Approved' | 'Dispatched' | 'Completed' | 'Cancelled' | 'Returned';
@@ -294,4 +303,16 @@ export interface Approval {
   status: 'Pending' | 'Approved' | 'Rejected';
   createdAt: string;
   data?: any;
+}
+
+export interface Brand {
+  id: string;
+  name: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  parent_id?: string | null;
 }

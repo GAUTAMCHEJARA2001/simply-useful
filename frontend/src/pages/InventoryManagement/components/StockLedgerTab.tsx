@@ -55,8 +55,10 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
         apiClient<any[]>('/inv/reports/current-stock'),
         apiClient<any[]>('/inv/masters/warehouses'),
       ]);
-      setStock(Array.isArray(st) ? st : []);
-      setWarehouses(Array.isArray(wh) ? wh : []);
+      const stockData = st.success ? st.data : (Array.isArray(st) ? st : []);
+      const whData = wh.success ? wh.data : (Array.isArray(wh) ? wh : []);
+      setStock(stockData);
+      setWarehouses(whData);
     } catch (err: any) {
       setError(err.message || 'Failed to load stock ledger data');
     } finally {
@@ -76,11 +78,12 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
       if (popWh) url += `warehouseId=${popWh}&`;
       
       const res: any = await apiClient(url);
-      setLedger(Array.isArray(res.items) ? res.items : []);
+      const resData = res.success ? res.data : res;
+      setLedger(Array.isArray(resData?.items) ? resData.items : []);
       // Set opening stock and current stock from the response object
       setSummary({
-        opening: res.openingBalance || 0,
-        current: res.currentStock || 0
+        opening: resData?.openingBalance || 0,
+        current: resData?.currentStock || 0
       });
     } catch (e: any) {
       toast({ title: 'Fetch failed', description: e.message, variant: 'destructive' });
@@ -137,7 +140,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
         <DataTable
           columns={['Product Name', 'SKU', 'Category', 'Unit', 'Wh', 'Opening', 'Production', 'Consumed', 'Purchase', 'Sales', 'Sales Return', 'Purch. Ret', 'Adj', 'Closing Stock', 'Action']}
           rows={filteredStock.map(s => [
-            s.productName, s.sku, s.categoryName || '—', s.unit || '—',
+            s.productName, s.sku, s.categoryName || '—', s.unit?.name || (typeof s.unit === 'string' ? s.unit : '') || '—',
             <span className="text-xs text-muted-foreground">{s.warehouseName || 'Global'}</span>,
             <span className="text-muted-foreground">{s.openingStock}</span>,
             <span className="text-blue-600">{s.production}</span>,
@@ -181,7 +184,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                   data={{
                     productName: selectedProduct.productName,
                     sku: selectedProduct.sku,
-                    unit: selectedProduct.unit || 'Bags',
+                    unit: selectedProduct.unit?.name || (typeof selectedProduct.unit === 'string' ? selectedProduct.unit : '') || 'Bags',
                     dateFrom: popDateFrom,
                     dateTo: popDateTo,
                     summary: {

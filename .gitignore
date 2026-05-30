@@ -9,3 +9,6 @@ coverage/
 .env
 .prisma/
 *.log
+*_log.txt
+temp_*.txt
+*.tsbuildinfo

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Dealer, Distributor, Product, Order, Visit, Expense, OrderStatus } from '@/types';
+import { Dealer, Distributor, Product, Order, Visit, Expense, OrderStatus, Warehouse } from '@/types';
 import { apiService } from '@/api/apiService';
 
 /**

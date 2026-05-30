@@ -15,6 +15,7 @@ import { expenseService } from './services/expense.service';
 import { visitService } from './services/visit.service';
 import { settingsService } from './services/settings.service';
 import { api } from './client';
+import { crudApi } from './crud';
 
 export const apiService = {
   auth: authService,
@@ -29,6 +30,7 @@ export const apiService = {
   
   // Instance for raw access
   api,
+  crud: crudApi,
 };
 
 export default apiService;
@@ -43,3 +45,5 @@ export * from './services/party.service';
 export * from './services/expense.service';
 export * from './services/visit.service';
 export * from './services/settings.service';
+export * from './apiError';
+export * from './crud';

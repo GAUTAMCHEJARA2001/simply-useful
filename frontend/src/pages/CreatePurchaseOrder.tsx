@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import apiClient from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -31,6 +31,8 @@ interface POItem {
 const CreatePurchaseOrder: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { id } = useParams<{ id?: string }>();
+  const isEditMode = Boolean(id);
   
   // Data States
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -60,6 +62,32 @@ const CreatePurchaseOrder: React.FC = () => {
         setSuppliers(s as any[]);
         setWarehouses(w as any[]);
         setProducts(p as any[]);
+
+        if (id) {
+          const poRes = await apiClient<any>(`/inv/transactions/purchase-orders/${id}`);
+          if (poRes.success && poRes.data) {
+            const po = poRes.data;
+            setSupplierId(po.supplier_id || po.supplierId || '');
+            setWarehouseId(po.warehouse_id || po.warehouseId || '');
+            setRemarks(po.remarks || '');
+            if (po.expected_date || po.expectedDate) {
+              setExpectedDate(new Date(po.expected_date || po.expectedDate).toISOString().split('T')[0]);
+            }
+            if (po.items && po.items.length > 0) {
+              setItems(po.items.map((it: any) => ({
+                product_id: it.product_id || it.productId || '',
+                product_name: it.product_name || it.productName || '',
+                quantity: Number(it.quantity || it.qty || 0),
+                rate: Number(it.rate || 0),
+                tax_percent: Number(it.tax_percent || 0),
+                line_total: Number(it.line_total || it.lineTotal || 0),
+                remark: it.remark || ''
+              })));
+            }
+          } else {
+            toast({ title: 'Failed to load PO details', description: poRes.message, variant: 'destructive' });
+          }
+        }
       } catch (err: any) {
         toast({ title: 'Load failed', description: err.message, variant: 'destructive' });
       } finally {
@@ -67,7 +95,7 @@ const CreatePurchaseOrder: React.FC = () => {
       }
     };
     loadData();
-  }, [toast]);
+  }, [toast, id]);
 
   const selectedSupplier = useMemo(() => 
     suppliers.find(s => s.id === supplierId), 
@@ -119,8 +147,13 @@ const CreatePurchaseOrder: React.FC = () => {
 
     try {
       setSubmitting(true);
-      const res = await apiClient<any>('/inv/transactions/purchase-orders', {
-        method: 'POST',
+      const url = id 
+        ? `/inv/transactions/purchase-orders/${id}`
+        : '/inv/transactions/purchase-orders';
+      const method = id ? 'PUT' : 'POST';
+
+      const res = await apiClient<any>(url, {
+        method,
         data: {
           supplier_id: supplierId,
           warehouse_id: warehouseId,
@@ -131,7 +164,12 @@ const CreatePurchaseOrder: React.FC = () => {
       });
       if (res.success) {
         setSubmittedPO(res.data);
-        toast({ title: 'Success', description: `Purchase Order ${res.data.po_number || ''} created!` });
+        toast({ 
+          title: 'Success', 
+          description: id 
+            ? `Purchase Order ${res.data.po_number || ''} updated!`
+            : `Purchase Order ${res.data.po_number || ''} created!` 
+        });
       } else {
         throw new Error(res.message);
       }
@@ -151,7 +189,7 @@ const CreatePurchaseOrder: React.FC = () => {
           <Check className="w-10 h-10 text-success" />
         </motion.div>
         <div>
-          <h2 className="text-2xl font-bold">{submittedPO.po_number} Created Successfully!</h2>
+          <h2 className="text-2xl font-bold">{submittedPO.po_number} {id ? 'Updated' : 'Created'} Successfully!</h2>
           <p className="text-muted-foreground mt-2">The Purchase Order has been saved as a formal document.</p>
         </div>
         <div className="flex gap-4">
@@ -172,15 +210,19 @@ const CreatePurchaseOrder: React.FC = () => {
                   tax: submittedPO.total_tax || 0,
                   grandTotal: submittedPO.net_amount,
                 },
-                items: items.map(it => ({
+                items: items.map(it => {
+                  const u = products.find(p => p.id === it.product_id)?.unit;
+                  const unitStr = u?.name || (typeof u === 'string' ? u : '') || 'Bags';
+                  return {
                     product_id: it.product_id,
                     product_name: it.product_name,
                     qty: it.quantity,
-                    unit: products.find(p => p.id === it.product_id)?.unit || 'Bags',
+                    unit: unitStr,
                     rate: it.rate,
                     total: it.line_total,
                     remark: it.remark
-                }))
+                  };
+                })
               }}
               filename={`${submittedPO.po_number}.pdf`}
               buttonLabel="Print Purchase Order Now"
@@ -195,8 +237,8 @@ const CreatePurchaseOrder: React.FC = () => {
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="w-5 h-5" /></Button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Create Purchase Order</h1>
-          <p className="text-muted-foreground">Issue a formal PO to your supplier.</p>
+          <h1 className="text-2xl font-bold tracking-tight">{isEditMode ? 'Edit Purchase Order' : 'Create Purchase Order'}</h1>
+          <p className="text-muted-foreground">{isEditMode ? 'Modify and update the existing PO details.' : 'Issue a formal PO to your supplier.'}</p>
         </div>
       </div>
 
@@ -277,7 +319,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                     <Check className={`mr-2 h-4 w-4 ${item.product_id === p.id ? "opacity-100" : "opacity-0"}`} />
                                     <div className="flex flex-col">
                                       <span className="font-medium">{p.name}</span>
-                                      <span className="text-[10px] text-muted-foreground">₹{p.rate || 0} / {p.unit || 'Unit'}</span>
+                                      <span className="text-[10px] text-muted-foreground">₹{p.rate || 0} / {p.unit?.name || (typeof p.unit === 'string' ? p.unit : '') || 'Unit'}</span>
                                     </div>
                                   </CommandItem>
                                 ))}
@@ -344,7 +386,7 @@ const CreatePurchaseOrder: React.FC = () => {
               </div>
 
               <Button onClick={handleSubmit} disabled={submitting} className="w-full h-14 text-lg font-bold shadow-lg shadow-primary/20 action-button">
-                 {submitting ? "Saving..." : <><ShoppingCart className="mr-2" /> Generate & Save PO</>}
+                 {submitting ? "Saving..." : <><ShoppingCart className="mr-2" /> {isEditMode ? 'Update & Save PO' : 'Generate & Save PO'}</>}
               </Button>
             </CardContent>
           </Card>

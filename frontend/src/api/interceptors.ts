@@ -1,47 +1,72 @@
 import { api } from './client';
+import { normalizeApiError } from './apiError';
+import { getRouteHealCandidates, healApiPath } from './routeHealing';
 
-// ✅ REQUEST INTERCEPTOR
+const IS_DEV = import.meta.env.DEV;
+
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
+    const originalUrl = config.url;
+    config.url = healApiPath(config.url);
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    console.log(
-      `🚀 ${config.method?.toUpperCase()} → ${config.baseURL}${config.url}`
-    );
+    if (IS_DEV) {
+      if (originalUrl !== config.url) {
+        console.warn(`Route healed: ${originalUrl} -> ${config.url}`);
+      }
+      console.log(`${config.method?.toUpperCase()} -> ${config.url}`);
+    }
 
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// ✅ RESPONSE INTERCEPTOR
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error.response?.status;
+    const config = error.config || {};
 
-    console.error('❌ API ERROR:', error.response?.data || error.message);
+    if (status === 404 && !config.__routeHealRetried) {
+      const [candidate] = getRouteHealCandidates(config);
+      if (candidate) {
+        config.__routeHealRetried = true;
+        config.url = candidate;
+        if (IS_DEV) console.warn(`Retrying healed route -> ${candidate}`);
+        return api.request(config);
+      }
+    }
 
-    if (status === 401) {
-      console.warn('🔐 Session expired → Hard Reset');
+    const normalizedError = normalizeApiError(error);
 
-      localStorage.clear(); // Nuclear option for a clean state
+    if (IS_DEV) {
+      console.error('API ERROR:', {
+        url: normalizedError.url,
+        method: normalizedError.method,
+        status: normalizedError.status,
+        kind: normalizedError.kind,
+        retryable: normalizedError.retryable,
+        message: normalizedError.message,
+        data: normalizedError.data,
+      });
+    }
+
+    if (status === 401 || status === 403) {
+      if (IS_DEV) console.warn('Session expired or access forbidden -> redirecting to login');
+
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
 
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
     }
 
-
-
-    if (status === 404) {
-      console.error('🚨 API ROUTE NOT FOUND:', error.config?.url);
-    }
-
-    return Promise.reject(error);
+    return Promise.reject(normalizedError);
   }
 );
