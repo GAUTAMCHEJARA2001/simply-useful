@@ -43,6 +43,7 @@ model User {
   hashedPassword  String
   role            String                @default("SALES")
   active          Boolean               @default(true)
+  territory       String?
   companyId       String?
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
