@@ -53,7 +53,7 @@ def seed():
     else:
         user.hashedpassword = hashed_password
         user.updatedat = now
-        user.save()
+        user.save(update_fields=['hashedpassword', 'updatedat'])
         print(f"👤 Superadmin User already exists: {user.email} (Password reset to admin123)")
         
     # 3. Create MAIN Warehouse
