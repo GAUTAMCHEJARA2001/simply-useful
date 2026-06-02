@@ -2,6 +2,8 @@
 
 This folder houses the automated deployment specifications for the platform.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/GAUTAMCHEJARA2001/simply-useful/tree/30.05.2026)
+
 ## 📂 Folder Contents
 - `render.yaml`: Blueprint configuration for deploying the Django API Service to Render.
 
