@@ -2,7 +2,7 @@ services:
   - type: web
     name: simply-useful-backend
     env: python
-    buildCommand: "cd backend && pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput && python seed_kamla.py"
+    buildCommand: "cd backend && pip install -r requirements.txt && python manage.py migrate && python sync_schema.py && python manage.py collectstatic --noinput && python seed_kamla.py"
     startCommand: "cd backend && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
     envVars:
       - key: SECRET_KEY
