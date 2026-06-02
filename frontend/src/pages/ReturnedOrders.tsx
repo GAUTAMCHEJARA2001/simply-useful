@@ -22,9 +22,31 @@ const ReturnedOrders: React.FC = () => {
     return match ? match[1] : '';
   };
 
+  const extractDispatchDate = (narration: string, fallback: string | undefined) => {
+    if (!narration) return fallback || '';
+    const matchTime = narration.match(/\[DISPATCH TIME:\s*([^\]\s]+)(?:\s+[^\]]+)?\]/i);
+    if (matchTime) return matchTime[1];
+    const matchDate = narration.match(/\[DISPATCH DATE:\s*([^\]]+)\]/i);
+    return matchDate ? matchDate[1] : (fallback || '');
+  };
+
+  const extractReturnDate = (narration: string, fallback: string | undefined) => {
+    if (!narration) return fallback || '';
+    const match = narration.match(/\[RETURN DATE:\s*([^\]]+)\]/i);
+    return match ? match[1] : (fallback || '');
+  };
+
   const getCleanNarration = (narration: string) => {
     if (!narration) return '—';
-    return narration.replace(/\[RETURN REASON:\s*[^\]]+\]/g, '').trim() || '—';
+    return narration
+      .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
+      .replace(/\[VEHICLE:\s*[^\]]+\]/gi, '')
+      .replace(/\[DRIVER:\s*[^\]]+\]/gi, '')
+      .replace(/\[DISPATCH TIME:\s*[^\]]+\]/gi, '')
+      .replace(/\[DISPATCH DATE:\s*[^\]]+\]/gi, '')
+      .replace(/\[RETURN REASON:\s*[^\]]+\]/gi, '')
+      .replace(/\[RETURN DATE:\s*[^\]]+\]/gi, '')
+      .trim() || '—';
   };
 
   return (
@@ -44,11 +66,11 @@ const ReturnedOrders: React.FC = () => {
           <DataTable
             columns={['Order ID', 'Order Date', 'Party', 'Dispatch Date', 'Return Date', 'Action']}
             rows={returnedOrders.map(o => [
-              <span key="id" className="font-semibold">{o.order_id}</span>,
+              <span key="id" className="font-semibold">{o.order_id || o.orderId || o.id}</span>,
               formatDate(o.date),
-              o.party_name,
-              formatDate(o.dispatch_date),
-              formatDate(o.return_date),
+              o.party_name || o.partyName || '—',
+              formatDate(extractDispatchDate(o.narration, o.date || o.createdAt)),
+              formatDate(extractReturnDate(o.narration, o.updatedAt || o.date || o.createdAt)),
               <Button key="btn" size="sm" variant="outline" onClick={() => setSelectedOrder(o)}>View Details</Button>
             ])}
           />
@@ -60,10 +82,10 @@ const ReturnedOrders: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
               <RefreshCw className="w-5 h-5" />
-              Return Details &middot; <span className="text-foreground">{selectedOrder?.order_id}</span>
+              Return Details &middot; <span className="text-foreground">{selectedOrder?.order_id || selectedOrder?.orderId || selectedOrder?.id}</span>
             </DialogTitle>
             <DialogDescription id="return-details-desc" className="sr-only">
-              View comprehensive details for returned order {selectedOrder?.order_id}, including reasons, dates, and items.
+              View comprehensive details for returned order {selectedOrder?.order_id || selectedOrder?.orderId || selectedOrder?.id}, including reasons, dates, and items.
             </DialogDescription>
           </DialogHeader>
 
@@ -83,11 +105,11 @@ const ReturnedOrders: React.FC = () => {
                 </div>
                 <div className="bg-muted/30 p-3 rounded-lg border border-border">
                   <p className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1"><Calendar className="w-3 h-3"/> Dispatch Date</p>
-                  <p className="text-sm font-medium mt-0.5">{formatDate(selectedOrder.dispatch_date)}</p>
+                  <p className="text-sm font-medium mt-0.5">{formatDate(extractDispatchDate(selectedOrder.narration, selectedOrder.date || selectedOrder.createdAt))}</p>
                 </div>
                 <div className="bg-muted/30 p-3 rounded-lg border border-border flex flex-col justify-end">
                   <p className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1"><Calendar className="w-3 h-3"/> Return Date</p>
-                  <p className="text-sm font-bold text-red-600 mt-0.5">{formatDate(selectedOrder.return_date)}</p>
+                  <p className="text-sm font-bold text-red-600 mt-0.5">{formatDate(extractReturnDate(selectedOrder.narration, selectedOrder.updatedAt || selectedOrder.date || selectedOrder.createdAt))}</p>
                 </div>
               </div>
 
@@ -95,12 +117,12 @@ const ReturnedOrders: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5"><User className="w-3.5 h-3.5"/> Order Given By</p>
-                  <p className="text-sm font-semibold">{selectedOrder.so_email}</p>
+                  <p className="text-sm font-semibold">{selectedOrder.so_email || selectedOrder.soEmail}</p>
                 </div>
                 <div className="space-y-1 md:text-right">
                   <p className="text-xs text-muted-foreground flex items-center md:justify-end gap-1.5"><MapPin className="w-3.5 h-3.5"/> Dealer/Distributor</p>
-                  <p className="text-sm font-semibold">{selectedOrder.party_name}</p>
-                  <p className="text-[11px] text-muted-foreground">{selectedOrder.party_type} • Linked: {selectedOrder.distributor || 'N/A'}</p>
+                  <p className="text-sm font-semibold">{selectedOrder.party_name || selectedOrder.partyName}</p>
+                  <p className="text-[11px] text-muted-foreground">{selectedOrder.party_type || selectedOrder.partyType} • Linked: {selectedOrder.distributor || 'N/A'}</p>
                 </div>
               </div>
 
@@ -119,12 +141,15 @@ const ReturnedOrders: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {selectedOrder.items.map((item, idx) => (
+                      {(selectedOrder.items || []).map((item, idx) => (
                         <tr key={idx} className="bg-card">
-                          <td className="px-3 py-2 font-medium whitespace-nowrap">{item.product}</td>
+                          <td className="px-3 py-2 font-medium whitespace-nowrap animate-none">
+                            {/* React crash fix: render friendly name if product is nested object, fallback to product as string */}
+                            {item.productName || (typeof item.product === 'object' && item.product ? (item.product as any).name || (item.product as any).productName : item.product)}
+                          </td>
                           <td className="px-3 py-2 text-center text-primary font-bold">{item.qty}</td>
                           <td className="px-3 py-2 text-right">{formatCurrency(item.price)}</td>
-                          <td className="px-3 py-2 text-muted-foreground truncate max-w-[150px]" title={item.item_remark}>{item.item_remark || '—'}</td>
+                          <td className="px-3 py-2 text-muted-foreground truncate max-w-[150px]" title={item.itemRemark || item.item_remark}>{item.itemRemark || item.item_remark || '—'}</td>
                           <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.total)}</td>
                         </tr>
                       ))}

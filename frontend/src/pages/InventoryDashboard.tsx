@@ -21,10 +21,21 @@ const statusStyles: Record<string, string> = {
 
 const InventoryDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { orders, products, updateOrderStatus, loading: dataLoading } = useData();
+  const { orders, products, warehouses, updateOrderStatus, loading: dataLoading } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
-  const [confirmOrder, setConfirmOrder] = useState<{ id: string; action: OrderStatus; reason?: string; action_date?: string } | null>(null);
+  const [confirmOrder, setConfirmOrder] = useState<{
+    id: string;
+    action: OrderStatus;
+    reason?: string;
+    action_date?: string;
+    action_time?: string;
+    invoiceDetails?: string;
+    warehouseDetails?: string;
+    vehicleDetails?: string;
+    driverName?: string;
+    driverMobile?: string;
+  } | null>(null);
 
   if (dataLoading) {
     return (
@@ -70,17 +81,63 @@ const InventoryDashboard: React.FC = () => {
   // Debug log as requested by user
   console.log('Product Demand Data:', productDemand);
 
+  const setFormConfirmField = (field: string, value: any) => {
+    if (!confirmOrder) return;
+    setConfirmOrder({ ...confirmOrder, [field]: value });
+  };
+
   const handleAction = async () => {
     if (!confirmOrder) return;
+
     if (confirmOrder.action === 'Returned' && !confirmOrder.reason?.trim()) {
       toast({ title: 'Reason required', description: 'Please provide a return reason.', variant: 'destructive' });
       return;
     }
-    if ((confirmOrder.action === 'Dispatched' || confirmOrder.action === 'Returned') && !confirmOrder.action_date) {
-      toast({ title: 'Date required', description: `Please select a ${confirmOrder.action === 'Dispatched' ? 'dispatch' : 'return'} date.`, variant: 'destructive' });
-      return;
+
+    if (confirmOrder.action === 'Dispatched') {
+      if (!confirmOrder.invoiceDetails?.trim()) {
+        toast({ title: 'Invoice Details required', description: 'Please provide the Invoice/Challan details.', variant: 'destructive' });
+        return;
+      }
+      if (!confirmOrder.warehouseDetails?.trim()) {
+        toast({ title: 'Warehouse required', description: 'Please select the dispatch warehouse.', variant: 'destructive' });
+        return;
+      }
+      if (!confirmOrder.vehicleDetails?.trim()) {
+        toast({ title: 'Vehicle Details required', description: 'Please provide the Vehicle details.', variant: 'destructive' });
+        return;
+      }
+      if (!confirmOrder.driverName?.trim()) {
+        toast({ title: 'Driver Name required', description: 'Please provide the Driver name.', variant: 'destructive' });
+        return;
+      }
+      if (!confirmOrder.driverMobile?.trim()) {
+        toast({ title: 'Driver Mobile required', description: 'Please provide the Driver mobile number.', variant: 'destructive' });
+        return;
+      }
+      if (!confirmOrder.action_date) {
+        toast({ title: 'Date required', description: 'Please select a dispatch date.', variant: 'destructive' });
+        return;
+      }
+      if (!confirmOrder.action_time) {
+        toast({ title: 'Time required', description: 'Please select a dispatch time.', variant: 'destructive' });
+        return;
+      }
+    } else if (confirmOrder.action === 'Returned') {
+      if (!confirmOrder.action_date) {
+        toast({ title: 'Date required', description: 'Please select a return date.', variant: 'destructive' });
+        return;
+      }
     }
-    await updateOrderStatus(confirmOrder.id, confirmOrder.action, confirmOrder.reason, confirmOrder.action_date);
+
+    let narrationStr = confirmOrder.reason || '';
+    if (confirmOrder.action === 'Dispatched') {
+      narrationStr = `[INVOICE: ${confirmOrder.invoiceDetails.trim()}] [WAREHOUSE: ${confirmOrder.warehouseDetails.trim()}] [VEHICLE: ${confirmOrder.vehicleDetails.trim()}] [DRIVER: ${confirmOrder.driverName.trim()}] [DRIVER MOBILE: ${confirmOrder.driverMobile.trim()}] [DISPATCH TIME: ${confirmOrder.action_date} ${confirmOrder.action_time}] ${narrationStr}`.trim();
+    } else if (confirmOrder.action === 'Returned') {
+      narrationStr = `[RETURN REASON: ${confirmOrder.reason.trim()}] [RETURN DATE: ${confirmOrder.action_date}] ${narrationStr}`.trim();
+    }
+
+    await updateOrderStatus(confirmOrder.id, confirmOrder.action, narrationStr, confirmOrder.action_date);
     const label = confirmOrder.action === 'Dispatched' ? 'dispatched' : confirmOrder.action === 'Returned' ? 'returned' : 'completed';
     toast({
       title: `Order ${label}`,
@@ -123,8 +180,8 @@ const InventoryDashboard: React.FC = () => {
           <motion.div key={kpi.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
             <div className="kpi-card">
               <div className={`w-10 h-10 rounded-lg ${kpi.color} flex items-center justify-center mb-3`}><kpi.icon className="w-5 h-5" /></div>
-              <p className="text-2xl font-bold">{kpi.value}</p>
-              <p className="text-xs text-muted-foreground mt-1">{kpi.label}</p>
+              <p className="text-xl xl:text-2xl font-bold text-foreground truncate" title={String(kpi.value)}>{kpi.value}</p>
+              <p className="text-xs text-muted-foreground mt-1 truncate" title={kpi.label}>{kpi.label}</p>
             </div>
           </motion.div>
         ))}
@@ -142,8 +199,8 @@ const InventoryDashboard: React.FC = () => {
                 <th className="text-right px-4 py-3 text-muted-foreground font-medium">Orders</th>
               </tr></thead>
               <tbody>
-                {productDemand.map(p => (
-                  <tr key={p.product} className="border-b border-border/50">
+                {productDemand.map((p, index) => (
+                   <tr key={`${p.product || 'unknown-product'}-${index}`} className="border-b border-border/50">
                     <td className="px-4 py-3 font-medium">{p.product}</td>
                     <td className="px-4 py-3 text-right font-bold text-primary">{p.qty}</td>
                     <td className="px-4 py-3 text-right">{p.orders}</td>
@@ -188,7 +245,21 @@ const InventoryDashboard: React.FC = () => {
                       {action.map((a: any) => (
                         <button
                           key={a.next}
-                          onClick={() => setConfirmOrder({ id: orderId, action: a.next, action_date: new Date().toISOString().split('T')[0] })}
+                          onClick={() => {
+                            const now = new Date();
+                            setConfirmOrder({ 
+                              id: orderId, 
+                              action: a.next, 
+                              action_date: now.toISOString().split('T')[0],
+                              action_time: now.toTimeString().split(' ')[0].slice(0, 5),
+                              invoiceDetails: '',
+                              warehouseDetails: warehouses[0]?.name || '',
+                              vehicleDetails: '',
+                              driverName: '',
+                              driverMobile: '',
+                              reason: ''
+                            });
+                          }}
                           className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${a.color}`}
                         >
                           <a.icon className="w-3.5 h-3.5" /> {a.label}
@@ -220,34 +291,128 @@ const InventoryDashboard: React.FC = () => {
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               {confirmOrder?.action === 'Dispatched'
-                ? `Mark order ${confirmOrder?.id} as DISPATCHED? This will notify the Sales Officer and Admin.`
+                ? `Enter delivery and transport details to dispatch order ${confirmOrder?.id}:`
                 : confirmOrder?.action === 'Returned'
-                ? `Return order ${confirmOrder?.id}? Please provide a reason below.`
+                ? `Return order ${confirmOrder?.id}? Please provide details below.`
                 : `Mark order ${confirmOrder?.id} as COMPLETED? This confirms delivery and updates revenue.`}
             </p>
 
-            {(confirmOrder?.action === 'Dispatched' || confirmOrder?.action === 'Returned') && (
-              <div>
-                <label className="text-sm font-medium block mb-1.5">{confirmOrder.action === 'Dispatched' ? 'Dispatch Date' : 'Return Date'}</label>
-                <input 
-                  type="date"
-                  value={confirmOrder.action_date || ''}
-                  onChange={e => setConfirmOrder({ ...confirmOrder, action_date: e.target.value })}
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background mb-3"
-                />
+            {confirmOrder?.action === 'Dispatched' && (
+              <div className="space-y-3 mt-2 border-t pt-3 border-border/40">
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1">Invoice / Challan Number</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. INV-1001"
+                    value={confirmOrder.invoiceDetails || ''} 
+                    onChange={e => setFormConfirmField('invoiceDetails', e.target.value)}
+                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1">Vehicle Details</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. UP-32-AB-1234"
+                    value={confirmOrder.vehicleDetails || ''} 
+                    onChange={e => setFormConfirmField('vehicleDetails', e.target.value.toUpperCase())}
+                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1">Warehouse</label>
+                  <select
+                    value={confirmOrder.warehouseDetails || ''}
+                    onChange={e => setFormConfirmField('warehouseDetails', e.target.value)}
+                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                  >
+                    <option value="">Select warehouse</option>
+                    {warehouses.map((warehouse: any) => (
+                      <option key={warehouse.id || warehouse.name} value={warehouse.name}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1">Driver Name</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Ramesh Kumar"
+                    value={confirmOrder.driverName || ''} 
+                    onChange={e => setFormConfirmField('driverName', e.target.value)}
+                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1">Driver Mobile Number</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. +91 98765 43210"
+                    value={confirmOrder.driverMobile || ''} 
+                    onChange={e => setFormConfirmField('driverMobile', e.target.value)}
+                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] font-semibold block mb-1">Dispatch Date</label>
+                    <input 
+                      type="date"
+                      value={confirmOrder.action_date || ''}
+                      onChange={e => setFormConfirmField('action_date', e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold block mb-1">Dispatch Time</label>
+                    <input 
+                      type="time"
+                      value={confirmOrder.action_time || ''}
+                      onChange={e => setFormConfirmField('action_time', e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1">Remarks / Notes (Optional)</label>
+                  <textarea 
+                    placeholder="Any comments or remarks..."
+                    value={confirmOrder.reason || ''} 
+                    onChange={e => setFormConfirmField('reason', e.target.value)}
+                    className="w-full text-xs border border-border rounded-lg p-2 bg-background min-h-[50px]"
+                  />
+                </div>
               </div>
             )}
 
             {confirmOrder?.action === 'Returned' && (
-              <div>
-                <label className="text-sm font-medium block mb-1.5">Return Reason</label>
-                <textarea 
-                  value={confirmOrder.reason || ''} 
-                  onChange={e => setConfirmOrder({ ...confirmOrder, reason: e.target.value })}
-                  placeholder="Required: Reason for order return..."
-                  className="w-full text-sm border border-border rounded-lg p-2 bg-background min-h-[80px]"
-                />
+              <div className="space-y-3 mt-2 border-t pt-3 border-border/40">
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1">Return Date</label>
+                  <input 
+                    type="date"
+                    value={confirmOrder.action_date || ''}
+                    onChange={e => setFormConfirmField('action_date', e.target.value)}
+                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold block mb-1">Return Reason</label>
+                  <textarea 
+                    value={confirmOrder.reason || ''} 
+                    onChange={e => setFormConfirmField('reason', e.target.value)}
+                    placeholder="Required: Reason for order return..."
+                    className="w-full text-xs border border-border rounded-lg p-2 bg-background min-h-[70px]"
+                  />
+                </div>
               </div>
+            )}
+
+            {confirmOrder?.action === 'Completed' && (
+              <p className="text-xs text-muted-foreground italic mt-2">
+                This will mark the order as delivered and finalize stock changes.
+              </p>
             )}
           </div>
           <DialogFooter className="gap-2 mt-2">

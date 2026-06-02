@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { SafeDataView } from '@/components/SafeDataView';
+import { useAuth } from '@/contexts/AuthContext';
 
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
@@ -24,6 +25,9 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
 );
 
 export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId: string) => void }> = ({ onViewTransaction }) => {
+  const { user } = useAuth();
+  const isInventoryOnly = user?.role === 'INVENTORY';
+
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +72,13 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
 
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    if (isInventoryOnly && warehouses.length > 0) {
+      if (!whFilter) setWhFilter(warehouses[0].name);
+      if (!popWh) setPopWh(warehouses[0].id.toString());
+    }
+  }, [isInventoryOnly, warehouses, whFilter, popWh]);
 
   const fetchLedger = useCallback(async (prodId: string) => {
     setLoadLedger(true);
@@ -125,7 +136,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
           {[...new Set(stock.map(s => s.categoryName).filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <select value={whFilter} onChange={e => setWhFilter(e.target.value)} className="border border-border rounded-lg px-3 py-2 bg-background text-sm">
-          <option value="">All Warehouses</option>
+          {!isInventoryOnly && <option value="">All Warehouses</option>}
           {[...new Set(stock.map(s => s.warehouseName).filter(Boolean))].map(w => <option key={w} value={w}>{w}</option>)}
         </select>
       </div>
@@ -140,7 +151,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
         <DataTable
           columns={['Product Name', 'SKU', 'Category', 'Unit', 'Wh', 'Opening', 'Production', 'Consumed', 'Purchase', 'Sales', 'Sales Return', 'Purch. Ret', 'Adj', 'Closing Stock', 'Action']}
           rows={filteredStock.map(s => [
-            s.productName, s.sku, s.categoryName || '—', s.unit?.name || (typeof s.unit === 'string' ? s.unit : '') || '—',
+            s.productName, `${s.sku}-${s.warehouseName || 'Global'}`, s.categoryName || '—', s.unit?.name || (typeof s.unit === 'string' ? s.unit : '') || '—',
             <span className="text-xs text-muted-foreground">{s.warehouseName || 'Global'}</span>,
             <span className="text-muted-foreground">{s.openingStock}</span>,
             <span className="text-blue-600">{s.production}</span>,
@@ -174,7 +185,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
               <span className="text-muted-foreground">to</span>
               <input type="date" value={popDateTo} onChange={e => setPopDateTo(e.target.value)} className="border border-border rounded-lg px-2 py-1 bg-background text-xs" />
               <select value={popWh} onChange={e => setPopWh(e.target.value)} className="border border-border rounded-lg px-2 py-1 bg-background text-xs">
-                <option value="">All Warehouses</option>
+                {!isInventoryOnly && <option value="">All Warehouses</option>}
                 {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
               <Button size="sm" variant="outline" onClick={() => { setPopDateFrom(''); setPopDateTo(''); setPopWh(''); }}><X className="w-3 h-3 mr-1" /> Clear</Button>
@@ -183,7 +194,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                   type="STOCK_LEDGER" 
                   data={{
                     productName: selectedProduct.productName,
-                    sku: selectedProduct.sku,
+                    sku: `${selectedProduct.sku}-${selectedProduct.warehouseName || 'Global'}`,
                     unit: selectedProduct.unit?.name || (typeof selectedProduct.unit === 'string' ? selectedProduct.unit : '') || 'Bags',
                     dateFrom: popDateFrom,
                     dateTo: popDateTo,
@@ -203,7 +214,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                       balance: l.balance
                     }))
                   }}
-                  filename={`Ledger_${selectedProduct.sku}.pdf`}
+                  filename={`Ledger_${selectedProduct.sku}_${selectedProduct.warehouseName || 'Global'}.pdf`}
                   buttonLabel="Download Ledger"
                 />
                 <Button size="sm" variant="outline" onClick={() => toast({ title: 'Exporting to CSV...' })}><Download className="w-3.5 h-3.5 mr-1" /> Export</Button>
@@ -228,9 +239,13 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                   <tbody className="divide-y divide-border">
                     {ledger.map((l) => (
                       <tr key={l.id} 
-                        className={`hover:bg-primary/5 cursor-pointer transition-colors group ${onViewTransaction ? 'cursor-pointer' : ''}`}
+                        className={`transition-colors group ${
+                          l.transactionType === 'OPENING STOCK'
+                            ? 'bg-blue-50 dark:bg-blue-950/30 font-semibold'
+                            : 'hover:bg-primary/5 cursor-pointer'
+                        } ${onViewTransaction && l.transactionType !== 'OPENING STOCK' ? 'cursor-pointer' : ''}`}
                         onClick={() => {
-                          if (!onViewTransaction || !l.referenceId) return;
+                          if (!onViewTransaction || !l.referenceId || l.transactionType === 'OPENING STOCK') return;
                           let type = '';
                           const t = l.transactionType.toUpperCase();
                           if (t.includes('PURCHASE')) type = 'purchase';

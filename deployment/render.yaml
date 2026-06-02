@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: simply-useful-backend
+    env: python
+    buildCommand: "cd backend && pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput"
+    startCommand: "cd backend && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*"
+      - key: JWT_SECRET
+        value: "simply-useful-secret-key-123-super-secure-key-2026"

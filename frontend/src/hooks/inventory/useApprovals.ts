@@ -20,7 +20,23 @@ export const useApprovalMutations = () => {
     mutationFn: (id: string) => api.post(`/transactions/approvals/${id}/approve`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Success', description: 'Action approved and effect given' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const dispatchMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) => api.post(`/transactions/approvals/${id}/dispatch`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast({ title: 'Dispatched', description: 'Order moved to Sales & Stock Management' });
     },
     onError: (error: any) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -31,6 +47,8 @@ export const useApprovalMutations = () => {
     mutationFn: (id: string) => api.post(`/transactions/approvals/${id}/reject`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Rejected', description: 'Approval request rejected' });
     },
     onError: (error: any) => {
@@ -41,6 +59,8 @@ export const useApprovalMutations = () => {
   return {
     approve: approveMutation.mutateAsync,
     isApproving: approveMutation.isPending,
+    dispatchOrder: dispatchMutation.mutateAsync,
+    isDispatching: dispatchMutation.isPending,
     reject: rejectMutation.mutateAsync,
     isRejecting: rejectMutation.isPending,
   };

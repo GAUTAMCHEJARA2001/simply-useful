@@ -34,6 +34,9 @@ import RejectedOrders from "./pages/RejectedOrders";
 import CreatePurchaseOrder from "./pages/CreatePurchaseOrder";
 import ErrorBoundary from "./components/ErrorBoundary";
 import GlobalInventory from "./pages/GlobalInventory";
+import LeadsPage from "./pages/CRM/LeadsPage";
+import SOMapping from "./pages/SOMapping";
+import MyTerritory from "./pages/MyTerritory";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -93,6 +96,8 @@ const App = () => {
                   <Route path="/sales/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
                   <Route path="/sales/visits" element={<ProtectedRoute><VisitTracking /></ProtectedRoute>} />
                   <Route path="/sales/expenses" element={<ProtectedRoute><ExpenseEntry /></ProtectedRoute>} />
+                  <Route path="/sales/crm" element={<ProtectedRoute><LeadsPage /></ProtectedRoute>} />
+                  <Route path="/sales/territory" element={<ProtectedRoute><MyTerritory /></ProtectedRoute>} />
 
                   {/* Admin */}
                   <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
@@ -103,6 +108,7 @@ const App = () => {
                   <Route path="/admin/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
                   <Route path="/admin/warehouses" element={<ProtectedRoute><WarehouseManagement /></ProtectedRoute>} />
                   <Route path="/admin/bom" element={<ProtectedRoute><BOMManagement /></ProtectedRoute>} />
+                  <Route path="/admin/so-mapping" element={<ProtectedRoute><SOMapping /></ProtectedRoute>} />
                   <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
                   {/* HR */}

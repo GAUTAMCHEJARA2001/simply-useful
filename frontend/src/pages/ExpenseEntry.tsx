@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Plus, Receipt, IndianRupee } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
 
 const categories = ['Travel', 'Food', 'Accommodation', 'Fuel', 'Phone', 'Other'];
 
@@ -19,13 +20,14 @@ const ExpenseEntry: React.FC = () => {
   const { user } = useAuth();
   const { expenses, addExpense, updateExpenseStatus, updateExpense } = useData();
   const { toast } = useToast();
+  const { filterBySelectedFY, fyLabel } = useFinancialYear();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<Expense>({ date: new Date().toISOString().split('T')[0], soEmail: user?.email || '', category: '', amount: 0, remarks: '', status: 'PENDING' });
 
   const isHr = user?.role === 'HR' || user?.role === 'SUPERADMIN' || user?.role === 'ADMIN';
   
-  const displayExpenses = expenses;
-  const myExpenses = expenses; // Keep for KPIs items counts
+  const displayExpenses = filterBySelectedFY(expenses, e => e.date);
+  const myExpenses = displayExpenses; // Keep for KPIs items counts
   const totalExpense = myExpenses.reduce((s, e) => s + e.amount, 0);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,7 +61,7 @@ const ExpenseEntry: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="page-header">Expense Entry</h1>
-          <p className="page-subheader">Submit travel expenses</p>
+          <p className="page-subheader">Submit travel expenses &middot; <span className="font-semibold text-primary">{fyLabel}</span></p>
         </div>
         <Button className="action-button" onClick={() => setDialogOpen(true)}><Plus className="w-5 h-5 mr-2" /> Add Expense</Button>
       </div>
@@ -69,15 +71,15 @@ const ExpenseEntry: React.FC = () => {
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
             <Receipt className="w-5 h-5 text-primary" />
           </div>
-          <p className="text-2xl font-bold">{myExpenses.length}</p>
-          <p className="text-xs text-muted-foreground mt-1">Total Entries</p>
+          <p className="text-xl xl:text-2xl font-bold text-foreground truncate" title={String(myExpenses.length)}>{myExpenses.length}</p>
+          <p className="text-xs text-muted-foreground mt-1 truncate" title="Total Entries">Total Entries</p>
         </div>
         <div className="kpi-card">
           <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center mb-3">
             <IndianRupee className="w-5 h-5 text-success" />
           </div>
-          <p className="text-2xl font-bold">₹{totalExpense.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground mt-1">Total Amount</p>
+          <p className="text-xl xl:text-2xl font-bold text-foreground truncate" title={`₹${totalExpense.toLocaleString()}`}>₹{totalExpense.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mt-1 truncate" title="Total Amount">Total Amount</p>
         </div>
       </div>
 

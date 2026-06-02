@@ -131,7 +131,7 @@
   }
 
   .kpi-card {
-    @apply bg-card rounded-xl border border-border/60 shadow-md p-5 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+    @apply bg-card rounded-xl border border-border/60 shadow-md p-4 xl:p-5 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
   }
 
   .sidebar-link {

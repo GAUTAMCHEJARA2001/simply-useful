@@ -1,129 +1,120 @@
 import React from 'react';
-import { Text, View, StyleSheet } from '@react-pdf/renderer';
-import { BaseLayout } from '../layouts/BaseLayout';
-import { styles } from '../styles';
-
-interface BOMItem {
-  id: string;
-  name: string;
-  code: string;
-  qty: number;
-  unit: string;
-}
+import { View, Text } from '@react-pdf/renderer';
+import { PrintableProductionOrder } from '../adapters/production.adapter';
+import { getThemeStyles } from '../theme';
+import { presets } from '../theme/presets';
+import { PDFHeader } from '../components/PDFHeader';
+import { PDFTable, PDFColumnDef } from '../components/PDFTable';
+import { PDFTerms } from '../components/PDFTerms';
+import { ThemePreset, PrintDensity } from '../types/printableCommon.types';
 
 interface ProductionTemplateProps {
-  orderNo: string;
-  date: string;
-  product_name: string;
-  target_qty: number;
-  unit: string;
-  bom_items: BOMItem[];
-  remarks?: string;
-  company: any;
+  production: PrintableProductionOrder;
+  themePreset?: ThemePreset;
+  densityMode?: PrintDensity;
 }
 
-const prodStyles = StyleSheet.create({
-  summaryBox: {
-    padding: 10,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 4,
-    marginBottom: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  summaryItem: {
-    flexDirection: 'column',
-  },
-  summaryLabel: {
-    fontSize: 8,
-    color: '#64748b',
-    textTransform: 'uppercase',
-  },
-  summaryValue: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#0f172a',
-  },
+export const ProductionTemplate: React.FC<ProductionTemplateProps> = React.memo(({
+  production,
+  themePreset = 'minimal',
+  densityMode = 'comfortable'
+}) => {
+  const styles = React.useMemo(() => getThemeStyles(themePreset, densityMode), [themePreset, densityMode]);
+  const tokens = React.useMemo(() => presets[themePreset] || presets.zoho, [themePreset]);
+
+  // Column definitions for the raw materials requirement table
+  const columns: PDFColumnDef<any>[] = [
+    { key: 'serialNo', title: 'Sr No', width: '10%', align: 'center' },
+    { key: 'code', title: 'Material SKU', width: '25%', align: 'left' },
+    { key: 'name', title: 'Material Name', width: '40%', align: 'left' },
+    { key: 'qty', title: 'Required Qty', width: '15%', align: 'right', formatter: (val) => Number(val).toFixed(2) },
+    { key: 'unit', title: 'Unit', width: '10%', align: 'center' }
+  ];
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* 1. Header */}
+      <PDFHeader
+        company={production.company}
+        documentTitle="PRODUCTION BATCH ORDER"
+        documentNo={production.orderNo}
+        documentDate={production.date}
+        tokens={tokens}
+        styles={styles}
+      />
+
+      {/* 2. Finished Goods batch summary card */}
+      <View style={{
+        padding: 8,
+        backgroundColor: tokens.colors.bgHeader,
+        borderWidth: 0.5,
+        borderColor: tokens.colors.border,
+        borderRadius: 4,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 12
+      }}>
+        <View style={{ flexDirection: 'column' }}>
+          <Text style={{ fontSize: 6.5, color: tokens.colors.muted, textTransform: 'uppercase' }}>Finished Good</Text>
+          <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: tokens.colors.text }}>{production.productName}</Text>
+        </View>
+        <View style={{ flexDirection: 'column' }}>
+          <Text style={{ fontSize: 6.5, color: tokens.colors.muted, textTransform: 'uppercase' }}>Batch Quantity</Text>
+          <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: tokens.colors.text }}>{production.targetQty.toLocaleString()} {production.unit}</Text>
+        </View>
+        <View style={{ flexDirection: 'column' }}>
+          <Text style={{ fontSize: 6.5, color: tokens.colors.muted, textTransform: 'uppercase' }}>Work Center</Text>
+          <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: tokens.colors.text }}>{production.workCenter}</Text>
+        </View>
+      </View>
+
+      {/* 3. BOM Requirement Listing */}
+      <View style={{ marginTop: 6 }}>
+        <Text style={{
+          fontSize: tokens.typography.small,
+          fontFamily: 'Helvetica-Bold',
+          color: tokens.colors.secondary,
+          textTransform: 'uppercase',
+          borderBottomWidth: tokens.borders.thin,
+          borderBottomColor: tokens.colors.border,
+          borderStyle: tokens.borders.style,
+          paddingBottom: 2,
+          marginBottom: 4
+        }}>Raw Material Requirements (BOM)</Text>
+        <PDFTable columns={columns} data={production.bomItems} styles={styles} />
+      </View>
+
+      {/* 4. Production batch Remarks */}
+      {production.remarks && (
+        <View style={{ marginTop: 10 }}>
+          <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: tokens.colors.muted, textTransform: 'uppercase', marginBottom: 2 }}>
+            Production Remarks:
+          </Text>
+          <Text style={{ fontSize: 8.5, color: tokens.colors.text, lineHeight: 1.3 }}>
+            {production.remarks}
+          </Text>
+        </View>
+      )}
+
+      {/* 5. Production execution signatures */}
+      <View style={{ marginTop: 30, flexDirection: 'row', justifyContent: 'space-between' }} wrap={false}>
+        <View style={{ width: '30%' }}>
+          <View style={{ borderBottomWidth: 0.5, borderColor: '#ccc', marginBottom: 4, height: 18 }} />
+          <Text style={{ textAlign: 'center', fontSize: 7, fontFamily: 'Helvetica-Bold' }}>Mixer Operator</Text>
+        </View>
+        <View style={{ width: '30%' }}>
+          <View style={{ borderBottomWidth: 0.5, borderColor: '#ccc', marginBottom: 4, height: 18 }} />
+          <Text style={{ textAlign: 'center', fontSize: 7, fontFamily: 'Helvetica-Bold' }}>QC Inspector</Text>
+        </View>
+        <View style={{ width: '30%' }}>
+          <View style={{ borderBottomWidth: 0.5, borderColor: '#ccc', marginBottom: 4, height: 18 }} />
+          <Text style={{ textAlign: 'center', fontSize: 7, fontFamily: 'Helvetica-Bold' }}>Floor Manager</Text>
+        </View>
+      </View>
+
+      <PDFTerms terms={production.terms} styles={styles} />
+    </View>
+  );
 });
 
-export const ProductionTemplate: React.FC<ProductionTemplateProps> = ({
-  orderNo,
-  date,
-  product_name,
-  target_qty,
-  unit,
-  bom_items,
-  remarks,
-  company
-}) => (
-  <BaseLayout
-    title="PRODUCTION ORDER"
-    docNumber={orderNo}
-    date={date}
-    companyInfo={company}
-  >
-    {/* Finished Good Summary */}
-    <View style={prodStyles.summaryBox}>
-      <View style={prodStyles.summaryItem}>
-        <Text style={prodStyles.summaryLabel}>Finished Good</Text>
-        <Text style={prodStyles.summaryValue}>{product_name}</Text>
-      </View>
-      <View style={prodStyles.summaryItem}>
-        <Text style={prodStyles.summaryLabel}>Batch Quantity</Text>
-        <Text style={prodStyles.summaryValue}>{Number(target_qty || 0).toLocaleString()} {unit || 'Units'}</Text>
-      </View>
-      <View style={prodStyles.summaryItem}>
-        <Text style={prodStyles.summaryLabel}>Work Center</Text>
-        <Text style={prodStyles.summaryValue}>Main Plant</Text>
-      </View>
-    </View>
-
-    {/* BOM Section */}
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Raw Material Requirements (BOM)</Text>
-      <View style={styles.table}>
-        <View style={styles.tableHeader}>
-          <Text style={[styles.tableCell, styles.colNo]}>Sr.</Text>
-          <Text style={[styles.tableCell, styles.colCode]}>Item Code</Text>
-          <Text style={[styles.tableCell, styles.colName]}>Item Name</Text>
-          <Text style={[styles.tableCell, styles.colQty]}>Req. Qty</Text>
-          <Text style={[styles.tableCell, styles.colUnit]}>Unit</Text>
-        </View>
-
-        {(bom_items || []).map((item, idx) => (
-          <View key={idx} style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlternate : null].filter(Boolean)}>
-            <Text style={[styles.tableCell, styles.colNo]}>{idx + 1}</Text>
-            <Text style={[styles.tableCell, styles.colCode]}>{item.code || '—'}</Text>
-            <Text style={[styles.tableCell, styles.colName]}>{item.name || 'Unknown'}</Text>
-            <Text style={[styles.tableCell, styles.colQty]}>{Number(item.qty || 0).toFixed(2).toLocaleString()}</Text>
-            <Text style={[styles.tableCell, styles.colUnit]}>{item.unit || 'Kg'}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-
-    {/* Production Remarks */}
-    {remarks ? (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Production Remarks</Text>
-        <Text style={{ fontSize: 9, color: '#444' }}>{remarks}</Text>
-      </View>
-    ) : null}
-
-    {/* Flow Verification (Empty slots for manual signing) */}
-    <View style={{ marginTop: 30, flexDirection: 'row', justifyContent: 'space-between' }}>
-      <View style={{ width: '30%' }}>
-        <View style={{ borderBottomWidth: 1, borderTopWidth: 0, borderLeftWidth: 0, borderRightWidth: 0, borderBottomColor: '#ccc', borderStyle: 'solid', marginBottom: 5, height: 15 }} />
-        <Text style={{ textAlign: 'center', fontSize: 8, fontWeight: 'bold' }}>Mixer Operator</Text>
-      </View>
-      <View style={{ width: '30%' }}>
-        <View style={{ borderBottomWidth: 1, borderTopWidth: 0, borderLeftWidth: 0, borderRightWidth: 0, borderBottomColor: '#ccc', borderStyle: 'solid', marginBottom: 5, height: 15 }} />
-        <Text style={{ textAlign: 'center', fontSize: 8, fontWeight: 'bold' }}>QC Inspector</Text>
-      </View>
-      <View style={{ width: '30%' }}>
-        <View style={{ borderBottomWidth: 1, borderTopWidth: 0, borderLeftWidth: 0, borderRightWidth: 0, borderBottomColor: '#ccc', borderStyle: 'solid', marginBottom: 5, height: 15 }} />
-        <Text style={{ textAlign: 'center', fontSize: 8, fontWeight: 'bold' }}>Floor Manager</Text>
-      </View>
-    </View>
-  </BaseLayout>
-);
+ProductionTemplate.displayName = 'ProductionTemplate';

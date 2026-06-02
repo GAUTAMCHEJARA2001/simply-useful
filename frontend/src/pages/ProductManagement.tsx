@@ -33,7 +33,13 @@ const CAT_COLORS: Record<string, string> = {
 };
 const getCatColor = (cat: string) => CAT_COLORS[cat] || 'bg-indigo-100 text-indigo-700';
 
-const emptyProduct: Product = { productCode: '', productName: '', category: '', bagSize: '', rate: 0, gst: 18, openingStock: 0 };
+const getCategoryName = (category: Product['category']) => {
+  if (!category) return 'Other';
+  if (typeof category === 'object') return category.name || 'Other';
+  return category;
+};
+
+const emptyProduct: Product = { productCode: '', name: '', productName: '', category: '', bagSize: '', rate: 0, gst: 18, openingStock: 0 };
 
 const ProductManagement: React.FC = () => {
   const { user } = useAuth();
@@ -55,8 +61,9 @@ const ProductManagement: React.FC = () => {
   const isAdmin = can('manage_products');
 
   const filtered = products.filter(p => {
-    const matchSearch = p.productName.toLowerCase().includes(search.toLowerCase()) || p.productCode.toLowerCase().includes(search.toLowerCase());
-    const matchCat = categoryFilter === 'All' || p.category === categoryFilter;
+    const productName = p.productName || p.name || '';
+    const matchSearch = productName.toLowerCase().includes(search.toLowerCase()) || p.productCode.toLowerCase().includes(search.toLowerCase());
+    const matchCat = categoryFilter === 'All' || getCategoryName(p.category) === categoryFilter;
     return matchSearch && matchCat;
   });
 
@@ -65,19 +72,48 @@ const ProductManagement: React.FC = () => {
     setForm({ ...emptyProduct, productCode: `PRD${String(Date.now()).slice(-4)}`, category: categories[0] || 'Other' });
     setDialogOpen(true);
   };
-  const openEdit = (p: Product) => { setEditing(p); setForm({ ...p }); setDialogOpen(true); };
+  const openEdit = (p: Product) => {
+    setEditing(p);
+    // Sanitize numeric fields to prevent NaN in inputs
+    setForm({
+      ...p,
+      rate: isNaN(Number(p.rate)) ? 0 : Number(p.rate),
+      gst: isNaN(Number(p.gst)) ? 18 : Number(p.gst),
+      openingStock: isNaN(Number(p.openingStock)) ? 0 : Number(p.openingStock),
+      // Resolve category to string name for the Select component
+      category: getCategoryName(p.category),
+    });
+    setDialogOpen(true);
+  };
 
   const handleSave = () => {
     if (!form.productName || !form.bagSize || !form.rate || !form.category) {
       toast({ title: 'Missing Fields', variant: 'destructive' }); return;
     }
-    if (editing) { updateProduct(editing.productCode, form); toast({ title: 'Product Updated', description: form.productName }); }
-    else { addProduct(form); toast({ title: 'Product Added', description: form.productName }); }
+    // Build a clean payload: strip read-only object fields so the backend serializer
+    // doesn't receive nested objects where it expects plain IDs.
+    const { brand, unit, categoryRef, ...cleanForm } = form as any;
+    const payload = {
+      ...cleanForm,
+      productName: form.productName || form.name || '',
+      name: form.productName || form.name || '',
+      rate: Number(form.rate) || 0,
+      gst: Number(form.gst) || 18,
+      openingStock: Number(form.openingStock) || 0,
+    };
+    if (editing) { updateProduct(editing.productCode, payload); toast({ title: 'Product Updated', description: form.productName }); }
+    else { addProduct(payload); toast({ title: 'Product Added', description: form.productName }); }
     setDialogOpen(false);
   };
 
   const handleDelete = () => { deleteProduct(deleteTarget); toast({ title: 'Deleted' }); setDeleteDialogOpen(false); };
-  const uf = (field: keyof Product, value: any) => setForm(prev => ({ ...prev, [field]: value }));
+  const uf = (field: keyof Product, value: any) => setForm(prev => {
+    const updated = { ...prev, [field]: value };
+    if (field === 'productName') {
+      updated.name = value;
+    }
+    return updated;
+  });
 
   // Category management
   const handleAddCategory = () => {
@@ -120,7 +156,7 @@ const ProductManagement: React.FC = () => {
           All ({products.length})
         </button>
         {categories.map(cat => {
-          const count = products.filter(p => p.category === cat).length;
+          const count = products.filter(p => getCategoryName(p.category) === cat).length;
           if (count === 0) return null;
           return (
             <button key={cat} onClick={() => setCategoryFilter(cat)}
@@ -144,9 +180,9 @@ const ProductManagement: React.FC = () => {
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <p className="font-semibold text-sm">{p.productName}</p>
-                  <p className="text-xs text-muted-foreground">{p.productCode} · {p.bagSize}</p>
+                  <p className="text-xs text-muted-foreground">{p.productCode} · {p.bagSize} · Opening: {p.openingStock ?? 0}</p>
                 </div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${getCatColor(p.category)}`}>{p.category || 'Other'}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${getCatColor(getCategoryName(p.category))}`}>{getCategoryName(p.category)}</span>
               </div>
               <div className="flex items-center justify-between mt-3">
                 <span className="text-sm font-bold text-primary">₹{p.rate}</span>
@@ -169,7 +205,7 @@ const ProductManagement: React.FC = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                {['Code', 'Product Name', 'Category', 'Bag Size', 'Rate (₹)', 'GST %', ...(isAdmin ? ['Actions'] : [])].map(h => (
+                {['Code', 'Product Name', 'Category', 'Bag Size', 'Opening Stock', 'Rate (₹)', 'GST %', ...(isAdmin ? ['Actions'] : [])].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
                 ))}
               </tr>
@@ -180,9 +216,10 @@ const ProductManagement: React.FC = () => {
                   <td className="px-4 py-3 font-mono text-xs">{p.productCode}</td>
                   <td className="px-4 py-3 font-medium">{p.productName}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${getCatColor(p.category)}`}>{p.category || 'Other'}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${getCatColor(getCategoryName(p.category))}`}>{getCategoryName(p.category)}</span>
                   </td>
                   <td className="px-4 py-3">{p.bagSize}</td>
+                  <td className="px-4 py-3">{p.openingStock ?? 0}</td>
                   <td className="px-4 py-3">₹{p.rate}</td>
                   <td className="px-4 py-3">{p.gst}%</td>
                   {isAdmin && (
@@ -195,7 +232,7 @@ const ProductManagement: React.FC = () => {
                   )}
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">No products found</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">No products found</td></tr>}
             </tbody>
           </table>
         </CardContent>
@@ -249,15 +286,16 @@ const ProductManagement: React.FC = () => {
             </div>
             <div className="space-y-2">
               <Label>Category *</Label>
-              <Select value={form.category} onValueChange={v => uf('category', v)}>
+              <Select value={getCategoryName(form.category)} onValueChange={v => uf('category', v)}>
                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>{categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2 col-span-1"><Label>Bag Size *</Label><Input value={form.bagSize} onChange={e => uf('bagSize', e.target.value)} placeholder="20 KG" /></div>
-              <div className="space-y-2 col-span-1"><Label>Rate (₹) *</Label><Input type="number" value={form.rate || ''} onChange={e => uf('rate', Number(e.target.value))} /></div>
-              <div className="space-y-2 col-span-1"><Label>GST %</Label><Input type="number" value={form.gst} onChange={e => uf('gst', Number(e.target.value))} /></div>
+            <div className="grid grid-cols-4 gap-3">
+              <div className="space-y-2"><Label>Bag Size *</Label><Input value={form.bagSize} onChange={e => uf('bagSize', e.target.value)} placeholder="20 KG" /></div>
+              <div className="space-y-2"><Label>Opening Stock</Label><Input type="number" value={(form.openingStock ?? 0).toString()} onChange={e => uf('openingStock', Number(e.target.value) || 0)} /></div>
+              <div className="space-y-2"><Label>Rate (₹) *</Label><Input type="number" value={(form.rate ?? '').toString()} onChange={e => uf('rate', Number(e.target.value) || 0)} /></div>
+              <div className="space-y-2"><Label>GST %</Label><Input type="number" value={(form.gst ?? 18).toString()} onChange={e => uf('gst', Number(e.target.value) || 0)} /></div>
             </div>
           </div>
           <DialogFooter className="gap-2">

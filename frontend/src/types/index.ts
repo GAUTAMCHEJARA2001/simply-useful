@@ -7,6 +7,7 @@ export interface User {
   role: UserRole;
   active: boolean;
   password?: string;
+  territory?: string;
 }
 
 export interface LoginInput {
@@ -37,6 +38,7 @@ export interface Dealer {
   creditLimit: number;
   outstanding: number;
   active: boolean;
+  territory?: string;
   dealer_code?: string;
   dealer_name?: string;
   assigned_so_email?: string;
@@ -52,6 +54,7 @@ export interface Distributor {
   creditLimit: number;
   outstanding: number;
   active: boolean;
+  territory?: string;
   distributor_name?: string;
   assigned_so_email?: string;
   credit_limit?: number;

@@ -14,18 +14,73 @@ interface SalesModalProps {
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
+const extractChallanNumber = (narration: string) => {
+  if (!narration) return '';
+  let match = narration.match(/\[CHALLAN:\s*([^\]]+)\]/i);
+  if (!match) {
+    match = narration.match(/\[INVOICE:\s*([^\]]+)\]/i);
+  }
+  return match ? match[1] : '';
+};
+
+const extractWarehouseId = (narration: string) => {
+  if (!narration) return '';
+  const match = narration.match(/\[WAREHOUSE ID:\s*([^\]]+)\]/i);
+  return match ? match[1].trim() : '';
+};
+
+const extractDispatchDetails = (narration: string) => {
+  if (!narration) return { invoice: '', vehicle: '', driver: '', mobile: '', dispatchDate: '', dispatchTime: '', warehouseName: '', warehouseId: '' };
+  const invoiceMatch = narration.match(/\[CHALLAN:\s*([^\]]+)\]/i) || narration.match(/\[INVOICE:\s*([^\]]+)\]/i);
+  const vehicleMatch = narration.match(/\[VEHICLE:\s*([^\]]+)\]/i);
+  const driverMatch = narration.match(/\[DRIVER:\s*([^\]]+)\]/i);
+  const mobileMatch = narration.match(/\[DRIVER MOBILE:\s*([^\]]+)\]/i);
+  const dateMatch = narration.match(/\[DISPATCH DATE:\s*([^\]]+)\]/i);
+  const timeMatch = narration.match(/\[DISPATCH TIME:\s*([^\]]+)\]/i);
+  const warehouseMatch = narration.match(/\[WAREHOUSE:\s*([^\]]+)\]/i);
+  const warehouseIdMatch = narration.match(/\[WAREHOUSE ID:\s*([^\]]+)\]/i);
+  
+  return {
+    invoice: invoiceMatch ? invoiceMatch[1].trim() : '',
+    vehicle: vehicleMatch ? vehicleMatch[1].trim() : '',
+    driver: driverMatch ? driverMatch[1].trim() : '',
+    mobile: mobileMatch ? mobileMatch[1].trim() : '',
+    dispatchDate: dateMatch ? dateMatch[1].trim() : '',
+    dispatchTime: timeMatch ? timeMatch[1].trim() : '',
+    warehouseName: warehouseMatch ? warehouseMatch[1].trim() : '',
+    warehouseId: warehouseIdMatch ? warehouseIdMatch[1].trim() : '',
+  };
+};
+
 export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale }) => {
   const { data: products = [] } = useProducts();
   const { data: warehouses = [] } = useWarehouses();
   const { saveSale } = useSaleMutations();
+  const extractedDetails = extractDispatchDetails(sale?.narration || '');
 
   const [form, setForm] = useState<any>({
     lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }]
   });
 
   useEffect(() => {
-    if (sale) setForm(sale);
-    else setForm({ lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }] });
+    if (sale && isOpen) {
+      // Map Order object to SalesModal form shape
+      const mappedLineItems = (sale.items || []).map((it: any) => ({
+        productId: it.productId || it.productid_id || '',
+        quantity: it.qty || 0,
+        rate: it.price || 0,
+        tax_percent: it.tax_percent || 18
+      }));
+      setForm({
+        ...sale,
+        customerName: sale.partyName || sale.customerName || '',
+        challanNumber: extractChallanNumber(sale.narration) || sale.challanNumber || '',
+        warehouse_id: extractWarehouseId(sale.narration) || sale.warehouseId || sale.warehouse_id || '',
+        lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }]
+      });
+    } else {
+      setForm({ lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }] });
+    }
   }, [sale, isOpen]);
 
   const addLineItem = () => {
@@ -40,23 +95,112 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
 
   const updateLineItem = (index: number, field: string, value: any) => {
     const updated = [...(form.lineItems || [])];
-    updated[index] = { ...updated[index], [field]: value };
+    if (field === 'productId') {
+      const selectedProd = products.find((p: any) => p.id === value);
+      updated[index] = {
+        ...updated[index],
+        productId: value,
+        rate: selectedProd ? selectedProd.rate || 0 : 0,
+        tax_percent: selectedProd ? selectedProd.gst || 18 : 18
+      };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
     setForm({ ...form, lineItems: updated });
-  };
-
-  const handleSave = async () => {
-    await saveSale(form);
-    onClose();
   };
 
   const grandTotal = (form.lineItems || []).reduce((acc: number, it: any) => 
     acc + (it.quantity || 0) * (it.rate || 0) * (1 + (it.tax_percent || 0) / 100), 0
   );
 
+  const handleSave = async () => {
+    const rawNarration = form.narration || '';
+    // Clean any old bracketed tags from narration to avoid stacking
+    let cleanNarration = rawNarration
+      .replace(/\[CHALLAN:\s*[^\]]+\]/g, '')
+      .replace(/\[WAREHOUSE:\s*[^\]]+\]/g, '')
+      .replace(/\[WAREHOUSE ID:\s*[^\]]+\]/g, '')
+      .trim();
+
+    if (form.challanNumber) {
+      cleanNarration = `[CHALLAN: ${form.challanNumber}] ${cleanNarration}`.trim();
+    }
+
+    const selectedWh = warehouses.find((w: any) => String(w.id) === String(form.warehouse_id));
+    if (selectedWh) {
+      cleanNarration = `[WAREHOUSE: ${selectedWh.name}] [WAREHOUSE ID: ${selectedWh.id}] ${cleanNarration}`.trim();
+    }
+
+    const payload = {
+      ...form,
+      partyName: form.customerName || form.partyName || '',
+      partyType: form.partyType || 'Dealer',
+      status: form.status || 'Completed',
+      grandTotal: grandTotal,
+      narration: cleanNarration,
+      warehouse_id: form.warehouse_id || '',
+      items: (form.lineItems || []).map((it: any) => ({
+        productId: it.productId,
+        qty: it.quantity,
+        price: it.rate,
+        total: (it.quantity || 0) * (it.rate || 0),
+        tax_percent: it.tax_percent || 18
+      }))
+    };
+    await saveSale(payload);
+    onClose();
+  };
+
   return (
     <Modal isOpen={isOpen} title={sale?.id ? 'Edit Sale' : 'New Sale Registration'} onClose={onClose}>
       <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
         
+        {sale?.id && (
+          <div className="p-4 bg-purple-500/5 border border-purple-500/15 rounded-xl text-xs space-y-3">
+            <p className="font-bold uppercase tracking-wider text-purple-700 text-[10px] flex items-center gap-1.5">
+              📋 Sale &amp; Fulfillment Context
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-muted-foreground">
+              <div>
+                <span className="font-bold text-foreground/80 block">Placed By (Sales Officer)</span>
+                <span className="text-foreground font-medium">{sale.soEmail || '—'}</span>
+              </div>
+              <div>
+                <span className="font-bold text-foreground/80 block">Customer / Party Name</span>
+                <span className="text-foreground font-medium">{sale.partyName || sale.customerName || '—'}</span>
+              </div>
+              <div>
+                <span className="font-bold text-foreground/80 block">Order Placed Date</span>
+                <span className="text-foreground font-medium">
+                  {sale.date ? new Date(sale.date).toLocaleString('en-IN') : '—'}
+                </span>
+              </div>
+              <div>
+                <span className="font-bold text-foreground/80 block">Dispatched Date / Time</span>
+                <span className="text-foreground font-medium">
+                  {extractedDetails.dispatchDate || extractedDetails.dispatchTime || sale.dispatchDate || '—'}
+                </span>
+              </div>
+              <div>
+                <span className="font-bold text-foreground/80 block">Dispatch Vehicle Number</span>
+                <span className="text-foreground font-medium">{extractedDetails.vehicle || sale.vehicleNumber || '—'}</span>
+              </div>
+              <div>
+                <span className="font-bold text-foreground/80 block">Driver Details</span>
+                <span className="text-foreground font-medium">
+                  {extractedDetails.driver ? `${extractedDetails.driver} ${extractedDetails.mobile ? `(${extractedDetails.mobile})` : ''}` : (sale.driverName ? `${sale.driverName} ${sale.driverMobileNumber ? `(${sale.driverMobileNumber})` : ''}` : '—')}
+                </span>
+              </div>
+              <div className="col-span-2 md:col-span-3">
+                <span className="font-bold text-foreground/80 block">Fulfillment Location (Warehouse)</span>
+                <span className="text-foreground font-semibold">
+                  {extractedDetails.warehouseName || sale.warehouseName || '—'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 p-4 bg-muted/20 rounded-xl border border-border/40">
           <div>
             <label className="text-[11px] font-semibold block mb-1">Customer Name</label>

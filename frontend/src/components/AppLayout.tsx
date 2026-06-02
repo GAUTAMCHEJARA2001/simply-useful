@@ -4,10 +4,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, ShoppingCart, Users, MapPin, Receipt,
   Package, BarChart3, Settings, LogOut, Menu, X, Building2,
-  ClipboardList, Warehouse, RefreshCw, XCircle, Globe
+  ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
+import { FinancialYearProvider } from '@/contexts/FinancialYearContext';
+import FYSelector from '@/components/FYSelector';
 
 interface NavItem {
   label: string;
@@ -22,11 +24,14 @@ const navItems: NavItem[] = [
   { label: 'My Order List', path: '/sales/orders', icon: ClipboardList, feature: 'view_own_orders' },
   { label: 'Customer Visits', path: '/sales/visits', icon: MapPin, feature: 'track_visits' },
   { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses' },
+  { label: 'CRM Leads', path: '/sales/crm', icon: Users, feature: 'track_visits' },
+  { label: 'My Territory', path: '/sales/territory', icon: Store, feature: 'track_visits' },
   { label: 'Admin Panels', path: '/admin', icon: Settings, feature: 'view_admin_dashboard' },
   { label: 'Global Stock', path: '/admin/global-inventory', icon: Globe, feature: 'view_admin_dashboard' },
   { label: 'Cancelled Orders', path: '/admin/rejected', icon: XCircle, feature: 'view_admin_dashboard' },
-  { label: 'Retailers', path: '/admin/dealers', icon: Users, feature: 'manage_customers' },
-  { label: 'Suppliers', path: '/admin/distributors', icon: Users, feature: 'manage_customers' },
+  { label: 'Dealers', path: '/admin/dealers', icon: Users, feature: 'manage_customers' },
+  { label: 'Distributors', path: '/admin/distributors', icon: Users, feature: 'manage_customers' },
+  { label: 'SO Territory', path: '/admin/so-mapping', icon: UserCheck, feature: 'manage_customers' },
   { label: 'Staff Dashboard', path: '/hr', icon: Users, feature: 'view_reports' },
   { label: 'Stock Room', path: '/inventory', icon: Package, feature: 'view_inventory_dashboard' },
   { label: 'Manage Stock', path: '/inventory/manage', icon: Package, feature: 'view_inventory_dashboard' },
@@ -46,6 +51,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const filteredNav = navItems.filter(item => {
     if (item.path === '/admin/global-inventory') return user.role === 'SUPERADMIN';
+    if (item.path === '/reports') return user.role === 'SUPERADMIN';
     return can(item.feature);
   });
 
@@ -65,6 +71,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   };
 
   return (
+    <FinancialYearProvider>
     <div className="min-h-screen flex w-full bg-background">
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -87,7 +94,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <Building2 className="w-5 h-5 text-sidebar-primary-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-bold text-sidebar-foreground truncate">Tile System</h2>
+            <h2 className="text-sm font-bold text-sidebar-foreground truncate">Kamla OTS</h2>
             <p className="text-[10px] text-sidebar-muted truncate">{user.role}</p>
           </div>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-sidebar-foreground">
@@ -154,9 +161,12 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <Menu className="w-5 h-5 text-foreground" />
           </button>
           <div className="flex-1" />
-          <span className="text-xs text-muted-foreground hidden sm:block">
-            {user.name} &middot; {user.role}
-          </span>
+          <div className="flex items-center gap-3">
+            <FYSelector />
+            <span className="text-xs text-muted-foreground hidden sm:block">
+              {user.name} &middot; {user.role}
+            </span>
+          </div>
         </header>
 
         {/* Page content */}
@@ -165,6 +175,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </main>
       </div>
     </div>
+    </FinancialYearProvider>
   );
 };
 

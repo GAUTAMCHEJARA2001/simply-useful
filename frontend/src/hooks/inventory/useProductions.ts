@@ -23,7 +23,10 @@ export const useProductionMutations = () => {
       toast({ title: 'Success', description: 'Production recorded' });
     },
     onError: (e: any) => {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      const errData = e.response?.data || e.data;
+      if (errData?.error_type !== 'NEGATIVE_RAW_MATERIALS') {
+        toast({ title: 'Error', description: errData?.message || e.message || 'Save failed', variant: 'destructive' });
+      }
     }
   });
 

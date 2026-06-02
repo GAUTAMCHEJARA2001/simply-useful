@@ -81,9 +81,9 @@ export const DashboardTab: React.FC = () => {
                   </div>
                 )}
               </div>
-              <h3 className="text-2xl font-black tracking-tight">{kpi.value}</h3>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mt-1">{kpi.label}</p>
-              <p className="text-[10px] text-muted-foreground/60 mt-2">{kpi.sub}</p>
+              <h3 className="text-xl xl:text-2xl font-black tracking-tight truncate" title={String(kpi.value)}>{kpi.value}</h3>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mt-1 truncate" title={kpi.label}>{kpi.label}</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-2 truncate" title={kpi.sub}>{kpi.sub}</p>
             </motion.div>
           ))}
         </div>

@@ -1,14 +1,19 @@
 import React from 'react';
 import { pdf, Document, Page, Text, View } from '@react-pdf/renderer';
 
-// Buffer is provided globally via CDN in index.html for @react-pdf/renderer v4
 import { Button } from '@/components/ui/button';
-import { Download, Save, Loader2, AlertTriangle } from 'lucide-react';
+import { Save, Loader2 } from 'lucide-react';
 import { OrderTemplate } from './templates/OrderTemplate';
 import { ProductionTemplate } from './templates/ProductionTemplate';
 import { StockLedgerTemplate } from './templates/StockLedgerTemplate';
 import { useData } from '@/contexts/DataContext';
 import { toast } from 'sonner';
+
+// Import New Enterprise Renderers & Flags
+import { renderInvoicePDF } from './renderers/invoice.renderer';
+import { renderLedgerPDF } from './renderers/ledger.renderer';
+import { renderProductionPDF } from './renderers/production.renderer';
+import { pdfFlags } from './config/featureFlags';
 
 /** Utility to ensure all PDF text inputs are safe primitives (strings/numbers) */
 const safeString = (val: any) => {
@@ -58,75 +63,119 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
     logo: settings.company_logo && settings.company_logo.startsWith('data:image') ? settings.company_logo : null
   }), [settings]);
 
-  const getTemplate = () => {
-    // Data Sanitization
-    const safeItems = ((typeof data.items === 'string' ? JSON.parse(data.items) : data.items) || []).map((i: any) => {
-      const qty = Number(i.qty || i.quantity || 0) || 0;
-      const rate = sanitizeValue(i.price || i.rate || 0);
-      return {
-        product_name: safeString(i.product || i.product_name || 'Unknown Product'),
-        qty,
-        unit: safeString(i.unit || 'Bags'),
-        rate,
-        total: Number(i.total || (qty * rate) || 0) || 0,
-        remark: safeString(i.item_remark || i.remark)
-      };
-    });
-
-    const safeSubtotal = sanitizeValue(data.grand_total || 0);
-
-    switch (type) {
-      case 'SALES_ORDER':
-      case 'PURCHASE_ORDER':
-        return (
-          <OrderTemplate
-            type={type === 'SALES_ORDER' ? 'SALES ORDER' : 'PURCHASE ORDER'}
-            orderNo={safeString(data.order_id || 'N/A')}
-            date={safeString(data.date || new Date().toLocaleDateString())}
-            party={{
-              name: safeString(data.party_name || 'Generic Customer/Vendor'),
-              address: safeString(data.address || 'N/A'),
-              contact: safeString(data.contact || 'N/A'),
-              gst: safeString(data.gst || 'N/A')
-            }}
-            items={safeItems}
-            totals={{
-              subtotal: safeSubtotal > 1e12 ? 0 : safeSubtotal,
-              tax: 0, 
-              grandTotal: safeSubtotal > 1e12 ? 0 : safeSubtotal
-            }}
-            company={companyInfo}
-          />
-        );
-      case 'PRODUCTION_ORDER':
-        return (
-          <ProductionTemplate
-            orderNo={safeString(data.order_id)}
-            date={safeString(data.date)}
-            product_name={safeString(data.product_name)}
-            target_qty={Number(data.target_qty || 0)}
-            unit={safeString(data.unit)}
-            bom_items={data.bom_items || []}
-            remarks={safeString(data.remarks)}
-            company={companyInfo}
-          />
-        );
-      case 'STOCK_LEDGER':
-        return (
-          <StockLedgerTemplate
-            product_name={safeString(data.product_name)}
-            sku={safeString(data.sku)}
-            unit={safeString(data.unit)}
-            date_from={safeString(data.date_from)}
-            date_to={safeString(data.date_to)}
-            summary={data.summary}
-            items={data.ledger || []}
-            company={companyInfo}
-          />
-        );
-      default:
-        return null;
+  // Main Controller: Maps dynamic adapters or falls back to legacy formats based on flags
+  const getTemplate = (level: 'FULL' | 'SAFE' | 'EMERGENCY' = 'FULL') => {
+    // 1. Check Emergency Mode
+    if (level === 'EMERGENCY') {
+      return (
+        <Document>
+          <Page size="A4" style={{ padding: 40 }}>
+            <Text style={{ fontSize: 20, marginBottom: 10 }}>{safeString(type)} - EMERGENCY RECOVERY</Text>
+            <Text style={{ fontSize: 12, marginBottom: 5 }}>Order No: {safeString(data.order_id || data.sku || 'N/A')}</Text>
+            <Text style={{ fontSize: 10 }}>This is a plain-text recovery document because the primary layout engine failed.</Text>
+          </Page>
+        </Document>
+      );
     }
+
+    const safeCompany = { ...companyInfo, logo: level === 'FULL' ? companyInfo.logo : null };
+
+    // 2. Map Invoices
+    if (type === 'SALES_ORDER' || type === 'PURCHASE_ORDER') {
+      if (pdfFlags.enableEnterpriseInvoices) {
+        return renderInvoicePDF({
+          rawOrder: data,
+          companyInfo: safeCompany,
+          documentType: type === 'SALES_ORDER' ? 'TAX INVOICE' : 'PURCHASE ORDER',
+          themePreset: type === 'SALES_ORDER' ? 'zoho' : 'modern',
+          densityMode: 'comfortable'
+        });
+      }
+
+      // Legacy fallback
+      const safeItems = ((typeof data.items === 'string' ? JSON.parse(data.items) : data.items) || []).map((i: any) => {
+        const qty = Number(i.qty || i.quantity || 0) || 0;
+        const rate = sanitizeValue(i.price || i.rate || 0);
+        return {
+          product_name: safeString(i.product || i.product_name || 'Unknown Product'),
+          qty,
+          unit: safeString(i.unit || 'Bags'),
+          rate,
+          total: Number(i.total || (qty * rate) || 0) || 0,
+          remark: safeString(i.item_remark || i.remark)
+        };
+      });
+      const safeSubtotal = sanitizeValue(data.grand_total || 0);
+
+      return (
+        <OrderTemplate
+          type={type === 'SALES_ORDER' ? 'SALES ORDER' : 'PURCHASE ORDER'}
+          orderNo={safeString(data.order_id || 'N/A')}
+          date={safeString(data.date || new Date().toLocaleDateString())}
+          party={{
+            name: safeString(data.party_name || 'Generic Customer'),
+            address: safeString(data.address || 'N/A'),
+            contact: safeString(data.contact || 'N/A'),
+            gst: safeString(data.gst || 'N/A')
+          }}
+          items={level === 'FULL' ? safeItems : safeItems.slice(0, 5)}
+          totals={{ subtotal: safeSubtotal, grandTotal: safeSubtotal }}
+          company={safeCompany}
+        />
+      );
+    }
+
+    // 3. Map Production Orders
+    if (type === 'PRODUCTION_ORDER') {
+      if (pdfFlags.enableEnterpriseProduction) {
+        return renderProductionPDF({
+          rawData: data,
+          companyInfo: safeCompany,
+          themePreset: 'minimal',
+          densityMode: 'comfortable'
+        });
+      }
+
+      return (
+        <ProductionTemplate
+          orderNo={safeString(data.order_id)}
+          date={safeString(data.date)}
+          product_name={safeString(data.product_name)}
+          target_qty={Number(data.target_qty || 0)}
+          unit={safeString(data.unit)}
+          bom_items={data.bom_items || []}
+          remarks={safeString(data.remarks)}
+          company={safeCompany}
+        />
+      );
+    }
+
+    // 4. Map Stock Ledgers
+    if (type === 'STOCK_LEDGER') {
+      if (pdfFlags.enableEnterpriseLedger) {
+        return renderLedgerPDF({
+          rawLedger: data,
+          companyInfo: safeCompany,
+          themePreset: 'tally',
+          densityMode: 'compact'
+        });
+      }
+
+      return (
+        <StockLedgerTemplate
+          product_name={safeString(data.product_name)}
+          sku={safeString(data.sku)}
+          unit={safeString(data.unit)}
+          date_from={safeString(data.date_from)}
+          date_to={safeString(data.date_to)}
+          summary={data.summary}
+          items={data.ledger || []}
+          company={safeCompany}
+        />
+      );
+    }
+
+    return null;
   };
 
   const handleDownload = async () => {
@@ -134,113 +183,32 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
       setIsGenerating(true);
       const toastId = toast.loading('Generating PDF...');
 
-      const getSafeTemplate = (level: 'FULL' | 'SAFE' | 'EMERGENCY') => {
-        if (level === 'EMERGENCY') {
-          return (
-            <Document>
-              <Page size="A4" style={{ padding: 40 }}>
-                <Text style={{ fontSize: 20, marginBottom: 10 }}>{safeString(type)} - EMERGENCY RECOVERY</Text>
-                <Text style={{ fontSize: 12, marginBottom: 5 }}>Order No: {safeString(data.order_id)}</Text>
-                <Text style={{ fontSize: 10 }}>This is a plain-text recovery document because the primary layout engine failed.</Text>
-                <View style={{ marginTop: 20 }}>
-                    {((typeof data.items === 'string' ? JSON.parse(data.items) : data.items) || []).map((i: any, idx: number) => (
-                        <Text key={idx}>{idx + 1}. {safeString(i.product || i.product_name)} - Qty: {safeString(i.qty || i.quantity)}</Text>
-                    ))}
-                </View>
-              </Page>
-            </Document>
-          );
-        }
-
-        const safeItems = ((typeof data.items === 'string' ? JSON.parse(data.items) : data.items) || []).map((i: any) => {
-          const qty = Number(i.qty || i.quantity || 0) || 0;
-          const rate = sanitizeValue(i.price || i.rate || 0);
-          return {
-            product_name: safeString(i.product || i.product_name || 'Unknown Product'),
-            qty,
-            unit: safeString(i.unit || 'Bags'),
-            rate,
-            total: Number(i.total || (qty * rate) || 0) || 0,
-            remark: safeString(i.item_remark || i.remark)
-          };
-        });
-
-        // SAFE/EMERGENCY: Truncate items to prevent layout crashes from massive lists
-        const finalItems = (level === 'FULL') ? safeItems : safeItems.slice(0, 5);
-
-        const safeSubtotal = sanitizeValue(data.grand_total || 0);
-        const safeCompany = { ...companyInfo, logo: level === 'FULL' ? companyInfo.logo : null };
-
-        switch (type) {
-          case 'SALES_ORDER':
-          case 'PURCHASE_ORDER':
-            return (
-              <OrderTemplate
-                type={type === 'SALES_ORDER' ? 'SALES ORDER' : 'PURCHASE ORDER'}
-                orderNo={safeString(data.order_id || 'N/A')}
-                date={safeString(data.date || new Date().toLocaleDateString())}
-                party={{
-                  name: safeString(data.party_name || 'N/A'),
-                  address: safeString(data.address || 'N/A'),
-                  contact: safeString(data.contact || 'N/A'),
-                  gst: safeString(data.gst || 'N/A')
-                }}
-                items={finalItems}
-                totals={{ subtotal: safeSubtotal, grandTotal: safeSubtotal }}
-                company={safeCompany}
-              />
-            );
-          case 'PRODUCTION_ORDER':
-            return (
-              <ProductionTemplate
-                orderNo={safeString(data.order_id)}
-                date={safeString(data.date)}
-                product_name={safeString(data.product_name)}
-                target_qty={Number(data.target_qty || 0)}
-                unit={safeString(data.unit)}
-                bom_items={data.bom_items || []}
-                remarks={safeString(data.remarks)}
-                company={safeCompany}
-              />
-            );
-          case 'STOCK_LEDGER':
-            return (
-              <StockLedgerTemplate
-                product_name={safeString(data.product_name)}
-                sku={safeString(data.sku)}
-                unit={safeString(data.unit)}
-                date_from={safeString(data.date_from)}
-                date_to={safeString(data.date_to)}
-                summary={data.summary}
-                items={data.ledger || []}
-                company={safeCompany}
-              />
-            );
-          default: return null;
-        }
-      };
-
       // Attempt 1: Full Render
       await new Promise(r => setTimeout(r, 600)); 
-      let blob = await pdf(getSafeTemplate('FULL')).toBlob();
+      const templateNode = getTemplate('FULL');
+      if (!templateNode) throw new Error('Failed to resolve layout template');
+
+      let blob = await pdf(templateNode).toBlob();
       
       // If corrupted (4KB), retry without logo (Safe Mode)
       if (blob.size < 5000) {
         console.warn("Corruption Detected (FULL). Retrying in SAFE Mode (No Logo)...");
         await new Promise(r => setTimeout(r, 1000)); 
-        blob = await pdf(getSafeTemplate('SAFE')).toBlob();
+        const safeNode = getTemplate('SAFE');
+        if (safeNode) blob = await pdf(safeNode).toBlob();
       }
 
       // If STILL corrupted, try EMERGENCY (Ultra-Safe)
       if (blob.size < 5000) {
         console.warn("Corruption Detected (SAFE). Retrying in EMERGENCY Mode...");
         await new Promise(r => setTimeout(r, 1500)); 
-        blob = await pdf(getSafeTemplate('EMERGENCY')).toBlob();
+        const emergencyNode = getTemplate('EMERGENCY');
+        if (emergencyNode) blob = await pdf(emergencyNode).toBlob();
       }
 
       if (blob.size < 5000) {
         toast.dismiss(toastId);
-        toast.error("PDF Engine Timeout. Use 'Standard Print'?", {
+        toast.error("PDF Engine Timeout. Use standard browser print?", {
           action: {
             label: "Print Page",
             onClick: () => window.print()
@@ -252,32 +220,29 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
 
       toast.dismiss(toastId);
       
-      // Prompt Save As
-      if ('showSaveFilePicker' in window) {
-        try {
-          const handle = await (window as any).showSaveFilePicker({
-            suggestedName: filename,
-            types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          toast.success('Document saved successfully');
-          return;
-        } catch (err: any) {
-          if (err.name === 'AbortError') return;
+      const url = URL.createObjectURL(blob);
+
+      // 1. Automatically open a preview of the generated PDF in a new tab/window
+      try {
+        const previewWindow = window.open(url, '_blank');
+        if (!previewWindow) {
+          console.warn("Pop-up blocked: Enable pop-ups to automatically preview PDFs.");
         }
+      } catch (err) {
+        console.error("Failed to open auto-preview:", err);
       }
 
-      const url = URL.createObjectURL(blob);
+      // 2. Automatically download the PDF to the user's local disk
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(url), 100);
-      toast.success('Download triggered');
+
+      // Keep the Object URL active longer so the new preview tab can fully load and display the stream
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast.success('PDF downloaded and preview opened');
 
     } catch (error: any) {
       console.error('PDF Render Error:', error);

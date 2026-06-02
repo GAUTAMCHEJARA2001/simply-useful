@@ -37,11 +37,13 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
     setLoading(true);
     try {
       const [r, p] = await Promise.all([
-        apiClient<any[]>('/inv/bom').catch(() => []),
-        apiClient<any[]>('/inv/masters/products').catch(() => [])
+        apiClient<any[]>('/inv/bom').catch(() => null),
+        apiClient<any[]>('/inv/masters/products').catch(() => null)
       ]);
-      setRecipes(Array.isArray(r) ? r : []);
-      setProducts(Array.isArray(p) ? p : []);
+      const recipesList = r && r.data ? r.data : (Array.isArray(r) ? r : []);
+      const productsList = p && p.data ? p.data : (Array.isArray(p) ? p : []);
+      setRecipes(recipesList);
+      setProducts(productsList);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, []);
@@ -94,14 +96,14 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
     setForm({ ...form, items: newItems });
   };
 
-  const canManage = ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '');
+  const canManage = ['SUPERADMIN', 'ADMIN'].includes(user?.role || '');
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">BOM (Recipes)</h1>
         {canManage && (
-          <Button size="sm" onClick={() => { setForm({ name: '', product_id: '', output_quantity: 1, items: [] }); setModal(true); }}>
+          <Button size="sm" onClick={() => { setForm({ name: '', productId: '', outputQuantity: 1, items: [] }); setModal(true); }}>
             <Plus className="w-4 h-4 mr-1.5" /> New Recipe
           </Button>
         )}
@@ -155,7 +157,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
             const r = filteredRecipes[i];
             try {
                 const details = await apiClient<any>(`/inv/bom/${r.id}`);
-                setForm(details);
+                setForm(details && details.data ? details.data : details);
                 setModal(true);
             } catch (e: any) {
                 toast({ title: 'Failed to load details', description: e.message, variant: 'destructive' });
@@ -201,8 +203,14 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
               </div>
               {productSearch && !form.productId && (
                 <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                    {products.filter(p => !productSearch || (p.name && p.name.toLowerCase().includes(productSearch.toLowerCase()))).map(p => (
-                        <button key={p.id} onClick={() => { setForm({ ...form, productId: p.id, productName: p.name }); setProductSearch(''); }}
+                    {products
+                      .filter(p => {
+                        const cat = (p.categoryRef?.name || p.categoryName || p.category?.name || '').toUpperCase();
+                        return cat === 'FINISHED GOOD' || cat === 'SEMI FINISHED GOOD' || cat === 'TILES ADHESIVE' || cat === 'JOINT FILLER';
+                      })
+                      .filter(p => !productSearch || (p.name && p.name.toLowerCase().includes(productSearch.toLowerCase())))
+                      .map(p => (
+                        <button key={p.id} onClick={() => { setForm({ ...form, productId: p.id, productName: p.name, productCode: p.productCode || p.sku }); setProductSearch(''); }}
                              className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors">
                             {p.name} <span className="text-[10px] text-muted-foreground ml-2">({p.sku})</span>
                         </button>

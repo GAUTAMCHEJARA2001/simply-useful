@@ -12,11 +12,13 @@ import { useCategories } from '@/hooks/inventory/useCategories';
 import { useWarehouses, useUnits, useSettings } from '@/hooks/inventory/useMasters';
 import { Product } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 export const ProductsTab: React.FC = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [search, setSearch] = useState<string>('');
   
   // Data Queries
@@ -58,15 +60,22 @@ export const ProductsTab: React.FC = () => {
   }, [modal, form.categoryId, categories]);
 
   useEffect(() => {
-    if (modal && !form.id && !form.sku && !form.productCode) {
-      const initials = settings?.companyName 
-        ? settings.companyName.split(' ').filter(Boolean).map((w: string) => w[0]?.toUpperCase()).join('').substring(0, 4) 
-        : 'KCPL';
-      const nextNum = products.length + 1;
-      const sku = `${initials}-${nextNum.toString().padStart(4, '0')}`;
-      setForm(f => ({ ...f, sku, productCode: sku }));
+    if (modal && !form.id) {
+      if (form.defaultWarehouseId) {
+        const selectedWh = warehouses.find(w => String(w.id) === String(form.defaultWarehouseId));
+        const whSuffix = selectedWh ? selectedWh.name.toUpperCase() : '';
+        const initials = settings?.companyName 
+          ? settings.companyName.split(' ').filter(Boolean).map((w: string) => w[0]?.toUpperCase()).join('').substring(0, 4) 
+          : 'KCPL';
+        const nextNum = products.length + 1;
+        const skuSuffix = whSuffix ? `-${whSuffix}` : '';
+        const sku = `${initials}-${nextNum.toString().padStart(4, '0')}${skuSuffix}`;
+        setForm(f => ({ ...f, sku, productCode: sku }));
+      } else {
+        setForm(f => ({ ...f, sku: '', productCode: '' }));
+      }
     }
-  }, [modal, form.id, form.sku, form.productCode, settings, products.length]);
+  }, [modal, form.id, form.defaultWarehouseId, settings, products.length, warehouses]);
 
   useEffect(() => {
     if (modal) {
@@ -89,7 +98,23 @@ export const ProductsTab: React.FC = () => {
   }, [modal, form.unit, form.brand, form.unitId, form.brandId]);
 
   const handleSave = async () => {
-    await saveProduct(form);
+    if (!form.id && !form.defaultWarehouseId) {
+      toast({ title: 'Warehouse required', description: 'Please select a default warehouse to generate the SKU and create the product.', variant: 'destructive' });
+      return;
+    }
+    // Strip read-only nested fields before sending to API — the backend
+    // serializer expects plain IDs, not nested objects like brand={id,name}.
+    const { brand, unit, categoryRef, ...cleanForm } = form as any;
+    const payload: Partial<Product> = {
+      ...cleanForm,
+      rate: Number(cleanForm.rate) || 0,
+      gst: Number(cleanForm.gst) || 18,
+      openingStock: Number(cleanForm.openingStock) || 0,
+      minimumStock: Number(cleanForm.minimumStock) || 0,
+      // Resolve brandId from nested object if not already set
+      brandId: cleanForm.brandId ? Number(cleanForm.brandId) : undefined,
+    };
+    await saveProduct(payload);
     setModal(false); 
     setForm({});
   };
@@ -184,15 +209,16 @@ export const ProductsTab: React.FC = () => {
             {[
               { key: 'productCode', label: 'SKU', type: 'text', readOnly: true },
               { key: 'name', label: 'Product Name', type: 'text' },
+              { key: 'openingStock', label: 'Opening Stock', type: 'number' },
               { key: 'minimumStock', label: 'Minimum Stock', type: 'number' },
               { key: 'rate', label: 'Price', type: 'number' }
             ].map((field) => (
               <div key={field.key}>
                 <label className="text-sm font-medium block mb-1">{field.label}</label>
-                <input 
+                 <input 
                   type={field.type} 
-                  value={(form as any)[field.key] || ''} 
-                  onChange={e => setForm({ ...form, [field.key]: field.type === 'number' ? parseFloat(e.target.value) : e.target.value })}
+                  value={String((form as any)[field.key] !== undefined && (form as any)[field.key] !== null && !Number.isNaN((form as any)[field.key]) ? (form as any)[field.key] : '')} 
+                  onChange={e => setForm({ ...form, [field.key]: field.type === 'number' ? (e.target.value === '' ? 0 : Number(e.target.value) || 0) : e.target.value })}
                   onWheel={field.type === 'number' ? e => e.currentTarget.blur() : undefined}
                   readOnly={field.readOnly}
                   className={`w-full border border-border rounded-lg px-3 py-2 bg-background text-sm ${field.readOnly ? 'bg-muted cursor-not-allowed font-mono' : ''}`} 
@@ -250,6 +276,7 @@ export const ProductsTab: React.FC = () => {
             <div><span className="font-semibold text-muted-foreground">Brand:</span> {viewProduct.brand?.name || viewProduct.brandName || '—'}</div>
             <div><span className="font-semibold text-muted-foreground">Category:</span> {viewProduct.categoryRef?.name || viewProduct.category?.name || viewProduct.categoryName || '—'}</div>
             <div><span className="font-semibold text-muted-foreground">Unit:</span> {viewProduct.unit?.name || viewProduct.unit || '—'}</div>
+            <div><span className="font-semibold text-muted-foreground">Opening Stock:</span> {viewProduct.openingStock || 0}</div>
             <div><span className="font-semibold text-muted-foreground">Stock:</span> {viewProduct.availableStock || viewProduct.stockQty || 0}</div>
             <div><span className="font-semibold text-muted-foreground">Default Price:</span> {Currency(viewProduct.rate || viewProduct.defaultPrice || 0)}</div>
             <div><span className="font-semibold text-muted-foreground">Warehouse:</span> {warehouses.find((w: any) => w.id === viewProduct.defaultWarehouseId)?.name || '—'}</div>

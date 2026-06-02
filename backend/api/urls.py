@@ -5,6 +5,8 @@ from api.views import (
     CategoryViewSet, BrandViewSet, UnitViewSet, WarehouseViewSet, RegionViewSet,
     MarketViewSet, master_settings, DealerViewSet, DistributorViewSet, OrderViewSet,
     VisitViewSet, ExpenseViewSet, BOMViewSet, SupplierViewSet, LabourViewSet,
+    user_assignments,
+    bulk_template, bulk_import, database_export,
     
     # Reports
     report_dashboard_kpis, report_sales_summary, report_low_stock, report_daily,
@@ -13,13 +15,21 @@ from api.views import (
     # Transactions
     transaction_purchases, transaction_purchase_detail, transaction_sales,
     transaction_sales_detail, transaction_approvals, transaction_approval_detail,
-    transaction_approve, transaction_reject, transaction_productions,
+    transaction_approve, transaction_dispatch, transaction_reject, transaction_productions, transaction_productions_detail,
     transaction_production_materials, transaction_adjustments, transaction_adjustments_detail,
     transaction_attendance, transaction_attendance_detail, transaction_returns,
     transaction_purchase_orders, transaction_purchase_order_items, transaction_purchase_order_detail,
     
     # Health & Metrics
-    system_health, system_metrics
+    system_health, system_metrics,
+    
+    # CRM
+    LeadViewSet,
+    
+    # Analytics & Decision Intelligence
+    trigger_analytics_etl, get_analytics_kpis,
+    get_analytics_predictions, get_analytics_alerts, action_analytics_alert, get_analytics_cfo_liquidity,
+    get_analytics_bottlenecks, get_analytics_data_quality
 )
 
 router = DefaultRouter(trailing_slash=False)
@@ -39,6 +49,7 @@ router.register('sales', OrderViewSet, basename='sales')
 router.register('visits', VisitViewSet, basename='visits')
 router.register('expenses', ExpenseViewSet, basename='expenses')
 router.register('bom', BOMViewSet, basename='bom')
+router.register('crm/leads', LeadViewSet, basename='crm-leads')
 
 urlpatterns = [
     # Auth
@@ -49,6 +60,10 @@ urlpatterns = [
     # Master custom settings
     path('masters/settings', master_settings, name='master-settings'),
     path('masters/products', ProductViewSet.as_view({'get': 'list'}), name='master-products'),
+    path('masters/users/<str:pk>/assignments', user_assignments, name='master-user-assignments'),
+    path('bulk/<str:entity>/template', bulk_template, name='bulk-template'),
+    path('bulk/<str:entity>/import', bulk_import, name='bulk-import'),
+    path('system/database-export', database_export, name='database-export'),
     
     # Reports
     path('reports/dashboard-kpis', report_dashboard_kpis, name='report-dashboard-kpis'),
@@ -60,6 +75,16 @@ urlpatterns = [
     path('reports/aggregate-stock', report_aggregate_stock, name='report-aggregate-stock'),
     path('reports/global-inventory', report_global_inventory, name='report-global-inventory'),
     
+    # Analytics & Decision Intelligence
+    path('analytics/trigger-etl', trigger_analytics_etl, name='analytics-trigger-etl'),
+    path('analytics/kpis', get_analytics_kpis, name='analytics-kpis'),
+    path('analytics/predictions', get_analytics_predictions, name='analytics-predictions'),
+    path('analytics/alerts', get_analytics_alerts, name='analytics-alerts'),
+    path('analytics/alerts/<str:pk>/action', action_analytics_alert, name='analytics-alerts-action'),
+    path('analytics/cfo-liquidity', get_analytics_cfo_liquidity, name='analytics-cfo-liquidity'),
+    path('analytics/bottlenecks', get_analytics_bottlenecks, name='analytics-bottlenecks'),
+    path('analytics/data-quality', get_analytics_data_quality, name='analytics-data-quality'),
+    
     # Transactions
     path('transactions/purchases', transaction_purchases, name='tx-purchases'),
     path('transactions/purchases/<str:pk>', transaction_purchase_detail, name='tx-purchase-detail'),
@@ -68,8 +93,10 @@ urlpatterns = [
     path('transactions/approvals', transaction_approvals, name='tx-approvals'),
     path('transactions/approvals/<str:pk>', transaction_approval_detail, name='tx-approval-detail'),
     path('transactions/approvals/<str:pk>/approve', transaction_approve, name='tx-approve'),
+    path('transactions/approvals/<str:pk>/dispatch', transaction_dispatch, name='tx-dispatch'),
     path('transactions/approvals/<str:pk>/reject', transaction_reject, name='tx-reject'),
     path('transactions/productions', transaction_productions, name='tx-productions'),
+    path('transactions/productions/<str:pk>', transaction_productions_detail, name='tx-production-detail'),
     path('transactions/productions/<str:pk>/materials', transaction_production_materials, name='tx-production-materials'),
     path('transactions/adjustments', transaction_adjustments, name='tx-adjustments'),
     path('transactions/adjustments/<str:pk>', transaction_adjustments_detail, name='tx-adjustment-detail'),

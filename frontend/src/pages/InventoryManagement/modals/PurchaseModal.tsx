@@ -198,7 +198,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
             <label className="text-[10px] font-bold text-foreground/70 uppercase tracking-wider block mb-1.5">Vehicle Number</label>
             <input 
               value={form.vehicle_number || ''} 
-              onChange={e => setForm({ ...form, vehicle_number: e.target.value })}
+              onChange={e => setForm({ ...form, vehicle_number: e.target.value.toUpperCase() })}
               placeholder="HR-55-A-1234" 
               className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" 
             />

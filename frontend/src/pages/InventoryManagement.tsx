@@ -22,7 +22,6 @@ import { AdjustmentsTab } from './InventoryManagement/components/AdjustmentsTab'
 import { AttendanceTab } from './InventoryManagement/components/AttendanceTab';
 import { ApprovalsTab } from './InventoryManagement/components/ApprovalsTab';
 import { ReturnsTab } from './InventoryManagement/components/ReturnsTab';
-import { ReportsTab } from './InventoryManagement/components/ReportsTab';
 import { RecipesTab } from './InventoryManagement/components/RecipesTab';
 import { useInventoryManagement, Tab } from '@/hooks/inventory/useInventoryManagement';
 
@@ -35,10 +34,10 @@ const InventoryManagement: React.FC = () => {
 
   const navItems: { id: Tab; label: string; icon: any; group: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, group: 'Overview' },
-    { id: 'reports', label: 'Reports', icon: TrendingUp, group: 'Overview' },
     { id: 'total_stock', label: 'Total Stock', icon: Package, group: 'Overview' },
     { id: 'stock_ledger', label: 'Stock Ledger', icon: ClipboardList, group: 'Overview' },
     { id: 'products', label: 'Products', icon: Package, group: 'Masters' },
+    { id: 'bom', label: 'BOM (Recipes)', icon: ClipboardList, group: 'Masters' },
     { id: 'categories', label: 'Categories', icon: Sliders, group: 'Masters' },
     { id: 'sub_categories', label: 'Sub Categories', icon: ClipboardList, group: 'Masters' },
     { id: 'brands', label: 'Brands', icon: Package, group: 'Masters' },
@@ -78,7 +77,7 @@ const InventoryManagement: React.FC = () => {
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-2 mb-1">{group}</p>
             {navItems
               .filter(n => n.group === group)
-              .filter(n => n.id !== 'bom' || user?.role === 'SUPERADMIN')
+              .filter(n => n.id !== 'bom' || ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || ''))
               .map(n => (
               <button key={n.id} onClick={() => setTab(n.id)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${tab === n.id ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground hover:text-foreground'}`}>
@@ -95,7 +94,7 @@ const InventoryManagement: React.FC = () => {
         <div className="block md:hidden mb-4 overflow-x-auto pb-2 scrollbar-none">
           <div className="flex gap-2 whitespace-nowrap">
             {navItems
-              .filter(n => n.id !== 'bom' || user?.role === 'SUPERADMIN')
+              .filter(n => n.id !== 'bom' || ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || ''))
               .map(n => (
               <button key={n.id} onClick={() => setTab(n.id)}
                 className={`flex-none flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${tab === n.id ? 'bg-primary text-primary-foreground shadow' : 'bg-muted text-muted-foreground'}`}>
@@ -119,12 +118,11 @@ const InventoryManagement: React.FC = () => {
         {tab === 'purchase_orders' && <PurchaseOrdersTab />}
         {tab === 'purchases' && <PurchasesTab />}
         {tab === 'sales' && <SalesTab />}
-        {tab === 'productions' && <ProductionsTab />}
+        {tab === 'productions' && <ProductionsTab onTabChange={setTab} />}
         {tab === 'adjustments' && <AdjustmentsTab />}
         {tab === 'attendance' && <AttendanceTab />}
         {tab === 'approvals' && <ApprovalsTab />}
         {tab === 'returns' && <ReturnsTab />}
-        {tab === 'reports' && <ReportsTab />}
         {tab === 'bom' && <RecipesTab onRefresh={() => {}} />}
       </div>
     </div>

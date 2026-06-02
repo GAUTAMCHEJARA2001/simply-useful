@@ -21,7 +21,7 @@ export const usePermissions = () => {
         // unless it's a SUPERADMIN, which we might want to default to true for safety.
         if (!perm) {
             const role = (user.role || '').toUpperCase();
-            if (role === 'SUPERADMIN') return true;
+            if (role === 'SUPERADMIN' || role === 'ADMIN') return true;
             
             const salesFeatures = ['view_sales_dashboard', 'create_order', 'view_own_orders', 'track_visits', 'manage_expenses'];
             if (role.startsWith('SALES') && salesFeatures.includes(feature)) return true;

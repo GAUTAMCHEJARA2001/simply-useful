@@ -7,12 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { Settings, Shield, CreditCard, Bell, Building2, Save } from 'lucide-react';
+import { Settings, Shield, CreditCard, Bell, Building2, Save, Download, Upload, Database } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '@/api/client';
 
 const SettingsPage: React.FC = () => {
     const { settings, updateSetting } = useData();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const bulkFileInputRef = React.useRef<HTMLInputElement>(null);
+    const [bulkType, setBulkType] = React.useState('products');
+    const [bulkFile, setBulkFile] = React.useState<File | null>(null);
 
     const settingsItems = [
         {
@@ -94,6 +98,57 @@ const SettingsPage: React.FC = () => {
                 });
             };
             reader.readAsDataURL(file);
+        }
+    };
+
+    const downloadBlob = (blob: Blob, filename: string) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleTemplateDownload = async (type: string) => {
+        try {
+            const res = await api.get(`/bulk/${type}/template`, { responseType: 'blob' });
+            downloadBlob(res.data, `${type}_template.csv`);
+        } catch {
+            toast.error('Template download failed');
+        }
+    };
+
+    const handleBulkImport = async () => {
+        if (!bulkFile) {
+            toast.error('Please select a CSV file first');
+            return;
+        }
+        const payload = new FormData();
+        payload.append('file', bulkFile);
+        try {
+            const res = await api.post(`/bulk/${bulkType}/import`, payload, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            const data = res.data?.data || {};
+            toast.success(`Import complete: ${data.created || 0} created, ${data.updated || 0} updated`);
+            setBulkFile(null);
+            if (bulkFileInputRef.current) bulkFileInputRef.current.value = '';
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Import failed');
+        }
+    };
+
+    const handleDatabaseExport = async (format: 'json' | 'sqlite' = 'json') => {
+        try {
+            const url = `/system/database-export${format === 'sqlite' ? '?db_format=sqlite' : ''}`;
+            const res = await api.get(url, { responseType: 'blob' });
+            downloadBlob(res.data, format === 'sqlite' ? 'db.sqlite3' : 'simply-useful-database-export.json');
+            toast.success(`${format === 'sqlite' ? 'SQLite Database' : 'Database JSON backup'} downloaded successfully`);
+        } catch {
+            toast.error('Database export failed');
         }
     };
 
@@ -249,6 +304,78 @@ const SettingsPage: React.FC = () => {
                                 )}
                             </Button>
                         </CardFooter>
+                    </Card>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                >
+                    <Card>
+                        <CardHeader className="border-b bg-muted/20">
+                            <CardTitle className="flex items-center text-lg">
+                                <Upload className="w-5 h-5 mr-2 text-primary" />
+                                Bulk Import & Backup
+                            </CardTitle>
+                            <CardDescription>Use Excel-compatible CSV sheets for products, dealers, distributors, and recipes.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-6 space-y-5">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {[
+                                    { id: 'products', label: 'Product Template' },
+                                    { id: 'dealers', label: 'Dealer Template' },
+                                    { id: 'distributors', label: 'Distributor Template' },
+                                    { id: 'recipes', label: 'Recipe Template' },
+                                ].map(item => (
+                                    <Button key={item.id} variant="outline" onClick={() => handleTemplateDownload(item.id)} className="justify-start">
+                                        <Download className="w-4 h-4 mr-2" /> {item.label}
+                                    </Button>
+                                ))}
+                            </div>
+
+                            <div className="rounded-lg border border-border p-4 space-y-3">
+                                <Label className="font-bold">Upload Filled Sheet</Label>
+                                <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-3">
+                                    <select
+                                        value={bulkType}
+                                        onChange={(e) => setBulkType(e.target.value)}
+                                        className="border border-border rounded-lg px-3 py-2 bg-background text-sm"
+                                    >
+                                        <option value="products">Products</option>
+                                        <option value="dealers">Dealers</option>
+                                        <option value="distributors">Distributors</option>
+                                        <option value="recipes">Recipes</option>
+                                    </select>
+                                    <Input
+                                        ref={bulkFileInputRef}
+                                        type="file"
+                                        accept=".csv,text/csv"
+                                        onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
+                                    />
+                                </div>
+                                <div className="flex justify-end">
+                                    <Button onClick={handleBulkImport}>
+                                        <Upload className="w-4 h-4 mr-2" /> Import Sheet
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border border-border p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div>
+                                    <Label className="font-bold flex items-center gap-2"><Database className="w-4 h-4" /> Full Database Export</Label>
+                                    <p className="text-xs text-muted-foreground mt-1">Download all company data as JSON backup or the raw SQLite database file.</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button variant="outline" onClick={() => handleDatabaseExport('json')}>
+                                        <Download className="w-4 h-4 mr-2" /> Export JSON
+                                    </Button>
+                                    <Button variant="outline" onClick={() => handleDatabaseExport('sqlite')}>
+                                        <Download className="w-4 h-4 mr-2" /> Export SQLite DB
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
                     </Card>
                 </motion.div>
             </div>

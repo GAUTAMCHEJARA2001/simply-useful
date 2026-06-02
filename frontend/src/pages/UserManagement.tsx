@@ -22,9 +22,21 @@ interface UserForm {
   name: string;
   role: string;
   active: boolean;
+  inventoryAccess: boolean;
+  warehouses: any[];
+  territory?: string;
 }
 
-const emptyForm: UserForm = { email: '', password: '', name: '', role: 'SALES', active: true };
+const emptyForm: UserForm = { 
+  email: '', 
+  password: '', 
+  name: '', 
+  role: 'SALES', 
+  active: true,
+  inventoryAccess: false,
+  warehouses: [],
+  territory: ''
+};
 
 const UserManagement: React.FC = () => {
   const { users, addUser, updateUser, deleteUser, updateUserPassword, permissions, updatePermission } = useData();
@@ -50,6 +62,8 @@ const UserManagement: React.FC = () => {
   const [userAssignments, setUserAssignments] = useState<{ brands: any[], categories: any[], warehouses: any[], products: any[] }>({ brands: [], categories: [], warehouses: [], products: [] });
   const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [selectedParentCat, setSelectedParentCat] = useState<number | null>(null);
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState<any>(null);
+  const [selectedSubCatFilter, setSelectedSubCatFilter] = useState<any>(null);
   const [searchProd, setSearchProd] = useState('');
 
   const openAssignments = async (u: AppUserRecord) => {
@@ -57,6 +71,8 @@ const UserManagement: React.FC = () => {
     setAssignmentsOpen(true);
     setLoadingAssignments(true);
     setSelectedParentCat(null);
+    setSelectedBrandFilter(null);
+    setSelectedSubCatFilter(null);
     setSearchProd('');
     setUserAssignments({ brands: [], categories: [], warehouses: [], products: [] });
     try {
@@ -81,7 +97,12 @@ const UserManagement: React.FC = () => {
   const saveAssignments = async () => {
     if (!assignUser) return;
     try {
-      await apiService.users.saveAssignments(assignUser.id, userAssignments);
+      await apiService.users.saveAssignments(assignUser.id, {
+        brands: [],
+        categories: [],
+        warehouses: userAssignments.warehouses || [],
+        products: userAssignments.products || []
+      });
       toast({ title: 'Assignments saved' });
       setAssignmentsOpen(false);
     } catch (e: any) { 
@@ -89,26 +110,122 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  const getFilteredProducts = () => {
+    let list = allProducts;
+    if (selectedBrandFilter) {
+      list = list.filter(p => (p.brandId ?? p.brand_id) === selectedBrandFilter);
+    }
+    if (selectedParentCat) {
+      const subCatIds = allCategories.filter(c => (c.parentId ?? c.parent_id) === selectedParentCat).map(c => c.id);
+      if (selectedSubCatFilter) {
+        list = list.filter(p => (p.categoryId ?? p.category_id) === selectedSubCatFilter);
+      } else {
+        const allowedCatIds = [selectedParentCat, ...subCatIds];
+        list = list.filter(p => allowedCatIds.includes(p.categoryId ?? p.category_id));
+      }
+    }
+    return list;
+  };
+
+  const getRelatedMainCategories = () => {
+    const mainCats = allCategories.filter(c => !(c.parentId ?? c.parent_id));
+    if (!selectedBrandFilter) return mainCats;
+    const brandProductCatIds = allProducts
+      .filter(p => (p.brandId ?? p.brand_id) === selectedBrandFilter)
+      .map(p => p.categoryId ?? p.category_id);
+    const parentIdsOfBrandProducts = allCategories
+      .filter(c => brandProductCatIds.includes(c.id))
+      .map(c => c.parentId ?? c.parent_id)
+      .filter(Boolean);
+    return mainCats.filter(c => brandProductCatIds.includes(c.id) || parentIdsOfBrandProducts.includes(c.id));
+  };
+
   const filtered = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase())
+    u.email.toLowerCase().includes(search.toLowerCase()) ||
+    (u.territory || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const openAdd = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
-  const openEdit = (u: AppUserRecord) => { setEditing(u); setForm({ email: u.email, password: '', name: u.name, role: u.role, active: u.active }); setDialogOpen(true); };
+  const fetchWarehousesOnce = async () => {
+    if (allWarehouses.length === 0) {
+      try {
+        const w = await apiService.inventory.getWarehouses().then(({ data }) => data.success ? data.data || [] : []);
+        setAllWarehouses(w);
+      } catch (e) {}
+    }
+  };
+
+  const openAdd = async () => {
+    setEditing(null);
+    setForm(emptyForm);
+    setDialogOpen(true);
+    await fetchWarehousesOnce();
+  };
+
+  const openEdit = async (u: AppUserRecord) => {
+    setEditing(u);
+    setForm({ 
+      email: u.email, 
+      password: '', 
+      name: u.name, 
+      role: u.role, 
+      active: u.active,
+      inventoryAccess: false,
+      warehouses: [],
+      territory: u.territory || ''
+    });
+    setDialogOpen(true);
+    await fetchWarehousesOnce();
+    try {
+      const res = await apiService.users.getAssignments(u.id);
+      if (res.data.success) {
+        const whs = res.data.data.warehouses || [];
+        setForm(f => ({
+          ...f,
+          inventoryAccess: whs.length > 0 || u.role.startsWith('INVENTORY') || u.role === 'SUPERADMIN' || u.role === 'ADMIN',
+          warehouses: whs
+        }));
+      }
+    } catch (e) {}
+  };
 
   const handleSave = async () => {
     if (!form.name || (!editing && (!form.email || !form.password))) {
       toast({ title: 'Missing Fields', variant: 'destructive' }); return;
     }
-    if (editing) {
-      await updateUser(editing.id, { name: form.name, role: form.role, active: form.active });
-      toast({ title: 'Updated', description: `${form.name} updated.` });
-    } else {
-      await addUser(form);
-      toast({ title: 'User Created', description: `${form.name} has been created and can now log in.` });
+    try {
+      let savedUser: any = null;
+      if (editing) {
+        savedUser = await updateUser(editing.id, { name: form.name, role: form.role, active: form.active, territory: form.territory });
+        toast({ title: 'Updated', description: `${form.name} updated.` });
+      } else {
+        savedUser = await addUser(form);
+        toast({ title: 'User Created', description: `${form.name} has been created and can now log in.` });
+      }
+
+      const userId = editing ? editing.id : savedUser?.id;
+      if (userId) {
+        let existingProducts: any[] = [];
+        let existingBrands: any[] = [];
+        try {
+          const res = await apiService.users.getAssignments(userId);
+          if (res.data.success) {
+            existingProducts = res.data.data.products || [];
+            existingBrands = res.data.data.brands || [];
+          }
+        } catch (e) {}
+
+        await apiService.users.saveAssignments(userId, {
+          brands: existingBrands,
+          categories: [],
+          warehouses: form.inventoryAccess ? (form.warehouses || []) : [],
+          products: existingProducts
+        });
+      }
+      setDialogOpen(false);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     }
-    setDialogOpen(false);
   };
 
   const handleDelete = async () => {
@@ -175,7 +292,7 @@ const UserManagement: React.FC = () => {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-semibold text-sm">{u.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{u.email}</p>
+                      <p className="text-[10px] text-muted-foreground">{u.email} {u.territory ? `· Territory: ${u.territory}` : ''}</p>
                     </div>
                     <div className="flex gap-1">
                       <Badge variant="outline" className="text-[10px]">{u.role}</Badge>
@@ -203,7 +320,7 @@ const UserManagement: React.FC = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    {['Name', 'Email', 'Role', 'Status', 'Actions'].map(h => (
+                    {['Name', 'Email', 'Role', 'Territory', 'Status', 'Actions'].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
                     ))}
                   </tr>
@@ -214,6 +331,7 @@ const UserManagement: React.FC = () => {
                       <td className="px-4 py-3 font-medium">{u.name}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{u.email}</td>
                       <td className="px-4 py-3"><Badge variant="outline" className="text-[10px]">{u.role}</Badge></td>
+                      <td className="px-4 py-3 font-medium text-xs text-primary">{u.territory || '—'}</td>
                       <td className="px-4 py-3"><Badge variant={u.active ? 'default' : 'destructive'} className="text-[10px]">{u.active ? 'Active' : 'Inactive'}</Badge></td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
@@ -382,6 +500,46 @@ const UserManagement: React.FC = () => {
                 </Select>
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Territory (Area Code)</Label>
+                <Input value={form.territory || ''} onChange={e => uf('territory', e.target.value)} placeholder="e.g. T-WEST" />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 py-2 border-t border-border mt-2">
+              <Switch 
+                id="inventoryAccess" 
+                checked={form.inventoryAccess} 
+                onCheckedChange={checked => uf('inventoryAccess', checked)} 
+              />
+              <Label htmlFor="inventoryAccess" className="text-xs font-bold text-primary cursor-pointer">Inventory Access (Module Authorization)</Label>
+            </div>
+
+            {form.inventoryAccess && (
+              <div className="space-y-1.5 border-t pt-3 border-border animate-in fade-in duration-200">
+                <Label className="text-xs font-bold text-primary">Assign Warehouse(s)</Label>
+                <div className="grid grid-cols-2 gap-2 p-3 border border-border rounded-xl bg-card max-h-32 overflow-y-auto shadow-inner">
+                  {allWarehouses.map(w => (
+                    <label key={w.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1 rounded transition-colors">
+                      <input 
+                        type="checkbox" 
+                        className="rounded-sm border-primary/30"
+                        checked={form.warehouses?.includes(w.id)} 
+                        onChange={e => {
+                          const ch = e.target.checked;
+                          const currentWh = form.warehouses || [];
+                          uf('warehouses', ch ? [...currentWh, w.id] : currentWh.filter((id: any) => id !== w.id));
+                        }} 
+                      /> <span className="hover:text-primary transition-colors">{w.name}</span>
+                    </label>
+                  ))}
+                  {allWarehouses.length === 0 && (
+                    <div className="text-[10px] text-muted-foreground col-span-2 py-2 text-center">No warehouses available.</div>
+                  )}
+                </div>
+              </div>
+            )}
             <DialogFooter className="gap-2 pt-4">
               <Button variant="outline" onClick={() => setDialogOpen(false)} type="button">Cancel</Button>
               <Button type="submit">{editing ? 'Update' : 'Create'}</Button>
@@ -466,71 +624,119 @@ const UserManagement: React.FC = () => {
               {((assignUser?.role && (assignUser.role.startsWith('SALES') || assignUser.role.includes('SO'))) || assignUser?.role === 'SUPERADMIN' || assignUser?.role === 'ADMIN') && (
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-primary">1. Assigned Brands</Label>
-                    <div className="grid grid-cols-2 gap-2 p-3 border border-border rounded-xl bg-card max-h-32 overflow-y-auto">
-                      {allBrands.map(b => (
-                        <label key={b.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer p-0.5">
-                          <input type="checkbox" checked={userAssignments.brands?.includes(b.id)} onChange={e => {
-                            const c = e.target.checked;
-                            setUserAssignments(f => ({ ...f, brands: c ? [...(f.brands || []), b.id] : (f.brands || []).filter((id: any) => id !== b.id) }));
-                          }} /> {b.name}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5 border-t pt-3 border-border">
-                    <Label className="text-xs font-bold text-primary">2. Select Parent Category</Label>
-                    <select value={selectedParentCat || ''} onChange={e => setSelectedParentCat(e.target.value ? parseInt(e.target.value) : null)}
-                      className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs">
-                      <option value="">-- Choose Category --</option>
-                      {allCategories.filter(c => !c.parent_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    <Label className="text-xs font-bold text-primary">1. Select Brand</Label>
+                    <select 
+                      value={selectedBrandFilter || ''} 
+                      onChange={e => {
+                        const val = e.target.value ? (isNaN(Number(e.target.value)) ? e.target.value : parseInt(e.target.value)) : null;
+                        setSelectedBrandFilter(val);
+                        setSelectedParentCat(null);
+                        setSelectedSubCatFilter(null);
+                      }}
+                      className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs"
+                    >
+                      <option value="">-- Choose Brand --</option>
+                      {allBrands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </select>
                   </div>
 
+                  {selectedBrandFilter && (
+                    <div className="space-y-1.5 border-t pt-3 border-border animate-in fade-in duration-200">
+                      <Label className="text-xs font-bold text-primary">2. Select Main Category</Label>
+                      <select 
+                        value={selectedParentCat || ''} 
+                        onChange={e => {
+                          const val = e.target.value ? parseInt(e.target.value) : null;
+                          setSelectedParentCat(val);
+                          setSelectedSubCatFilter(null);
+                        }}
+                        className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs"
+                      >
+                        <option value="">-- Choose Category --</option>
+                        {getRelatedMainCategories().map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+
                   {selectedParentCat && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">3. Assign Sub-categories <Badge variant="outline">{allCategories.find(c => c.id === selectedParentCat)?.name}</Badge></Label>
-                      <div className="grid grid-cols-2 gap-2 p-3 border border-border rounded-xl bg-card max-h-32 overflow-y-auto shadow-inner">
-                        {allCategories.filter(c => c.parent_id === selectedParentCat).map(sub => (
-                          <label key={sub.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1 rounded transition-colors group">
-                            <input type="checkbox" className="rounded-sm border-primary/30" checked={userAssignments.categories?.includes(sub.id)} onChange={e => {
-                              const ch = e.target.checked;
-                              setUserAssignments(f => ({ ...f, categories: ch ? [...(f.categories || []), sub.id] : (f.categories || []).filter((id: any) => id !== sub.id) }));
-                            }} /> <span className="group-hover:text-primary transition-colors">{sub.name}</span>
-                          </label>
+                    <div className="space-y-1.5 border-t pt-3 border-border animate-in fade-in duration-200">
+                      <Label className="text-xs font-bold text-primary">3. Select Subcategory</Label>
+                      <select 
+                        value={selectedSubCatFilter || ''} 
+                        onChange={e => setSelectedSubCatFilter(e.target.value ? parseInt(e.target.value) : null)}
+                        className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs"
+                      >
+                        <option value="">-- Choose Subcategory --</option>
+                        {allCategories.filter(c => (c.parentId ?? c.parent_id) === selectedParentCat).map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
-                      </div>
+                      </select>
                     </div>
                   )}
 
                   <div className="space-y-1.5 border-t pt-3 border-border">
-                    <Label className="text-xs font-bold text-primary">4. Assigned Products (Specific)</Label>
+                    <Label className="text-xs font-bold text-primary">4. Available Products ({getFilteredProducts().length})</Label>
                     <div className="relative mb-2">
                       <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                       <Input 
                         placeholder="Search specific products..." 
                         className="pl-7 h-8 text-[11px] bg-muted/20"
-                        onChange={e => {
-                           // Local filter logic or we can just scroll-to? 
-                           // For now just keep it simple, the list below will be long so search is good.
-                           setSearchProd(e.target.value);
-                        }}
+                        onChange={e => setSearchProd(e.target.value)}
                       />
                     </div>
-                    <div className="grid grid-cols-1 gap-1 p-3 border border-border rounded-xl bg-card max-h-48 overflow-y-auto">
-                      {allProducts.filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())).map(p => (
+                    <div className="grid grid-cols-1 gap-1 p-3 border border-border rounded-xl bg-card max-h-48 overflow-y-auto shadow-inner">
+                      {getFilteredProducts().filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())).map(p => (
                         <label key={p.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1.5 rounded border border-transparent hover:border-border/40 transition-all">
-                          <input type="checkbox" checked={userAssignments.products?.includes(p.id)} onChange={e => {
-                            const ch = e.target.checked;
-                            setUserAssignments(f => ({ ...f, products: ch ? [...(f.products || []), p.id] : (f.products || []).filter((id: any) => id !== p.id) }));
-                          }} /> 
+                          <input 
+                            type="checkbox" 
+                            checked={userAssignments.products?.includes(p.id)} 
+                            onChange={e => {
+                              const ch = e.target.checked;
+                              setUserAssignments(f => ({ 
+                                ...f, 
+                                products: ch 
+                                  ? [...(f.products || []), p.id] 
+                                  : (f.products || []).filter((id: any) => id !== p.id) 
+                              }));
+                            }} 
+                          /> 
                           <span className="flex-1">{p.name} <span className="text-[10px] text-muted-foreground ml-1">({p.sku || p.productCode || 'N/A'})</span></span>
-                          {allBrands.find(b => b.id === (p.brandId ?? p.brand_id)) && <Badge variant="secondary" className="text-[9px] px-1 h-4">{allBrands.find(b => b.id === (p.brandId ?? p.brand_id))?.name}</Badge>}
+                          {allBrands.find(b => b.id === (p.brandId ?? p.brand_id)) && (
+                            <Badge variant="secondary" className="text-[9px] px-1 h-4">
+                              {allBrands.find(b => b.id === (p.brandId ?? p.brand_id))?.name}
+                            </Badge>
+                          )}
                         </label>
                       ))}
+                      {getFilteredProducts().length === 0 && (
+                        <div className="text-center py-4 text-xs text-muted-foreground">No products match the selected filters.</div>
+                      )}
                     </div>
                   </div>
+
+                  {userAssignments.products && userAssignments.products.length > 0 && (
+                    <div className="space-y-1.5 border-t pt-3 border-border animate-in fade-in duration-200">
+                      <Label className="text-xs font-bold text-muted-foreground">Currently Assigned Products ({userAssignments.products.length})</Label>
+                      <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-2 border border-border rounded-lg bg-muted/30 shadow-inner">
+                        {userAssignments.products.map(pId => {
+                          const pObj = allProducts.find(p => p.id === pId);
+                          if (!pObj) return null;
+                          return (
+                            <Badge key={pId} variant="outline" className="text-[10px] gap-1.5 py-0.5 pl-2 pr-1.5 bg-card hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors">
+                              {pObj.name}
+                              <button 
+                                type="button"
+                                onClick={() => setUserAssignments(f => ({ ...f, products: (f.products || []).filter((id: any) => id !== pId) }))}
+                                className="hover:bg-destructive/20 p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors font-bold text-[9px] w-3.5 h-3.5 flex items-center justify-center"
+                              >
+                                &times;
+                              </button>
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

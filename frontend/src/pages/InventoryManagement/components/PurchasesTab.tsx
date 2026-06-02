@@ -46,7 +46,7 @@ export const PurchasesTab: React.FC = () => {
             (p.items || []).map((it: any) => it.productName || it.product_name || '—').join(', ') || '—',
             (p.items || []).map((it: any) => `${Number(it.qty || it.quantity || 0).toLocaleString('en-IN')}`).join(', ') || '—',
             p.challanNumber || '—', 
-            p.vehicleNumber || p.vehicle_number || '—', 
+            (p.vehicleNumber || p.vehicle_number || '—').toUpperCase(), 
             Currency(p.totalTax || 0), 
             Currency(p.netAmount || p.total_amount || p.grandTotal || 0), 
             p.date || p.createdAt ? new Date(p.date || p.createdAt).toLocaleDateString('en-IN') : '—'

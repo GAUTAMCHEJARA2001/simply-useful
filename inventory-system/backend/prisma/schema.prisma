@@ -1,0 +1,372 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id           String      @id @default(cuid())
+  name         String      @unique
+  skuPrefix    String?     @default("KCPL")
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  users        User[]
+  products     Product[]
+  categories   Category[]
+  units        Unit[]
+  brands       Brand[]
+  warehouses   Warehouse[]
+  orders       Order[]
+  purchases    Purchase[]
+  boms         BOM[]
+  regions      Region[]
+  expenses     Expense[]
+  visits       Visit[]
+  dealers      Dealer[]
+  distributors Distributor[]
+}
+
+model User {
+  id              String                @id @default(cuid())
+  email           String                @unique
+  name            String?
+  hashedPassword  String
+  role            UserRole              @default(SALES)
+  active          Boolean               @default(true)
+  companyId       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  company         Company?              @relation(fields: [companyId], references: [id])
+  expenses        Expense[]
+  orders          Order[]               @relation("SalesOfficerOrders")
+  productAccess   UserProductAccess[]
+  warehouseAccess UserWarehouseAccess[]
+  visits          Visit[]
+}
+
+model Product {
+  id              String              @id @default(cuid())
+  productCode     String              @unique
+  name            String
+  bagSize         String
+  brandId         Int?
+  unitId          Int?
+  rate            Float
+  gst             Float
+  active          Boolean             @default(true)
+  companyId       String
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  categoryId      Int
+  inventory       Inventory[]
+  orderItems      OrderItem[]
+  brand           Brand?              @relation(fields: [brandId], references: [id])
+  categoryRef     Category            @relation(fields: [categoryId], references: [id])
+  company         Company             @relation(fields: [companyId], references: [id])
+  unit            Unit?               @relation(fields: [unitId], references: [id])
+  accessRules     UserProductAccess[]
+
+  @@index([brandId])
+  @@index([unitId])
+  @@index([categoryId])
+  @@index([companyId])
+}
+
+model Dealer {
+  id              String   @id @default(cuid())
+  dealerCode      String   @unique
+  dealerName      String
+  city            String
+  assignedSoEmail String
+  distributorName String
+  creditLimit     Float    @default(0)
+  outstanding     Float    @default(0)
+  active          Boolean  @default(true)
+  companyId       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  company         Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+}
+
+model Distributor {
+  id              String   @id @default(cuid())
+  distributorName String   @unique
+  area            String
+  assignedSoEmail String
+  creditLimit     Float    @default(0)
+  outstanding     Float    @default(0)
+  active          Boolean  @default(true)
+  companyId       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  company         Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  orderId      String      @unique
+  date         DateTime    @default(now())
+  soEmail      String
+  partyType    String
+  partyName    String
+  distributor  String
+  narration    String?
+  status       OrderStatus @default(Pending)
+  grandTotal   Float
+  companyId    String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  company      Company     @relation(fields: [companyId], references: [id])
+  salesOfficer User        @relation("SalesOfficerOrders", fields: [soEmail], references: [email])
+  items        OrderItem[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([soEmail])
+  @@index([companyId])
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  productId  String
+  qty        Int
+  price      Float
+  total      Float
+  itemRemark String?
+  order      Order   @relation(fields: [orderId], references: [id])
+  product    Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Visit {
+  id            String    @id @default(cuid())
+  date          DateTime  @default(now())
+  soEmail       String
+  dealerName    String
+  remarks       String
+  nextFollowup  DateTime?
+  nextVisitTime DateTime?
+  gpsLocation   String?
+  photo         String?
+  companyId     String
+  createdAt     DateTime  @default(now())
+  company       Company   @relation(fields: [companyId], references: [id])
+  user          User      @relation(fields: [soEmail], references: [email])
+
+  @@index([createdAt])
+  @@index([companyId])
+}
+
+model Expense {
+  id           String   @id @default(cuid())
+  date         DateTime @default(now())
+  soEmail      String
+  category     String
+  amount       Float
+  remarks      String
+  status       String   @default("Pending")
+  photo        String?
+  rejectReason String?
+  declaration  String?
+  companyId    String
+  createdAt    DateTime @default(now())
+  company      Company  @relation(fields: [companyId], references: [id])
+  user         User     @relation(fields: [soEmail], references: [email])
+
+  @@index([createdAt])
+  @@index([companyId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Unit {
+  id        Int       @id @default(autoincrement())
+  name      String
+  active    Boolean   @default(true)
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id])
+  products  Product[]
+
+  @@unique([name, companyId])
+}
+
+model Brand {
+  id          Int                 @id @default(autoincrement())
+  name        String
+  active      Boolean             @default(true)
+  companyId   String
+  company     Company             @relation(fields: [companyId], references: [id])
+  products    Product[]
+  accessRules UserProductAccess[]
+
+  @@unique([name, companyId])
+}
+
+model Category {
+  id          Int                 @id @default(autoincrement())
+  name        String
+  active      Boolean             @default(true)
+  companyId   String
+  company     Company             @relation(fields: [companyId], references: [id])
+  products    Product[]
+  accessRules UserProductAccess[]
+
+  @@unique([name, companyId])
+}
+
+model Warehouse {
+  id              Int                   @id @default(autoincrement())
+  name            String
+  active          Boolean               @default(true)
+  companyId       String
+  company         Company               @relation(fields: [companyId], references: [id])
+  inventory       Inventory[]
+  warehouseAccess UserWarehouseAccess[]
+
+  @@unique([name, companyId])
+}
+
+model Region {
+  id        Int      @id @default(autoincrement())
+  name      String
+  active    Boolean  @default(true)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  markets   Market[]
+
+  @@unique([name, companyId])
+}
+
+model Market {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  active   Boolean @default(true)
+  regionId Int
+  region   Region  @relation(fields: [regionId], references: [id])
+
+  @@index([regionId])
+}
+
+model Inventory {
+  id          Int       @id @default(autoincrement())
+  productId   String
+  warehouseId Int
+  quantity    Int       @default(0)
+  product     Product   @relation(fields: [productId], references: [id])
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@unique([productId, warehouseId])
+  @@index([productId])
+  @@index([warehouseId])
+}
+
+model UserProductAccess {
+  id         Int       @id @default(autoincrement())
+  userId     String
+  brandId    Int?
+  categoryId Int?
+  productId  String?
+  brand      Brand?    @relation(fields: [brandId], references: [id])
+  category   Category? @relation(fields: [categoryId], references: [id])
+  product    Product?  @relation(fields: [productId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([brandId])
+  @@index([categoryId])
+  @@index([productId])
+}
+
+model UserWarehouseAccess {
+  id          Int       @id @default(autoincrement())
+  userId      String
+  warehouseId Int
+  user        User      @relation(fields: [userId], references: [id])
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@index([userId])
+  @@index([warehouseId])
+}
+
+model BOM {
+  id          String    @id @default(cuid())
+  productCode String    @unique
+  name        String
+  companyId   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  company     Company   @relation(fields: [companyId], references: [id])
+  items       BOMItem[]
+
+  @@index([companyId])
+}
+
+model BOMItem {
+  id           String @id @default(cuid())
+  bomId        String
+  materialName String
+  qty          Float
+  unit         String
+  bom          BOM    @relation(fields: [bomId], references: [id])
+}
+
+model Purchase {
+  id         String         @id @default(cuid())
+  purchaseId String         @unique
+  date       DateTime       @default(now())
+  vendorName String
+  grandTotal Float
+  status     String         @default("Received")
+  companyId  String
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  company    Company        @relation(fields: [companyId], references: [id])
+  items      PurchaseItem[]
+
+  @@index([companyId])
+}
+
+model PurchaseItem {
+  id          String   @id @default(cuid())
+  purchaseId  String
+  productName String
+  qty         Int
+  rate        Float
+  total       Float
+  purchase    Purchase @relation(fields: [purchaseId], references: [id])
+}
+
+enum UserRole {
+  SALES
+  ADMIN
+  HR
+  INVENTORY
+  SUPERADMIN
+}
+
+enum OrderStatus {
+  Pending
+  Approved
+  Dispatched
+  Completed
+  Cancelled
+  Returned
+}

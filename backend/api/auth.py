@@ -18,6 +18,10 @@ class JWTUser:
         self.is_authenticated = True
 
     @property
+    def pk(self):
+        return self.id
+
+    @property
     def is_anonymous(self):
         return False
 

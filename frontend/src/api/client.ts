@@ -11,8 +11,15 @@ export interface ApiResponse<T = any> {
   meta?: any;
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1';
+const API_BASE_URL = (() => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) return envUrl;
+  
+  // Dynamically resolve to the host machine's IP/hostname running the backend
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  return `http://${hostname}:4000/api/v1`;
+})();
+
 
 /**
  * TOKEN MANAGEMENT helpers

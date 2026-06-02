@@ -34,7 +34,7 @@ def test_post():
 
         payload = {
             "supplier_id": supplier.id,
-            "warehouse_id": "cmo75yliq0002wesurjpett1n",
+            "warehouse_id": 1,
             "challanNumber": "CH-12345",
             "vehicle_number": "HR-26-A-9999",
             "lineItems": [

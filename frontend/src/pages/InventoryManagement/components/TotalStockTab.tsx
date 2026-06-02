@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Package, Warehouse, Filter } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -7,20 +7,32 @@ import { Label } from '@/components/ui/label';
 import { useStockReport, useAggregateStock } from '@/hooks/inventory/useStock';
 import { useWarehouses } from '@/hooks/inventory/useMasters';
 import { SafeDataView } from '@/components/SafeDataView';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const TotalStockTab: React.FC = () => {
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('all');
+  const { user } = useAuth();
+  const isInventoryOnly = user?.role === 'INVENTORY';
+  
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(isInventoryOnly ? '' : 'all');
   
   const { data: stock = [], isLoading: stockLoading, error: stockError, refetch: refetchStock } = useStockReport();
   const { data: aggregateStock = [], isLoading: aggLoading, error: aggError, refetch: refetchAgg } = useAggregateStock();
   const { data: warehouses = [], isLoading: whLoading } = useWarehouses();
+
+  useEffect(() => {
+    if (isInventoryOnly && warehouses.length > 0 && (selectedWarehouseId === 'all' || selectedWarehouseId === '')) {
+      setSelectedWarehouseId(warehouses[0].id.toString());
+    }
+  }, [isInventoryOnly, warehouses, selectedWarehouseId]);
 
   const loading = stockLoading || aggLoading || whLoading;
   const error = (stockError || aggError) ? ((stockError || aggError) as any).message : null;
 
   const filteredStock = selectedWarehouseId === 'all' 
     ? stock
-    : stock.filter(s => s.warehouseId?.toString() === selectedWarehouseId);
+    : selectedWarehouseId === ''
+      ? []
+      : stock.filter(s => s.warehouseId?.toString() === selectedWarehouseId);
 
   const selectedWarehouseName = selectedWarehouseId === 'all' 
     ? 'All Warehouses' 
@@ -31,22 +43,24 @@ export const TotalStockTab: React.FC = () => {
   return (
     <SafeDataView data={aggregateStock} isLoading={loading} error={error} onRetry={onRetry}>
       <div className="space-y-8 pb-10">
-        <section>
-          <h1 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <Package className="w-5 h-5 text-primary" />
-            Aggregate Stock (Unified View)
-          </h1>
-          <DataTable 
-            columns={['Product', 'SKU', 'Category', 'Total Stock', 'Unit']}
-            rows={(aggregateStock || []).map(s => [
-              s.productName, 
-              s.sku, 
-              s.categoryName, 
-              Math.round(parseFloat(s.totalStock || 0)), 
-              s.unit?.name || (typeof s.unit === 'string' ? s.unit : '') || '—'
-            ])}
-          />
-        </section>
+        {!isInventoryOnly && (
+          <section>
+            <h1 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Package className="w-5 h-5 text-primary" />
+              Aggregate Stock (Unified View)
+            </h1>
+            <DataTable 
+              columns={['Product', 'SKU', 'Category', 'Total Stock', 'Unit']}
+              rows={(aggregateStock || []).map(s => [
+                s.productName, 
+                s.sku, 
+                s.categoryName, 
+                Math.round(parseFloat(s.totalStock || 0)), 
+                s.unit?.name || (typeof s.unit === 'string' ? s.unit : '') || '—'
+              ])}
+            />
+          </section>
+        )}
 
         <section>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pt-4 border-t border-border">
@@ -64,7 +78,7 @@ export const TotalStockTab: React.FC = () => {
                     <SelectValue placeholder="Select Warehouse" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Warehouses</SelectItem>
+                    {!isInventoryOnly && <SelectItem value="all">All Warehouses</SelectItem>}
                     {warehouses.map(w => (
                       <SelectItem key={w.id} value={w.id.toString()}>{w.name}</SelectItem>
                     ))}
@@ -75,9 +89,10 @@ export const TotalStockTab: React.FC = () => {
           </div>
 
           <DataTable 
-            columns={['Product', 'Warehouse', 'Current Stock', 'Unit', 'Status']}
+            columns={['Product', 'SKU', 'Warehouse', 'Current Stock', 'Unit', 'Status']}
             rows={filteredStock.map(s => [
               s.productName, 
+              `${s.sku}-${s.warehouseName || 'Unassigned'}`,
               s.warehouseName || 'Unassigned', 
               Math.round(parseFloat(s.currentStock as any || 0)), 
               s.unit?.name || (typeof s.unit === 'string' ? s.unit : '') || '—',

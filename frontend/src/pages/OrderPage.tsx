@@ -38,15 +38,20 @@ const OrderPage: React.FC = () => {
 
   useEffect(() => {
     if (id && orders.length > 0) {
-      const existing = orders.find(o => o.orderId === id);
+      const existing = orders.find(o => 
+        (o.orderId && o.orderId.toLowerCase() === id.toLowerCase()) ||
+        (o.id && String(o.id).toLowerCase() === id.toLowerCase()) ||
+        (o.order_id && String(o.order_id).toLowerCase() === id.toLowerCase())
+      );
       if (existing) {
         setPartyType(existing.partyType);
         setSelectedParty(existing.partyName);
-        setItems(existing.items.map((item: any) => ({
+        setItems((existing.items || []).map((item: any) => ({
           ...item,
-          product: typeof item.product === 'object' ? item.product.id : (item.productId || item.product)
+          product: typeof item.product === 'object' ? item.product?.id : (item.productId || item.product),
+          itemRemark: item.itemRemark ?? item.item_remark ?? item.remark ?? '',
         })));
-        setNarration(existing.narration);
+        setNarration(existing.narration || '');
       }
     }
     // Fallback warehouse if 1 is not present
@@ -66,7 +71,12 @@ const OrderPage: React.FC = () => {
   // These are now purely data-driven based on what DataContext fetches (which is role-aware)
   const myDealers = dealers.filter(d => d.active);
   const myDistributors = distributors.filter(d => d.active);
-  const parties = partyType === 'Dealer' ? myDealers.map(d => d.dealerName) : myDistributors.map(d => d.distributorName);
+  const parties = useMemo(() => {
+    const rawList = partyType === 'Dealer' 
+      ? myDealers.map(d => d.dealerName) 
+      : myDistributors.map(d => d.distributorName);
+    return Array.from(new Set(rawList.filter(Boolean)));
+  }, [partyType, myDealers, myDistributors]);
 
   const selectedDealerInfo = partyType === 'Dealer' ? dealers.find(d => d.dealerName === selectedParty) : null;
   const selectedDistInfo = partyType === 'Distributor'
@@ -75,7 +85,7 @@ const OrderPage: React.FC = () => {
 
   const creditWarning = useMemo(() => {
     // Check if credit warnings are enabled in global settings
-    if (settings.showCreditWarnings === false) return null;
+    if (settings.showCreditWarnings === false || settings.show_credit_warnings === false || settings.showCreditWarnings === 'false' || settings.show_credit_warnings === 'false') return null;
 
     const grandTotal = items.reduce((s, i) => s + i.total, 0);
     if (partyType === 'Dealer' && selectedDealerInfo) {
@@ -89,7 +99,30 @@ const OrderPage: React.FC = () => {
     return null;
   }, [items, selectedDealerInfo, selectedDistInfo, partyType]);
 
-  const isAdmin = user?.role === 'SUPERADMIN' || user?.role === 'ADMIN';
+  const userRole = (user?.role || '').toUpperCase();
+  const isAdmin = userRole === 'SUPERADMIN' || userRole === 'ADMIN';
+
+  // Check if price editing is allowed by global settings (both camelCase and snake_case supported)
+  const allowPriceEditSales = settings.allowPriceEditSales === true || 
+                              settings.allowPriceEditSales === 'true' || 
+                              settings.allow_price_edit_sales === true || 
+                              settings.allow_price_edit_sales === 'true';
+
+  // Price input is disabled for non-admins if price editing settings is off and they don't have explicit permission
+  const isPriceInputDisabled = !isAdmin && !can('edit_order_price') && !allowPriceEditSales;
+
+  // Debug logging to help identify why the price input is enabled/disabled in real-time
+  useEffect(() => {
+    console.log('[DEBUG] Price Input State Evaluation:', {
+      userEmail: user?.email,
+      userRole,
+      isAdmin,
+      hasExplicitPriceEditPerm: can('edit_order_price'),
+      allowPriceEditSalesSetting: allowPriceEditSales,
+      settingsState: settings,
+      isPriceInputDisabled
+    });
+  }, [user, userRole, isAdmin, settings, isPriceInputDisabled, can]);
 
   const getBagWeight = (bag_size: string): number => {
     const m = (bag_size || '').match(/(\d+)/);
@@ -97,10 +130,12 @@ const OrderPage: React.FC = () => {
   };
 
   const getItemWeight = (item: OrderItem) => {
-    const prod = products.find(p => p.id === item.product);
+    if (!item) return 0;
+    const prodId = typeof item.product === 'object' ? (item.product as any)?.id : item.product;
+    const prod = products.find(p => p.id === prodId);
     if (!prod) return 0;
-    if (prod.weight && prod.weight > 0) return prod.weight * item.qty;
-    return getBagWeight(prod.bagSize) * item.qty;
+    if (prod.weight && prod.weight > 0) return prod.weight * (item.qty || 0);
+    return getBagWeight(prod.bagSize) * (item.qty || 0);
   };
 
   const getTotalWeight = () => {
@@ -339,13 +374,13 @@ const OrderPage: React.FC = () => {
                     value={item.price || ''}
                     onChange={e => updateItem(idx, 'price', Number(e.target.value))}
                     placeholder="0"
-                    disabled={!isAdmin && !can('edit_order_price') && settings.allowPriceEditSales !== true && settings.allowPriceEditSales !== 'true'}
+                    disabled={isPriceInputDisabled}
                   />
 
                 </div>
               </div>
               <div className="flex items-center justify-between">
-                <Input placeholder="Item remark (optional)" className="h-9 text-xs flex-1 mr-3" value={item.itemRemark} onChange={e => updateItem(idx, 'itemRemark', e.target.value)} />
+                <Input placeholder="Item remark (optional)" className="h-9 text-xs flex-1 mr-3" value={item.itemRemark ?? ''} onChange={e => updateItem(idx, 'itemRemark', e.target.value)} />
 
                 <div className="flex flex-col items-end">
                   <span className="text-sm font-bold text-foreground whitespace-nowrap">{getItemWeight(item)} kg</span>
@@ -408,7 +443,9 @@ const OrderPage: React.FC = () => {
                 <tbody>
                   {items.filter(i => i.product).map((item, idx) => (
                     <tr key={idx} className="border-t border-border">
-                      <td className="px-3 py-2">{item.product}</td>
+                      <td className="px-3 py-2">
+                        {products.find(p => p.id === item.product)?.productName || item.product}
+                      </td>
                       <td className="px-3 py-2 text-center">{item.qty}</td>
                       <td className="px-3 py-2 text-center">₹{item.price}</td>
                       <td className="px-3 py-2 text-right font-medium">

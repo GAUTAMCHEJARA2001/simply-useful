@@ -16,6 +16,7 @@ export interface AppUserRecord {
   active: boolean;
   monthlyTarget?: number;
   monthly_target?: number;
+  territory?: string;
 }
 
 export interface RolePermission {
@@ -124,6 +125,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }))
   });
 
+  const normalizeVisit = (v: any): Visit => ({
+    ...v,
+    soEmail: v.soEmail || v.so_email,
+    so_email: v.soEmail || v.so_email,
+    dealerName: v.dealerName || v.dealer_name,
+    dealer_name: v.dealerName || v.dealer_name,
+    nextFollowup: v.nextFollowup || v.next_followup,
+    next_followup: v.nextFollowup || v.next_followup,
+  });
+
+  const normalizeExpense = (e: any): Expense => ({
+    ...e,
+    soEmail: e.soEmail || e.so_email,
+    so_email: e.soEmail || e.so_email,
+    rejectReason: e.rejectReason || e.reject_reason,
+    reject_reason: e.rejectReason || e.reject_reason,
+  });
+
   const refreshAll = useCallback(async () => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -142,10 +161,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         apiService.inventory.getAll(),
         apiService.orders.getAll(),
         apiService.users.getAll({ page: 1, limit: 100 }),
-        apiService.inventory.getWarehouses()
+        apiService.inventory.getWarehouses(),
+        apiService.visits.get(),
+        apiService.expenses.get(),
+        apiService.settings.get()
       ]);
 
-      const [dealerRes, distributorRes, productRes, orderRes, userRes, warehouseRes] = results.map(r => 
+      const [
+        dealerRes,
+        distributorRes,
+        productRes,
+        orderRes,
+        userRes,
+        warehouseRes,
+        visitRes,
+        expenseRes,
+        settingsRes
+      ] = results.map(r => 
         r.status === 'fulfilled' ? r.value.data : null
       );
 
@@ -155,6 +187,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (productRes?.success) setProducts(productRes.data || []);
       if (orderRes?.success) setOrders((orderRes.data || []).map(normalizeOrder));
       if (warehouseRes?.success) setWarehouses(warehouseRes.data || []);
+      if (visitRes?.success) setVisits((visitRes.data || []).map(normalizeVisit));
+      if (expenseRes?.success) setExpenses((expenseRes.data || []).map(normalizeExpense));
+      if (settingsRes?.success) setSettings(settingsRes.data || {});
       
       if (userRes?.success) {
         // Handle paginated response structure { success: true, data: [...], meta: {...} }
@@ -181,89 +216,138 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addDealer = useCallback(async (d: Dealer) => { 
     const res = await apiService.parties.createDealer(d);
-    if (res.data.success) setDealers(prev => [...prev, d]); 
-  }, []);
+    if (res.data.success) {
+      setDealers(prev => [...prev, d]); 
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const updateDealer = useCallback(async (code: string, d: Partial<Dealer>) => {
     const res = await apiService.parties.updateDealer(code, d);
-    if (res.data.success) setDealers(prev => prev.map(x => x.dealerCode === code ? { ...x, ...d } : x));
-  }, []);
+    if (res.data.success) {
+      setDealers(prev => prev.map(x => x.dealerCode === code ? { ...x, ...d } : x));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const deleteDealer = useCallback(async (code: string) => {
     const res = await apiService.parties.deleteDealer(code);
-    if (res.data.success) setDealers(prev => prev.filter(x => x.dealerCode !== code));
-  }, []);
+    if (res.data.success) {
+      setDealers(prev => prev.filter(x => x.dealerCode !== code));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const addDistributor = useCallback(async (d: Distributor) => {
     const res = await apiService.parties.createDistributor(d);
-    if (res.data.success) setDistributors(prev => [...prev, d]);
-  }, []);
+    if (res.data.success) {
+      setDistributors(prev => [...prev, d]);
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const updateDistributor = useCallback(async (name: string, d: Partial<Distributor>) => {
     const res = await apiService.parties.updateDistributor(name, d);
-    if (res.data.success) setDistributors(prev => prev.map(x => x.distributorName === name ? { ...x, ...d } : x));
-  }, []);
+    if (res.data.success) {
+      setDistributors(prev => prev.map(x => x.distributorName === name ? { ...x, ...d } : x));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const deleteDistributor = useCallback(async (name: string) => {
     const res = await apiService.parties.deleteDistributor(name);
-    if (res.data.success) setDistributors(prev => prev.filter(x => x.distributorName !== name));
-  }, []);
+    if (res.data.success) {
+      setDistributors(prev => prev.filter(x => x.distributorName !== name));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const addProduct = useCallback(async (p: Product) => {
     const res = await apiService.inventory.create(p);
-    if (res.data.success) setProducts(prev => [...prev, p]);
-  }, []);
+    if (res.data.success) {
+      setProducts(prev => [...prev, p]);
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const updateProduct = useCallback(async (code: string, p: Partial<Product>) => {
     const res = await apiService.inventory.update(code, p);
-    if (res.data.success) setProducts(prev => prev.map(x => x.productCode === code ? { ...x, ...p } : x));
-  }, []);
+    if (res.data.success) {
+      setProducts(prev => prev.map(x => x.productCode === code ? { ...x, ...p } : x));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const deleteProduct = useCallback(async (code: string) => {
     const res = await apiService.inventory.remove(code);
-    if (res.data.success) setProducts(prev => prev.filter(x => x.productCode !== code));
-  }, []);
+    if (res.data.success) {
+      setProducts(prev => prev.filter(x => x.productCode !== code));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const addOrder = useCallback(async (o: Order) => {
     const res = await apiService.orders.create(o);
-    if (res.data.success) setOrders(prev => [...prev, o]);
-  }, []);
+    if (res.data.success) {
+      setOrders(prev => [...prev, o]);
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const updateOrderStatus = useCallback(async (id: string, status: OrderStatus, reason?: string, actionDate?: string) => {
     const res = await apiService.orders.updateStatus(id, { status, reason, actionDate });
-    if (res.data.success) setOrders(prev => prev.map(o => o.orderId === id ? { ...o, status, ...(reason ? { narration: reason } : {}), ...(actionDate ? { dispatchDate: actionDate } : {}) } : o));
-  }, []);
+    if (res.data.success) {
+      setOrders(prev => prev.map(o => o.orderId === id ? { ...o, status, ...(reason ? { narration: reason } : {}), ...(actionDate ? { dispatchDate: actionDate } : {}) } : o));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const updateOrderItems = useCallback(async (id: string, updatedOrder: any) => {
     const res = await apiService.orders.updateItems(id, updatedOrder);
-    if (res.data.success) setOrders(prev => prev.map(o => o.orderId === id ? { ...o, ...updatedOrder } : o));
-  }, []);
+    if (res.data.success) {
+      setOrders(prev => prev.map(o => o.orderId === id ? { ...o, ...updatedOrder } : o));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const addVisit = useCallback(async (v: Visit) => {
     const res = await apiService.visits.add(v);
-    if (res.data.success) setVisits(prev => [...prev, v]);
-  }, []);
+    if (res.data.success) {
+      setVisits(prev => [...prev, v]);
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const addExpense = useCallback(async (e: Expense) => {
     const res = await apiService.expenses.add(e);
-    if (res.data.success && res.data.data) setExpenses(prev => [...prev, res.data.data!]);
-  }, []);
+    if (res.data.success && res.data.data) {
+      setExpenses(prev => [...prev, res.data.data!]);
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const updateExpenseStatus = useCallback(async (id: string, status: string, rejectReason?: string) => {
     const res = await apiService.expenses.updateStatus(id, status, rejectReason);
-    if (res.data.success) setExpenses(prev => prev.map(e => e.id === id ? { ...e, status, rejectReason } : e));
-  }, []);
+    if (res.data.success) {
+      setExpenses(prev => prev.map(e => e.id === id ? { ...e, status, rejectReason } : e));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
 
   const updateExpense = useCallback(async (id: string, data: Partial<Expense>) => {
     const res = await apiService.expenses.update(id, data);
-    if (res.data.success) setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
-  }, []);
+    if (res.data.success) {
+      setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const addUser = async (u: Partial<AppUserRecord>) => {
     const res = await apiService.users.create(u);
     if (res.data.success) {
       setUsers(prev => [...prev, res.data.data]);
+      refreshAll();
       return res.data.data;
     }
   };
@@ -272,6 +356,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await apiService.users.update(id, u);
     if (res.data.success) {
       setUsers(prev => prev.map(user => user.id === id ? { ...user, ...res.data.data } : user));
+      refreshAll();
       return res.data.data;
     }
   };
@@ -280,27 +365,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await apiService.users.remove(id);
     if (res.data.success) {
       setUsers(prev => prev.filter(user => user.id !== id));
+      refreshAll();
     }
   };
 
   const updateUserPassword = async (id: string, password: string) => {
     await apiService.users.resetPassword(id, password);
+    refreshAll();
   };
 
   const updateUserTarget = useCallback(async (id: string, target: number) => {
     const res = await apiService.users.updateTarget(id, target);
-    if (res.data.success) setUsers(prev => prev.map(x => x.id === id ? { ...x, monthlyTarget: target } : x));
-  }, []);
+    if (res.data.success) {
+      setUsers(prev => prev.map(x => x.id === id ? { ...x, monthlyTarget: target } : x));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const updateSetting = useCallback(async (key: string, value: any) => {
     const res = await apiService.settings.update(key, value);
-    if (res.data.success) setSettings(prev => ({ ...prev, [key]: value }));
-  }, []);
+    if (res.data.success) {
+      setSettings(prev => ({ ...prev, [key]: value }));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   const updatePermission = useCallback(async (id: string, isEnabled: boolean) => {
     const res = await apiService.settings.updatePermission(id, isEnabled);
-    if (res.data.success) setPermissions(prev => prev.map(p => p.id === id ? { ...p, isEnabled } : p));
-  }, []);
+    if (res.data.success) {
+      setPermissions(prev => prev.map(p => p.id === id ? { ...p, isEnabled } : p));
+      refreshAll();
+    }
+  }, [refreshAll]);
 
   return (
     <DataContext.Provider value={{

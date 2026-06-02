@@ -7,6 +7,7 @@ import { API_ENDPOINTS } from '../endpoints';
  */
 export const settingsService = {
   // Global Settings
+  get: () => api.get(`${API_ENDPOINTS.SETTINGS}?t=${Date.now()}`),
   update: (key: string, value: any) => 
     api.put(API_ENDPOINTS.SETTINGS, { key, value }),
 

@@ -6,6 +6,8 @@
 #   * Remove `managed = False` lines if you wish to allow Django to create, modify, and delete the table
 # Feel free to rename the models, but don't rename db_table values or field names.
 from django.db import models
+from django.utils import timezone
+from decimal import Decimal
 
 
 class Bom(models.Model):
@@ -13,8 +15,9 @@ class Bom(models.Model):
     productcode = models.TextField(db_column='productCode', unique=True)  # Field name made lowercase.
     name = models.TextField()
     companyid = models.ForeignKey('Company', models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
+    outputquantity = models.FloatField(db_column='outputQuantity', default=1.0, blank=True, null=True)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -61,8 +64,8 @@ class Company(models.Model):
     name = models.TextField(unique=True)
     skuprefix = models.TextField(db_column='skuPrefix', blank=True, null=True)  # Field name made lowercase.
     active = models.BooleanField()
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
     stockmethod = models.TextField(db_column='stockMethod')  # Field name made lowercase.
 
     class Meta:
@@ -77,12 +80,21 @@ class Dealer(models.Model):
     city = models.TextField()
     assignedsoemail = models.TextField(db_column='assignedSoEmail')  # Field name made lowercase.
     distributorname = models.TextField(db_column='distributorName')  # Field name made lowercase.
-    creditlimit = models.FloatField(db_column='creditLimit')  # Field name made lowercase.
-    outstanding = models.FloatField()
+    creditlimit = models.DecimalField(db_column='creditLimit', max_digits=14, decimal_places=2, default=Decimal('0.00'))  # Field name made lowercase.
+    outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     active = models.BooleanField()
+    territory = models.TextField(blank=True, null=True)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
+    converted_lead = models.OneToOneField(
+        'Lead',
+        models.SET_NULL,
+        db_column='convertedLeadId',
+        blank=True,
+        null=True,
+        related_name='converted_dealer'
+    )
 
     class Meta:
         managed = False
@@ -94,12 +106,13 @@ class Distributor(models.Model):
     distributorname = models.TextField(db_column='distributorName', unique=True)  # Field name made lowercase.
     area = models.TextField()
     assignedsoemail = models.TextField(db_column='assignedSoEmail')  # Field name made lowercase.
-    creditlimit = models.FloatField(db_column='creditLimit')  # Field name made lowercase.
-    outstanding = models.FloatField()
+    creditlimit = models.DecimalField(db_column='creditLimit', max_digits=14, decimal_places=2, default=Decimal('0.00'))  # Field name made lowercase.
+    outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     active = models.BooleanField()
+    territory = models.TextField(blank=True, null=True)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -118,7 +131,7 @@ class Expense(models.Model):
     rejectreason = models.TextField(db_column='rejectReason', blank=True, null=True)  # Field name made lowercase.
     declaration = models.TextField(blank=True, null=True)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -130,8 +143,8 @@ class Inventory(models.Model):
     warehouseid = models.ForeignKey('Warehouse', models.DO_NOTHING, db_column='warehouseId')  # Field name made lowercase.
     quantity = models.IntegerField()
     avgcost = models.FloatField(db_column='avgCost')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -145,8 +158,8 @@ class Labour(models.Model):
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
     dailywage = models.FloatField(db_column='dailyWage', default=0.0)
     contactinfo = models.TextField(db_column='contactInfo', blank=True, null=True)
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -176,8 +189,8 @@ class Order(models.Model):
     status = models.TextField()
     grandtotal = models.FloatField(db_column='grandTotal')  # Field name made lowercase.
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -209,8 +222,8 @@ class Product(models.Model):
     gst = models.FloatField()
     active = models.BooleanField()
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
     categoryid = models.ForeignKey(Category, models.DO_NOTHING, db_column='categoryId')  # Field name made lowercase.
     openingstock = models.IntegerField(db_column='openingStock')  # Field name made lowercase.
     minimumstock = models.IntegerField(db_column='minimumStock')  # Field name made lowercase.
@@ -229,13 +242,14 @@ class Purchase(models.Model):
     grandtotal = models.FloatField(db_column='grandTotal')  # Field name made lowercase.
     status = models.TextField()
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
     supplierid = models.ForeignKey('Supplier', models.DO_NOTHING, db_column='supplierId', blank=True, null=True)  # Field name made lowercase.
     challannumber = models.TextField(db_column='challanNumber', blank=True, null=True)
     vehiclenumber = models.TextField(db_column='vehicleNumber', blank=True, null=True)
     totaltax = models.FloatField(db_column='totalTax', blank=True, null=True)
     purchaseorderid = models.ForeignKey('Purchaseorder', models.DO_NOTHING, db_column='purchaseOrderId', blank=True, null=True)
+    warehouseid = models.ForeignKey('Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -267,8 +281,8 @@ class Purchaseorder(models.Model):
     status = models.TextField()
     remarks = models.TextField(blank=True, null=True)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -297,7 +311,7 @@ class Refreshtoken(models.Model):
     userid = models.TextField(db_column='userId')  # Field name made lowercase.
     expiresat = models.DateTimeField(db_column='expiresAt')  # Field name made lowercase.
     revoked = models.BooleanField()
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -323,8 +337,8 @@ class Stockbatch(models.Model):
     remaining = models.IntegerField()
     cost = models.FloatField()
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -341,8 +355,8 @@ class Supplier(models.Model):
     address = models.TextField(blank=True, null=True)
     active = models.BooleanField()
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -367,9 +381,10 @@ class User(models.Model):
     hashedpassword = models.TextField(db_column='hashedPassword')  # Field name made lowercase.
     role = models.TextField()
     active = models.BooleanField()
+    territory = models.TextField(blank=True, null=True)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', blank=True, null=True)  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -407,7 +422,7 @@ class Visit(models.Model):
     gpslocation = models.TextField(db_column='gpsLocation', blank=True, null=True)  # Field name made lowercase.
     photo = models.TextField(blank=True, null=True)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt')  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
 
     class Meta:
         managed = False
@@ -425,3 +440,131 @@ class Warehouse(models.Model):
         managed = False
         db_table = 'Warehouse'
         unique_together = (('name', 'companyid'),)
+
+
+class ActiveLeadManager(models.Manager):
+    def get_queryset(self):
+        # Override to automatically exclude soft-deleted leads globally
+        return super().get_queryset().filter(is_deleted=False)
+
+
+class Lead(models.Model):
+    STATUS_CHOICES = [
+        ('NEW', 'New'),
+        ('CONTACTED', 'Contacted'),
+        ('PROPOSAL', 'Proposal'),
+        ('NEGOTIATION', 'Negotiation'),
+        ('WON', 'Won'),
+        ('LOST', 'Lost'),
+    ]
+
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+    ]
+
+    id = models.CharField(primary_key=True, max_length=30)
+    name = models.CharField(max_length=255)  # Contact Person Name
+    company_name = models.CharField(db_column='companyName', max_length=255, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True, db_index=True)
+    phone = models.CharField(max_length=20, blank=True, null=True, db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NEW')
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='MEDIUM')
+    source = models.CharField(max_length=100, blank=True, null=True)  # cold call, referral, etc.
+    city = models.CharField(max_length=100, blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
+    pincode = models.CharField(max_length=10, blank=True, null=True)
+    value = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))  # High-precision financial value
+    notes = models.TextField(blank=True, null=True)  # Primary lead requirements/notes
+    is_deleted = models.BooleanField(db_column='isDeleted', default=False)
+    companyid = models.ForeignKey('Company', models.DO_NOTHING, db_column='companyId')
+    assigned_to = models.ForeignKey('User', models.DO_NOTHING, db_column='assignedTo', blank=True, null=True, related_name='assigned_leads')
+    created_by = models.ForeignKey('User', models.DO_NOTHING, db_column='createdBy', related_name='created_leads')
+    updated_by = models.ForeignKey('User', models.DO_NOTHING, db_column='updatedBy', related_name='updated_leads', blank=True, null=True)
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
+    version = models.PositiveIntegerField(default=1, db_index=True)
+
+    # Active Manager handles non-archived leads, standard objects manager preserved for raw access
+    objects = ActiveLeadManager()
+    all_objects = models.Manager()
+
+    class Meta:
+        db_table = 'Lead'
+        ordering = ['-updatedat']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['assigned_to', 'is_deleted']),  # Composite index for RBAC
+            models.Index(fields=['createdat']),
+            models.Index(fields=['is_deleted']),
+            models.Index(fields=['companyid', 'status', 'priority']),
+            models.Index(fields=['companyid', 'assigned_to']),
+            models.Index(fields=['companyid', 'updatedat']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(name=''),
+                name='lead_name_not_empty'
+            ),
+            models.CheckConstraint(
+                condition=models.Q(version__gte=1),
+                name='lead_version_positive'
+            ),
+            models.CheckConstraint(
+                condition=models.Q(value__gte=0),
+                name='lead_value_non_negative'
+            ),
+            models.UniqueConstraint(
+                fields=['companyid', 'email'],
+                condition=models.Q(is_deleted=False) & ~models.Q(email=None) & ~models.Q(email=''),
+                name='unique_active_lead_email_per_company'
+            ),
+            models.UniqueConstraint(
+                fields=['companyid', 'phone'],
+                condition=models.Q(is_deleted=False) & ~models.Q(phone=None) & ~models.Q(phone=''),
+                name='unique_active_lead_phone_per_company'
+            )
+        ]
+
+
+class LeadFollowUp(models.Model):
+    FOLLOWUP_TYPES = [
+        ('CALL', 'Call'),
+        ('EMAIL', 'Email'),
+        ('VISIT', 'Visit'),
+        ('MEETING', 'Meeting'),
+    ]
+
+    id = models.CharField(primary_key=True, max_length=30)
+    lead = models.ForeignKey(Lead, models.CASCADE, db_column='leadId', related_name='followups')
+    type = models.CharField(max_length=20, choices=FOLLOWUP_TYPES)
+    notes = models.TextField()  # Activity outcome summary
+    next_followup_date = models.DateTimeField(db_column='nextFollowupDate', blank=True, null=True)
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    created_by = models.ForeignKey('User', models.DO_NOTHING, db_column='createdBy', related_name='followup_logs', blank=True, null=True)
+
+    class Meta:
+        db_table = 'LeadFollowUp'
+        ordering = ['-createdat']
+        indexes = [
+            models.Index(fields=['lead', 'next_followup_date']),
+            models.Index(fields=['createdat']),
+            models.Index(fields=['next_followup_date'], name='lead_followup_due_idx'),
+        ]
+
+
+class LeadStageHistory(models.Model):
+    id = models.CharField(primary_key=True, max_length=30)
+    lead = models.ForeignKey(Lead, models.CASCADE, db_column='leadId', related_name='stage_history')
+    old_status = models.CharField(db_column='oldStatus', max_length=20, choices=Lead.STATUS_CHOICES)
+    new_status = models.CharField(db_column='newStatus', max_length=20, choices=Lead.STATUS_CHOICES)
+    changed_by = models.ForeignKey('User', models.DO_NOTHING, db_column='changedBy')
+    changed_at = models.DateTimeField(db_column='changedAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'LeadStageHistory'
+        ordering = ['-changed_at']
+        indexes = [
+            models.Index(fields=['changed_at']),
+        ]
