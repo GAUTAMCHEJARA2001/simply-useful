@@ -9,8 +9,11 @@ django.setup()
 
 from api.models import Company, User, Warehouse
 
+from django.utils import timezone
+
 def seed():
     print("🌱 Seeding Kamla Enterprises database...")
+    now = timezone.now()
     
     # 1. Create Company
     company, created = Company.objects.get_or_create(
@@ -19,7 +22,9 @@ def seed():
             'id': 'cmpwp1h8v0000sscdshw8thbl',
             'skuprefix': 'KMLA',
             'active': True,
-            'stockmethod': 'FIFO'
+            'stockmethod': 'FIFO',
+            'createdat': now,
+            'updatedat': now
         }
     )
     if created:
@@ -38,13 +43,16 @@ def seed():
             'hashedpassword': hashed_password,
             'role': 'SUPERADMIN',
             'active': True,
-            'companyid': company
+            'companyid': company,
+            'createdat': now,
+            'updatedat': now
         }
     )
     if created:
         print(f"👤 Created Superadmin User: {user.email}")
     else:
         user.hashedpassword = hashed_password
+        user.updatedat = now
         user.save()
         print(f"👤 Superadmin User already exists: {user.email} (Password reset to admin123)")
         
