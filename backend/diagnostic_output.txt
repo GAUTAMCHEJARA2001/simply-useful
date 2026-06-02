@@ -1,0 +1,54 @@
+--- Companies ---
+┌─────────┬─────────────────────────────┬─────────────────────┐
+│ (index) │ id                          │ name                │
+├─────────┼─────────────────────────────┼─────────────────────┤
+│ 0       │ 'cmo75yliq0000wesurjpett1n' │ 'Kamla Enterprises' │
+│ 1       │ 'cmo768eyx0001dbg6pld3obi3' │ 'Alpha Corp'        │
+└─────────┴─────────────────────────────┴─────────────────────┘
+--- Users ---
+┌─────────┬───────────────────┬─────────────────────────────┬──────────────┐
+│ (index) │ email             │ companyId                   │ role         │
+├─────────┼───────────────────┼─────────────────────────────┼──────────────┤
+│ 0       │ 'admin@alpha.com' │ 'cmo768eyx0001dbg6pld3obi3' │ 'SUPERADMIN' │
+│ 1       │ 'sahil@alpha.com' │ 'cmo75yliq0000wesurjpett1n' │ 'SALES'      │
+│ 2       │ 'amol@alpha.com'  │ 'cmo75yliq0000wesurjpett1n' │ 'SALES'      │
+│ 3       │ 'vruti@alpha.com' │ 'cmo75yliq0000wesurjpett1n' │ 'ADMIN'      │
+│ 4       │ 'kiran@alpha.com' │ 'cmo75yliq0000wesurjpett1n' │ 'INVENTORY'  │
+│ 5       │ 'agent@test.com'  │ 'cmo75yliq0000wesurjpett1n' │ 'SUPERADMIN' │
+└─────────┴───────────────────┴─────────────────────────────┴──────────────┘
+--- Product Counts by Company ---
+┌─────────┬───────────┬─────────────────────────────┐
+│ (index) │ _count    │ companyId                   │
+├─────────┼───────────┼─────────────────────────────┤
+│ 0       │ { id: 6 } │ 'cmo768eyx0001dbg6pld3obi3' │
+└─────────┴───────────┴─────────────────────────────┘
+--- Order Counts by Company ---
+┌─────────┐
+│ (index) │
+├─────────┤
+└─────────┘
+--- Dealer Counts by Company ---
+┌─────────┬───────────┬─────────────────────────────┐
+│ (index) │ _count    │ companyId                   │
+├─────────┼───────────┼─────────────────────────────┤
+│ 0       │ { id: 2 } │ 'cmo768eyx0001dbg6pld3obi3' │
+└─────────┴───────────┴─────────────────────────────┘
+--- Sample Product ---
+{
+  "id": "cmofrb9pz0002142diifpj92k",
+  "productCode": "AC-0002",
+  "name": "ET-222",
+  "bagSize": "20KG",
+  "brandId": 1,
+  "unitId": 3,
+  "rate": 300,
+  "gst": 18,
+  "openingStock": 0,
+  "minimumStock": 0,
+  "defaultWarehouseId": null,
+  "active": true,
+  "companyId": "cmo768eyx0001dbg6pld3obi3",
+  "createdAt": "2026-04-26T12:40:54.082Z",
+  "updatedAt": "2026-04-26T12:40:54.082Z",
+  "categoryId": 13
+}

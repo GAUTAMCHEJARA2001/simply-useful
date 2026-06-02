@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@react-pdf/renderer": ["./src/types/react-pdf-renderer"]
+    },
+    "target": "ES2020",
+    "types": [
+      "node"
+    ],
+    "useDefineForClassFields": true
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/test"
+  ]
+}
