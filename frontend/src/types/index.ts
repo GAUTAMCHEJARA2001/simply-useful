@@ -319,3 +319,9 @@ export interface Category {
   parentId?: string | null;
   parent_id?: string | null;
 }
+
+export interface Unit {
+  id: string;
+  name: string;
+  active?: boolean;
+}

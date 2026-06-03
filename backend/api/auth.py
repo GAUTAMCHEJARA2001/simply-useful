@@ -76,6 +76,15 @@ class JWTAuthentication(authentication.BaseAuthentication):
         role = payload.get('role')
         company_id = payload.get('companyId')
         
+        # Verify company existence in SQLite to heal stale client-side tokens
+        try:
+            from api.models import Company
+            if company_id and not Company.objects.filter(id=company_id).exists():
+                first_company = Company.objects.first()
+                company_id = first_company.id if first_company else None
+        except Exception:
+            pass
+        
         # If it's a mock admin login
         if user_id == 'superadmin-1' or email in ['admin@alpha.com', 'admin@simplyuseful.com']:
             jwt_user = JWTUser(

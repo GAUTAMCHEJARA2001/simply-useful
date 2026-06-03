@@ -66,12 +66,14 @@ def auth_login(request):
 
     # 1. Mock Superadmin Login (exact match to Node backend logic)
     if email in ['admin@alpha.com', 'admin@simplyuseful.com']:
+        first_company = Company.objects.first()
+        company_id = first_company.id if first_company else "cmo75yliq0000wesurjpett1n"
         mock_user = {
             "id": "superadmin-1",
             "email": email,
             "name": "System Admin",
             "role": "SUPERADMIN",
-            "companyId": "cmo75yliq0000wesurjpett1n"
+            "companyId": company_id
         }
         access_token, refresh_token = generate_tokens(
             mock_user["id"], mock_user["email"], mock_user["role"], mock_user["companyId"]
@@ -393,6 +395,26 @@ class ProductViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
         
+        # Generate SKU / productCode if blank or missing
+        product_code = (data.get('productCode') or data.get('productcode') or '').strip()
+        if not product_code:
+            company_id = request.user.companyId
+            company = Company.objects.filter(id=company_id).first() if company_id else None
+            prefix = getattr(company, 'skuprefix', 'PRD') or 'PRD'
+            import random
+            import string
+            attempts = 0
+            while attempts < 100:
+                rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                candidate_code = f"{prefix}-{rand_suffix}"
+                if not Product.objects.filter(productcode=candidate_code).exists():
+                    product_code = candidate_code
+                    break
+                attempts += 1
+            if not product_code:
+                return send_error("Failed to auto-generate a unique product code", 400)
+            data['productCode'] = product_code
+
         # Generate cuid-like ID
         import uuid
         if 'id' not in data or not data['id']:
@@ -848,7 +870,12 @@ def _new_id(prefix='c'):
 
 
 def _company_id(request):
-    return getattr(request.user, 'companyId', None) or Company.objects.first().id
+    val = getattr(request.user, 'companyId', None)
+    if val:
+        from api.models import Company
+        if Company.objects.filter(id=val).exists():
+            return val
+    return Company.objects.first().id
 
 
 FY_START_MONTH = 4
@@ -937,8 +964,8 @@ def bulk_template(request, entity):
     templates = {
         'products': (
             'products_template.csv',
-            ['productCode', 'name', 'bagSize', 'category', 'brand', 'unit', 'rate', 'gst', 'openingStock', 'minimumStock', 'defaultWarehouse'],
-            [['FG-001', 'Sample Product', '50 KG', 'FINISHED GOOD', 'Default Brand', 'BAG', '100', '18', '0', '10', 'Main Warehouse']]
+            ['productCode', 'name', 'bagSize', 'category', 'subcategory', 'brand', 'unit', 'rate', 'gst', 'openingStock', 'minimumStock', 'defaultWarehouse'],
+            [['FG-001', 'Sample Product', '50 KG', 'FINISHED GOOD', 'Tile Adhesive', 'Default Brand', 'BAG', '100', '18', '0', '10', 'Main Warehouse']]
         ),
         'dealers': (
             'dealers_template.csv',
@@ -983,15 +1010,62 @@ def bulk_import(request, entity):
                 code = (row.get('productCode') or row.get('product_code') or '').strip()
                 name = (row.get('name') or row.get('productName') or '').strip()
                 category_name = (row.get('category') or '').strip()
-                if not code or not name or not category_name:
-                    skipped.append({"row": index, "reason": "productCode, name and category are required"})
+                subcategory_name = (row.get('subcategory') or row.get('subCategory') or row.get('sub_category') or '').strip()
+                
+                if not name or (not category_name and not subcategory_name):
+                    skipped.append({"row": index, "reason": "productName/name and category/subcategory are required"})
                     continue
 
-                category, _ = Category.objects.get_or_create(
-                    name=category_name,
-                    companyid_id=company_id,
-                    defaults={'active': True}
-                )
+                if not code:
+                    company = Company.objects.filter(id=company_id).first()
+                    prefix = getattr(company, 'skuprefix', 'PRD') or 'PRD'
+                    import random
+                    import string
+                    attempts = 0
+                    while attempts < 100:
+                        rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                        candidate_code = f"{prefix}-{rand_suffix}"
+                        if not Product.objects.filter(productcode=candidate_code).exists():
+                            code = candidate_code
+                            break
+                        attempts += 1
+                    if not code:
+                        skipped.append({"row": index, "reason": "Failed to auto-generate a unique product code"})
+                        continue
+
+                category_to_assign = None
+                if category_name:
+                    category, created = Category.objects.get_or_create(
+                        name=category_name,
+                        companyid_id=company_id,
+                        defaults={'parentid': None, 'active': True}
+                    )
+                    if not created and category.parentid is not None:
+                        category.parentid = None
+                        category.save()
+                    category_to_assign = category
+                    
+                    if subcategory_name:
+                        subcategory, created_sub = Category.objects.get_or_create(
+                            name=subcategory_name,
+                            companyid_id=company_id,
+                            defaults={'parentid': category, 'active': True}
+                        )
+                        if not created_sub and subcategory.parentid != category:
+                            subcategory.parentid = category
+                            subcategory.save()
+                        category_to_assign = subcategory
+                elif subcategory_name:
+                    category, created = Category.objects.get_or_create(
+                        name=subcategory_name,
+                        companyid_id=company_id,
+                        defaults={'parentid': None, 'active': True}
+                    )
+                    if not created and category.parentid is not None:
+                        category.parentid = None
+                        category.save()
+                    category_to_assign = category
+
                 brand = None
                 brand_name = (row.get('brand') or '').strip()
                 if brand_name:
@@ -1024,11 +1098,11 @@ def bulk_import(request, entity):
                     'bagsize': row.get('bagSize') or row.get('bag_size') or '50 KG',
                     'brandid': brand,
                     'unitid': unit,
-                    'rate': _num(row.get('rate')),
+                    'rate': _num(row.get('rate') or row.get('price')),
                     'gst': _num(row.get('gst'), 18.0),
                     'active': _truthy(row.get('active'), True),
                     'companyid_id': company_id,
-                    'categoryid': category,
+                    'categoryid': category_to_assign,
                     'openingstock': _int(row.get('openingStock') or row.get('opening_stock')),
                     'minimumstock': _int(row.get('minimumStock') or row.get('minimum_stock')),
                     'defaultwarehouseid': default_wh,

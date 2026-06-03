@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
-import { Product } from '@/types';
+import { Product, Category, Brand, Unit } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Search, Plus, Edit, Trash2, Tag, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { apiService } from '@/api/apiService';
 
 // ── Category storage (localStorage, per-session) ──────────────────
 const STORAGE_KEY = 'erp_product_categories';
@@ -39,13 +40,34 @@ const getCategoryName = (category: Product['category']) => {
   return category;
 };
 
-const emptyProduct: Product = { productCode: '', name: '', productName: '', category: '', bagSize: '', rate: 0, gst: 18, openingStock: 0 };
+const emptyProduct: Product = {
+  productCode: '',
+  name: '',
+  productName: '',
+  category: '',
+  categoryId: '',
+  bagSize: '',
+  rate: 0,
+  gst: 18,
+  openingStock: 0,
+  minimumStock: 0,
+  brandId: undefined,
+  unitId: undefined,
+  defaultWarehouseId: null
+};
 
 const ProductManagement: React.FC = () => {
   const { user } = useAuth();
-  const { products, addProduct, updateProduct, deleteProduct } = useData();
+  const { products, addProduct, updateProduct, deleteProduct, warehouses } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
+
+  const [dbCategories, setDbCategories] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [units, setUnitList] = useState<Unit[]>([]);
+
+  const [selectedParentCatId, setSelectedParentCatId] = useState<string>('');
+  const [selectedSubCatId, setSelectedSubCatId] = useState<string>('');
 
   const [categories, setCategories] = useState<string[]>(getCategories);
   const [search, setSearch] = useState('');
@@ -60,6 +82,34 @@ const ProductManagement: React.FC = () => {
 
   const isAdmin = can('manage_products');
 
+  useEffect(() => {
+    const fetchMasters = async () => {
+      try {
+        const [catsRes, brandsRes, unitsRes] = await Promise.all([
+          apiService.inventory.getCategories(),
+          apiService.inventory.getBrands(),
+          apiService.inventory.getUnits()
+        ]);
+        if (catsRes.data?.success) {
+          const fetchedCats = catsRes.data.data || [];
+          setDbCategories(fetchedCats);
+          const catNames = Array.from(new Set(fetchedCats.map((c: any) => c.name))) as string[];
+          if (catNames.length > 0) {
+            setCategories(catNames);
+            saveCategories(catNames);
+          }
+        }
+        if (brandsRes.data?.success) setBrands(brandsRes.data.data || []);
+        if (unitsRes.data?.success) setUnitList(unitsRes.data.data || []);
+      } catch (err) {
+        console.error("Error fetching master lists:", err);
+      }
+    };
+    if (user) {
+      fetchMasters();
+    }
+  }, [user]);
+
   const filtered = products.filter(p => {
     const productName = p.productName || p.name || '';
     const matchSearch = productName.toLowerCase().includes(search.toLowerCase()) || p.productCode.toLowerCase().includes(search.toLowerCase());
@@ -69,29 +119,69 @@ const ProductManagement: React.FC = () => {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ ...emptyProduct, productCode: `PRD${String(Date.now()).slice(-4)}`, category: categories[0] || 'Other' });
+    setForm({
+      ...emptyProduct,
+      productCode: '',
+      category: categories[0] || 'Other'
+    });
+    setSelectedParentCatId('');
+    setSelectedSubCatId('');
     setDialogOpen(true);
   };
   const openEdit = (p: Product) => {
     setEditing(p);
-    // Sanitize numeric fields to prevent NaN in inputs
+    
+    let resolvedParentId = '';
+    let resolvedSubId = '';
+    if (p.categoryId) {
+      const cat = dbCategories.find(c => String(c.id) === String(p.categoryId));
+      if (cat) {
+        if (cat.parentId) {
+          resolvedParentId = String(cat.parentId);
+          resolvedSubId = String(cat.id);
+        } else {
+          resolvedParentId = String(cat.id);
+          resolvedSubId = '';
+        }
+      }
+    } else if (p.categoryRef) {
+      const cat = dbCategories.find(c => String(c.id) === String(p.categoryRef?.id));
+      if (cat) {
+        if (cat.parentId) {
+          resolvedParentId = String(cat.parentId);
+          resolvedSubId = String(cat.id);
+        } else {
+          resolvedParentId = String(cat.id);
+          resolvedSubId = '';
+        }
+      }
+    }
+
+    setSelectedParentCatId(resolvedParentId);
+    setSelectedSubCatId(resolvedSubId);
+
     setForm({
       ...p,
       rate: isNaN(Number(p.rate)) ? 0 : Number(p.rate),
       gst: isNaN(Number(p.gst)) ? 18 : Number(p.gst),
       openingStock: isNaN(Number(p.openingStock)) ? 0 : Number(p.openingStock),
-      // Resolve category to string name for the Select component
+      minimumStock: isNaN(Number(p.minimumStock)) ? 0 : Number(p.minimumStock),
       category: getCategoryName(p.category),
+      brandId: p.brandId ? Number(p.brandId) : undefined,
+      unitId: p.unitId ? Number(p.unitId) : undefined,
+      defaultWarehouseId: p.defaultWarehouseId ? Number(p.defaultWarehouseId) : null,
     });
     setDialogOpen(true);
   };
 
   const handleSave = () => {
-    if (!form.productName || !form.bagSize || !form.rate || !form.category) {
-      toast({ title: 'Missing Fields', variant: 'destructive' }); return;
+    if (!form.productName || !form.bagSize || !form.rate || !selectedParentCatId) {
+      toast({ title: 'Missing Fields', variant: 'destructive', description: 'Product Name, Bag Size, Price, and Category are required.' });
+      return;
     }
-    // Build a clean payload: strip read-only object fields so the backend serializer
-    // doesn't receive nested objects where it expects plain IDs.
+
+    const finalCategoryId = selectedSubCatId || selectedParentCatId;
+
     const { brand, unit, categoryRef, ...cleanForm } = form as any;
     const payload = {
       ...cleanForm,
@@ -100,6 +190,11 @@ const ProductManagement: React.FC = () => {
       rate: Number(form.rate) || 0,
       gst: Number(form.gst) || 18,
       openingStock: Number(form.openingStock) || 0,
+      minimumStock: Number(form.minimumStock) || 0,
+      categoryId: finalCategoryId ? Number(finalCategoryId) : null,
+      brandId: form.brandId ? Number(form.brandId) : null,
+      unitId: form.unitId ? Number(form.unitId) : null,
+      defaultWarehouseId: form.defaultWarehouseId ? Number(form.defaultWarehouseId) : null,
     };
     if (editing) { updateProduct(editing.productCode, payload); toast({ title: 'Product Updated', description: form.productName }); }
     else { addProduct(payload); toast({ title: 'Product Added', description: form.productName }); }
@@ -272,7 +367,7 @@ const ProductManagement: React.FC = () => {
 
       {/* ── Add/Edit Product Dialog ─────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg" aria-describedby="product-form-desc">
+        <DialogContent className="max-w-xl" aria-describedby="product-form-desc">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit' : 'Add'} Product</DialogTitle>
             <DialogDescription id="product-form-desc" className="sr-only">
@@ -281,21 +376,124 @@ const ProductManagement: React.FC = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Code</Label><Input value={form.productCode} onChange={e => uf('productCode', e.target.value)} disabled={!!editing} /></div>
-              <div className="space-y-2"><Label>Name *</Label><Input value={form.productName} onChange={e => uf('productName', e.target.value)} /></div>
+              <div className="space-y-2">
+                <Label htmlFor="product-sku">Code (SKU)</Label>
+                <Input id="product-sku" name="productCode" value={form.productCode} onChange={e => uf('productCode', e.target.value)} disabled={!!editing} placeholder="Auto-generated if empty" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-name">Name *</Label>
+                <Input id="product-name" name="productName" value={form.productName} onChange={e => uf('productName', e.target.value)} placeholder="Product Name" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Category *</Label>
-              <Select value={getCategoryName(form.category)} onValueChange={v => uf('category', v)}>
-                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                <SelectContent>{categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
-              </Select>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="product-category">Category *</Label>
+                <Select 
+                  value={selectedParentCatId} 
+                  onValueChange={v => {
+                    setSelectedParentCatId(v);
+                    setSelectedSubCatId('');
+                  }}
+                >
+                  <SelectTrigger id="product-category" name="category"><SelectValue placeholder="Select Category" /></SelectTrigger>
+                  <SelectContent>
+                    {dbCategories.filter(c => !c.parentId).map(cat => (
+                      <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-subcategory">Subcategory</Label>
+                <Select 
+                  value={selectedSubCatId || 'none_selected'} 
+                  onValueChange={v => setSelectedSubCatId(v === 'none_selected' ? '' : v)}
+                  disabled={!selectedParentCatId}
+                >
+                  <SelectTrigger id="product-subcategory" name="subcategory"><SelectValue placeholder={selectedParentCatId ? "Select Subcategory" : "Choose Category first"} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none_selected">-- None --</SelectItem>
+                    {dbCategories.filter(c => String(c.parentId) === String(selectedParentCatId)).map(cat => (
+                      <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="grid grid-cols-4 gap-3">
-              <div className="space-y-2"><Label>Bag Size *</Label><Input value={form.bagSize} onChange={e => uf('bagSize', e.target.value)} placeholder="20 KG" /></div>
-              <div className="space-y-2"><Label>Opening Stock</Label><Input type="number" value={(form.openingStock ?? 0).toString()} onChange={e => uf('openingStock', Number(e.target.value) || 0)} /></div>
-              <div className="space-y-2"><Label>Rate (₹) *</Label><Input type="number" value={(form.rate ?? '').toString()} onChange={e => uf('rate', Number(e.target.value) || 0)} /></div>
-              <div className="space-y-2"><Label>GST %</Label><Input type="number" value={(form.gst ?? 18).toString()} onChange={e => uf('gst', Number(e.target.value) || 0)} /></div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="product-brand">Brand</Label>
+                <Select 
+                  value={form.brandId ? String(form.brandId) : 'none_selected'} 
+                  onValueChange={v => uf('brandId', v === 'none_selected' ? null : Number(v))}
+                >
+                  <SelectTrigger id="product-brand" name="brandId"><SelectValue placeholder="Select Brand" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none_selected">-- None --</SelectItem>
+                    {brands.map(b => (
+                      <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-unit">Unit</Label>
+                <Select 
+                  value={form.unitId ? String(form.unitId) : 'none_selected'} 
+                  onValueChange={v => uf('unitId', v === 'none_selected' ? null : Number(v))}
+                >
+                  <SelectTrigger id="product-unit" name="unitId"><SelectValue placeholder="Select Unit" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none_selected">-- None --</SelectItem>
+                    {units.map(u => (
+                      <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="product-bag-size">Bag Size *</Label>
+                <Input id="product-bag-size" name="bagSize" value={form.bagSize} onChange={e => uf('bagSize', e.target.value)} placeholder="50 KG" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-rate">Rate (Price ₹) *</Label>
+                <Input id="product-rate" name="rate" type="number" value={(form.rate ?? '').toString()} onChange={e => uf('rate', Number(e.target.value) || 0)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-gst">GST %</Label>
+                <Input id="product-gst" name="gst" type="number" value={(form.gst ?? 18).toString()} onChange={e => uf('gst', Number(e.target.value) || 0)} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="product-opening-stock">Opening Stock</Label>
+                <Input id="product-opening-stock" name="openingStock" type="number" value={(form.openingStock ?? 0).toString()} onChange={e => uf('openingStock', Number(e.target.value) || 0)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-minimum-stock">Minimum Stock</Label>
+                <Input id="product-minimum-stock" name="minimumStock" type="number" value={(form.minimumStock ?? 0).toString()} onChange={e => uf('minimumStock', Number(e.target.value) || 0)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-warehouse">Default Warehouse</Label>
+                <Select 
+                  value={form.defaultWarehouseId ? String(form.defaultWarehouseId) : 'none_selected'} 
+                  onValueChange={v => uf('defaultWarehouseId', v === 'none_selected' ? null : Number(v))}
+                >
+                  <SelectTrigger id="product-warehouse" name="defaultWarehouseId"><SelectValue placeholder="Select Warehouse" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none_selected">-- None --</SelectItem>
+                    {warehouses.map(w => (
+                      <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter className="gap-2">
