@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { getRoleDashboard } from "@/contexts/AuthContext";
+import { Analytics } from "@vercel/analytics/react";
 import React from "react";
 
 import Login from "./features/auth/Login";
@@ -129,6 +130,7 @@ const App = () => {
               </DataProvider>
             </AuthProvider>
           </BrowserRouter>
+          <Analytics />
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>
