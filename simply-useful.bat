@@ -6,8 +6,6 @@ setlocal enabledelayedexpansion
 :: =================================================================
 :: v2.0 Updates:
 :: - Added [8] OPEN APP  shortcut to launch both UI and API in browser
-:: - Added [9] DB BACKUP  to snapshot the SQLite database with timestamp
-:: - Added [10] RESET MIGRATIONS  (wipe + re-migrate for clean dev slate)
 :: - AUDIT now runs 5 steps: Django check, migrations, TypeScript, Vite build,
 ::   + new dependency drift check (pip + npm outdated)
 :: - HEALTH CHECK now verifies both Backend (port 4000) and Frontend (port 8080)
@@ -35,16 +33,12 @@ echo   [5]  AUDIT       System audit (TypeScript, build, migrations, deps)
 echo   [6]  SWAGGER     Open browsable REST API explorer
 echo   [7]  OPEN APP    Launch frontend + API docs in browser
 echo.
-echo   DATABASE
-echo   [8]  DB BACKUP   Snapshot SQLite database with timestamp
-echo   [9]  DB RESET    Wipe ^& re-apply all migrations (dev only)
-echo.
-echo   [10] EXIT
+echo   [8]  EXIT
 echo.
 echo   Project: "%BASE_DIR%"
 echo  ###############################################################
 echo.
-set /p choice="  Select an option [1-10]: "
+set /p choice="  Select an option [1-8]: "
 
 if "%choice%"=="1"  goto START
 if "%choice%"=="2"  goto STOP
@@ -53,9 +47,7 @@ if "%choice%"=="4"  goto TEST
 if "%choice%"=="5"  goto AUDIT
 if "%choice%"=="6"  goto SWAGGER
 if "%choice%"=="7"  goto OPENAPP
-if "%choice%"=="8"  goto DBBACKUP
-if "%choice%"=="9"  goto DBRESET
-if "%choice%"=="10" exit
+if "%choice%"=="8" exit
 goto MENU
 
 :: =================================================================
@@ -105,12 +97,14 @@ if not exist "%BASE_DIR%backend\venv" (
     if !errorlevel! neq 0 (echo  [ERROR] pip install failed. & pause & goto MENU)
 
     echo  Applying initial migrations...
-    venv\Scripts\python manage.py migrate --run-syncdb
+    venv\Scripts\python manage.py migrate --database=default
+    venv\Scripts\python manage.py migrate --database=wh_navsari
+    venv\Scripts\python manage.py migrate --database=wh_nashik
     echo  [OK] Virtual environment ready.
     cd /d "%BASE_DIR%"
 )
 
-start "Simply Useful - Backend" cmd /k "cd /d "%BASE_DIR%backend" && venv\Scripts\python manage.py migrate && echo. && echo  [BACKEND] http://localhost:4000 && echo  [API]     http://localhost:4000/api/v1/ && echo. && venv\Scripts\python manage.py runserver 0.0.0.0:4000"
+start "Simply Useful - Backend" cmd /k "cd /d "%BASE_DIR%backend" && venv\Scripts\python manage.py migrate --database=default && venv\Scripts\python manage.py migrate --database=wh_navsari && venv\Scripts\python manage.py migrate --database=wh_nashik && echo. && echo  [BACKEND] http://localhost:4000 && echo  [API]     http://localhost:4000/api/v1/ && echo. && venv\Scripts\python manage.py runserver 0.0.0.0:4000"
 
 :: --- FRONTEND ---
 echo.
@@ -284,10 +278,12 @@ echo.
 echo  [2/5] Database Migration Status...
 if exist "%BASE_DIR%backend" (
     cd /d "%BASE_DIR%backend"
-    venv\Scripts\python manage.py migrate --check >nul 2>&1
+    venv\Scripts\python manage.py migrate --check --database=default >nul 2>&1
     if !errorlevel! neq 0 (
         echo  [!] Pending migrations detected. Applying now...
-        venv\Scripts\python manage.py migrate
+        venv\Scripts\python manage.py migrate --database=default
+        venv\Scripts\python manage.py migrate --database=wh_navsari
+        venv\Scripts\python manage.py migrate --database=wh_nashik
     ) else (
         echo  [OK] Database schema is fully up to date.
     )
@@ -355,84 +351,3 @@ echo.
 pause
 goto MENU
 
-:: =================================================================
-:DBBACKUP
-:: =================================================================
-echo.
-echo  [DB BACKUP] Snapshotting SQLite database...
-
-if not exist "%BASE_DIR%backend\db.sqlite3" (
-    echo  [ERROR] db.sqlite3 not found at "%BASE_DIR%backend\db.sqlite3"
-    pause & goto MENU
-)
-
-:: Create backups folder if not exists
-if not exist "%BASE_DIR%backups" mkdir "%BASE_DIR%backups"
-
-:: Timestamp: YYYYMMDD_HHMMSS
-for /f "tokens=1-3 delims=/- " %%a in ("%date%") do (
-    set "YY=%%a" & set "MM=%%b" & set "DD=%%c"
-)
-for /f "tokens=1-3 delims=:." %%a in ("%time: =0%") do (
-    set "HH=%%a" & set "MI=%%b" & set "SS=%%c"
-)
-set "STAMP=%YY%%MM%%DD%_%HH%%MI%%SS%"
-set "BACKUP_FILE=%BASE_DIR%backups\db_backup_%STAMP%.sqlite3"
-
-copy "%BASE_DIR%backend\db.sqlite3" "%BACKUP_FILE%" >nul
-if !errorlevel! neq 0 (
-    echo  [ERROR] Backup failed.
-) else (
-    echo  [OK] Backup saved to:
-    echo       %BACKUP_FILE%
-)
-echo.
-pause
-goto MENU
-
-:: =================================================================
-:DBRESET
-:: =================================================================
-echo.
-echo  ###############################################################
-echo   DB RESET  -  WARNING: Destructive Operation
-echo  ###############################################################
-echo.
-echo  This will DELETE the current database and re-apply all migrations.
-echo  All data will be lost. Use only in development.
-echo.
-set /p confirm="  Type YES to confirm: "
-if /i not "%confirm%"=="YES" (
-    echo  [CANCELLED] No changes made.
-    pause & goto MENU
-)
-
-:: Backup first automatically
-echo.
-echo  Creating automatic pre-reset backup...
-if not exist "%BASE_DIR%backups" mkdir "%BASE_DIR%backups"
-for /f "tokens=1-3 delims=/- " %%a in ("%date%") do (
-    set "YY=%%a" & set "MM=%%b" & set "DD=%%c"
-)
-for /f "tokens=1-3 delims=:." %%a in ("%time: =0%") do (
-    set "HH=%%a" & set "MI=%%b" & set "SS=%%c"
-)
-set "STAMP=%YY%%MM%%DD%_%HH%%MI%%SS%"
-if exist "%BASE_DIR%backend\db.sqlite3" (
-    copy "%BASE_DIR%backend\db.sqlite3" "%BASE_DIR%backups\db_pre_reset_%STAMP%.sqlite3" >nul
-    echo  [OK] Pre-reset backup saved to backups\db_pre_reset_%STAMP%.sqlite3
-    del "%BASE_DIR%backend\db.sqlite3"
-)
-
-echo.
-echo  Re-applying all migrations...
-cd /d "%BASE_DIR%backend"
-venv\Scripts\python manage.py migrate --run-syncdb
-if !errorlevel! neq 0 (
-    echo  [ERROR] Migration failed! Restore from backup if needed.
-) else (
-    echo  [OK] Fresh database ready.
-)
-cd /d "%BASE_DIR%"
-pause
-goto MENU

@@ -3,12 +3,15 @@ import { inventoryService } from '@/api/services/inventory.service';
 import { Product } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { QUERY_KEYS } from '@/constants/queryKeys';
+import { useWarehouse } from '@/contexts/WarehouseContext';
 
-export const useProducts = (params?: { search?: string }) => {
+export const useProducts = (params?: { search?: string, warehouseId?: string }) => {
+  const { activeWarehouseId } = useWarehouse();
+  const targetWhId = params?.warehouseId || activeWarehouseId;
   return useQuery({
-    queryKey: [...QUERY_KEYS.products, params],
+    queryKey: [...QUERY_KEYS.products, targetWhId, params?.search],
     queryFn: async () => {
-      const res = await inventoryService.getProductsMaster();
+      const res = await inventoryService.getProductsMaster(targetWhId || undefined);
       const data = res.data?.data || res.data || [];
       
       // Basic client-side search if needed, though usually handled by API

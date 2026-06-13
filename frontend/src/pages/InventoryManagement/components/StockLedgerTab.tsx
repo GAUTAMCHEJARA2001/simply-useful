@@ -74,10 +74,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
   useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
-    if (isInventoryOnly && warehouses.length > 0) {
-      if (!whFilter) setWhFilter(warehouses[0].name);
-      if (!popWh) setPopWh(warehouses[0].id.toString());
-    }
+    // Let inventory users view all assigned warehouses by default instead of forcing the first one
   }, [isInventoryOnly, warehouses, whFilter, popWh]);
 
   const fetchLedger = useCallback(async (prodId: string) => {
@@ -106,7 +103,9 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
   }, [selectedProduct, popDateFrom, popDateTo, popWh, fetchLedger]);
 
   const filteredStock = stock.filter(s => {
-    const matchesSearch = s.productName.toLowerCase().includes(search.toLowerCase()) || s.sku.toLowerCase().includes(search.toLowerCase());
+    const productName = s.productName || '';
+    const sku = s.sku || '';
+    const matchesSearch = productName.toLowerCase().includes(search.toLowerCase()) || sku.toLowerCase().includes(search.toLowerCase());
     const matchesCat = !catFilter || s.categoryName === catFilter;
     const matchesWh = !whFilter || s.warehouseName === whFilter;
     return matchesSearch && matchesCat && matchesWh;
@@ -136,7 +135,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
           {[...new Set(stock.map(s => s.categoryName).filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <select value={whFilter} onChange={e => setWhFilter(e.target.value)} className="border border-border rounded-lg px-3 py-2 bg-background text-sm">
-          {!isInventoryOnly && <option value="">All Warehouses</option>}
+          <option value="">All Warehouses</option>
           {[...new Set(stock.map(s => s.warehouseName).filter(Boolean))].map(w => <option key={w} value={w}>{w}</option>)}
         </select>
       </div>
@@ -185,7 +184,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
               <span className="text-muted-foreground">to</span>
               <input type="date" value={popDateTo} onChange={e => setPopDateTo(e.target.value)} className="border border-border rounded-lg px-2 py-1 bg-background text-xs" />
               <select value={popWh} onChange={e => setPopWh(e.target.value)} className="border border-border rounded-lg px-2 py-1 bg-background text-xs">
-                {!isInventoryOnly && <option value="">All Warehouses</option>}
+                <option value="">All Warehouses</option>
                 {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
               <Button size="sm" variant="outline" onClick={() => { setPopDateFrom(''); setPopDateTo(''); setPopWh(''); }}><X className="w-3 h-3 mr-1" /> Clear</Button>

@@ -7,7 +7,7 @@ const getApiUrl = () => {
 
 const config = {
   apiUrl: getApiUrl(),
-  appName: import.meta.env.VITE_APP_NAME || 'Simply Useful',
+  appName: import.meta.env.VITE_APP_NAME || 'KAMLA OTS',
   isDev: import.meta.env.DEV,
 };
 

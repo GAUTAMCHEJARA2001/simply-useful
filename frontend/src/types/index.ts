@@ -8,6 +8,7 @@ export interface User {
   active: boolean;
   password?: string;
   territory?: string;
+  authorizedWarehouses?: { id: string; name: string }[];
 }
 
 export interface LoginInput {
@@ -44,6 +45,11 @@ export interface Dealer {
   assigned_so_email?: string;
   distributor_name?: string;
   credit_limit?: number;
+  phone?: string;
+  email?: string;
+  address?: string;
+  gst?: string;
+  contactPerson?: string;
 }
 
 export interface Distributor {
@@ -58,6 +64,11 @@ export interface Distributor {
   distributor_name?: string;
   assigned_so_email?: string;
   credit_limit?: number;
+  phone?: string;
+  email?: string;
+  address?: string;
+  gst?: string;
+  contactPerson?: string;
 }
 
 export interface Product {
@@ -119,6 +130,7 @@ export interface Order {
   totalAmount: number;
   grandTotal: number;
   dispatchDate?: string;
+  assignedWarehouse?: string | number | null;
   returnDate?: string;
   cancelledDate?: string;
   order_id?: string;
@@ -144,6 +156,12 @@ export interface Visit {
   so_email?: string;
   dealer_name?: string;
   next_followup?: string;
+  leadId?: string;
+  visitStatus?: string;
+  hrRemark?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  visit_status?: string;
 }
 
 export interface Expense {

@@ -25,6 +25,11 @@ def get_field_db_type(field):
 
 
 def sync():
+    db_url = os.environ.get('DATABASE_URL')
+    if db_url and (db_url.startswith('postgres://') or db_url.startswith('postgresql://')):
+        print("PostgreSQL detected. Skipping SQLite schema sync.")
+        return
+
     db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'db.sqlite3')
     print(f"Target SQLite database path: {db_path}")
     conn = sqlite3.connect(db_path)

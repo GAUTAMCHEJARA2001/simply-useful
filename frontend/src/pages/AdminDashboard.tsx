@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -15,19 +15,58 @@ import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { reportService } from '@/api/services/report.service';
 import { useQuery } from '@tanstack/react-query';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700',
   Approved: 'bg-blue-100 text-blue-700',
   Dispatched: 'bg-purple-100 text-purple-700',
   Completed: 'bg-green-100 text-green-700',
+  Returned: 'bg-orange-100 text-orange-700',
   Cancelled: 'bg-red-100 text-red-700',
 };
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { orders, dealers, users, updateOrderStatus } = useData();
+  const { orders, dealers, users, warehouses, updateOrderStatus, updateOrderItems } = useData();
   const { toast } = useToast();
+
+  const salesOfficers = useMemo(() => {
+    return (users || []).filter(u => (u.role === 'SALES' || u.role === 'SALES_OFFICER') && u.active);
+  }, [users]);
+
+  const handleAssignWarehouse = async (orderId: string, warehouseId: string) => {
+    try {
+      const wh = warehouses.find(w => String(w.id) === warehouseId);
+      await updateOrderItems(orderId, { assignedWarehouse: Number(warehouseId) });
+      toast({
+        title: 'Warehouse Assigned',
+        description: `Order ${orderId} allocated to warehouse "${wh?.name || warehouseId}".`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Allocation Failed',
+        description: err.message || 'An error occurred.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleReassignSO = async (orderId: string, soEmail: string) => {
+    try {
+      await updateOrderItems(orderId, { soEmail });
+      toast({
+        title: 'Sales Officer Reassigned',
+        description: `Order ${orderId} is now assigned to ${soEmail}.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Reassignment Failed',
+        description: err.message || 'An error occurred.',
+        variant: 'destructive',
+      });
+    }
+  };
   const { can } = usePermissions();
   const { filterBySelectedFY, fyLabel, selectedFY } = useFinancialYear();
   const [confirmOrder, setConfirmOrder] = useState<{ order: Order; action: 'Approved' | 'Cancelled'; reason?: string; action_date?: string } | null>(null);
@@ -52,6 +91,7 @@ const AdminDashboard: React.FC = () => {
     Approved: fyOrders.filter(o => o.status === 'Approved').length,
     Dispatched: fyOrders.filter(o => o.status === 'Dispatched').length,
     Completed: fyOrders.filter(o => o.status === 'Completed').length,
+    Returned: fyOrders.filter(o => o.status === 'Returned').length,
     Cancelled: fyOrders.filter(o => o.status === 'Cancelled').length,
   };
   const pendingOrders = fyOrders.filter(o => o.status === 'Pending');
@@ -72,6 +112,7 @@ const AdminDashboard: React.FC = () => {
     { label: 'Approved', count: pipeline.Approved, color: '#3b82f6', icon: CheckCircle },
     { label: 'Dispatched', count: pipeline.Dispatched, color: '#a855f7', icon: Truck },
     { label: 'Completed', count: pipeline.Completed, color: '#22c55e', icon: CheckCircle },
+    { label: 'Returned', count: pipeline.Returned, color: '#f97316', icon: Truck },
     { label: 'Cancelled', count: pipeline.Cancelled, color: '#f87171', icon: XCircle },
   ];
 
@@ -134,7 +175,7 @@ const AdminDashboard: React.FC = () => {
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">📦 Order Flow</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-5 gap-3 mb-4">
+          <div className="grid grid-cols-6 gap-3 mb-4">
             {pipelineItems.map((item, i) => (
               <motion.div key={item.label} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.08 }}
                 className="flex flex-col items-center text-center">
@@ -194,7 +235,41 @@ const AdminDashboard: React.FC = () => {
                       <span className="font-semibold text-sm">{orderId}</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusStyles[displayStatus]}`}>{displayStatus}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{partyName} · SO: {soEmail}</p>
+                    <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span>{partyName}</span>
+                      <span>·</span>
+                      <div className="inline-flex items-center gap-1.5">
+                        <span className="font-semibold text-foreground/80 text-[11px]">SO:</span>
+                        {(() => {
+                          const activeSO = [...salesOfficers];
+                          if (soEmail && !activeSO.some(u => u.email.toLowerCase() === soEmail.toLowerCase())) {
+                            const match = (users || []).find(u => u.email.toLowerCase() === soEmail.toLowerCase());
+                            if (match) {
+                              activeSO.push(match);
+                            } else {
+                              activeSO.push({ id: soEmail, email: soEmail, name: soEmail, role: 'SALES', active: false } as any);
+                            }
+                          }
+                          return (
+                            <Select 
+                              value={soEmail || ''} 
+                              onValueChange={(val) => handleReassignSO(orderId, val)}
+                            >
+                              <SelectTrigger className="h-7 py-0 px-2 text-[11px] min-w-[140px] bg-background border border-border/85 rounded-md">
+                                <SelectValue placeholder="Select SO" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {activeSO.map(so => (
+                                  <SelectItem key={so.id} value={so.email} className="text-xs">
+                                    {so.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          );
+                        })()}
+                      </div>
+                    </div>
                     <p className="text-xs text-muted-foreground">{o.items.map(i => `${i.productName || (typeof i.product === 'object' && i.product ? (i.product as any).name || (i.product as any).productName : i.product)} ×${i.qty}`).join(' | ')}</p>
                     {o.narration && (
                       <p className="text-[11px] text-yellow-700 bg-yellow-500/10 px-1.5 py-0.5 rounded mt-1 w-fit border border-yellow-500/20">
@@ -202,6 +277,29 @@ const AdminDashboard: React.FC = () => {
                       </p>
                     )}
                     <p className="text-xs font-semibold text-primary mt-1">₹{grandTotal.toLocaleString()}</p>
+                    {/* Allocate Warehouse */}
+                    <div className="inline-flex items-center gap-1.5 mt-1.5">
+                      <span className="font-semibold text-foreground/80 text-[11px]">🏭 Warehouse:</span>
+                      {warehouses.length > 0 ? (
+                        <Select
+                          value={String((o as any).assignedWarehouse || '')}
+                          onValueChange={(val) => handleAssignWarehouse(orderId, val)}
+                        >
+                          <SelectTrigger className="h-7 py-0 px-2 text-[11px] min-w-[140px] bg-background border border-border/85 rounded-md">
+                            <SelectValue placeholder="Assign Warehouse" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {warehouses.map(wh => (
+                              <SelectItem key={wh.id} value={String(wh.id)} className="text-xs">
+                                {wh.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground italic">No warehouses</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <Button

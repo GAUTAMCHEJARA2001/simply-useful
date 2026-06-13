@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { WarehouseProvider } from "@/contexts/WarehouseContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { getRoleDashboard } from "@/contexts/AuthContext";
 import React from "react";
@@ -42,8 +43,9 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      refetchOnWindowFocus: false,
-      staleTime: 1000 * 60, // 1 minute
+      refetchOnWindowFocus: true, // Fetch fresh data when user returns to the tab
+      refetchInterval: 1000 * 10, // Automatically poll backend every 10 seconds for safe real-time sync without triggering 429 rate limits
+      staleTime: 1000 * 5, // Consider data stale after 5 seconds to force fresh fetches
       gcTime: 1000 * 60 * 5, // 5 minutes
     },
   },
@@ -74,7 +76,68 @@ const HomeRedirect: React.FC = () => {
 };
 
 const App = () => {
-  console.log('💎 Simply Useful ERP Booting...');
+  console.log('💎 KAMLA OTS Booting...');
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        const target = e.target as HTMLElement;
+        if (!target) return;
+
+        const tagName = target.tagName.toLowerCase();
+        const inputType = tagName === 'input' ? (target as HTMLInputElement).type : '';
+
+        // Only intercept text-like inputs and native selects
+        // Explicitly exclude: buttons (Cancel/Save/Submit), checkboxes, radios
+        const isTextInput = tagName === 'input' && !['button', 'submit', 'image', 'reset', 'checkbox', 'radio'].includes(inputType);
+        const isSelect = tagName === 'select';
+        const isTextArea = tagName === 'textarea';
+
+        // Also handle Radix UI closed combobox triggers (shadcn Select)
+        const isClosedCombobox = tagName === 'button' && target.getAttribute('role') === 'combobox' && target.getAttribute('aria-expanded') !== 'true';
+
+        if (isTextInput || isSelect || isClosedCombobox) {
+          const container = (
+            target.closest('form') ||
+            target.closest('[role="dialog"]') ||
+            target.closest('.form-container') ||
+            document.body
+          ) as HTMLElement;
+
+          // Only navigate to other text inputs, textareas, and closed combobox triggers — NEVER to buttons
+          const selector = [
+            'input:not([disabled]):not([type="hidden"]):not([readonly]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"])',
+            'select:not([disabled])',
+            'textarea:not([disabled])',
+            'button[role="combobox"]:not([disabled])',
+          ].join(', ');
+
+          const focusable = Array.from(container.querySelectorAll<HTMLElement>(selector));
+
+          const visibleFocusable = focusable.filter(el => {
+            const style = window.getComputedStyle(el);
+            return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetWidth > 0 && el.offsetHeight > 0;
+          });
+
+          const index = visibleFocusable.indexOf(target);
+          if (index > -1 && index < visibleFocusable.length - 1) {
+            e.preventDefault();
+            visibleFocusable[index + 1].focus();
+          }
+          // If we're on the last input and press Enter, let the form submit naturally
+        }
+
+        // If Enter is pressed on a real Cancel/Close button, let it click (default behavior)
+        // No interception needed — browser handles it correctly
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
@@ -83,9 +146,10 @@ const App = () => {
           <Sonner />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <AuthProvider>
-              <DataProvider>
-                <Routes>
-                  <Route path="/login" element={<Login />} />
+              <WarehouseProvider>
+                <DataProvider>
+                  <Routes>
+                    <Route path="/login" element={<Login />} />
                   <Route path="/signup" element={<Signup />} />
                   <Route path="/" element={<HomeRedirect />} />
 
@@ -124,9 +188,9 @@ const App = () => {
                   {/* Reports */}
                   <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
 
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </DataProvider>
+                  </Routes>
+                </DataProvider>
+              </WarehouseProvider>
             </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>

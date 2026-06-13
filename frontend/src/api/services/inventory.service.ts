@@ -9,6 +9,7 @@ export const inventoryService = {
   getAll: () => api.get(API_ENDPOINTS.PRODUCTS),
   getById: (id: string | number) => api.get(`${API_ENDPOINTS.PRODUCTS}/${id}`),
   create: (data: any) => api.post(API_ENDPOINTS.PRODUCTS, data),
+  suggestSKU: (data: any) => api.post(`${API_ENDPOINTS.PRODUCTS}/suggest-sku`, data),
   update: (id: string | number, data: any) => api.put(`${API_ENDPOINTS.PRODUCTS}/${id}`, data),
   remove: (id: string | number) => api.delete(`${API_ENDPOINTS.PRODUCTS}/${id}`),
 
@@ -29,7 +30,8 @@ export const inventoryService = {
   getUnits: () => api.get(API_ENDPOINTS.MASTERS.UNITS),
   getMarkets: () => api.get(API_ENDPOINTS.MASTERS.MARKETS),
   getRegions: () => api.get(API_ENDPOINTS.MASTERS.REGIONS),
-  getProductsMaster: () => api.get(API_ENDPOINTS.MASTERS.PRODUCTS),
+  getProductsMaster: (customWhId?: string) => 
+    api.get(API_ENDPOINTS.MASTERS.PRODUCTS, customWhId ? { headers: { 'X-Warehouse-ID': customWhId } } : undefined),
 
   // Reports & Dashboard
   getDashboardKPIs: () => api.get(API_ENDPOINTS.REPORTS.DASHBOARD),

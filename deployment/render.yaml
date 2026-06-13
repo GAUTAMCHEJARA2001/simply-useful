@@ -1,8 +1,14 @@
+databases:
+  - name: simply-useful-db
+    plan: free
+    databaseName: simply_useful
+    databaseUser: simply_user
+
 services:
   - type: web
     name: simply-useful-backend
     env: python
-    buildCommand: "cd backend && pip install -r requirements.txt && python manage.py migrate && python sync_schema.py && python manage.py collectstatic --noinput && python seed_kamla.py"
+    buildCommand: "cd backend && pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput && python seed_kamla.py"
     startCommand: "cd backend && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
     envVars:
       - key: SECRET_KEY
@@ -13,3 +19,7 @@ services:
         value: "*"
       - key: JWT_SECRET
         value: "simply-useful-secret-key-123-super-secure-key-2026"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: simply-useful-db
+          property: connectionString

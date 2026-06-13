@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 
 /**
  * VITE STABLE CONFIGURATION (BATTLE-TESTED)
@@ -18,7 +17,6 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mode === "development" && componentTagger(),
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -30,4 +28,17 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: {
     include: ["buffer"],
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["react", "react-dom", "react-router-dom"],
+          ui: ["@radix-ui/react-dialog", "@radix-ui/react-slot", "@radix-ui/react-tooltip", "@radix-ui/react-dropdown-menu", "lucide-react", "framer-motion"],
+          query: ["@tanstack/react-query"],
+          charts: ["recharts"]
+        }
+      }
+    }
+  }
 }));

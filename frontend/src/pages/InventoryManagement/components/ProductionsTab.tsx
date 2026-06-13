@@ -55,7 +55,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
         const [pRes, wRes, rRes] = await Promise.all([
           apiClient<any[]>('/inv/masters/products').catch(() => null),
           apiClient<any[]>('/inv/masters/warehouses').catch(() => null),
-          apiClient<any[]>('/inv/bom').catch(() => null)
+          apiClient<any[]>('/bom').catch(() => null)
         ]);
         const pList = pRes && pRes.data ? pRes.data : (Array.isArray(pRes) ? pRes : []);
         const wList = wRes && wRes.data ? wRes.data : (Array.isArray(wRes) ? wRes : []);

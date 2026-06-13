@@ -95,7 +95,7 @@ export function ReportsTable<T extends { id: string | number }>({
               <>
                 {rows.map((row, idx) => (
                   <TableRow
-                    key={String(row.id ?? idx)}
+                    key={`${String(row.id ?? 'row')}-${idx}`}
                     className={cn(
                       "border-b border-border/50 transition-colors hover:bg-muted/20",
                       idx % 2 === 1 && "bg-muted/5" // Clean traditional Zebra Rows!

@@ -1,19 +1,20 @@
-import React, { useState, useCallback } from 'react';
+﻿import React, { useState, useCallback } from 'react';
 import { useData } from '@/contexts/DataContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Expense } from '@/types';
+import { Expense, Visit } from '@/types';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { 
   Users, Target, TrendingUp, IndianRupee, MapPin, Receipt, 
-  Download, Search, ZoomIn, ZoomOut, RotateCw, RefreshCw, X, Award, FileText
+  Download, Search, ZoomIn, ZoomOut, RotateCw, RefreshCw, X, Award, FileText, CheckCircle2, AlertTriangle, Clock, Image
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -26,7 +27,7 @@ type Tab = 'overview' | 'performance' | 'visits' | 'expenses';
 type DateRange = 'ALL' | '7D' | '30D' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_FY';
 
 const HRDashboard: React.FC = () => {
-  const { orders, dealers, users, visits, expenses, updateUserTarget, updateExpenseStatus } = useData();
+  const { orders, dealers, users, visits, expenses, updateUserTarget, updateExpenseStatus, updateVisitStatus } = useData();
   const { can } = usePermissions();
   const { fyBounds, fyLabel } = useFinancialYear();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -44,6 +45,13 @@ const HRDashboard: React.FC = () => {
   // Rejection Reason Modal States
   const [rejectingExpense, setRejectingExpense] = useState<{ id: string; currentSo: string; amount: number } | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
+
+  // Visit Verification States
+  const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
+  const [flaggingVisit, setFlaggingVisit] = useState<{ id: string; soEmail: string; dealer: string } | null>(null);
+  const [flagReason, setFlagReason] = useState<string>('');
+  const [visitZoom, setVisitZoom] = useState(1);
+  const [visitRotate, setVisitRotate] = useState(0);
 
   // Lightbox Media States
   const [zoom, setZoom] = useState(1);
@@ -594,7 +602,7 @@ const HRDashboard: React.FC = () => {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/40">
-                        {['Log Date', 'Officer Email', 'Dealer Name', 'Visit Remarks & Details', 'Target Follow-up Date'].map(h => (
+                        {['Log Date', 'Officer Email', 'Dealer Name', 'Visit Remarks & Details', 'Target Follow-up Date', 'HR Status', 'Proof', 'Actions'].map(h => (
                           <th key={h} className="text-left px-4 py-3.5 text-muted-foreground font-bold text-xs uppercase tracking-wider">{h}</th>
                         ))}
                       </tr>
@@ -615,9 +623,80 @@ const HRDashboard: React.FC = () => {
                               <span className="text-xs text-muted-foreground/60">—</span>
                             )}
                           </td>
+                          {/* HR Verification Status Badge */}
+                          <td className="px-4 py-3">
+                            {(() => {
+                              const vs = (v.visitStatus ?? v.visit_status ?? 'PENDING').toUpperCase();
+                              if (vs === 'VERIFIED') return (
+                                <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-green-500/10 text-green-600 border border-green-500/20">
+                                  <CheckCircle2 className="w-3 h-3" /> Verified
+                                </span>
+                              );
+                              if (vs === 'FLAGGED') return (
+                                <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-500/10 text-red-600 border border-red-500/20" title={v.hrRemark ?? v.hr_remark ?? ''}>
+                                  <AlertTriangle className="w-3 h-3" /> Flagged
+                                </span>
+                              );
+                              return (
+                                <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-yellow-500/10 text-yellow-600 border border-yellow-500/20 animate-pulse">
+                                  <Clock className="w-3 h-3" /> Pending
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          {/* Photo proof */}
+                          <td className="px-4 py-3">
+                            {v.photo ? (
+                              <button
+                                onClick={() => { setSelectedVisit(v); setVisitZoom(1); setVisitRotate(0); }}
+                                className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
+                              >
+                                <Image className="w-3.5 h-3.5" /> View Photo
+                              </button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/60">—</span>
+                            )}
+                          </td>
+                          {/* Verify / Flag action buttons */}
+                          <td className="px-4 py-3" onClick={(ev) => ev.stopPropagation()}>
+                            {(() => {
+                              const vs = (v.visitStatus ?? v.visit_status ?? 'PENDING').toUpperCase();
+                              if (vs === 'VERIFIED' || vs === 'FLAGGED') {
+                                return (
+                                  <button
+                                    onClick={async () => { if (v.id) await updateVisitStatus(v.id, 'PENDING'); }}
+                                    className="px-2 py-1 rounded bg-secondary text-foreground font-bold text-xs hover:bg-secondary/80 border border-border shadow-sm"
+                                    title="Reset to Pending"
+                                  >
+                                    Reset
+                                  </button>
+                                );
+                              }
+                              return (
+                                <div className="flex gap-1.5">
+                                  <button
+                                    onClick={async () => { if (v.id) await updateVisitStatus(v.id, 'VERIFIED'); }}
+                                    className="px-2 py-1 rounded bg-green-600 text-white font-bold text-xs hover:bg-green-700 shadow-sm hover:scale-[1.02] transition-transform active:scale-[0.98]"
+                                  >
+                                    Verify
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (!v.id) return;
+                                      setFlaggingVisit({ id: v.id, soEmail: v.so_email ?? v.soEmail ?? '', dealer: v.dealer_name ?? v.dealerName ?? '' });
+                                      setFlagReason('');
+                                    }}
+                                    className="px-2 py-1 rounded bg-red-600 text-white font-bold text-xs hover:bg-red-700 shadow-sm hover:scale-[1.02] transition-transform active:scale-[0.98]"
+                                  >
+                                    Flag
+                                  </button>
+                                </div>
+                              );
+                            })()}
+                          </td>
                         </tr>
                       ))}
-                      {filteredVisits.length === 0 && <tr><td colSpan={5} className="px-4 py-12 text-center text-muted-foreground font-medium">No visit logs matched current filters</td></tr>}
+                      {filteredVisits.length === 0 && <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground font-medium">No visit logs matched current filters</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -989,7 +1068,7 @@ const HRDashboard: React.FC = () => {
                    }}
                  >
                    Approve Claim
-                 </Button>
+                  </Button>
                  <Button 
                    variant="destructive" 
                    className="w-full font-bold h-10 shadow-sm" 
@@ -1002,6 +1081,166 @@ const HRDashboard: React.FC = () => {
                  </Button>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ── Flag Visit Dialog ───────────────────────────────── */}
+      <Dialog open={!!flaggingVisit} onOpenChange={(open) => { if (!open) setFlaggingVisit(null); }}>
+        <DialogContent className="max-w-md bg-card border-border shadow-lg rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5 text-destructive" /> Flag Visit Record
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Flag the visit to <span className="font-bold text-foreground">{flaggingVisit?.dealer}</span> by{' '}
+              <span className="font-bold text-foreground">{flaggingVisit?.soEmail}</span> as suspicious or unverified.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Flag Reason</Label>
+              <Textarea
+                placeholder="Explain why this visit is being flagged (minimum 5 characters)..."
+                value={flagReason}
+                onChange={(e) => setFlagReason(e.target.value)}
+                className="w-full min-h-[100px] bg-background/50 text-sm p-3 rounded-lg border border-border"
+              />
+              <span className="text-[10px] text-muted-foreground text-right font-semibold">{flagReason.length} characters</span>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <Button variant="ghost" onClick={() => setFlaggingVisit(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={flagReason.trim().length < 5}
+              onClick={async () => {
+                if (flaggingVisit && flagReason.trim().length >= 5) {
+                  await updateVisitStatus(flaggingVisit.id, 'FLAGGED', flagReason.trim());
+                  setFlaggingVisit(null);
+                  setFlagReason('');
+                }
+              }}
+            >
+              Flag Visit
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Visit Photo Lightbox Dialog ─────────────────────── */}
+      {selectedVisit && (
+        <Dialog open={!!selectedVisit} onOpenChange={(open) => { if (!open) setSelectedVisit(null); }}>
+          <DialogContent className="max-w-2xl bg-card border-border shadow-lg rounded-xl" aria-describedby="visit-proof-desc">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-primary" /> Verified Visit Proof
+              </DialogTitle>
+              <DialogDescription id="visit-proof-desc" className="text-xs text-muted-foreground">
+                GPS-sealed visit proof for <span className="font-bold text-foreground">{selectedVisit.dealer_name ?? selectedVisit.dealerName}</span>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3 text-sm p-3 rounded-lg bg-secondary/40 border border-border/40">
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-muted-foreground">Sales Officer</span>
+                  <p className="font-semibold text-foreground text-xs truncate mt-0.5">{selectedVisit.so_email ?? selectedVisit.soEmail}</p>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-muted-foreground">Visit Date</span>
+                  <p className="font-semibold text-foreground mt-0.5 text-xs">{selectedVisit.date}</p>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-muted-foreground">Dealer / Contact</span>
+                  <p className="font-bold text-foreground text-xs mt-0.5">{selectedVisit.dealer_name ?? selectedVisit.dealerName}</p>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-muted-foreground">GPS Location</span>
+                  <p className="font-semibold text-foreground mt-0.5 text-xs">{(selectedVisit as any).gpsLocation ?? (selectedVisit as any).gpslocation ?? '—'}</p>
+                </div>
+              </div>
+
+              <div className="text-sm flex items-center gap-4">
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-muted-foreground block mb-0.5">HR Verification Status</span>
+                  {(() => {
+                    const vs = (selectedVisit.visitStatus ?? selectedVisit.visit_status ?? 'PENDING').toUpperCase();
+                    if (vs === 'VERIFIED') return <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 bg-green-500/10 text-green-600 border-green-500/20"><CheckCircle2 className="w-3 h-3" /> Verified</span>;
+                    if (vs === 'FLAGGED') return <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 bg-red-500/10 text-red-600 border-red-500/20"><AlertTriangle className="w-3 h-3" /> Flagged</span>;
+                    return <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20"><Clock className="w-3 h-3" /> Pending Verification</span>;
+                  })()}
+                </div>
+              </div>
+
+              {selectedVisit.remarks && (
+                <div className="text-xs p-2.5 rounded-lg border bg-background/50">
+                  <span className="text-[9px] uppercase font-bold text-muted-foreground block mb-0.5">Visit Notes</span>
+                  <p className="text-foreground">{selectedVisit.remarks}</p>
+                </div>
+              )}
+
+              {(selectedVisit.hrRemark ?? selectedVisit.hr_remark) && (
+                <div className="text-xs bg-red-500/5 p-2.5 rounded-lg border border-red-500/20">
+                  <span className="text-[10px] font-bold text-red-600 block mb-0.5">HR Flag Reason</span>
+                  <p className="text-red-600 font-medium">{selectedVisit.hrRemark ?? selectedVisit.hr_remark}</p>
+                </div>
+              )}
+
+              {selectedVisit.photo && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">GPS-Sealed Visit Photo</span>
+                    <div className="flex gap-1.5">
+                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 border-border" onClick={() => setVisitZoom(z => Math.max(0.5, z - 0.25))} title="Zoom Out"><ZoomOut className="w-3 h-3"/></Button>
+                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 text-[9px] border-border font-bold" onClick={() => setVisitZoom(1)} title="Reset">1x</Button>
+                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 border-border" onClick={() => setVisitZoom(z => Math.min(3, z + 0.25))} title="Zoom In"><ZoomIn className="w-3 h-3"/></Button>
+                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 border-border" onClick={() => setVisitRotate(r => r + 90)} title="Rotate"><RotateCw className="w-3 h-3"/></Button>
+                    </div>
+                  </div>
+                  <div className="border border-border rounded-lg overflow-hidden w-full aspect-video relative bg-black/10 flex items-center justify-center p-1">
+                    <img
+                      src={selectedVisit.photo}
+                      alt="Visit Proof"
+                      className="max-h-full max-w-full object-contain transition-transform duration-200"
+                      style={{ transform: `scale(${visitZoom}) rotate(${visitRotate}deg)` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Inline verify/flag from within the lightbox */}
+            {(() => {
+              const vs = (selectedVisit.visitStatus ?? selectedVisit.visit_status ?? 'PENDING').toUpperCase();
+              if (vs !== 'VERIFIED' && vs !== 'FLAGGED') return (
+                <div className="flex gap-2 border-t border-border pt-4 mt-2">
+                  <Button
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold h-10 shadow-sm"
+                    onClick={async () => {
+                      if (selectedVisit.id) {
+                        await updateVisitStatus(selectedVisit.id, 'VERIFIED');
+                        setSelectedVisit(prev => prev ? { ...prev, visitStatus: 'VERIFIED', visit_status: 'VERIFIED' } : null);
+                      }
+                    }}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Verify Visit
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="w-full font-bold h-10 shadow-sm"
+                    onClick={() => {
+                      if (!selectedVisit.id) return;
+                      setFlaggingVisit({ id: selectedVisit.id, soEmail: selectedVisit.so_email ?? selectedVisit.soEmail ?? '', dealer: selectedVisit.dealer_name ?? selectedVisit.dealerName ?? '' });
+                      setFlagReason('');
+                      setSelectedVisit(null);
+                    }}
+                  >
+                    <AlertTriangle className="w-4 h-4 mr-2" /> Flag Visit
+                  </Button>
+                </div>
+              );
+              return null;
+            })()}
           </DialogContent>
         </Dialog>
       )}

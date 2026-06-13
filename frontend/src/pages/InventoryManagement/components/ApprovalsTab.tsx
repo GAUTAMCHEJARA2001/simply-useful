@@ -6,6 +6,7 @@ import { useWarehouses } from '@/hooks/inventory/useMasters';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
 import { Send, Truck } from 'lucide-react';
+import { useProducts } from '@/hooks/inventory/useProducts';
 
 const extractDispatchDetails = (narration: string) => {
   if (!narration) return null;
@@ -44,6 +45,7 @@ export const ApprovalsTab: React.FC = () => {
   const { data: approvals = [], isLoading, error, refetch } = useApprovals();
   const { approve, reject, dispatchOrder, isDispatching } = useApprovalMutations();
   const { data: warehouses = [] } = useWarehouses();
+  const { data: products = [] } = useProducts();
   const [selected, setSelected] = useState<any>(null);
   const [dispatchTarget, setDispatchTarget] = useState<any>(null);
   const [dispatchForm, setDispatchForm] = useState<any>({
@@ -239,8 +241,10 @@ export const ApprovalsTab: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-border">
                           {orderItems.map((item: any, idx: number) => {
-                            const displayName = item.productName || item.product_name || 
-                              (typeof item.product === 'object' && item.product ? item.product.name || item.product.productName : item.product);
+                            const prodId = typeof item.product === 'object' ? item.product?.id : (item.productId || item.product);
+                            const prod = products.find((p: any) => p.id === prodId || p.productName === prodId || p.name === prodId);
+                            const fallbackName = typeof item.product === 'object' && item.product ? (item.product.name || item.product.productName) : (item.productName || item.product_name || item.product);
+                            const displayName = prod?.name || prod?.productName || fallbackName;
                             return (
                               <tr key={idx} className="bg-card">
                                 <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{displayName || 'Unknown Product'}</td>
@@ -349,14 +353,6 @@ export const ApprovalsTab: React.FC = () => {
               <label className="text-[11px] font-semibold block mb-1">Invoice Number</label>
               <input value={dispatchForm.invoiceNumber} onChange={e => setDispatchForm({ ...dispatchForm, invoiceNumber: e.target.value })}
                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm" />
-            </div>
-            <div>
-              <label className="text-[11px] font-semibold block mb-1">Warehouse</label>
-              <select value={dispatchForm.warehouseId} onChange={e => setDispatchForm({ ...dispatchForm, warehouseId: e.target.value })}
-                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm">
-                <option value="">Select Warehouse</option>
-                {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
             </div>
             <div>
               <label className="text-[11px] font-semibold block mb-1">Vehicle Number</label>

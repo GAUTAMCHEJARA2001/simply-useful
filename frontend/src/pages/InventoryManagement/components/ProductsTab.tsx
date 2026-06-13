@@ -10,9 +10,11 @@ import { useProducts, useProductMutations } from '@/hooks/inventory/useProducts'
 import { useBrands } from '@/hooks/inventory/useBrands';
 import { useCategories } from '@/hooks/inventory/useCategories';
 import { useWarehouses, useUnits, useSettings } from '@/hooks/inventory/useMasters';
+import { useWarehouse } from '@/contexts/WarehouseContext';
 import { Product } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { inventoryService } from '@/api/services/inventory.service';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
@@ -28,6 +30,7 @@ export const ProductsTab: React.FC = () => {
   const { data: warehouses = [] } = useWarehouses();
   const { data: units = [] } = useUnits();
   const { data: settings } = useSettings();
+  const { activeWarehouseId, activeWarehouseName } = useWarehouse();
 
   // Mutations
   const { saveProduct, deleteProduct } = useProductMutations();
@@ -61,21 +64,33 @@ export const ProductsTab: React.FC = () => {
 
   useEffect(() => {
     if (modal && !form.id) {
-      if (form.defaultWarehouseId) {
-        const selectedWh = warehouses.find(w => String(w.id) === String(form.defaultWarehouseId));
-        const whSuffix = selectedWh ? selectedWh.name.toUpperCase() : '';
-        const initials = settings?.companyName 
-          ? settings.companyName.split(' ').filter(Boolean).map((w: string) => w[0]?.toUpperCase()).join('').substring(0, 4) 
-          : 'KCPL';
-        const nextNum = products.length + 1;
-        const skuSuffix = whSuffix ? `-${whSuffix}` : '';
-        const sku = `${initials}-${nextNum.toString().padStart(4, '0')}${skuSuffix}`;
-        setForm(f => ({ ...f, sku, productCode: sku }));
-      } else {
+      if (!activeWarehouseId) {
         setForm(f => ({ ...f, sku: '', productCode: '' }));
+        return;
       }
+      
+      const timer = setTimeout(async () => {
+        if (form.name && form.categoryId && form.brandId) {
+          try {
+            const res = await inventoryService.suggestSKU({
+              name: form.name,
+              categoryId: form.categoryId,
+              brandId: form.brandId
+            });
+            if (res.data?.success && res.data?.data?.sku) {
+              setForm(f => ({ ...f, sku: res.data.data.sku, productCode: res.data.data.sku, defaultWarehouseId: activeWarehouseId }));
+            }
+          } catch (e) {
+             console.error("Failed to suggest SKU", e);
+          }
+        } else {
+           // If they clear the name, reset the sku so it doesn't stay stale
+           setForm(f => ({ ...f, sku: '', productCode: '', defaultWarehouseId: activeWarehouseId }));
+        }
+      }, 500);
+      return () => clearTimeout(timer);
     }
-  }, [modal, form.id, form.defaultWarehouseId, settings, products.length, warehouses]);
+  }, [modal, form.id, form.name, form.categoryId, form.brandId, activeWarehouseId]);
 
   useEffect(() => {
     if (modal) {
@@ -98,8 +113,12 @@ export const ProductsTab: React.FC = () => {
   }, [modal, form.unit, form.brand, form.unitId, form.brandId]);
 
   const handleSave = async () => {
-    if (!form.id && !form.defaultWarehouseId) {
-      toast({ title: 'Warehouse required', description: 'Please select a default warehouse to generate the SKU and create the product.', variant: 'destructive' });
+    if (!form.id && (!activeWarehouseId || activeWarehouseId === 'GLOBAL')) {
+      toast({ title: 'Warehouse required', description: 'Please select a specific warehouse (not Global) to create a product.', variant: 'destructive' });
+      return;
+    }
+    if (!form.categoryId) {
+      toast({ title: 'Category required', description: 'Please select a category for the product.', variant: 'destructive' });
       return;
     }
     // Strip read-only nested fields before sending to API — the backend
@@ -114,9 +133,14 @@ export const ProductsTab: React.FC = () => {
       // Resolve brandId from nested object if not already set
       brandId: cleanForm.brandId ? Number(cleanForm.brandId) : undefined,
     };
-    await saveProduct(payload);
-    setModal(false); 
-    setForm({});
+    try {
+      await saveProduct(payload);
+      setModal(false);
+      setForm({});
+    } catch (error) {
+      // Error is already handled by useProductMutations and displayed via toast
+      console.warn("Product save failed, keeping modal open for correction.");
+    }
   };
 
   const confirmDelete = async () => {
@@ -221,6 +245,7 @@ export const ProductsTab: React.FC = () => {
                   onChange={e => setForm({ ...form, [field.key]: field.type === 'number' ? (e.target.value === '' ? 0 : Number(e.target.value) || 0) : e.target.value })}
                   onWheel={field.type === 'number' ? e => e.currentTarget.blur() : undefined}
                   readOnly={field.readOnly}
+                  placeholder={field.key === 'productCode' ? 'Auto-assigned by system on save' : ''}
                   className={`w-full border border-border rounded-lg px-3 py-2 bg-background text-sm ${field.readOnly ? 'bg-muted cursor-not-allowed font-mono' : ''}`} 
                 />
               </div>
@@ -232,15 +257,6 @@ export const ProductsTab: React.FC = () => {
                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm">
                 <option value="">-- Select Unit --</option>
                 {(units || []).map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium block mb-1">Warehouse</label>
-              <select value={form.defaultWarehouseId || ''} onChange={e => setForm({ ...form, defaultWarehouseId: e.target.value })}
-                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm">
-                <option value="">-- None --</option>
-                {(warehouses || []).map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </div>
 

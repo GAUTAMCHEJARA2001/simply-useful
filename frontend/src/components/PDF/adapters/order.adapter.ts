@@ -12,6 +12,7 @@ export const adaptOrderToPrintable = (
     address: string;
     gst?: string;
     contact: string;
+    phone?: string;
     logo?: string | null;
   },
   documentType: 'TAX INVOICE' | 'QUOTATION' | 'PURCHASE ORDER' | 'DELIVERY CHALLAN'
@@ -24,35 +25,50 @@ export const adaptOrderToPrintable = (
     name: companyInfo.name || 'KAMLA INDUSTRIES',
     address: companyInfo.address || 'Phase-1, Industrial Area, Rajasthan, India',
     contact: companyInfo.contact || '',
+    phone: companyInfo.phone || '',
     gst: companyInfo.gst || '08ABCDE1234F1Z5',
-    pan: companyInfo.gst ? companyInfo.gst.substring(2, 12) : 'ABCDE1234F',
+    pan: companyInfo.gst && companyInfo.gst.length >= 12 ? companyInfo.gst.substring(2, 12) : 'ABCDE1234F',
     cin: 'L45201RJ2001PLC012345',
-    bankName: 'State Bank of India',
-    bankAccount: '31234567890',
-    bankIfsc: 'SBIN0001234',
+    bankName: companyInfo.bankName || 'State Bank of India',
+    bankAccount: companyInfo.bankAccount || '31234567890',
+    bankIfsc: companyInfo.bankIfsc || 'SBIN0001234',
+    bankBranch: companyInfo.bankBranch || 'Main Branch',
     logoUrl: companyInfo.logo || null,
     state: companyState,
     stateCode: companyStateCode
   };
 
   // 2. Map Customer/Party details
-  const partyName = rawOrder.party_name || rawOrder.partyName || 'Walk-in Customer';
-  const partyAddress = rawOrder.address || 'N/A';
-  const partyContact = rawOrder.contact || '';
-  const partyGst = rawOrder.gst || '';
+  const partyDetails = rawOrder.partyDetails || rawOrder.party || {};
+  const partyName = rawOrder.party_name || rawOrder.partyName || partyDetails.name || 'Walk-in Customer';
+  const partyAddress = rawOrder.address || partyDetails.address || 'N/A';
+  const partyContact = rawOrder.contact || partyDetails.phone || partyDetails.contact || '';
+  const partyGst = rawOrder.gst || partyDetails.gst || '';
+  const partyEmail = rawOrder.soEmail || partyDetails.email || 'customer@example.com';
   const partyState = 'Gujarat';
   const partyStateCode = partyGst ? partyGst.substring(0, 2) : '24'; // Standard state code for Gujarat
+
+  const isPO = documentType === 'PURCHASE ORDER';
 
   const customer: PrintableCustomer = {
     name: partyName,
     billingAddress: partyAddress,
-    shippingAddress: partyAddress, // Default to billing address if not provided
+    shippingAddress: isPO ? company.address : partyAddress,
     gst: partyGst || undefined,
     pan: partyGst && partyGst.length >= 12 ? partyGst.substring(2, 12) : undefined,
     mobile: partyContact,
-    email: rawOrder.email || 'customer@example.com',
+    email: partyEmail,
     state: partyState,
-    stateCode: partyStateCode
+    stateCode: partyStateCode,
+    
+    // For Purchase Orders, we ship to our own company
+    ...(isPO ? {
+      shippingName: company.name,
+      shippingMobile: company.phone || company.contact,
+      shippingGst: company.gst,
+      shippingState: company.state,
+      shippingStateCode: company.stateCode
+    } : {})
   };
 
   // Helper: safely extract a human-readable product name string from an order item DTO
@@ -129,11 +145,17 @@ export const adaptOrderToPrintable = (
   });
 
   // 5. Default terms & conditions
-  const terms = [
-    '1. Goods once sold will not be taken back.',
-    '2. All disputes are subject to local jurisdiction only.',
-    '3. Interest @18% p.a. will be charged if payment is delayed beyond terms.'
-  ];
+  const terms = documentType === 'PURCHASE ORDER'
+    ? [
+        '1. All materials must match the approved specifications and quantity.',
+        '2. Delivery must be made on or before the expected delivery date.',
+        '3. Payment will be processed after verification and quality check of received goods.'
+      ]
+    : [
+        '1. Goods once sold will not be taken back.',
+        '2. All disputes are subject to local jurisdiction only.',
+        '3. Interest @18% p.a. will be charged if payment is delayed beyond terms.'
+      ];
 
   return {
     documentType,

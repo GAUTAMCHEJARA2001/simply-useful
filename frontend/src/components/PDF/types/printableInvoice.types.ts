@@ -2,6 +2,7 @@ export interface PrintableCompany {
   name: string;
   address: string;
   contact: string;
+  phone?: string;
   gst?: string;
   pan?: string;
   cin?: string;
@@ -10,6 +11,7 @@ export interface PrintableCompany {
   bankName?: string;
   bankAccount?: string;
   bankIfsc?: string;
+  bankBranch?: string;
   logoUrl?: string | null;
   state: string;
   stateCode: string;
@@ -25,6 +27,13 @@ export interface PrintableCustomer {
   email: string;
   state: string;
   stateCode: string;
+  
+  // Optional Shipping overrides
+  shippingName?: string;
+  shippingMobile?: string;
+  shippingGst?: string;
+  shippingState?: string;
+  shippingStateCode?: string;
 }
 
 export interface PrintableInvoiceItem {

@@ -141,8 +141,8 @@ const UserManagement: React.FC = () => {
   };
 
   const filtered = users.filter(u =>
-    u.name.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase()) ||
+    (u.name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (u.email || '').toLowerCase().includes(search.toLowerCase()) ||
     (u.territory || '').toLowerCase().includes(search.toLowerCase())
   );
 
@@ -165,11 +165,11 @@ const UserManagement: React.FC = () => {
   const openEdit = async (u: AppUserRecord) => {
     setEditing(u);
     setForm({ 
-      email: u.email, 
+      email: u.email || '', 
       password: '', 
-      name: u.name, 
-      role: u.role, 
-      active: u.active,
+      name: u.name || '', 
+      role: u.role || 'SALES', 
+      active: u.active ?? true,
       inventoryAccess: false,
       warehouses: [],
       territory: u.territory || ''
@@ -479,11 +479,11 @@ const UserManagement: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-4">
-            <div className="space-y-2"><Label>Name *</Label><Input value={form.name} onChange={e => uf('name', e.target.value)} required /></div>
+            <div className="space-y-2"><Label>Name *</Label><Input value={form.name || ''} onChange={e => uf('name', e.target.value)} required /></div>
             {!editing && (
               <>
-                <div className="space-y-2"><Label>Email *</Label><Input type="email" value={form.email} onChange={e => uf('email', e.target.value)} required /></div>
-                <div className="space-y-2"><Label>Password *</Label><Input type="password" value={form.password} onChange={e => uf('password', e.target.value)} minLength={6} required /></div>
+                <div className="space-y-2"><Label>Email *</Label><Input type="email" value={form.email || ''} onChange={e => uf('email', e.target.value)} required /></div>
+                <div className="space-y-2"><Label>Password *</Label><Input type="password" value={form.password || ''} onChange={e => uf('password', e.target.value)} minLength={6} required /></div>
               </>
             )}
             <div className="grid grid-cols-2 gap-4">
@@ -518,7 +518,10 @@ const UserManagement: React.FC = () => {
 
             {form.inventoryAccess && (
               <div className="space-y-1.5 border-t pt-3 border-border animate-in fade-in duration-200">
-                <Label className="text-xs font-bold text-primary">Assign Warehouse(s)</Label>
+                <div className="flex flex-col">
+                  <Label className="text-xs font-bold text-primary">Assign Warehouse(s)</Label>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Select the warehouses this user should have access to. Unchecked warehouses are hidden from their view.</p>
+                </div>
                 <div className="grid grid-cols-2 gap-2 p-3 border border-border rounded-xl bg-card max-h-32 overflow-y-auto shadow-inner">
                   {allWarehouses.map(w => (
                     <label key={w.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1 rounded transition-colors">
