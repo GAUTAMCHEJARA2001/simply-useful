@@ -110,36 +110,19 @@ if DATABASE_URL:
         }
     }
 else:
-    # Local PostgreSQL Implementation
-    db_user = os.environ.get('DATABASE_USER', 'postgres')
-    db_password = os.environ.get('DATABASE_PASSWORD', 'admin')
-    db_host = os.environ.get('DATABASE_HOST', 'localhost')
-    db_port = os.environ.get('DATABASE_PORT', '5432')
-
+    # Fallback to SQLite (Allows Render to build successfully without a Postgres DB)
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'db_master',
-            'USER': db_user,
-            'PASSWORD': db_password,
-            'HOST': db_host,
-            'PORT': db_port,
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
         },
         'wh_navsari': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'wh_navsari',
-            'USER': db_user,
-            'PASSWORD': db_password,
-            'HOST': db_host,
-            'PORT': db_port,
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'wh_navsari.sqlite3',
         },
         'wh_nashik': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'wh_nashik',
-            'USER': db_user,
-            'PASSWORD': db_password,
-            'HOST': db_host,
-            'PORT': db_port,
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'wh_nashik.sqlite3',
         }
     }
 
