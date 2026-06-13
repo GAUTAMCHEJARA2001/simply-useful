@@ -85,40 +85,63 @@ WSGI_APPLICATION = 'config.wsgi.application'
 import os
 from pathlib import Path
 
-# Provide dynamic DB connection via DATABASES
-db_user = os.environ.get('DATABASE_USER', 'postgres')
-db_password = os.environ.get('DATABASE_PASSWORD', 'admin')
-db_host = os.environ.get('DATABASE_HOST', 'localhost')
-db_port = os.environ.get('DATABASE_PORT', '5432')
+from urllib.parse import urlparse
 
-# 100% PostgreSQL Implementation
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'db_master',
-        'USER': db_user,
-        'PASSWORD': db_password,
-        'HOST': db_host,
-        'PORT': db_port,
-    },
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
-    'wh_navsari': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'wh_navsari',
-        'USER': db_user,
-        'PASSWORD': db_password,
-        'HOST': db_host,
-        'PORT': db_port,
-    },
-    'wh_nashik': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'wh_nashik',
-        'USER': db_user,
-        'PASSWORD': db_password,
-        'HOST': db_host,
-        'PORT': db_port,
+if DATABASE_URL:
+    url = urlparse(DATABASE_URL)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': url.path[1:],
+            'USER': url.username,
+            'PASSWORD': url.password,
+            'HOST': url.hostname,
+            'PORT': url.port or 5432,
+        },
+        'wh_navsari': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'wh_navsari.sqlite3',
+        },
+        'wh_nashik': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'wh_nashik.sqlite3',
+        }
     }
-}
+else:
+    # Local PostgreSQL Implementation
+    db_user = os.environ.get('DATABASE_USER', 'postgres')
+    db_password = os.environ.get('DATABASE_PASSWORD', 'admin')
+    db_host = os.environ.get('DATABASE_HOST', 'localhost')
+    db_port = os.environ.get('DATABASE_PORT', '5432')
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'db_master',
+            'USER': db_user,
+            'PASSWORD': db_password,
+            'HOST': db_host,
+            'PORT': db_port,
+        },
+        'wh_navsari': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'wh_navsari',
+            'USER': db_user,
+            'PASSWORD': db_password,
+            'HOST': db_host,
+            'PORT': db_port,
+        },
+        'wh_nashik': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'wh_nashik',
+            'USER': db_user,
+            'PASSWORD': db_password,
+            'HOST': db_host,
+            'PORT': db_port,
+        }
+    }
 
 DATABASE_ROUTERS = ['api.db_router.TenantDatabaseRouter']
 
