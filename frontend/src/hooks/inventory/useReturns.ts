@@ -21,9 +21,10 @@ export const useReturnMutations = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['returns'] });
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['purchases'] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      toast({ title: 'Returned', description: 'Returned stock added back to inventory' });
+      toast({ title: 'Returned', description: 'Return processed and inventory updated' });
     },
     onError: (error: any) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });

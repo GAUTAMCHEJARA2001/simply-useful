@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { useAuth } from '@/contexts/AuthContext';
 import { Dealer, Distributor, Product, Order, Visit, Expense, OrderStatus, Warehouse } from '@/types';
 import { apiService } from '@/api/apiService';
+import { useQueryClient } from '@tanstack/react-query';
 
 /**
  * DATA CONTEXT (ELITE)
@@ -46,6 +47,7 @@ interface DataContextType {
   updateOrderItems: (id: string, updatedOrder: any) => Promise<void>;
   visits: Visit[];
   addVisit: (v: Visit) => Promise<void>;
+  updateVisitStatus: (id: string, visitStatus: string, hrRemark?: string) => Promise<void>;
   expenses: Expense[];
   addExpense: (e: Expense) => Promise<void>;
   updateExpenseStatus: (id: string, status: string, rejectReason?: string) => Promise<void>;
@@ -106,6 +108,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [permissions, setPermissions] = useState<RolePermission[]>(defaultPermissions);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
   const [error, setError] = useState<string | null>(null);
 
@@ -118,6 +121,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     grandTotal: o.grandTotal || o.grand_total || 0,
     status: o.status || 'Pending',
     date: o.date || o.createdAt,
+    assignedWarehouse: o.assignedWarehouse || o.assigned_warehouse || null,
     items: (o.items || []).map((i: any) => ({
       ...i,
       productName: i.productName || i.product_name,
@@ -133,6 +137,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dealer_name: v.dealerName || v.dealer_name,
     nextFollowup: v.nextFollowup || v.next_followup,
     next_followup: v.nextFollowup || v.next_followup,
+    visitStatus: v.visitStatus || v.visit_status || 'PENDING',
+    visit_status: v.visitStatus || v.visit_status || 'PENDING',
+    hrRemark: v.hrRemark || v.hr_remark || null,
+    hr_remark: v.hrRemark || v.hr_remark || null,
+    verifiedBy: v.verifiedBy || v.verified_by || null,
+    verified_by: v.verifiedBy || v.verified_by || null,
+    verifiedAt: v.verifiedAt || v.verified_at || null,
+    verified_at: v.verifiedAt || v.verified_at || null,
   });
 
   const normalizeExpense = (e: any): Expense => ({
@@ -208,6 +220,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (user) {
       refreshAll();
+      // Auto-refresh every 30 seconds so new orders appear in approval queue
+      const interval = setInterval(refreshAll, 30_000);
+      return () => clearInterval(interval);
     } else {
       setLoading(false);
     }
@@ -290,30 +305,55 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await apiService.orders.create(o);
     if (res.data.success) {
       setOrders(prev => [...prev, o]);
+      queryClient.invalidateQueries({ queryKey: ['approvals'] });
       refreshAll();
     }
-  }, [refreshAll]);
+  }, [refreshAll, queryClient]);
 
   const updateOrderStatus = useCallback(async (id: string, status: OrderStatus, reason?: string, actionDate?: string) => {
     const res = await apiService.orders.updateStatus(id, { status, reason, actionDate });
     if (res.data.success) {
       setOrders(prev => prev.map(o => o.orderId === id ? { ...o, status, ...(reason ? { narration: reason } : {}), ...(actionDate ? { dispatchDate: actionDate } : {}) } : o));
+      queryClient.invalidateQueries({ queryKey: ['approvals'] });
       refreshAll();
     }
-  }, [refreshAll]);
+  }, [refreshAll, queryClient]);
 
   const updateOrderItems = useCallback(async (id: string, updatedOrder: any) => {
     const res = await apiService.orders.updateItems(id, updatedOrder);
     if (res.data.success) {
       setOrders(prev => prev.map(o => o.orderId === id ? { ...o, ...updatedOrder } : o));
+      queryClient.invalidateQueries({ queryKey: ['approvals'] });
       refreshAll();
     }
-  }, [refreshAll]);
+  }, [refreshAll, queryClient]);
 
   const addVisit = useCallback(async (v: Visit) => {
     const res = await apiService.visits.add(v);
     if (res.data.success) {
-      setVisits(prev => [...prev, v]);
+      setVisits(prev => [...prev, normalizeVisit(res.data.data || v)]);
+      refreshAll();
+    }
+  }, [refreshAll]);
+
+  const updateVisitStatus = useCallback(async (id: string, visitStatus: string, hrRemark?: string) => {
+    const res = await apiService.visits.updateStatus(id, visitStatus, hrRemark);
+    if (res.data.success) {
+      setVisits(prev => prev.map(v =>
+        v.id === id
+          ? {
+              ...v,
+              visitStatus,
+              visit_status: visitStatus,
+              hrRemark: hrRemark ?? v.hrRemark,
+              hr_remark: hrRemark ?? v.hr_remark,
+              verifiedBy: res.data.data?.verifiedBy ?? v.verifiedBy,
+              verified_by: res.data.data?.verifiedBy ?? v.verified_by,
+              verifiedAt: res.data.data?.verifiedAt ?? v.verifiedAt,
+              verified_at: res.data.data?.verifiedAt ?? v.verified_at,
+            }
+          : v
+      ));
       refreshAll();
     }
   }, [refreshAll]);
@@ -404,7 +444,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       distributors, addDistributor, updateDistributor, deleteDistributor,
       products, addProduct, updateProduct, deleteProduct,
       orders, addOrder, updateOrderStatus, updateOrderItems,
-      visits, addVisit,
+      visits, addVisit, updateVisitStatus,
       expenses, addExpense, updateExpenseStatus, updateExpense,
       users, addUser, updateUser, deleteUser, updateUserPassword, updateUserTarget,
       settings, updateSetting,

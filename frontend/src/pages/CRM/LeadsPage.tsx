@@ -50,6 +50,7 @@ const LeadsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
 
   // Dialog and details states
   const [addOpen, setAddOpen] = useState(false);
@@ -224,8 +225,9 @@ const LeadsPage: React.FC = () => {
 
     const matchesPriority = priorityFilter === 'all' || l.priority === priorityFilter;
     const matchesStatus = statusFilter === 'all' || l.status === statusFilter;
+    const matchesAssignee = assigneeFilter === 'all' || (assigneeFilter === 'none' ? !l.assignedTo : l.assignedTo === assigneeFilter);
 
-    return matchesSearch && matchesPriority && matchesStatus;
+    return matchesSearch && matchesPriority && matchesStatus && matchesAssignee;
   });
 
   return (
@@ -310,6 +312,23 @@ const LeadsPage: React.FC = () => {
                     <SelectItem value="NEGOTIATION">Negotiation</SelectItem>
                     <SelectItem value="WON">Won</SelectItem>
                     <SelectItem value="LOST">Lost</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+
+              {(user?.role === 'ADMIN' || user?.role === 'SUPERADMIN' || user?.role === 'MANAGER') && (
+                <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+                  <SelectTrigger className="w-[150px] bg-background">
+                    <SelectValue placeholder="Assigned Exec" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Execs</SelectItem>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {salesUsers.map(u => (
+                      <SelectItem key={u.email} value={u.email}>
+                        {u.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}

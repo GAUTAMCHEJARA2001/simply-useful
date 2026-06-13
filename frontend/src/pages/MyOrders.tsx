@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,6 +7,8 @@ import { Edit, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 
 const extractDispatchDetails = (narration: string) => {
   if (!narration) return null;
@@ -29,10 +31,31 @@ const extractDispatchDetails = (narration: string) => {
 
 const MyOrders: React.FC = () => {
   const { user } = useAuth();
-  const { orders, products } = useData();
+  const { orders, products, users, updateOrderItems } = useData();
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
   const { filterBySelectedFY, fyLabel } = useFinancialYear();
+  const { toast } = useToast();
+
+  const salesOfficers = useMemo(() => {
+    return (users || []).filter(u => (u.role === 'SALES' || u.role === 'SALES_OFFICER') && u.active);
+  }, [users]);
+
+  const handleReassignSO = async (orderId: string, soEmail: string) => {
+    try {
+      await updateOrderItems(orderId, { soEmail });
+      toast({
+        title: 'Sales Officer Reassigned',
+        description: `Order ${orderId} is now assigned to ${soEmail}.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Reassignment Failed',
+        description: err.message || 'An error occurred.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   // Filter States
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -182,9 +205,48 @@ const MyOrders: React.FC = () => {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-bold text-base text-foreground">{displayId}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {formatDate(order.date)} · {displayPartyType}: {displayPartyName}
-                      </p>
+                      <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span>{formatDate(order.date)}</span>
+                        <span>·</span>
+                        <span>{displayPartyType}: {displayPartyName}</span>
+                        <span>·</span>
+                        {isAdmin ? (
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="font-semibold text-foreground/80 text-[11px]">SO:</span>
+                            {(() => {
+                              const activeSO = [...salesOfficers];
+                              const currentEmail = order.soEmail;
+                              if (currentEmail && !activeSO.some(u => u.email.toLowerCase() === currentEmail.toLowerCase())) {
+                                const match = (users || []).find(u => u.email.toLowerCase() === currentEmail.toLowerCase());
+                                if (match) {
+                                  activeSO.push(match);
+                                } else {
+                                  activeSO.push({ id: currentEmail, email: currentEmail, name: currentEmail, role: 'SALES', active: false } as any);
+                                }
+                              }
+                              return (
+                                <Select 
+                                  value={currentEmail || ''} 
+                                  onValueChange={(val) => handleReassignSO(displayId, val)}
+                                >
+                                  <SelectTrigger className="h-7 py-0 px-2 text-[11px] min-w-[140px] bg-background border border-border/85 rounded-md">
+                                    <SelectValue placeholder="Select SO" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {activeSO.map(so => (
+                                      <SelectItem key={so.id} value={so.email} className="text-xs">
+                                        {so.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <span>SO: {order.soEmail || 'Unassigned'}</span>
+                        )}
+                      </div>
                     </div>
                     <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold border ${
                       displayStatus === 'Completed' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
@@ -207,9 +269,9 @@ const MyOrders: React.FC = () => {
                         p.name === prodId
                       );
                       const fallbackName = typeof i.product === 'object' 
-                        ? (i.product?.productName || i.product?.name) 
+                        ? (i.product?.name || i.product?.productName) 
                         : (i.productName || i.product_name || i.product);
-                      return prod?.productName || prod?.name || fallbackName || 'Unknown Product';
+                      return prod?.name || prod?.productName || fallbackName || 'Unknown Product';
                     }).join(', ')}
                   </div>
                   

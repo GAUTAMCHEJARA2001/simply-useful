@@ -56,6 +56,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'api.middleware.TenantQueryLoggingMiddleware',  # Multi-tenant query audit log
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -81,12 +82,45 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+import os
+from pathlib import Path
+
+# Provide dynamic DB connection via DATABASES
+db_user = os.environ.get('DATABASE_USER', 'postgres')
+db_password = os.environ.get('DATABASE_PASSWORD', 'admin')
+db_host = os.environ.get('DATABASE_HOST', 'localhost')
+db_port = os.environ.get('DATABASE_PORT', '5432')
+
+# 100% PostgreSQL Implementation
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'db_master',
+        'USER': db_user,
+        'PASSWORD': db_password,
+        'HOST': db_host,
+        'PORT': db_port,
+    },
+
+    'wh_navsari': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'wh_navsari',
+        'USER': db_user,
+        'PASSWORD': db_password,
+        'HOST': db_host,
+        'PORT': db_port,
+    },
+    'wh_nashik': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'wh_nashik',
+        'USER': db_user,
+        'PASSWORD': db_password,
+        'HOST': db_host,
+        'PORT': db_port,
     }
 }
+
+DATABASE_ROUTERS = ['api.db_router.TenantDatabaseRouter']
 
 
 # Password validation
@@ -139,6 +173,11 @@ STORAGES = {
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-warehouse-id',
+]
+
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -149,12 +188,6 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 25,
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.UserRateThrottle',
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        'user': '1000/day',
-    },
     'URL_FORMAT_OVERRIDE': None,
 }
 

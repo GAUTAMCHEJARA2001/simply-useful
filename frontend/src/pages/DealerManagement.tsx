@@ -15,7 +15,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 const emptyDealer: Dealer = {
   dealerCode: '', dealerName: '', city: '', assignedSoEmail: '',
   distributorName: '', creditLimit: 0, outstanding: 0, active: true,
-  territory: '',
+  territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '',
 };
 
 const DealerManagement: React.FC = () => {
@@ -200,6 +200,30 @@ const DealerManagement: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Contact Person Name</Label>
+                <Input value={form.contactPerson || ''} onChange={e => updateForm('contactPerson', e.target.value)} placeholder="e.g. John Doe" />
+              </div>
+              <div className="space-y-2">
+                <Label>Contact Number</Label>
+                <Input value={form.phone || ''} onChange={e => updateForm('phone', e.target.value)} placeholder="e.g. 9876543210" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Email ID</Label>
+                <Input type="email" value={form.email || ''} onChange={e => updateForm('email', e.target.value)} placeholder="e.g. dealer@example.com" />
+              </div>
+              <div className="space-y-2">
+                <Label>GST Number</Label>
+                <Input value={form.gst || ''} onChange={e => updateForm('gst', e.target.value)} placeholder="e.g. 08ABCDE1234F1Z5" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Address</Label>
+              <Input value={form.address || ''} onChange={e => updateForm('address', e.target.value)} placeholder="Enter full address" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

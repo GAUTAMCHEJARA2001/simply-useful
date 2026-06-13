@@ -27,7 +27,31 @@ export const PurchaseOrdersTab: React.FC = () => {
   const navigate = useNavigate();
   const { data: purchaseOrders = [], isLoading, error, refetch } = usePurchaseOrders();
   const [selectedPO, setSelectedPO] = useState<any>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const { toast } = useToast();
+
+  const filteredOrders = purchaseOrders.filter((po: any) => {
+    const matchesSearch = !search || 
+      (po.po_number || po.poNumber || '').toLowerCase().includes(search.toLowerCase()) || 
+      (po.supplier_name || po.supplier?.name || '').toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'ALL' || (po.status || '').toUpperCase() === statusFilter;
+    
+    let matchesDate = true;
+    if (startDate || endDate) {
+      const orderDateStr = po.order_date || po.orderDate || po.created_at || po.createdAt;
+      if (orderDateStr) {
+        const orderDate = new Date(orderDateStr).getTime();
+        const start = startDate ? new Date(startDate).getTime() : 0;
+        const end = endDate ? new Date(endDate).getTime() + 86400000 : Infinity; // Include the whole end day
+        matchesDate = orderDate >= start && orderDate <= end;
+      }
+    }
+    
+    return matchesSearch && matchesStatus && matchesDate;
+  });
 
   const viewPoDetails = (po: any) => {
     setSelectedPO(po);
@@ -65,10 +89,50 @@ export const PurchaseOrdersTab: React.FC = () => {
         </Button>
       </div>
 
-      <SafeDataView data={purchaseOrders} isLoading={isLoading} error={error} onRetry={() => refetch()}>
+      <div className="flex items-center gap-3 bg-muted/20 p-3 rounded-2xl border border-border/50">
+        <div className="flex-1 relative">
+          <input 
+            type="text" 
+            placeholder="Search by PO Number or Supplier..." 
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full border border-border rounded-xl px-4 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+          />
+        </div>
+        <div className="flex gap-2">
+          <input 
+            type="date"
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
+            className="border border-border rounded-xl px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+            title="Start Date"
+          />
+          <input 
+            type="date"
+            value={endDate}
+            onChange={e => setEndDate(e.target.value)}
+            className="border border-border rounded-xl px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+            title="End Date"
+          />
+        </div>
+        <select 
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          className="border border-border rounded-xl px-4 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+        >
+          <option value="ALL">All Statuses</option>
+          <option value="DRAFT">Draft</option>
+          <option value="ORDERED">Ordered</option>
+          <option value="PENDING">Pending</option>
+          <option value="RECEIVED">Received</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+      </div>
+
+      <SafeDataView data={filteredOrders} isLoading={isLoading} error={error} onRetry={() => refetch()} emptyMessage="No purchase orders found matching your filters.">
         <DataTable 
           columns={['PO #', 'Supplier', 'Ordered', 'Received', 'Pending', 'Extra', 'Status', 'Actions']}
-          rows={purchaseOrders.map((po: any) => {
+          rows={filteredOrders.map((po: any) => {
             const qty = getPoQtySummary(po);
             return [
               po.po_number || po.poNumber || '---',
@@ -100,7 +164,7 @@ export const PurchaseOrdersTab: React.FC = () => {
               </div>
             ];
           })}
-          onRowClick={i => viewPoDetails(purchaseOrders[i])}
+          onRowClick={i => viewPoDetails(filteredOrders[i])}
         />
       </SafeDataView>
 

@@ -7,6 +7,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useToast } from '@/hooks/use-toast';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search, MapPin } from 'lucide-react';
+
 interface DashboardMetrics {
   totalLeads: number;
   wonLeads: number;
@@ -39,8 +43,15 @@ const CRMDashboard: React.FC<{ refreshTrigger?: number }> = ({ refreshTrigger = 
     highPriority: 0,
     overdueFollowups: 0,
   });
+  const [allLeads, setAllLeads] = useState<any[]>([]);
   const [stageData, setStageData] = useState<LeadsByStage[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // New filters
+  const [cityFilter, setCityFilter] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
+  const [pincodeFilter, setPincodeFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('all');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,21 +67,11 @@ const CRMDashboard: React.FC<{ refreshTrigger?: number }> = ({ refreshTrigger = 
         ]);
         
         if (metricsRes.data?.success) {
-          setMetrics(metricsRes.data.data);
+          setMetrics(prev => ({ ...prev, overdueFollowups: metricsRes.data.data.overdueFollowups || 0 }));
         }
 
         if (leadsRes.data?.success) {
-          const leads = leadsRes.data.data;
-          const stages = ['NEW', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
-          const counts = stages.map(stage => {
-            const count = leads.filter((l: any) => l.status === stage).length;
-            return {
-              name: stage.charAt(0) + stage.slice(1).toLowerCase(),
-              value: count,
-              rawStage: stage,
-            };
-          });
-          setStageData(counts);
+          setAllLeads(leadsRes.data.data);
         }
       } catch (err: any) {
         console.error('CRM Dashboard error:', err);
@@ -86,6 +87,45 @@ const CRMDashboard: React.FC<{ refreshTrigger?: number }> = ({ refreshTrigger = 
 
     fetchData();
   }, [refreshTrigger, toast, selectedFY, fyBounds]);
+
+  // Recalculate metrics when leads or filters change
+  useEffect(() => {
+    if (!allLeads) return;
+
+    // Filter leads
+    const filtered = allLeads.filter(l => {
+      const matchCity = !cityFilter || (l.city || '').toLowerCase().includes(cityFilter.toLowerCase());
+      const matchState = !stateFilter || (l.state || '').toLowerCase().includes(stateFilter.toLowerCase());
+      const matchPincode = !pincodeFilter || (l.pincode || '').includes(pincodeFilter);
+      const matchSource = sourceFilter === 'all' || l.source === sourceFilter;
+      return matchCity && matchState && matchPincode && matchSource;
+    });
+
+    // Compute metrics
+    const total = filtered.length;
+    const won = filtered.filter(l => l.status === 'WON').length;
+    const high = filtered.filter(l => l.priority === 'HIGH').length;
+    const pipelineVal = filtered
+      .filter(l => ['NEW', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION'].includes(l.status))
+      .reduce((sum, l) => sum + (Number(l.value) || 0), 0);
+
+    setMetrics(prev => ({
+      ...prev,
+      totalLeads: total,
+      wonLeads: won,
+      highPriority: high,
+      pipelineValue: pipelineVal,
+    }));
+
+    // Compute chart data
+    const stages = ['NEW', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'];
+    const counts = stages.map(stage => ({
+      name: stage.charAt(0) + stage.slice(1).toLowerCase(),
+      value: filtered.filter((l: any) => l.status === stage).length,
+      rawStage: stage,
+    }));
+    setStageData(counts);
+  }, [allLeads, cityFilter, stateFilter, pincodeFilter, sourceFilter]);
 
   if (loading) {
     return (
@@ -128,6 +168,51 @@ const CRMDashboard: React.FC<{ refreshTrigger?: number }> = ({ refreshTrigger = 
 
   return (
     <div className="space-y-6">
+      {/* Analytics Filters Box */}
+      <div className="bg-muted/20 p-3 rounded-xl border border-border/40 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="relative">
+          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Filter by City"
+            value={cityFilter}
+            onChange={e => setCityFilter(e.target.value)}
+            className="pl-9 h-10 bg-background text-sm"
+          />
+        </div>
+        <div className="relative">
+          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Filter by State"
+            value={stateFilter}
+            onChange={e => setStateFilter(e.target.value)}
+            className="pl-9 h-10 bg-background text-sm"
+          />
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Filter by Pincode"
+            value={pincodeFilter}
+            onChange={e => setPincodeFilter(e.target.value)}
+            className="pl-9 h-10 bg-background text-sm"
+          />
+        </div>
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="bg-background h-10">
+            <SelectValue placeholder="Filter Source" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sources</SelectItem>
+            <SelectItem value="Cold Call">Cold Call</SelectItem>
+            <SelectItem value="Referral">Referral</SelectItem>
+            <SelectItem value="Website">Website</SelectItem>
+            <SelectItem value="Event">Event</SelectItem>
+            <SelectItem value="Social Media">Social Media</SelectItem>
+            <SelectItem value="Other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, index) => (

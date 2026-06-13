@@ -52,7 +52,8 @@ const InventoryManagement: React.FC = () => {
     { id: 'adjustments', label: 'Adjustments', icon: ClipboardList, group: 'Transactions' },
     { id: 'attendance', label: 'Attendance', icon: UserCheck, group: 'Transactions' },
     { id: 'approvals', label: 'Approvals', icon: ClipboardList, group: 'Transactions' },
-    { id: 'returns', label: 'Returns', icon: ShoppingCart, group: 'Transactions' },
+    { id: 'purchase_returns', label: 'Purchase Returns', icon: ShoppingCart, group: 'Transactions' },
+    { id: 'sales_returns', label: 'Sales Returns', icon: ShoppingCart, group: 'Transactions' },
   ];
 
   const groups = [...new Set(navItems.map(n => n.group))];
@@ -122,7 +123,8 @@ const InventoryManagement: React.FC = () => {
         {tab === 'adjustments' && <AdjustmentsTab />}
         {tab === 'attendance' && <AttendanceTab />}
         {tab === 'approvals' && <ApprovalsTab />}
-        {tab === 'returns' && <ReturnsTab />}
+        {tab === 'purchase_returns' && <ReturnsTab returnType="Purchase Return" />}
+        {tab === 'sales_returns' && <ReturnsTab returnType="Sales Return" />}
         {tab === 'bom' && <RecipesTab onRefresh={() => {}} />}
       </div>
     </div>

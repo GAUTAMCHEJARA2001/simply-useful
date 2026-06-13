@@ -54,7 +54,12 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = React.memo(({
       />
 
       {/* 2. Customer Section */}
-      <PDFPartySection customer={invoice.customer} styles={styles} />
+      <PDFPartySection 
+        customer={invoice.customer} 
+        billingTitle={invoice.documentType === 'PURCHASE ORDER' ? 'Supplier Details' : 'Bill To'}
+        shippingTitle={invoice.documentType === 'PURCHASE ORDER' ? 'Bill To' : 'Ship To'}
+        styles={styles} 
+      />
 
       {/* 3. Items Table */}
       <PDFTable columns={columns} data={invoice.items} styles={styles} />
@@ -72,7 +77,15 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = React.memo(({
 
       {/* 5. Terms & Bank details */}
       <View style={styles.bottomGovernanceSection} wrap={false}>
-        {invoice.showBankDetails ? <PDFBankDetails styles={styles} /> : null}
+        {invoice.showBankDetails ? (
+          <PDFBankDetails 
+            styles={styles} 
+            bankName={invoice.company.bankName}
+            accountNo={invoice.company.bankAccount}
+            ifscCode={invoice.company.bankIfsc}
+            branchName={invoice.company.bankBranch}
+          />
+        ) : null}
         <PDFSignature companyName={invoice.company.name} styles={styles} />
       </View>
 

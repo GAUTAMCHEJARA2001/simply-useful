@@ -350,59 +350,55 @@ def compile_analytical_warehouse(company_id=None):
         # 4. POPULATE FACT TABLES (ETL Phase)
         # ──────────────────────────────────────────────────────────────────
 
-        # A. Populate FactSales (Join Order & OrderItem & Product)
-        # Parses Warehouse ID from narration tags, e.g. [WAREHOUSE ID: 1]
-        cursor.execute("""
-            SELECT oi.id, o.id as order_id, o.date, o.soEmail, oi.productId, o.partyName, o.narration, 
-                   oi.qty, oi.price, oi.total, p.rate * 0.75 as unit_landed_cost, o.status, o.companyId
-            FROM OrderItem oi
-            JOIN `Order` o ON oi.orderId = o.id
-            JOIN Product p ON oi.productId = p.id
-        """)
-        order_rows = cursor.fetchall()
-        
+        # A. Populate FactSales (Join Order & OrderItem across Tenant DBs)
+        from api.models import Product, Warehouse, Order
+        product_rates = dict(Product.objects.values_list('id', 'rate'))
+
         sales_records = []
-        for r in order_rows:
-            fact_id = f"fact_sale_{r[0]}"
-            order_id = r[1]
-            date_str = parse_date_key(r[2])
-            so_key = r[3]
-            product_key = r[4]
-            party_name = r[5]
-            narration = r[6] or ''
-            qty = r[7]
-            price = r[8]
-            gross_sales = r[9]
-            unit_landed_cost = r[10] or (price * 0.75)
-            status = r[11]
-            co_id = r[12]
+        for wh in Warehouse.objects.filter(active=True):
+            if not wh.db_name:
+                continue
             
-            # Extract Warehouse ID from narration if possible, e.g. [WAREHOUSE ID: 1]
-            wh_key = "1" # Default warehouse fallback
-            if "[WAREHOUSE ID:" in narration:
-                try:
-                    wh_key = narration.split("[WAREHOUSE ID:")[1].split("]")[0].strip()
-                except:
-                    pass
+            # Fetch orders and items from the tenant DB using Django ORM
+            orders = Order.objects.using(wh.db_name).all().prefetch_related('orderitem_set')
             
-            # Find customer key matching customer name
-            cursor.execute("SELECT customer_key FROM DimCustomer WHERE name = %s LIMIT 1", (party_name,))
-            cust_row = cursor.fetchone()
-            cust_key = cust_row[0] if cust_row else None
-            
-            net_revenue = gross_sales / 1.18 # Net of 18% GST standard
-            landed_cost = qty * unit_landed_cost
-            margin = net_revenue - landed_cost
-            tax_amount = gross_sales - net_revenue
-            
-            so_surr_key = get_so_surrogate_key(cursor, so_key, date_str)
-            
-            sales_records.append((
-                fact_id, order_id, date_str, so_surr_key, product_key, wh_key, cust_key,
-                qty, price, gross_sales, net_revenue, landed_cost, margin, tax_amount,
-                status, co_id
-            ))
-            
+            for o in orders:
+                for oi in o.orderitem_set.all():
+                    fact_id = f"fact_sale_{wh.id}_{oi.id}"
+                    order_id = str(o.id)
+                    date_str = parse_date_key(o.date)
+                    so_key = o.soemail
+                    product_key = str(oi.productid_id)
+                    party_name = o.partyname
+                    qty = oi.qty or 0
+                    price = oi.price or 0.0
+                    gross_sales = oi.total or 0.0
+                    
+                    prod_rate = product_rates.get(product_key, 0.0)
+                    unit_landed_cost = prod_rate * 0.75 if prod_rate else price * 0.75
+                    
+                    status = o.status
+                    co_id = str(o.companyid_id)
+                    wh_key = str(wh.id)
+                    
+                    # Find customer key matching customer name
+                    cursor.execute("SELECT customer_key FROM DimCustomer WHERE name = %s LIMIT 1", (party_name,))
+                    cust_row = cursor.fetchone()
+                    cust_key = cust_row[0] if cust_row else None
+                    
+                    net_revenue = gross_sales / 1.18 # Net of 18% GST standard
+                    landed_cost = qty * unit_landed_cost
+                    margin = net_revenue - landed_cost
+                    tax_amount = gross_sales - net_revenue
+                    
+                    so_surr_key = get_so_surrogate_key(cursor, so_key, date_str)
+                    
+                    sales_records.append((
+                        fact_id, order_id, date_str, so_surr_key, product_key, wh_key, cust_key,
+                        qty, price, gross_sales, net_revenue, landed_cost, margin, tax_amount,
+                        status, co_id
+                    ))
+                    
         cursor.executemany("""
             INSERT INTO FactSales (fact_id, order_id, date_key, so_key, product_key, warehouse_key, customer_key,
                                   quantity, price, gross_sales, net_revenue, landed_cost, margin, tax_amount, status, company_id)

@@ -11,10 +11,10 @@ export const orderService = {
   create: (data: any) => api.post(API_ENDPOINTS.ORDERS, data),
   
   updateStatus: (id: string | number, payload: { status: string; reason?: string; actionDate?: string }) => 
-    api.put(`${API_ENDPOINTS.ORDERS}/${id}/status`, payload),
+    api.post(`${API_ENDPOINTS.ORDERS}/${id}/update-status`, payload),
     
   updateItems: (id: string | number, updatedOrder: any) => 
-    api.put(`${API_ENDPOINTS.ORDERS}/${id}/items`, updatedOrder),
+    api.put(`${API_ENDPOINTS.ORDERS}/${id}`, updatedOrder),
 
   // Custom Transactions
   getTransactions: () => api.get(API_ENDPOINTS.TRANSACTIONS),

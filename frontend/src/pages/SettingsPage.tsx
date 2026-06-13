@@ -46,6 +46,10 @@ const SettingsPage: React.FC = () => {
         company_phone: settings.company_phone || '+91 98765 43210',
         company_email: settings.company_email || 'office@kamlaerl.com',
         company_logo: settings.company_logo || '',
+        company_bank_name: settings.company_bank_name || '',
+        company_bank_account: settings.company_bank_account || '',
+        company_bank_ifsc: settings.company_bank_ifsc || '',
+        company_bank_branch: settings.company_bank_branch || '',
     });
 
     React.useEffect(() => {
@@ -57,6 +61,10 @@ const SettingsPage: React.FC = () => {
                 company_phone: settings.company_phone || '',
                 company_email: settings.company_email || '',
                 company_logo: settings.company_logo || '',
+                company_bank_name: settings.company_bank_name || '',
+                company_bank_account: settings.company_bank_account || '',
+                company_bank_ifsc: settings.company_bank_ifsc || '',
+                company_bank_branch: settings.company_bank_branch || '',
             });
         }
     }, [settings]);
@@ -73,6 +81,10 @@ const SettingsPage: React.FC = () => {
             await updateSetting('company_phone', companyDetails.company_phone);
             await updateSetting('company_email', companyDetails.company_email);
             await updateSetting('company_logo', companyDetails.company_logo);
+            await updateSetting('company_bank_name', companyDetails.company_bank_name);
+            await updateSetting('company_bank_account', companyDetails.company_bank_account);
+            await updateSetting('company_bank_ifsc', companyDetails.company_bank_ifsc);
+            await updateSetting('company_bank_branch', companyDetails.company_bank_branch);
             
             toast.success('Company details updated successfully');
         } catch (error) {
@@ -251,13 +263,58 @@ const SettingsPage: React.FC = () => {
                                         type="email"
                                         value={companyDetails.company_email} 
                                         onChange={(e) => setCompanyDetails({...companyDetails, company_email: e.target.value})}
-                                        placeholder="e.g. office@company.com"
+                                        placeholder="e.g. office@domain.com"
                                     />
                                 </div>
                             </div>
 
-                            <div className="space-y-4 pt-2 border-t">
-                                <Label>Company Logo</Label>
+                            <div className="pt-4 mt-4 border-t space-y-4">
+                                <h3 className="text-sm font-semibold flex items-center">
+                                    <CreditCard className="w-4 h-4 mr-2 text-primary" />
+                                    Bank Details (Electronic Transfer)
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="company_bank_name">Bank Name</Label>
+                                        <Input 
+                                            id="company_bank_name" 
+                                            value={companyDetails.company_bank_name} 
+                                            onChange={(e) => setCompanyDetails({...companyDetails, company_bank_name: e.target.value})}
+                                            placeholder="e.g. State Bank of India"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="company_bank_account">Account Number</Label>
+                                        <Input 
+                                            id="company_bank_account" 
+                                            value={companyDetails.company_bank_account} 
+                                            onChange={(e) => setCompanyDetails({...companyDetails, company_bank_account: e.target.value})}
+                                            placeholder="e.g. 31234567890"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="company_bank_ifsc">IFSC Code</Label>
+                                        <Input 
+                                            id="company_bank_ifsc" 
+                                            value={companyDetails.company_bank_ifsc} 
+                                            onChange={(e) => setCompanyDetails({...companyDetails, company_bank_ifsc: e.target.value})}
+                                            placeholder="e.g. SBIN0001234"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="company_bank_branch">Branch Name</Label>
+                                        <Input 
+                                            id="company_bank_branch" 
+                                            value={companyDetails.company_bank_branch} 
+                                            onChange={(e) => setCompanyDetails({...companyDetails, company_bank_branch: e.target.value})}
+                                            placeholder="e.g. Main Branch"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Company Logo (Max 5MB)</Label>
                                 <div className="flex items-center gap-6">
                                     <div className="w-24 h-24 border-2 border-dashed rounded-lg bg-muted/20 flex items-center justify-center overflow-hidden">
                                         {companyDetails.company_logo ? (
@@ -327,6 +384,7 @@ const SettingsPage: React.FC = () => {
                                     { id: 'dealers', label: 'Dealer Template' },
                                     { id: 'distributors', label: 'Distributor Template' },
                                     { id: 'recipes', label: 'Recipe Template' },
+                                    { id: 'leads', label: 'Lead Template' },
                                 ].map(item => (
                                     <Button key={item.id} variant="outline" onClick={() => handleTemplateDownload(item.id)} className="justify-start">
                                         <Download className="w-4 h-4 mr-2" /> {item.label}
@@ -346,6 +404,7 @@ const SettingsPage: React.FC = () => {
                                         <option value="dealers">Dealers</option>
                                         <option value="distributors">Distributors</option>
                                         <option value="recipes">Recipes</option>
+                                        <option value="leads">Leads</option>
                                     </select>
                                     <Input
                                         ref={bulkFileInputRef}

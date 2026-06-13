@@ -45,7 +45,7 @@ const Login: React.FC = () => {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-primary mb-4">
               <Building2 className="w-8 h-8 text-primary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Simply Useful ERP</h1>
+            <h1 className="text-2xl font-bold text-foreground">KAMLA OTS</h1>
             <p className="text-muted-foreground text-sm mt-1">Manufacturing & Distribution</p>
           </div>
 

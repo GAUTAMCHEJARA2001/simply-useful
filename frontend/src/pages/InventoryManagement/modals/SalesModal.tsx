@@ -53,7 +53,6 @@ const extractDispatchDetails = (narration: string) => {
 };
 
 export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale }) => {
-  const { data: products = [] } = useProducts();
   const { data: warehouses = [] } = useWarehouses();
   const { saveSale } = useSaleMutations();
   const extractedDetails = extractDispatchDetails(sale?.narration || '');
@@ -62,26 +61,50 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
     lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }]
   });
 
+  const { data: products = [] } = useProducts({ warehouseId: form.warehouse_id });
+
   useEffect(() => {
     if (sale && isOpen) {
       // Map Order object to SalesModal form shape
       const mappedLineItems = (sale.items || []).map((it: any) => ({
-        productId: it.productId || it.productid_id || '',
+        productId: it.productId || it.product_id || it.productid_id || it.product?.id || '',
         quantity: it.qty || 0,
         rate: it.price || 0,
         tax_percent: it.tax_percent || 18
       }));
+      
+      const whId = sale.assignedWarehouse || extractWarehouseId(sale.narration) || sale.warehouseId || sale.warehouse_id || '';
+      
       setForm({
         ...sale,
         customerName: sale.partyName || sale.customerName || '',
         challanNumber: extractChallanNumber(sale.narration) || sale.challanNumber || '',
-        warehouse_id: extractWarehouseId(sale.narration) || sale.warehouseId || sale.warehouse_id || '',
+        warehouse_id: whId,
         lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }]
       });
     } else {
       setForm({ lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }] });
     }
   }, [sale, isOpen]);
+
+  // Resolve warehouse name (e.g. "NASHIK") to numeric ID (e.g. 7) once warehouses load
+  useEffect(() => {
+    if (!isOpen || !form || warehouses.length === 0) return;
+    const currentWhId = String(form.warehouse_id || '');
+    if (!currentWhId) return;
+    
+    // Already a valid numeric warehouse ID — no resolution needed
+    const isIdValid = warehouses.some((w: any) => String(w.id) === currentWhId);
+    if (isIdValid) return;
+    
+    // Try to match by name
+    const matchingWh = warehouses.find((w: any) => 
+      w.name.toLowerCase().trim() === currentWhId.toLowerCase().trim()
+    );
+    if (matchingWh) {
+      setForm((prev: any) => ({ ...prev, warehouse_id: matchingWh.id }));
+    }
+  }, [warehouses, isOpen]); // Note: deliberately excludes form.warehouse_id to prevent loops
 
   const addLineItem = () => {
     setForm({ ...form, lineItems: [...(form.lineItems || []), { productId: '', quantity: 0, rate: 0, tax_percent: 18 }] });
@@ -239,7 +262,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
                     <select value={item.productId} onChange={e => updateLineItem(i, 'productId', e.target.value)}
                       className="w-full border border-border rounded-md px-2 py-1.5 bg-background text-xs">
                       <option value="">-- Product --</option>
-                      {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {products.map((p: any) => <option key={p.id} value={p.id}>{p.name || p.productName}</option>)}
                     </select>
                   </div>
                   <div>

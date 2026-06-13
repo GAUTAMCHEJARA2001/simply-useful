@@ -94,6 +94,30 @@ class JWTAuthentication(authentication.BaseAuthentication):
                 company_id=company_id or 'cmo75yliq0000wesurjpett1n',
                 name='System Admin'
             )
+            
+            # --- Multi-Tenant Warehouse Routing ---
+            warehouse_id = request.headers.get('X-Warehouse-ID')
+            if warehouse_id and warehouse_id != 'GLOBAL':
+                from api.db_router import set_current_db
+                from api.models import Warehouse
+                
+                # Fetch DB name from registry safely — try by ID first, then by name
+                try:
+                    wh = Warehouse.objects.using('default').filter(id=warehouse_id).first()
+                except (ValueError, TypeError):
+                    wh = None
+                
+                # Fallback: resolve warehouse by name if ID lookup failed
+                if not wh:
+                    wh = Warehouse.objects.using('default').filter(name__iexact=warehouse_id, active=True).first()
+                    
+                if wh and wh.db_name:
+                    set_current_db(wh.db_name)
+                else:
+                    set_current_db('default')
+            else:
+                from api.db_router import set_current_db
+                set_current_db('default')
             return (jwt_user, token)
             
         try:
@@ -109,6 +133,43 @@ class JWTAuthentication(authentication.BaseAuthentication):
                 company_id=user_model.companyid_id if hasattr(user_model, 'companyid') else user_model.companyid,
                 name=user_model.name or ""
             )
+
+            # --- Multi-Tenant Warehouse Routing ---
+            warehouse_id = request.headers.get('X-Warehouse-ID')
+            
+            if not warehouse_id or warehouse_id == 'GLOBAL':
+                if jwt_user.role == 'INVENTORY':
+                    raise exceptions.AuthenticationFailed('X-Warehouse-ID header is required for INVENTORY context')
+                # If non-inventory user lacks header or specifies GLOBAL, allow fallback to default DB
+                from api.db_router import set_current_db
+                set_current_db('default')
+            else:
+                from api.db_router import set_current_db
+                from api.models import Warehouse, Userwarehouseaccess
+                
+                # Enforce access control for restricted users
+                if jwt_user.role == 'INVENTORY':
+                    if not Userwarehouseaccess.objects.using('default').filter(userid_id=jwt_user.id, warehouseid_id=warehouse_id).exists():
+                        raise exceptions.AuthenticationFailed('Access denied to this warehouse context')
+                
+                # Fetch DB name from registry safely — try by ID first, then by name
+                try:
+                    wh = Warehouse.objects.using('default').filter(id=warehouse_id).first()
+                except (ValueError, TypeError):
+                    wh = None
+                
+                # Fallback: resolve warehouse by name if ID lookup failed
+                if not wh:
+                    wh = Warehouse.objects.using('default').filter(name__iexact=warehouse_id, active=True).first()
+                    
+                if not wh:
+                    raise exceptions.AuthenticationFailed('Requested warehouse context not found')
+                    
+                if wh.db_name:
+                    set_current_db(wh.db_name)
+                else:
+                    set_current_db('default')
+                    
             return (jwt_user, token)
         except User.DoesNotExist:
             # Recreate dynamic user fallback if user details were in payload
@@ -119,5 +180,25 @@ class JWTAuthentication(authentication.BaseAuthentication):
                     role=role,
                     company_id=company_id
                 )
+                
+                # --- Multi-Tenant Warehouse Routing (fallback path) ---
+                warehouse_id = request.headers.get('X-Warehouse-ID')
+                if warehouse_id and warehouse_id != 'GLOBAL':
+                    from api.db_router import set_current_db
+                    from api.models import Warehouse
+                    try:
+                        wh = Warehouse.objects.using('default').filter(id=warehouse_id).first()
+                    except (ValueError, TypeError):
+                        wh = None
+                    if not wh:
+                        wh = Warehouse.objects.using('default').filter(name__iexact=warehouse_id, active=True).first()
+                    if wh and wh.db_name:
+                        set_current_db(wh.db_name)
+                    else:
+                        set_current_db('default')
+                else:
+                    from api.db_router import set_current_db
+                    set_current_db('default')
+                
                 return (jwt_user, token)
             raise exceptions.AuthenticationFailed('User not found')

@@ -20,7 +20,7 @@ import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 
 const OrderPage: React.FC = () => {
   const { user } = useAuth();
-  const { dealers, distributors, products, orders, warehouses, addOrder, updateOrderItems, settings, refreshAll } = useData();
+  const { dealers, distributors, products, orders, warehouses, addOrder, updateOrderItems, settings, refreshAll, users } = useData();
   const { toast } = useToast();
 
   const { id } = useParams<{ id?: string }>();
@@ -28,6 +28,7 @@ const OrderPage: React.FC = () => {
 
   const [partyType, setPartyType] = useState<'Dealer' | 'Distributor'>('Dealer');
   const [selectedParty, setSelectedParty] = useState('');
+  const [soEmail, setSoEmail] = useState('');
   const [items, setItems] = useState<OrderItem[]>([
     { product: '', qty: 0, price: 0, total: 0, itemRemark: '' },
   ]);
@@ -35,6 +36,13 @@ const OrderPage: React.FC = () => {
   const [warehouseId, setWarehouseId] = useState<string | number>(1);
   const [showSummary, setShowSummary] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!id && user?.email) {
+      setSoEmail(user.email);
+    }
+  }, [id, user]);
 
   useEffect(() => {
     if (id && orders.length > 0) {
@@ -46,6 +54,7 @@ const OrderPage: React.FC = () => {
       if (existing) {
         setPartyType(existing.partyType);
         setSelectedParty(existing.partyName);
+        setSoEmail(existing.soEmail || '');
         setItems((existing.items || []).map((item: any) => ({
           ...item,
           product: typeof item.product === 'object' ? item.product?.id : (item.productId || item.product),
@@ -77,6 +86,25 @@ const OrderPage: React.FC = () => {
       : myDistributors.map(d => d.distributorName);
     return Array.from(new Set(rawList.filter(Boolean)));
   }, [partyType, myDealers, myDistributors]);
+
+  const salesOfficers = useMemo(() => {
+    const activeSO = (users || []).filter(u => (u.role === 'SALES' || u.role === 'SALES_OFFICER') && u.active);
+    if (soEmail && !activeSO.some(u => u.email.toLowerCase() === soEmail.toLowerCase())) {
+      const match = (users || []).find(u => u.email.toLowerCase() === soEmail.toLowerCase());
+      if (match) {
+        activeSO.push(match);
+      } else {
+        activeSO.push({
+          id: soEmail,
+          email: soEmail,
+          name: soEmail,
+          role: 'SALES',
+          active: false
+        } as any);
+      }
+    }
+    return activeSO;
+  }, [users, soEmail]);
 
   const selectedDealerInfo = partyType === 'Dealer' ? dealers.find(d => d.dealerName === selectedParty) : null;
   const selectedDistInfo = partyType === 'Distributor'
@@ -172,6 +200,9 @@ const OrderPage: React.FC = () => {
   }, [products]);
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
     const payloadItems = items.filter(i => i.product).map(i => ({
       productId: i.product,
       qty: Number(i.qty),
@@ -187,6 +218,7 @@ const OrderPage: React.FC = () => {
       partyName: selectedParty,
       distributor: selectedDistInfo?.distributorName || selectedParty,
       warehouseId: Number(warehouseId) || 1,
+      soEmail,
     };
 
     try {
@@ -197,7 +229,7 @@ const OrderPage: React.FC = () => {
         const newOrder = {
           date: new Date().toISOString().split('T')[0],
           orderId: `ORD-${Date.now().toString().slice(-6)}`,
-          soEmail: user?.email || '',
+          soEmail: soEmail || user?.email || '',
           partyType,
           partyName: selectedParty,
           distributor: selectedDistInfo?.distributorName || selectedParty,
@@ -216,6 +248,8 @@ const OrderPage: React.FC = () => {
     } catch (err: unknown) {
       const error = err as Error;
       toast({ title: 'Operation Failed', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -271,7 +305,7 @@ const OrderPage: React.FC = () => {
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Party Details</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
             <div className="space-y-2">
               <Label>Party Type</Label>
               <Select value={partyType} onValueChange={(v: 'Dealer' | 'Distributor') => { setPartyType(v); setSelectedParty(''); }}>
@@ -291,6 +325,21 @@ const OrderPage: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            {isAdmin && (
+              <div className="space-y-2">
+                <Label>Sales Officer</Label>
+                <Select value={soEmail} onValueChange={setSoEmail}>
+                  <SelectTrigger className="h-12"><SelectValue placeholder="Select Sales Officer" /></SelectTrigger>
+                  <SelectContent>
+                    {salesOfficers.map(so => (
+                      <SelectItem key={so.id} value={so.email}>
+                        {so.name} ({so.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           {selectedParty && selectedDistInfo && (
             <div className="bg-secondary rounded-lg p-3 text-sm">
@@ -342,7 +391,7 @@ const OrderPage: React.FC = () => {
                               {prods.map((p) => (
                                 <CommandItem
                                   key={p.id}
-                                  value={`${p.productName} ${category}`}
+                                  value={`${p.productName} ${category} - ${p.productCode || p.product_code || ''} - ${p.id}`}
                                   onSelect={() => {
                                     updateItem(idx, 'product', p.id!);
                                   }}
@@ -473,7 +522,7 @@ const OrderPage: React.FC = () => {
           </div>
           <DialogFooter className="gap-2 flex-col sm:flex-row">
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button variant="outline" onClick={() => setShowSummary(false)} className="flex-1">Edit</Button>
+              <Button variant="outline" onClick={() => setShowSummary(false)} disabled={isSubmitting} className="flex-1">Back to Edit</Button>
               <PDFGenerator 
                 type="SALES_ORDER" 
                 data={{
@@ -487,7 +536,9 @@ const OrderPage: React.FC = () => {
                 buttonLabel="Preview PDF"
               />
             </div>
-            <Button onClick={handleSubmit} className="action-button w-full sm:w-auto">Confirm & Submit</Button>
+            <Button onClick={handleSubmit} className="action-button w-full sm:w-auto" disabled={isSubmitting}>
+              {isSubmitting ? "Submitting..." : "Confirm & Submit"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

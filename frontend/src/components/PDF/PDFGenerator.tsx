@@ -60,7 +60,12 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
     address: settings.company_address || 'Phase-1, Industrial Area, Rajasthan, India',
     gst: settings.company_gst || '08ABCDE1234F1Z5',
     contact: `Phone: ${settings.company_phone || '+91 98765 43210'} | Email: ${settings.company_email || 'office@kamlaerl.com'}`,
-    logo: settings.company_logo && settings.company_logo.startsWith('data:image') ? settings.company_logo : null
+    phone: settings.company_phone || '+91 98765 43210',
+    logo: settings.company_logo && settings.company_logo.startsWith('data:image') ? settings.company_logo : null,
+    bankName: settings.company_bank_name || 'State Bank of India',
+    bankAccount: settings.company_bank_account || '31234567890',
+    bankIfsc: settings.company_bank_ifsc || 'SBIN0001234',
+    bankBranch: settings.company_bank_branch || 'Main Branch'
   }), [settings]);
 
   // Main Controller: Maps dynamic adapters or falls back to legacy formats based on flags
@@ -97,7 +102,7 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
         const qty = Number(i.qty || i.quantity || 0) || 0;
         const rate = sanitizeValue(i.price || i.rate || 0);
         return {
-          product_name: safeString(i.product || i.product_name || 'Unknown Product'),
+          product_name: safeString(i.productName || i.product_name || (typeof i.product === 'object' && i.product ? (i.product.name || i.product.productName) : i.product) || 'Unknown Product'),
           qty,
           unit: safeString(i.unit || 'Bags'),
           rate,
@@ -113,10 +118,10 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
           orderNo={safeString(data.order_id || 'N/A')}
           date={safeString(data.date || new Date().toLocaleDateString())}
           party={{
-            name: safeString(data.party_name || 'Generic Customer'),
-            address: safeString(data.address || 'N/A'),
-            contact: safeString(data.contact || 'N/A'),
-            gst: safeString(data.gst || 'N/A')
+            name: safeString(data.party_name || data.partyName || data.party?.name || 'Generic Customer'),
+            address: safeString(data.address || data.party?.address || 'N/A'),
+            contact: safeString(data.contact || data.party?.contact || 'N/A'),
+            gst: safeString(data.gst || data.party?.gst || 'N/A')
           }}
           items={level === 'FULL' ? safeItems : safeItems.slice(0, 5)}
           totals={{ subtotal: safeSubtotal, grandTotal: safeSubtotal }}

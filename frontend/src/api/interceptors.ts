@@ -14,6 +14,27 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    const warehouseId = localStorage.getItem('activeWarehouseId');
+    if (warehouseId && warehouseId !== 'GLOBAL') {
+      const hasHeader = config.headers.has ? config.headers.has('X-Warehouse-ID') : !!config.headers['X-Warehouse-ID'];
+      if (!hasHeader) {
+        let isSuperadmin = false;
+        try {
+          const userStr = localStorage.getItem('app_user');
+          if (userStr) {
+            const user = JSON.parse(userStr);
+            isSuperadmin = user.role === 'SUPERADMIN';
+          }
+        } catch (e) {}
+
+        if (typeof config.headers.set === 'function') {
+          config.headers.set('X-Warehouse-ID', warehouseId);
+        } else {
+          config.headers['X-Warehouse-ID'] = warehouseId;
+        }
+      }
+    }
+
     if (IS_DEV) {
       if (originalUrl !== config.url) {
         console.warn(`Route healed: ${originalUrl} -> ${config.url}`);

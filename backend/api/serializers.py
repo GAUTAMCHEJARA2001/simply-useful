@@ -22,10 +22,11 @@ class UserSerializer(serializers.ModelSerializer):
     companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
+    monthlyTarget = serializers.FloatField(source='monthlytarget', required=False, allow_null=True)
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'name', 'role', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory']
+        fields = ['id', 'email', 'name', 'role', 'active', 'monthlyTarget', 'companyId', 'createdAt', 'updatedAt', 'territory']
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -130,7 +131,7 @@ class ProductSerializer(serializers.ModelSerializer):
     active = serializers.BooleanField(default=True, required=False)
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
-    categoryId = serializers.IntegerField(source='categoryid_id', required=False, allow_null=True)
+    categoryId = serializers.IntegerField(source='categoryid_id', required=True)
     openingStock = serializers.IntegerField(source='openingstock', default=0)
     minimumStock = serializers.IntegerField(source='minimumstock', default=0)
     defaultWarehouseId = serializers.IntegerField(source='defaultwarehouseid', required=False, allow_null=True)
@@ -140,29 +141,105 @@ class ProductSerializer(serializers.ModelSerializer):
     brand = serializers.SerializerMethodField(read_only=True)
     unit = serializers.SerializerMethodField(read_only=True)
     categoryRef = serializers.SerializerMethodField(read_only=True)
+    availableStock = serializers.SerializerMethodField(read_only=True)
+    stockQty = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Product
         fields = [
             'id', 'productCode', 'name', 'productName', 'bagSize', 'brandId', 'unitId', 'rate', 'gst', 
             'active', 'companyId', 'createdAt', 'updatedAt', 'categoryId', 'openingStock', 
-            'minimumStock', 'defaultWarehouseId', 'brand', 'unit', 'categoryRef'
+            'minimumStock', 'defaultWarehouseId', 'brand', 'unit', 'categoryRef', 'availableStock', 'stockQty'
         ]
 
     def get_brand(self, obj):
-        if obj.brandid:
-            return {'id': obj.brandid.id, 'name': obj.brandid.name}
+        try:
+            if obj.brandid:
+                return {'id': obj.brandid.id, 'name': obj.brandid.name}
+        except Exception:
+            pass
         return None
 
+    def validate(self, data):
+        # Validate unique product code per company
+        product_code = data.get('productcode')
+        company_id = data.get('companyid_id')
+        
+        # In updates, we need to ignore the current instance
+        instance_id = self.instance.id if self.instance else None
+        
+        if product_code and company_id:
+            from api.models import Product
+            qs = Product.objects.filter(productcode__iexact=product_code, companyid=company_id)
+            if instance_id:
+                qs = qs.exclude(id=instance_id)
+                
+            if qs.exists():
+                raise serializers.ValidationError({"productCode": "A product with this SKU already exists."})
+                
+        return data
+
+    def create(self, validated_data):
+        validated_data.pop('defaultwarehouseid', None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop('defaultwarehouseid', None)
+        return super().update(instance, validated_data)
+
     def get_unit(self, obj):
-        if obj.unitid:
-            return {'id': obj.unitid.id, 'name': obj.unitid.name}
+        try:
+            if obj.unitid:
+                return {'id': obj.unitid.id, 'name': obj.unitid.name}
+        except Exception:
+            pass
         return None
 
     def get_categoryRef(self, obj):
-        if obj.categoryid:
-            return {'id': obj.categoryid.id, 'name': obj.categoryid.name}
+        try:
+            if obj.categoryid:
+                parent_data = None
+                try:
+                    if obj.categoryid.parentid:
+                        parent_data = {
+                            'id': obj.categoryid.parentid.id,
+                            'name': obj.categoryid.parentid.name
+                        }
+                except Exception:
+                    pass
+                return {
+                    'id': obj.categoryid.id,
+                    'name': obj.categoryid.name,
+                    'parent': parent_data
+                }
+        except Exception:
+            pass
         return None
+
+    def get_availableStock(self, obj):
+        if 'sku_qty_map' in self.context and getattr(obj, 'productcode', None):
+            return self.context['sku_qty_map'].get(obj.productcode, 0)
+            
+        from api.models import Inventory
+        from django.db.models import Sum
+        from django.db.utils import ProgrammingError, OperationalError
+        try:
+            request = self.context.get('request')
+            if request and request.user:
+                user = request.user
+                from api.models import Userwarehouseaccess
+                has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user.id).exists()
+                if has_wh_assignments and getattr(user, 'role', '') == 'INVENTORY':
+                    assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user.id).values_list('warehouseid_id', flat=True))
+                    total = Inventory.objects.filter(productid_id=obj.id, warehouseid_id__in=assigned_wh_ids).aggregate(Sum('quantity'))['quantity__sum']
+                    return total or 0
+            total = Inventory.objects.filter(productid_id=obj.id).aggregate(Sum('quantity'))['quantity__sum']
+            return total or 0
+        except (ProgrammingError, OperationalError):
+            return 0
+
+    def get_stockQty(self, obj):
+        return self.get_availableStock(obj)
 
 
 class DealerSerializer(serializers.ModelSerializer):
@@ -175,12 +252,29 @@ class DealerSerializer(serializers.ModelSerializer):
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
 
+    contactPerson = serializers.CharField(source='contact_person', required=False, allow_blank=True, allow_null=True)
+    phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    gst = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
     class Meta:
         model = Dealer
         fields = [
             'id', 'dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'distributorName',
-            'creditLimit', 'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory'
+            'creditLimit', 'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
+            'phone', 'email', 'address', 'gst', 'contactPerson'
         ]
+
+    def create(self, validated_data):
+        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
+            validated_data.pop(key, None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
+            validated_data.pop(key, None)
+        return super().update(instance, validated_data)
 
 
 class DistributorSerializer(serializers.ModelSerializer):
@@ -191,12 +285,29 @@ class DistributorSerializer(serializers.ModelSerializer):
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
 
+    contactPerson = serializers.CharField(source='contact_person', required=False, allow_blank=True, allow_null=True)
+    phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    gst = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
     class Meta:
         model = Distributor
         fields = [
             'id', 'distributorName', 'area', 'assignedSoEmail', 'creditLimit',
-            'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory'
+            'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
+            'phone', 'email', 'address', 'gst', 'contactPerson'
         ]
+
+    def create(self, validated_data):
+        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
+            validated_data.pop(key, None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
+            validated_data.pop(key, None)
+        return super().update(instance, validated_data)
 
 
 class OrderitemSerializer(serializers.ModelSerializer):
@@ -210,6 +321,47 @@ class OrderitemSerializer(serializers.ModelSerializer):
         model = Orderitem
         fields = ['id', 'orderId', 'productId', 'qty', 'price', 'total', 'itemRemark', 'product']
 
+    def to_representation(self, instance):
+        """Handle cross-database FK failures gracefully.
+        
+        In multi-tenant setups, order items may reference product IDs from
+        a different warehouse DB. When the FK can't resolve, we return a
+        minimal product stub instead of null so the frontend shows a name.
+        """
+        try:
+            ret = super().to_representation(instance)
+        except Product.DoesNotExist:
+            # FK lookup failed — manually build the representation
+            ret = {
+                'id': instance.id,
+                'orderId': instance.orderid_id,
+                'productId': instance.productid_id,
+                'qty': instance.qty,
+                'price': instance.price,
+                'total': instance.total,
+                'itemRemark': instance.itemremark,
+                'product': None,
+            }
+
+        # If product is still None, try to resolve from all warehouse DBs
+        if ret.get('product') is None and instance.productid_id:
+            from django.conf import settings
+            for db_name in settings.DATABASES:
+                try:
+                    p = Product.objects.using(db_name).filter(id=instance.productid_id).first()
+                    if p:
+                        ret['product'] = {
+                            'id': p.id,
+                            'productCode': p.productcode,
+                            'name': p.name,
+                            'productName': p.name,
+                        }
+                        break
+                except Exception:
+                    continue
+
+        return ret
+
 
 class OrderSerializer(serializers.ModelSerializer):
     orderId = serializers.CharField(source='orderid')
@@ -220,16 +372,46 @@ class OrderSerializer(serializers.ModelSerializer):
     companyId = serializers.CharField(source='companyid_id')
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
+    assignedWarehouse = serializers.PrimaryKeyRelatedField(source='assigned_warehouse', queryset=Warehouse.objects.all(), required=False, allow_null=True)
     items = OrderitemSerializer(many=True, required=False, source='orderitem_set')
+    partyDetails = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Order
         fields = [
             'id', 'orderId', 'date', 'soEmail', 'partyType', 'partyName', 'distributor',
-            'narration', 'status', 'grandTotal', 'companyId', 'createdAt', 'updatedAt', 'items'
+            'narration', 'status', 'grandTotal', 'companyId', 'createdAt', 'updatedAt', 'items',
+            'assignedWarehouse', 'partyDetails'
         ]
 
+    def get_partyDetails(self, obj):
+        from api.models import Dealer, Distributor
+        p_type = str(obj.partytype).upper()
+        if p_type == 'DEALER':
+            dealer = Dealer.objects.filter(dealername=obj.partyname).first()
+            if dealer:
+                return {
+                    'address': getattr(dealer, 'address', ''),
+                    'phone': getattr(dealer, 'phone', ''),
+                    'email': getattr(dealer, 'email', ''),
+                    'gst': getattr(dealer, 'gst', ''),
+                    'contact_person': getattr(dealer, 'contact_person', '')
+                }
+        elif p_type == 'DISTRIBUTOR':
+            distributor = Distributor.objects.filter(distributorname=obj.partyname).first()
+            if distributor:
+                return {
+                    'address': getattr(distributor, 'address', ''),
+                    'phone': getattr(distributor, 'phone', ''),
+                    'email': getattr(distributor, 'email', ''),
+                    'gst': getattr(distributor, 'gst', ''),
+                    'contact_person': getattr(distributor, 'contact_person', '')
+                }
+        return None
+
+
     def create(self, validated_data):
+        validated_data.pop('assigned_warehouse', None)
         # source='orderitem_set' means DRF stores nested items under 'orderitem_set' key
         items_data = validated_data.pop('orderitem_set', [])
         order = Order.objects.create(**validated_data)
@@ -241,6 +423,7 @@ class OrderSerializer(serializers.ModelSerializer):
         return order
 
     def update(self, instance, validated_data):
+        validated_data.pop('assigned_warehouse', None)
         # Pop the reverse relationship set to avoid setattr assignment errors
         items_data = validated_data.pop('orderitem_set', None)
         
@@ -269,13 +452,19 @@ class VisitSerializer(serializers.ModelSerializer):
     nextVisitTime = serializers.DateTimeField(source='nextvisittime', required=False, allow_null=True)
     gpsLocation = serializers.CharField(source='gpslocation', required=False, allow_null=True, allow_blank=True)
     companyId = serializers.CharField(source='companyid_id')
+    leadId = serializers.CharField(source='lead_id', required=False, allow_null=True)
+    visitStatus = serializers.CharField(source='visit_status', read_only=True)
+    hrRemark = serializers.CharField(source='hr_remark', read_only=True)
+    verifiedBy = serializers.CharField(source='verified_by', read_only=True)
+    verifiedAt = serializers.DateTimeField(source='verified_at', read_only=True)
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
 
     class Meta:
         model = Visit
         fields = [
             'id', 'date', 'soEmail', 'dealerName', 'remarks', 'nextFollowup',
-            'nextVisitTime', 'gpsLocation', 'photo', 'companyId', 'createdAt'
+            'nextVisitTime', 'gpsLocation', 'photo', 'companyId', 'leadId', 
+            'visitStatus', 'hrRemark', 'verifiedBy', 'verifiedAt', 'createdAt'
         ]
 
     def to_internal_value(self, data):
@@ -361,12 +550,14 @@ class BomSerializer(serializers.ModelSerializer):
 
     def get_productId(self, obj):
         from api.models import Product
-        prod = Product.objects.filter(productcode=obj.productcode).first()
+        db = obj._state.db or 'default'
+        prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
         return prod.id if prod else ""
 
     def get_productName(self, obj):
         from api.models import Product
-        prod = Product.objects.filter(productcode=obj.productcode).first()
+        db = obj._state.db or 'default'
+        prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
         return prod.name if prod else ""
 
     def validate(self, data):
@@ -458,14 +649,15 @@ class PurchaseorderitemSerializer(serializers.ModelSerializer):
         ]
 
     def _received_quantity(self, obj):
-        linked_purchase_ids = Purchase.objects.filter(purchaseorderid=obj.purchaseorderid).values_list('id', flat=True)
+        db = obj._state.db or 'default'
+        linked_purchase_ids = Purchase.objects.using(db).filter(purchaseorderid=obj.purchaseorderid).values_list('id', flat=True)
         if not linked_purchase_ids:
             return 0
 
         product_name = obj.productname or ''
         return sum(
             item.qty
-            for item in Purchaseitem.objects.filter(
+            for item in Purchaseitem.objects.using(db).filter(
                 purchaseid_id__in=linked_purchase_ids,
                 productname=product_name
             )

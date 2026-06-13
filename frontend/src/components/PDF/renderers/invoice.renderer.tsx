@@ -13,7 +13,12 @@ interface RenderInvoiceProps {
     address: string;
     gst?: string;
     contact: string;
+    phone?: string;
     logo?: string | null;
+    bankName?: string;
+    bankAccount?: string;
+    bankIfsc?: string;
+    bankBranch?: string;
   };
   documentType: 'TAX INVOICE' | 'QUOTATION' | 'PURCHASE ORDER' | 'DELIVERY CHALLAN';
   themePreset?: ThemePreset;

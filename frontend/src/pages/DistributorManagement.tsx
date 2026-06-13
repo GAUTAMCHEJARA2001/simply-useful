@@ -12,7 +12,7 @@ import { Search, Plus, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 
-const emptyDist: Distributor = { distributorName: '', area: '', assignedSoEmail: '', creditLimit: 0, outstanding: 0, active: true, territory: '' };
+const emptyDist: Distributor = { distributorName: '', area: '', assignedSoEmail: '', creditLimit: 0, outstanding: 0, active: true, territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '' };
 
 const DistributorManagement: React.FC = () => {
   const { distributors, users, addDistributor, updateDistributor, deleteDistributor } = useData();
@@ -135,7 +135,7 @@ const DistributorManagement: React.FC = () => {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg" aria-describedby="dist-form-desc">
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" aria-describedby="dist-form-desc">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit' : 'Add'} Distributor</DialogTitle>
             <DialogDescription id="dist-form-desc" className="sr-only">
@@ -152,6 +152,30 @@ const DistributorManagement: React.FC = () => {
                   <SelectContent>{salesUsers.filter(u => u.email).map(u => <SelectItem key={u.email} value={u.email}>{u.name} ({u.email})</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Contact Person Name</Label>
+                <Input value={form.contactPerson || ''} onChange={e => uf('contactPerson', e.target.value)} placeholder="e.g. Jane Doe" />
+              </div>
+              <div className="space-y-2">
+                <Label>Contact Number</Label>
+                <Input value={form.phone || ''} onChange={e => uf('phone', e.target.value)} placeholder="e.g. 9876543210" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Email ID</Label>
+                <Input type="email" value={form.email || ''} onChange={e => uf('email', e.target.value)} placeholder="e.g. dist@example.com" />
+              </div>
+              <div className="space-y-2">
+                <Label>GST Number</Label>
+                <Input value={form.gst || ''} onChange={e => uf('gst', e.target.value)} placeholder="e.g. 08ABCDE1234F1Z5" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Address</Label>
+              <Input value={form.address || ''} onChange={e => uf('address', e.target.value)} placeholder="Enter full address" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Territory (Area Code)</Label><Input value={form.territory || ''} onChange={e => uf('territory', e.target.value)} placeholder="e.g. T-WEST" /></div>

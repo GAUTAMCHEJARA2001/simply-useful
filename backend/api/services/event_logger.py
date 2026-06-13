@@ -2,7 +2,7 @@ from django.db import connection
 from django.utils import timezone
 import datetime
 
-def log_operational_event(entity_type, entity_id, old_state, new_state, user_email, company_id=None):
+def log_operational_event(entity_type, entity_id, old_state, new_state, user_email, company_id=None, db_name=None):
     """
     Writes an immutable event entry to the OperationalEventLedger.
     Computes exact duration_seconds spent in the old_state.
@@ -11,6 +11,20 @@ def log_operational_event(entity_type, entity_id, old_state, new_state, user_ema
     today_str = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
     
     with connection.cursor() as cursor:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS OperationalEventLedger (
+                id TEXT PRIMARY KEY,
+                entity_type TEXT,
+                entity_id TEXT,
+                old_state TEXT,
+                new_state TEXT,
+                timestamp TEXT,
+                user_email TEXT,
+                duration_seconds REAL,
+                company_id TEXT
+            )
+        """)
+        
         duration_seconds = 0.0
         
         # Check last transition event for this specific entity
@@ -31,8 +45,12 @@ def log_operational_event(entity_type, entity_id, old_state, new_state, user_ema
         else:
             # If no previous event log, calculate duration based on database creation timestamp
             if entity_type == 'Order':
-                cursor.execute("SELECT createdAt FROM `Order` WHERE id = %s", (entity_id,))
-                cre_row = cursor.fetchone()
+                from api.db_router import get_current_db
+                from django.db import connections
+                actual_db = db_name or get_current_db()
+                with connections[actual_db].cursor() as tenant_cursor:
+                    tenant_cursor.execute('SELECT "createdAt" FROM "Order" WHERE id = %s', (entity_id,))
+                    cre_row = tenant_cursor.fetchone()
                 if cre_row and cre_row[0]:
                     try:
                         val = cre_row[0]
@@ -45,8 +63,12 @@ def log_operational_event(entity_type, entity_id, old_state, new_state, user_ema
                     except:
                         pass
             elif entity_type == 'Lead':
-                cursor.execute("SELECT createdAt FROM Lead WHERE id = %s", (entity_id,))
-                cre_row = cursor.fetchone()
+                from api.db_router import get_current_db
+                from django.db import connections
+                actual_db = db_name or get_current_db()
+                with connections[actual_db].cursor() as tenant_cursor:
+                    tenant_cursor.execute('SELECT "createdAt" FROM "Lead" WHERE id = %s', (entity_id,))
+                    cre_row = tenant_cursor.fetchone()
                 if cre_row and cre_row[0]:
                     try:
                         val = cre_row[0]

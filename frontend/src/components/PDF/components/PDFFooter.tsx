@@ -17,7 +17,7 @@ export const PDFFooter: React.FC<PDFFooterProps> = React.memo(({
     <View style={styles.footerContainer} fixed>
       {/* Left side: System version and timestamp */}
       <Text style={styles.footerLeft}>
-        System Log: Simply Useful ({systemVersion}) | Printed: {timestamp}
+        System Log: KAMLA OTS ({systemVersion}) | Printed: {timestamp}
       </Text>
 
       {/* Right side: Re-evaluation of page numbers */}

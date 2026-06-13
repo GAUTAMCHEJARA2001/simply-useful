@@ -61,14 +61,16 @@ export const AdjustmentsTab: React.FC = () => {
               {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
+
           <div>
             <label className="text-sm font-medium block mb-1">Warehouse</label>
-            <select value={form.warehouse_id || ''} onChange={e => setForm({ ...form, warehouse_id: e.target.value })}
+            <select value={form.warehouseId || ''} onChange={e => setForm({ ...form, warehouseId: e.target.value })}
               className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm">
               <option value="">-- Choose Warehouse --</option>
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </div>
+
           <div>
             <label className="text-sm font-medium block mb-1">Quantity Change (+/-)</label>
             <input type="number" value={form.quantityChange || ''} onChange={e => setForm({ ...form, quantityChange: parseFloat(e.target.value) })}
@@ -81,7 +83,7 @@ export const AdjustmentsTab: React.FC = () => {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>Save</Button>
+            <Button onClick={handleSave} disabled={!form.productId || !form.warehouseId || !form.quantityChange || !form.reason}>Save</Button>
           </div>
         </div>
       </Modal>

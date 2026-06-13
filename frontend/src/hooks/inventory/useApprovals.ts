@@ -9,6 +9,10 @@ export const useApprovals = () => {
       const res = await api.get('/transactions/approvals');
       return (res.data?.data || res.data || []) as any[];
     },
+    refetchInterval: 15_000,        // Auto-refresh every 15 seconds
+    refetchOnWindowFocus: true,     // Always refresh when user switches back to tab
+    retry: 3,                       // Retry on failure (e.g. after a 500 error)
+    staleTime: 5_000,              // Consider data stale after 5 seconds
   });
 };
 
