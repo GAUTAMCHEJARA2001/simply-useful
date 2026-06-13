@@ -32,11 +32,14 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ["react", "react-dom", "react-router-dom"],
-          ui: ["@radix-ui/react-dialog", "@radix-ui/react-slot", "@radix-ui/react-tooltip", "@radix-ui/react-dropdown-menu", "lucide-react", "framer-motion"],
-          query: ["@tanstack/react-query"],
-          charts: ["recharts"]
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) return 'vendor';
+            if (id.includes('@radix-ui') || id.includes('lucide-react') || id.includes('framer-motion')) return 'ui';
+            if (id.includes('@tanstack/react-query')) return 'query';
+            if (id.includes('recharts')) return 'charts';
+            return 'modules';
+          }
         }
       }
     }
