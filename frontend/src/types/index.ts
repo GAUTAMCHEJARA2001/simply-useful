@@ -196,6 +196,7 @@ export interface KPIs {
   orders: number;
   totalStockValue: number;
   topProducts?: { name: string; qty: number }[];
+  categoryDistribution?: { name: string; value: number; color: string }[];
 }
 
 export interface Supplier {

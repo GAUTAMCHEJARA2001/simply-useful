@@ -1,91 +1,102 @@
 import threading
+import logging
+from django.db import connection
 
+logger = logging.getLogger(__name__)
 _local = threading.local()
 
 def set_current_db(db_name):
-    print(f'[ROUTER DB DEBUG] Setting DB to: {db_name}')
-    _local.current_db = db_name
-
-#
-    """Sets the database context for the current thread."""
     _local.current_db = db_name
 
 def get_current_db():
-    db = getattr(_local, 'current_db', 'default')
-    print(f'[ROUTER DB DEBUG] Returning DB: {db}')
-    return db
-
-#
-    """Retrieves the current database context. Defaults to 'default'."""
+    try:
+        if hasattr(connection, 'tenant') and connection.tenant:
+            schema = connection.tenant.schema_name
+            if schema == 'public':
+                return 'default'
+            return schema or 'default'
+    except Exception:
+        pass
     return getattr(_local, 'current_db', 'default')
 
-class TenantDatabaseRouter:
+def setup_dynamic_tenant_databases():
     """
-    A router to control all database operations on models for multi-tenant architecture.
+    Dynamically registers connection aliases for each active warehouse schema,
+    allowing .using(wh.db_name) queries to work transparently on the single database.
     """
+    from django.conf import settings
+    from django.db import connections
+    try:
+        from core.models import Warehouse
+        # Guard against running before database is ready/migrated
+        if not Warehouse.objects.all().exists():
+            return
+        
+        base_db = settings.DATABASES['default']
+        for wh in Warehouse.objects.filter(active=True):
+            # Resolve db_name/schema_name
+            alias = wh.db_name or wh.schema_name
+            schema = wh.schema_name or wh.db_name
+            if not alias or not schema or schema == 'public':
+                continue
+            
+            if alias not in settings.DATABASES:
+                db_config = base_db.copy()
+                # Use standard postgresql backend for the individual alias connections
+                db_config['ENGINE'] = 'django.db.backends.postgresql'
+                db_config['OPTIONS'] = {'options': f'-c search_path={schema},public'}
+                settings.DATABASES[alias] = db_config
+                connections.databases[alias] = db_config
+    except Exception:
+        # Suppress errors on startup before migrations are run
+        pass
+
+# Register schema connection aliases immediately
+setup_dynamic_tenant_databases()
+
+
+def get_tenant_model_cross_db(ModelClass, pk, prefetch=None):
+    from core.models import Warehouse
+    curr_db = get_current_db()
     
-    # Models that are partitioned per warehouse database
-    TENANT_MODELS = [
-        'inventory', 
-        'order', 
-        'orderitem', 
-        'purchase', 
-        'purchaseitem', 
-        'purchaseorder', 
-        'purchaseorderitem',
-        'stocktransaction',
-        'stockbatch',
-        'operationaleventledger',
-        'category',
-        'brand',
-        'unit',
-        'supplier',
-        'labour',
-        'dealer',
-        'distributor',
-        'product',
-        'bom',
-        'bomitem'
-    ]
-
-    def db_for_read(self, model, **hints):
-        """Points to the correct database for read operations."""
-        instance = hints.get('instance')
-        if instance and getattr(instance, '_state', None) and getattr(instance._state, 'db', None):
-            return instance._state.db
-        if model._meta.model_name in self.TENANT_MODELS:
-            return get_current_db()
-        return 'default'
-
-    def db_for_write(self, model, **hints):
-        """Points to the correct database for write operations."""
-        instance = hints.get('instance')
-        if instance and getattr(instance, '_state', None) and getattr(instance._state, 'db', None):
-            return instance._state.db
-        if model._meta.model_name in self.TENANT_MODELS:
-            return get_current_db()
-        return 'default'
-
-    def allow_relation(self, obj1, obj2, **hints):
-        """
-        Relations between objects are allowed. 
-        We enforce db_constraint=False on cross-db ForeignKeys manually.
-        """
-        return True
-
-    def allow_migrate(self, db, app_label, model_name=None, **hints):
-        """
-        Strictly isolate migrations.
-        Global models MUST only migrate to the 'default' DB.
-        Tenant models MUST only migrate to tenant DBs (e.g., 'warehouse_surat', 'warehouse_mumbai').
-        """
-        if model_name in self.TENANT_MODELS:
-            # Prevent tenant models from migrating into the master database
-            if db == 'default':
-                return False
-            return True
-        else:
-            # Prevent global models from migrating into tenant databases
-            if db != 'default':
-                return False
-            return True
+    qs = ModelClass.objects
+    if prefetch:
+        qs = qs.prefetch_related(prefetch)
+        
+    if curr_db != 'default':
+        obj = qs.using(curr_db).get(id=pk)
+        set_current_db(curr_db)
+        return obj
+        
+    for wh in Warehouse.objects.filter(active=True):
+        alias = wh.db_name or wh.schema_name
+        if not alias or alias == 'public':
+            continue
+        try:
+            obj = qs.using(alias).get(id=pk)
+            obj._state.db = alias
+            set_current_db(alias)
+            return obj
+        except Exception:
+            pass
+            
+    # Fallback to orderid/purchaseid etc. if applicable
+    fallback_field = None
+    if hasattr(ModelClass, 'orderid'): fallback_field = 'orderid'
+    elif hasattr(ModelClass, 'purchaseid'): fallback_field = 'purchaseid'
+    elif hasattr(ModelClass, 'ponumber'): fallback_field = 'ponumber'
+    
+    if fallback_field:
+        for wh in Warehouse.objects.filter(active=True):
+            alias = wh.db_name or wh.schema_name
+            if not alias or alias == 'public':
+                continue
+            try:
+                obj = qs.using(alias).get(**{fallback_field: pk})
+                obj._state.db = alias
+                set_current_db(alias)
+                return obj
+            except Exception:
+                pass
+                
+    raise ModelClass.DoesNotExist()

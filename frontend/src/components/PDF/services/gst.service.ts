@@ -20,10 +20,12 @@ export interface TaxCalculations {
   total: number;
 }
 
-/** Determines if two Indian states codes imply Intra-state or Inter-state trade */
 export const isIntrastate = (companyStateCode?: string, customerStateCode?: string): boolean => {
   if (!companyStateCode || !customerStateCode) return true;
-  return companyStateCode.trim().toLowerCase() === customerStateCode.trim().toLowerCase();
+  const c1 = companyStateCode.trim();
+  const c2 = customerStateCode.trim();
+  if (c1 === '' || c1 === '—' || c1 === '-' || c2 === '' || c2 === '—' || c2 === '-') return true;
+  return c1.toLowerCase() === c2.toLowerCase();
 };
 
 /** High-precision GST calculation engine avoiding float-drift */

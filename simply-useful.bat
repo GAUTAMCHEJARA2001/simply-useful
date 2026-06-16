@@ -97,14 +97,12 @@ if not exist "%BASE_DIR%backend\venv" (
     if !errorlevel! neq 0 (echo  [ERROR] pip install failed. & pause & goto MENU)
 
     echo  Applying initial migrations...
-    venv\Scripts\python manage.py migrate --database=default
-    venv\Scripts\python manage.py migrate --database=wh_navsari
-    venv\Scripts\python manage.py migrate --database=wh_nashik
+    venv\Scripts\python manage.py migrate
     echo  [OK] Virtual environment ready.
     cd /d "%BASE_DIR%"
 )
 
-start "Simply Useful - Backend" cmd /k "cd /d "%BASE_DIR%backend" && venv\Scripts\python manage.py migrate --database=default && venv\Scripts\python manage.py migrate --database=wh_navsari && venv\Scripts\python manage.py migrate --database=wh_nashik && echo. && echo  [BACKEND] http://localhost:4000 && echo  [API]     http://localhost:4000/api/v1/ && echo. && venv\Scripts\python manage.py runserver 0.0.0.0:4000"
+start "Simply Useful - Backend" cmd /k "cd /d "%BASE_DIR%backend" && venv\Scripts\python manage.py migrate && echo. && echo  [BACKEND] http://localhost:4000 && echo  [API]     http://localhost:4000/api/v1/ && echo. && venv\Scripts\python manage.py runserver 0.0.0.0:4000"
 
 :: --- FRONTEND ---
 echo.
@@ -213,7 +211,7 @@ echo.
 echo  Running Django tests...
 if exist "%BASE_DIR%backend" (
     cd /d "%BASE_DIR%backend"
-    venv\Scripts\python manage.py test --verbosity=2
+    venv\Scripts\python manage.py test api core --verbosity=2
 ) else ( echo  [ERROR] Backend directory not found. )
 pause & goto MENU
 
@@ -232,7 +230,7 @@ echo.
 echo  [1/2] Backend Tests...
 if exist "%BASE_DIR%backend" (
     cd /d "%BASE_DIR%backend"
-    venv\Scripts\python manage.py test
+    venv\Scripts\python manage.py test api core
 )
 echo.
 echo  [2/2] Frontend Tests...
@@ -278,12 +276,10 @@ echo.
 echo  [2/5] Database Migration Status...
 if exist "%BASE_DIR%backend" (
     cd /d "%BASE_DIR%backend"
-    venv\Scripts\python manage.py migrate --check --database=default >nul 2>&1
+    venv\Scripts\python manage.py migrate --check >nul 2>&1
     if !errorlevel! neq 0 (
         echo  [!] Pending migrations detected. Applying now...
-        venv\Scripts\python manage.py migrate --database=default
-        venv\Scripts\python manage.py migrate --database=wh_navsari
-        venv\Scripts\python manage.py migrate --database=wh_nashik
+        venv\Scripts\python manage.py migrate
     ) else (
         echo  [OK] Database schema is fully up to date.
     )

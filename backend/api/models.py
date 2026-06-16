@@ -8,13 +8,14 @@
 from django.db import models
 from django.utils import timezone
 from decimal import Decimal
+from core.models import Company, User, Warehouse, Userwarehouseaccess
 
 
 class Bom(models.Model):
     id = models.TextField(primary_key=True)
     productcode = models.TextField(db_column='productCode', unique=True)  # Field name made lowercase.
     name = models.TextField()
-    companyid = models.ForeignKey('Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
     outputquantity = models.FloatField(db_column='outputQuantity', default=1.0, blank=True, null=True)  # Field name made lowercase.
@@ -37,7 +38,7 @@ class Bomitem(models.Model):
 class Brand(models.Model):
     name = models.TextField()
     active = models.BooleanField()
-    companyid = models.ForeignKey('Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
 
     class Meta:
         db_table = 'Brand'
@@ -47,7 +48,7 @@ class Brand(models.Model):
 class Category(models.Model):
     name = models.TextField()
     active = models.BooleanField()
-    companyid = models.ForeignKey('Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
     parentid = models.ForeignKey('self', models.DO_NOTHING, db_column='parentId', blank=True, null=True, db_constraint=False)  # Field name made lowercase.
 
     class Meta:
@@ -55,17 +56,6 @@ class Category(models.Model):
         unique_together = (('name', 'companyid'),)
 
 
-class Company(models.Model):
-    id = models.TextField(primary_key=True)
-    name = models.TextField(unique=True)
-    skuprefix = models.TextField(db_column='skuPrefix', blank=True, null=True)  # Field name made lowercase.
-    active = models.BooleanField()
-    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
-    stockmethod = models.TextField(db_column='stockMethod')  # Field name made lowercase.
-
-    class Meta:
-        db_table = 'Company'
 
 
 class Dealer(models.Model):
@@ -122,7 +112,7 @@ class Distributor(models.Model):
 class Expense(models.Model):
     id = models.TextField(primary_key=True)
     date = models.DateTimeField()
-    soemail = models.ForeignKey('User', models.DO_NOTHING, db_column='soEmail', to_field='email', db_constraint=False)  # Field name made lowercase.
+    soemail = models.ForeignKey('core.User', models.DO_NOTHING, db_column='soEmail', to_field='email', db_constraint=False)  # Field name made lowercase.
     category = models.TextField()
     amount = models.FloatField()
     remarks = models.TextField()
@@ -139,7 +129,7 @@ class Expense(models.Model):
 
 class Inventory(models.Model):
     productid = models.ForeignKey('Product', models.DO_NOTHING, db_column='productId', db_constraint=False)  # Field name made lowercase.
-    warehouseid = models.ForeignKey('Warehouse', models.DO_NOTHING, db_column='warehouseId', db_constraint=False)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', db_constraint=False)  # Field name made lowercase.
     quantity = models.IntegerField()
     avgcost = models.FloatField(db_column='avgCost')  # Field name made lowercase.
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
@@ -177,7 +167,7 @@ class Order(models.Model):
     id = models.TextField(primary_key=True)
     orderid = models.TextField(db_column='orderId', unique=True)  # Field name made lowercase.
     date = models.DateTimeField()
-    soemail = models.ForeignKey('User', models.DO_NOTHING, db_column='soEmail', to_field='email', db_constraint=False)  # Field name made lowercase.
+    soemail = models.ForeignKey('core.User', models.DO_NOTHING, db_column='soEmail', to_field='email', db_constraint=False)  # Field name made lowercase.
     partytype = models.TextField(db_column='partyType')  # Field name made lowercase.
     partyname = models.TextField(db_column='partyName')  # Field name made lowercase.
     distributor = models.TextField()
@@ -244,7 +234,7 @@ class Purchase(models.Model):
     vehiclenumber = models.TextField(db_column='vehicleNumber', blank=True, null=True)
     totaltax = models.FloatField(db_column='totalTax', blank=True, null=True)
     purchaseorderid = models.ForeignKey('Purchaseorder', models.DO_NOTHING, db_column='purchaseOrderId', blank=True, null=True, db_constraint=False)
-    warehouseid = models.ForeignKey('Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)  # Field name made lowercase.
     narration = models.TextField(blank=True, null=True)
 
     class Meta:
@@ -322,7 +312,7 @@ class Region(models.Model):
 class Stockbatch(models.Model):
     id = models.TextField(primary_key=True)
     productid = models.ForeignKey(Product, models.DO_NOTHING, db_column='productId', db_constraint=False)  # Field name made lowercase.
-    warehouseid = models.ForeignKey('Warehouse', models.DO_NOTHING, db_column='warehouseId', db_constraint=False)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', db_constraint=False)  # Field name made lowercase.
     quantity = models.IntegerField()
     remaining = models.IntegerField()
     cost = models.FloatField()
@@ -361,21 +351,6 @@ class Unit(models.Model):
         unique_together = (('name', 'companyid'),)
 
 
-class User(models.Model):
-    id = models.TextField(primary_key=True)
-    email = models.TextField(unique=True)
-    name = models.TextField(blank=True, null=True)
-    hashedpassword = models.TextField(db_column='hashedPassword')  # Field name made lowercase.
-    role = models.TextField()
-    active = models.BooleanField()
-    monthlytarget = models.FloatField(db_column='monthlyTarget', blank=True, null=True)  # Added target field
-    territory = models.TextField(blank=True, null=True)
-    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', blank=True, null=True, db_constraint=False)  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
-
-    class Meta:
-        db_table = 'User'
 
 
 class Userproductaccess(models.Model):
@@ -388,12 +363,7 @@ class Userproductaccess(models.Model):
         db_table = 'UserProductAccess'
 
 
-class Userwarehouseaccess(models.Model):
-    userid = models.ForeignKey(User, models.DO_NOTHING, db_column='userId', db_constraint=False)  # Field name made lowercase.
-    warehouseid = models.ForeignKey('Warehouse', models.DO_NOTHING, db_column='warehouseId', db_constraint=False)  # Field name made lowercase.
-
-    class Meta:
-        db_table = 'UserWarehouseAccess'
+from core.models import Userwarehouseaccess
 
 
 class Visit(models.Model):
@@ -418,22 +388,6 @@ class Visit(models.Model):
         db_table = 'Visit'
 
 
-class Warehouse(models.Model):
-    name = models.TextField()
-    active = models.BooleanField()
-    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
-    gstnumber = models.TextField(db_column='gstNumber', blank=True, null=True)  # Field name made lowercase.
-    location = models.TextField(blank=True, null=True)
-    
-    # Database connection registry for multi-tenancy
-    db_name = models.CharField(max_length=100, blank=True, null=True)
-    db_host = models.CharField(max_length=200, blank=True, null=True)
-    db_port = models.IntegerField(blank=True, null=True)
-
-    class Meta:
-        managed = True
-        db_table = 'Warehouse'
-        unique_together = (('name', 'companyid'),)
 
 
 class ActiveLeadManager(models.Manager):
@@ -472,10 +426,10 @@ class Lead(models.Model):
     value = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))  # High-precision financial value
     notes = models.TextField(blank=True, null=True)  # Primary lead requirements/notes
     is_deleted = models.BooleanField(db_column='isDeleted', default=False)
-    companyid = models.ForeignKey('Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)
-    assigned_to = models.ForeignKey('User', models.DO_NOTHING, db_column='assignedTo', blank=True, null=True, related_name='assigned_leads', db_constraint=False)
-    created_by = models.ForeignKey('User', models.DO_NOTHING, db_column='createdBy', related_name='created_leads', db_constraint=False)
-    updated_by = models.ForeignKey('User', models.DO_NOTHING, db_column='updatedBy', related_name='updated_leads', blank=True, null=True, db_constraint=False)
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    assigned_to = models.ForeignKey('core.User', models.DO_NOTHING, db_column='assignedTo', blank=True, null=True, related_name='assigned_leads', db_constraint=False)
+    created_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='createdBy', related_name='created_leads', db_constraint=False)
+    updated_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='updatedBy', related_name='updated_leads', blank=True, null=True, db_constraint=False)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
     version = models.PositiveIntegerField(default=1, db_index=True)
@@ -536,7 +490,7 @@ class LeadFollowUp(models.Model):
     notes = models.TextField()  # Activity outcome summary
     next_followup_date = models.DateTimeField(db_column='nextFollowupDate', blank=True, null=True)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
-    created_by = models.ForeignKey('User', models.DO_NOTHING, db_column='createdBy', related_name='followup_logs', blank=True, null=True, db_constraint=False)
+    created_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='createdBy', related_name='followup_logs', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'LeadFollowUp'
@@ -553,7 +507,7 @@ class LeadStageHistory(models.Model):
     lead = models.ForeignKey(Lead, models.CASCADE, db_column='leadId', related_name='stage_history', db_constraint=False)
     old_status = models.CharField(db_column='oldStatus', max_length=20, choices=Lead.STATUS_CHOICES)
     new_status = models.CharField(db_column='newStatus', max_length=20, choices=Lead.STATUS_CHOICES)
-    changed_by = models.ForeignKey('User', models.DO_NOTHING, db_column='changedBy', db_constraint=False)
+    changed_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='changedBy', db_constraint=False)
     changed_at = models.DateTimeField(db_column='changedAt', default=timezone.now)
 
     class Meta:
@@ -567,7 +521,7 @@ class LeadStageHistory(models.Model):
 class Stocktransaction(models.Model):
     id = models.TextField(primary_key=True)
     productid = models.ForeignKey(Product, models.DO_NOTHING, db_column='productId', db_constraint=False)
-    warehouseid = models.ForeignKey('Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
     transactiontype = models.TextField(db_column='transactionType')
     quantity = models.FloatField()
     referenceid = models.TextField(db_column='referenceId', blank=True, null=True)

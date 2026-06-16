@@ -22,6 +22,8 @@ export interface PrintableProductionOrder {
   terms: string[];
 }
 
+import { getDetailsFromAddressOrGst, cleanGstNumber } from './stateResolver';
+
 /** Normalizes raw production order payloads */
 export const adaptProductionToPrintable = (
   rawData: any,
@@ -33,16 +35,19 @@ export const adaptProductionToPrintable = (
     logo?: string | null;
   }
 ): PrintableProductionOrder => {
+  const cleanCompGst = cleanGstNumber(companyInfo.gst || '08ABCDE1234F1Z5');
+  const companyDetails = getDetailsFromAddressOrGst(cleanCompGst, companyInfo.address);
+
   const company: PrintableCompany = {
     name: companyInfo.name || 'KAMLA INDUSTRIES',
     address: companyInfo.address || 'Phase-1, Industrial Area, Rajasthan, India',
     contact: companyInfo.contact || '',
-    gst: companyInfo.gst || '08ABCDE1234F1Z5',
-    pan: companyInfo.gst ? companyInfo.gst.substring(2, 12) : 'ABCDE1234F',
+    gst: cleanCompGst || undefined,
+    pan: cleanCompGst && cleanCompGst.length >= 12 ? cleanCompGst.substring(2, 12) : undefined,
     cin: 'L45201RJ2001PLC012345',
     logoUrl: companyInfo.logo || null,
-    state: 'Rajasthan',
-    stateCode: '08'
+    state: companyDetails.state,
+    stateCode: companyDetails.stateCode
   };
 
   const rawBom = rawData.bom_items || rawData.bomItems || [];

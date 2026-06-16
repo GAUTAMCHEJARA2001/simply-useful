@@ -41,18 +41,23 @@ export const WarehouseProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Initialize from user's authorized warehouses if not set
   useEffect(() => {
-    if (user && user.authorizedWarehouses && user.authorizedWarehouses.length > 0) {
-      // Check if current active warehouse is valid for this user
-      let currentValid = user.authorizedWarehouses.find(w => String(w.id) === String(activeWarehouseId));
-      
-      if (user.role === 'SUPERADMIN' && activeWarehouseId === 'GLOBAL') {
-        currentValid = { id: 'GLOBAL', name: 'Global Data' } as any;
+    if (user) {
+      if (user.role === 'SUPERADMIN') {
+        if (!activeWarehouseId) {
+          setActiveWarehouse('GLOBAL', 'Global Data');
+        }
+        return;
       }
-      
-      // If no valid active warehouse, default to the first one
-      if (!currentValid) {
-        const defaultWh = user.authorizedWarehouses[0];
-        setActiveWarehouse(defaultWh.id, defaultWh.name);
+
+      if (user.authorizedWarehouses && user.authorizedWarehouses.length > 0) {
+        // Check if current active warehouse is valid for this user
+        let currentValid = user.authorizedWarehouses.find(w => String(w.id) === String(activeWarehouseId));
+        
+        // If no valid active warehouse, default to the first one
+        if (!currentValid) {
+          const defaultWh = user.authorizedWarehouses[0];
+          setActiveWarehouse(defaultWh.id, defaultWh.name);
+        }
       }
     }
   }, [user, activeWarehouseId, setActiveWarehouse]);

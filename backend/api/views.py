@@ -1020,7 +1020,17 @@ def load_settings():
         "show_credit_warnings": True,
         "showCreditWarnings": True,
         "order_approval_required": False,
-        "orderApprovalRequired": False
+        "orderApprovalRequired": False,
+        "auto_backup_enabled": False,
+        "autoBackupEnabled": False,
+        "auto_backup_time": "02:00",
+        "autoBackupTime": "02:00",
+        "local_backup_dir": "C:\\SimplyUsefulBackups",
+        "localBackupDir": "C:\\SimplyUsefulBackups",
+        "local_backup_enabled": False,
+        "localBackupEnabled": False,
+        "local_backup_time": "02:00",
+        "localBackupTime": "02:00"
     }
     if os.path.exists(SETTINGS_FILE_PATH):
         try:
@@ -1060,6 +1070,31 @@ def load_settings():
                     data['companyName'] = data['company_name']
                 elif 'companyName' in data:
                     data['company_name'] = data['companyName']
+
+                if 'auto_backup_enabled' in data:
+                    data['autoBackupEnabled'] = data['auto_backup_enabled']
+                elif 'autoBackupEnabled' in data:
+                    data['auto_backup_enabled'] = data['autoBackupEnabled']
+
+                if 'auto_backup_time' in data:
+                    data['autoBackupTime'] = data['auto_backup_time']
+                elif 'autoBackupTime' in data:
+                    data['auto_backup_time'] = data['autoBackupTime']
+                
+                if 'local_backup_dir' in data:
+                    data['localBackupDir'] = data['local_backup_dir']
+                elif 'localBackupDir' in data:
+                    data['local_backup_dir'] = data['localBackupDir']
+
+                if 'local_backup_enabled' in data:
+                    data['localBackupEnabled'] = data['local_backup_enabled']
+                elif 'localBackupEnabled' in data:
+                    data['local_backup_enabled'] = data['localBackupEnabled']
+
+                if 'local_backup_time' in data:
+                    data['localBackupTime'] = data['local_backup_time']
+                elif 'localBackupTime' in data:
+                    data['local_backup_time'] = data['localBackupTime']
                 
                 return {**default_vals, **data}
         except Exception:
@@ -1126,6 +1161,31 @@ def master_settings(request):
             updated_data['companyName'] = new_data['company_name']
         elif 'companyName' in new_data:
             updated_data['company_name'] = new_data['companyName']
+
+        if 'auto_backup_enabled' in new_data:
+            updated_data['autoBackupEnabled'] = new_data['auto_backup_enabled']
+        elif 'autoBackupEnabled' in new_data:
+            updated_data['auto_backup_enabled'] = new_data['autoBackupEnabled']
+
+        if 'auto_backup_time' in new_data:
+            updated_data['autoBackupTime'] = new_data['auto_backup_time']
+        elif 'autoBackupTime' in new_data:
+            updated_data['auto_backup_time'] = new_data['autoBackupTime']
+            
+        if 'local_backup_dir' in new_data:
+            updated_data['localBackupDir'] = new_data['local_backup_dir']
+        elif 'localBackupDir' in new_data:
+            updated_data['local_backup_dir'] = new_data['localBackupDir']
+
+        if 'local_backup_enabled' in new_data:
+            updated_data['localBackupEnabled'] = new_data['local_backup_enabled']
+        elif 'localBackupEnabled' in new_data:
+            updated_data['local_backup_enabled'] = new_data['localBackupEnabled']
+
+        if 'local_backup_time' in new_data:
+            updated_data['localBackupTime'] = new_data['local_backup_time']
+        elif 'localBackupTime' in new_data:
+            updated_data['local_backup_time'] = new_data['localBackupTime']
             
         save_settings(updated_data)
         return send_success(updated_data, "Settings updated successfully")
@@ -1139,11 +1199,14 @@ def master_settings(request):
     return response
 
 
-def _csv_response(filename, headers, rows=None):
+def _csv_response(filename, headers, rows=None, instructions=None):
     import csv
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     writer = csv.writer(response)
+    if instructions:
+        for instr in instructions:
+            writer.writerow([f"# {instr}"])
     writer.writerow(headers)
     for row in rows or []:
         writer.writerow(row)
@@ -1157,7 +1220,9 @@ def _read_uploaded_csv(request):
     if not uploaded:
         return None, send_error("CSV file is required", 400)
     content = uploaded.read().decode('utf-8-sig')
-    return list(csv.DictReader(io.StringIO(content))), None
+    clean_lines = [line for line in content.splitlines() if line.strip() and not line.strip().startswith('#')]
+    clean_content = '\n'.join(clean_lines)
+    return list(csv.DictReader(io.StringIO(clean_content))), None
 
 
 def _truthy(value, default=True):
@@ -1281,17 +1346,33 @@ def bulk_template(request, entity):
         'products': (
             'products_template.csv',
             ['productCode', 'name', 'bagSize', 'category', 'subcategory', 'brand', 'unit', 'rate', 'gst', 'openingStock', 'minimumStock'],
-            [['FG-001', 'Sample Product', '50 KG', 'FINISHED GOOD', 'Tile Adhesive', 'Default Brand', 'BAG', '100', '18', '0', '10']]
+            [['FG-001', 'Sample Product', '50 KG', 'FINISHED GOOD', 'Tile Adhesive', 'Default Brand', 'BAG', '100', '18', '0', '10']],
+            [
+                "INSTRUCTION: Fill in the product details.",
+                "productCode is optional (auto-generated if left blank).",
+                "category and subcategory will be automatically created if they do not exist.",
+                "gst should be a percentage number (e.g. 18)."
+            ]
         ),
         'dealers': (
             'dealers_template.csv',
             ['dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'distributorName', 'creditLimit', 'outstanding', 'active', 'territory'],
-            [['D-001', 'Sample Dealer', 'Jaipur', 'sales@example.com', 'Sample Distributor', '100000', '0', 'true', 'T-WEST']]
+            [['D-001', 'Sample Dealer', 'Jaipur', 'sales@example.com', 'Sample Distributor', '100000', '0', 'true', 'T-WEST']],
+            [
+                "INSTRUCTION: Fill in dealer details.",
+                "dealerCode and dealerName are required.",
+                "active must be true or false (lowercase or uppercase)."
+            ]
         ),
         'distributors': (
             'distributors_template.csv',
             ['distributorName', 'area', 'assignedSoEmail', 'creditLimit', 'outstanding', 'active', 'territory'],
-            [['Sample Distributor', 'North Zone', 'sales@example.com', '500000', '0', 'true', 'T-WEST']]
+            [['Sample Distributor', 'North Zone', 'sales@example.com', '500000', '0', 'true', 'T-WEST']],
+            [
+                "INSTRUCTION: Fill in distributor details.",
+                "distributorName is required.",
+                "active must be true or false."
+            ]
         ),
         'recipes': (
             'recipes_template.csv',
@@ -1299,18 +1380,30 @@ def bulk_template(request, entity):
             [
                 ['FG-001', 'Sample Product Recipe', '1', 'Cement', '10', 'KG'],
                 ['FG-001', 'Sample Product Recipe', '1', 'Sand', '20', 'KG'],
+            ],
+            [
+                "INSTRUCTION: Fill in production recipe details.",
+                "recipeCode and materialName are required.",
+                "outputQuantity is the output yield quantity of the recipe.",
+                "Specify one row per material item belonging to the recipe."
             ]
         ),
         'leads': (
             'leads_template.csv',
             ['name', 'companyName', 'email', 'phone', 'status', 'priority', 'source', 'city', 'state', 'pincode', 'value', 'notes', 'assignedTo'],
-            [['Ramesh Kumar', 'RK Traders', 'ramesh@example.com', '9876543210', 'NEW', 'MEDIUM', 'Trade Show', 'Mumbai', 'Maharashtra', '400001', '50000', 'Interested in bulk cement order', 'sales@example.com']]
+            [['Ramesh Kumar', 'RK Traders', 'ramesh@example.com', '9876543210', 'NEW', 'MEDIUM', 'Trade Show', 'Mumbai', 'Maharashtra', '400001', '50000', 'Interested in bulk cement order', 'sales@example.com']],
+            [
+                "INSTRUCTION: Fill in CRM lead details.",
+                "name is required.",
+                "status can be NEW, CONTACTED, QUALIFIED, LOST, or WON.",
+                "priority can be LOW, MEDIUM, or HIGH."
+            ]
         ),
     }
     if entity not in templates:
         return send_error("Unknown template type", 404)
-    filename, headers, rows = templates[entity]
-    return _csv_response(filename, headers, rows)
+    filename, headers, rows, instructions = templates[entity]
+    return _csv_response(filename, headers, rows, instructions)
 
 
 @api_view(['POST'])
@@ -1638,6 +1731,172 @@ def database_export(request):
     response = HttpResponse(json.dumps(payload, cls=DjangoJSONEncoder, indent=2), content_type='application/json')
     response['Content-Disposition'] = 'attachment; filename="simply-useful-database-export.json"'
     return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def local_backup_status_view(request):
+    import os
+    import shutil
+    from backup_to_local import find_pg_dump, load_local_dir_from_settings
+    
+    pg_dump_path = find_pg_dump()
+    pg_dump_found = False
+    if os.path.isabs(pg_dump_path):
+        pg_dump_found = os.path.exists(pg_dump_path)
+    else:
+        pg_dump_found = shutil.which(pg_dump_path) is not None
+        
+    settings_data = load_settings()
+    local_backup_dir = settings_data.get('local_backup_dir') or load_local_dir_from_settings() or 'C:\\SimplyUsefulBackups'
+    
+    return send_success({
+        "pg_dump_found": pg_dump_found,
+        "pg_dump_path": pg_dump_path,
+        "local_backup_dir": local_backup_dir,
+        "local_backup_enabled": settings_data.get('local_backup_enabled', False),
+        "local_backup_time": settings_data.get('local_backup_time', '02:00'),
+    }, "Local backup status retrieved")
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def download_postgres_dump_view(request):
+    import sys
+    import subprocess
+    import os
+    import datetime
+    from django.conf import settings
+    from backup_to_local import find_pg_dump
+    
+    from django.conf import settings as django_settings
+    db_config = django_settings.DATABASES.get('default', {})
+    
+    db_name = db_config.get('NAME', 'db_master')
+    db_user = db_config.get('USER', 'postgres')
+    db_password = db_config.get('PASSWORD', 'admin')
+    db_host = db_config.get('HOST', 'localhost')
+    db_port = str(db_config.get('PORT', '5432'))
+    
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    backup_filename = f"db_backup_{timestamp}.dump"
+    local_temp_path = os.path.join(django_settings.BASE_DIR, backup_filename)
+    
+    pg_dump_path = find_pg_dump()
+    
+    env = os.environ.copy()
+    env['PGPASSWORD'] = db_password
+    
+    cmd = [
+        pg_dump_path,
+        '-h', db_host,
+        '-p', db_port,
+        '-U', db_user,
+        '-F', 'c',
+        '-b',
+        '-f', local_temp_path,
+        db_name
+    ]
+    
+    try:
+        subprocess.run(cmd, env=env, capture_output=True, text=True, check=True)
+        
+        if not os.path.exists(local_temp_path):
+            return send_error("Failed to generate database dump file.", 500)
+            
+        with open(local_temp_path, 'rb') as fh:
+            data = fh.read()
+            
+        try:
+            os.remove(local_temp_path)
+        except Exception:
+            pass
+            
+        response = HttpResponse(data, content_type='application/octet-stream')
+        response['Content-Disposition'] = f'attachment; filename="{backup_filename}"'
+        return response
+        
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr or e.stdout or str(e)
+        if os.path.exists(local_temp_path):
+            try:
+                os.remove(local_temp_path)
+            except Exception:
+                pass
+        return send_error(f"pg_dump failed: {error_msg}", 500)
+    except Exception as e:
+        if os.path.exists(local_temp_path):
+            try:
+                os.remove(local_temp_path)
+            except Exception:
+                pass
+        return send_error(f"Unexpected error: {str(e)}", 500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def schedule_local_backup_view(request):
+    import subprocess
+    import os
+    import sys
+    from django.conf import settings
+    
+    enabled = request.data.get('enabled', False)
+    backup_time = request.data.get('time', '02:00').strip()
+    local_backup_dir = request.data.get('local_backup_dir', 'C:\\SimplyUsefulBackups').strip()
+    
+    current_data = load_settings()
+    current_data['local_backup_enabled'] = enabled
+    current_data['localBackupEnabled'] = enabled
+    current_data['local_backup_time'] = backup_time
+    current_data['localBackupTime'] = backup_time
+    current_data['local_backup_dir'] = local_backup_dir
+    current_data['localBackupDir'] = local_backup_dir
+    save_settings(current_data)
+    
+    task_name = "SimplyUsefulAutoBackup"
+    
+    try:
+        subprocess.run(["schtasks", "/delete", "/tn", task_name, "/f"], capture_output=True, text=True)
+    except Exception:
+        pass
+        
+    if not enabled:
+        return send_success(None, "Automatic backup schedule disabled.")
+        
+    venv_python = os.path.join(settings.BASE_DIR, 'venv', 'Scripts', 'python.exe')
+    if not os.path.exists(venv_python):
+        venv_python = sys.executable
+        
+    script_path = os.path.join(settings.BASE_DIR, 'backup_to_local.py')
+    if not os.path.exists(script_path):
+        return send_error("Backup helper script 'backup_to_local.py' not found in backend directory.", 500)
+        
+    task_cmd = f'cmd.exe /c "cd /d \"{settings.BASE_DIR}\" && \"{venv_python}\" \"{script_path}\""'
+    
+    try:
+        cmd = [
+            "schtasks", "/create",
+            "/tn", task_name,
+            "/tr", task_cmd,
+            "/sc", "daily",
+            "/st", backup_time,
+            "/f"
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            error_details = res.stderr or res.stdout
+            return send_error(f"Failed to create automatic schedule task: {error_details}", 500)
+            
+        return send_success({
+            "task_name": task_name,
+            "time": backup_time,
+            "local_backup_dir": local_backup_dir
+        }, f"Automatic backup scheduled daily at {backup_time} to {local_backup_dir}.")
+    except Exception as e:
+        return send_error(f"An unexpected error occurred: {str(e)}", 500)
+
+
 
 
 # ----------------------------------------------------
@@ -2396,7 +2655,7 @@ class BOMViewSet(viewsets.ModelViewSet):
 def report_dashboard_kpis(request):
     company_id = request.user.companyId
     user_id = request.user.id
-    from api.models import Userwarehouseaccess, Product, Dealer, Order, Warehouse, Inventory
+    from api.models import Userwarehouseaccess, Product, Dealer, Order, Warehouse, Inventory, Orderitem
     from django.db.models import Sum
     has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()
     assigned_wh_ids = []
@@ -2405,7 +2664,6 @@ def report_dashboard_kpis(request):
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
         
     products_q = Product.objects.filter(companyid_id=company_id) if company_id else Product.objects.all()
-        
     dealers_q = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
     
     total_products = products_q.count()
@@ -2414,6 +2672,11 @@ def report_dashboard_kpis(request):
     total_orders = 0
     total_revenue = 0.0
     total_stock_value = 0.0
+    
+    category_stock = {}
+    product_sales = {}
+    
+    colors = ['#3b82f6', '#10b981', '#6366f1', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6']
     
     for wh in Warehouse.objects.filter(active=True):
         if not wh.db_name: continue
@@ -2430,21 +2693,57 @@ def report_dashboard_kpis(request):
         revenue_q = orders_q.filter(status='Completed').aggregate(Sum('grandtotal'))
         total_revenue += float(revenue_q['grandtotal__sum'] or 0)
         
-        # 2. Stock Value
-        qs = Inventory.objects.using(wh.db_name)
+        # 2. Stock Value & Category Distribution
+        inv_qs = Inventory.objects.using(wh.db_name).select_related('productid', 'productid__categoryid')
         if company_id:
-            product_ids = list(Product.objects.filter(companyid_id=company_id).values_list('id', flat=True))
-            qs = qs.filter(productid_id__in=product_ids)
+            inv_qs = inv_qs.filter(productid__companyid_id=company_id)
             
-        res = qs.aggregate(total_qty=Sum('quantity'))
-        total_stock_value += float(res['total_qty'] or 0)
-    
+        for inv in inv_qs:
+            qty = inv.quantity
+            rate = inv.productid.rate or inv.avgcost or 0
+            val = qty * rate
+            total_stock_value += val
+            
+            category_name = "Uncategorized"
+            if inv.productid.categoryid:
+                category_name = inv.productid.categoryid.name
+            
+            category_stock[category_name] = category_stock.get(category_name, 0) + val
+            
+        # 3. Top Products
+        completed_orders = list(orders_q.filter(status='Completed').values_list('id', flat=True))
+        if completed_orders:
+            order_items = Orderitem.objects.using(wh.db_name).filter(orderid_id__in=completed_orders).select_related('productid')
+            for item in order_items:
+                name = item.productid.name if item.productid else (item.productname or "Unknown Item")
+                product_sales[name] = product_sales.get(name, 0) + item.qty
+                
+    category_distribution = []
+    sorted_categories = sorted(category_stock.items(), key=lambda x: x[1], reverse=True)
+    for idx, (cat_name, value) in enumerate(sorted_categories):
+        color = colors[idx % len(colors)]
+        category_distribution.append({
+            "name": cat_name,
+            "value": MathRound(value),
+            "color": color
+        })
+        
+    top_products = []
+    sorted_sales = sorted(product_sales.items(), key=lambda x: x[1], reverse=True)
+    for name, qty in sorted_sales[:5]:
+        top_products.append({
+            "name": name,
+            "qty": qty
+        })
+        
     kpis = {
         "products": total_products,
         "dealers": total_dealers,
         "revenue": MathRound(total_revenue),
         "orders": total_orders,
-        "totalStockValue": total_stock_value
+        "totalStockValue": MathRound(total_stock_value),
+        "categoryDistribution": category_distribution,
+        "topProducts": top_products
     }
     
     return send_success(kpis, "Dashboard KPIs fetched")
@@ -3861,47 +4160,7 @@ def transaction_approvals(request):
     return send_success(mapped_approvals, "Approvals fetched successfully")
 
 
-def get_tenant_model_cross_db(ModelClass, pk, prefetch=None):
-    from api.db_router import get_current_db, set_current_db
-    from api.models import Warehouse
-    curr_db = get_current_db()
-    
-    qs = ModelClass.objects
-    if prefetch:
-        qs = qs.prefetch_related(prefetch)
-        
-    if curr_db != 'default':
-        obj = qs.using(curr_db).get(id=pk)
-        set_current_db(curr_db)
-        return obj
-        
-    for wh in Warehouse.objects.filter(active=True):
-        if not wh.db_name: continue
-        try:
-            obj = qs.using(wh.db_name).get(id=pk)
-            obj._state.db = wh.db_name
-            set_current_db(wh.db_name)
-            return obj
-        except Exception:
-            pass
-            
-    # Fallback to orderid/purchaseid etc. if applicable
-    fallback_field = None
-    if hasattr(ModelClass, 'orderid'): fallback_field = 'orderid'
-    elif hasattr(ModelClass, 'purchaseid'): fallback_field = 'purchaseid'
-    
-    if fallback_field:
-        for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name: continue
-            try:
-                obj = qs.using(wh.db_name).get(**{fallback_field: pk})
-                obj._state.db = wh.db_name
-                set_current_db(wh.db_name)
-                return obj
-            except Exception:
-                pass
-                
-    raise ModelClass.DoesNotExist()
+from api.db_router import get_tenant_model_cross_db
 
 @api_view(['GET'])
 def transaction_approval_detail(request, pk):

@@ -1,17 +1,37 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWarehouse } from '@/contexts/WarehouseContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Building2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { inventoryService } from '@/api/services/inventory.service';
 
 export const WarehouseSwitcher: React.FC = () => {
   const { user } = useAuth();
   const { activeWarehouseId, setActiveWarehouse } = useWarehouse();
   const location = useLocation();
+  const [warehouses, setWarehouses] = useState<{ id: string | number; name: string }[]>([]);
 
-  if (!user || !user.authorizedWarehouses || user.authorizedWarehouses.length === 0) {
-    if (user?.role !== 'SUPERADMIN') return null;
+  useEffect(() => {
+    if (user?.role === 'SUPERADMIN') {
+      inventoryService.getWarehouses()
+        .then((res) => {
+          if (res.data && res.data.success) {
+            setWarehouses(res.data.data);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load warehouses in switcher:", err);
+        });
+    } else if (user?.authorizedWarehouses) {
+      setWarehouses(user.authorizedWarehouses);
+    }
+  }, [user]);
+
+  if (!user) return null;
+
+  if (user.role !== 'SUPERADMIN' && warehouses.length === 0) {
+    return null;
   }
 
   // Only show on inventory management pages for all users
@@ -25,9 +45,9 @@ export const WarehouseSwitcher: React.FC = () => {
       window.location.reload();
       return;
     }
-    const selected = user?.authorizedWarehouses?.find(w => String(w.id) === String(value));
+    const selected = warehouses.find(w => String(w.id) === String(value));
     if (selected) {
-      setActiveWarehouse(selected.id, selected.name);
+      setActiveWarehouse(String(selected.id), selected.name);
     }
     window.location.reload();
   };
@@ -47,7 +67,7 @@ export const WarehouseSwitcher: React.FC = () => {
               🌍 Global Data
             </SelectItem>
           )}
-          {user?.authorizedWarehouses?.map((wh) => (
+          {warehouses.map((wh) => (
             <SelectItem key={wh.id} value={String(wh.id)}>
               {wh.name}
             </SelectItem>

@@ -30,25 +30,33 @@ ALLOWED_HOSTS = ['*']
 
 # Application definition
 
-INSTALLED_APPS = [
+SHARED_APPS = [
+    'django_tenants',  # Mandatory, must be at the very top!
+    'core',  # Contains shared Company, User, Warehouse, and Domain
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    # Third party apps
     'corsheaders',
     'rest_framework',
-    
-    # Local apps
-    'api',
 ]
+
+TENANT_APPS = [
+    'django.contrib.contenttypes',  # Required for django-tenants content type isolation
+    'api',  # Contains warehouse-specific Order, Product, Inventory, etc.
+]
+
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
+
+TENANT_MODEL = 'core.Warehouse'
+TENANT_DOMAIN_MODEL = 'core.Domain'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # Must be at the very top
     'django.middleware.security.SecurityMiddleware',
+    'core.middleware.HeaderTenantMiddleware',  # Routes schema based on X-Warehouse-ID header
     'whitenoise.middleware.WhiteNoiseMiddleware',  # High-performance static files serving
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -93,40 +101,36 @@ if DATABASE_URL:
     url = urlparse(DATABASE_URL)
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql',
+            'ENGINE': 'django_tenants.postgresql_backend',
             'NAME': url.path[1:],
             'USER': url.username,
             'PASSWORD': url.password,
             'HOST': url.hostname,
             'PORT': url.port or 5432,
-        },
-        'wh_navsari': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'wh_navsari.sqlite3',
-        },
-        'wh_nashik': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'wh_nashik.sqlite3',
         }
     }
 else:
-    # Fallback to SQLite (Allows Render to build successfully without a Postgres DB)
+    # Local PostgreSQL Implementation
+    db_user = os.environ.get('DATABASE_USER', 'postgres')
+    db_password = os.environ.get('DATABASE_PASSWORD', 'admin')
+    db_host = os.environ.get('DATABASE_HOST', 'localhost')
+    db_port = os.environ.get('DATABASE_PORT', '5432')
+
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        },
-        'wh_navsari': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'wh_navsari.sqlite3',
-        },
-        'wh_nashik': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'wh_nashik.sqlite3',
+            'ENGINE': 'django_tenants.postgresql_backend',
+            'NAME': 'db_master',
+            'USER': db_user,
+            'PASSWORD': db_password,
+            'HOST': db_host,
+            'PORT': db_port,
         }
     }
 
-DATABASE_ROUTERS = ['api.db_router.TenantDatabaseRouter']
+DATABASE_ROUTERS = (
+    'core.routers.CustomTenantSyncRouter',
+    'django_tenants.routers.TenantSyncRouter',
+)
 
 
 # Password validation

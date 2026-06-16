@@ -20,14 +20,9 @@ COMPANY_ID = 'cmo75yliq0000wesurjpett1n'
 print("Starting Realistic Data Generation...")
 
 def seed_global():
-    print("Seeding Global Data (Users, Leads, CRM)...")
+    print("Seeding Global Data (Users)...")
     company = Company.objects.get(id=COMPANY_ID)
-    wh_nashik = Warehouse.objects.get(db_name='wh_nashik')
-    wh_navsari = Warehouse.objects.get(db_name='wh_navsari')
-    Lead.objects.using('default').all().delete()
-    Visit.objects.using('default').all().delete()
-    Expense.objects.using('default').all().delete()
-
+    
     # Users
     password = bcrypt.hashpw(b'password123', bcrypt.gensalt()).decode('utf-8')
     
@@ -49,52 +44,7 @@ def seed_global():
             }
         )
         user_objs[u['id']] = obj
-
-    # Access
-    Userwarehouseaccess.objects.get_or_create(userid=user_objs['user-deepak'], warehouseid=wh_nashik)
-    Userwarehouseaccess.objects.get_or_create(userid=user_objs['user-deepak'], warehouseid=wh_navsari)
-    
-    # Leads & CRM
-    stages = ['NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', 'WON', 'LOST']
-    lead_ids = []
-    for i in range(25):
-        lead = Lead.objects.create(
-            id=uuid.uuid4().hex[:25],
-            companyid=company,
-            assigned_to=user_objs[random.choice(['user-rakesh', 'user-amit'])],
-            created_by=user_objs['user-rakesh'],
-            company_name=f'Construction Builders {i}',
-            name=f'Owner {i}',
-            phone=f'9876543{i:03}',
-            status=random.choice(stages),
-            createdat=timezone.now() - timedelta(days=random.randint(1, 100))
-        )
-        lead_ids.append(lead)
-
-    # Visits & Expenses
-    for lead in lead_ids[:10]:
-        for _ in range(2):
-            v_date = timezone.now() - timedelta(days=random.randint(1, 100))
-            Visit.objects.create(
-                id=uuid.uuid4().hex[:25],
-                companyid=company,
-                soemail=lead.assigned_to,
-                dealername=lead.company_name,
-                remarks='Product Demo, Positive feedback.',
-                date=v_date.date(),
-                createdat=v_date
-            )
-            if random.random() > 0.5:
-                Expense.objects.create(
-                    id=uuid.uuid4().hex[:25],
-                    companyid=company,
-                    soemail=lead.assigned_to,
-                    category='TRAVEL',
-                    amount=random.randint(500, 2000),
-                    date=v_date.date(),
-                    status='APPROVED',
-                    createdat=v_date
-                )
+        
     return user_objs
 
 def seed_tenant(db_name, company_id, user_objs):
@@ -103,10 +53,64 @@ def seed_tenant(db_name, company_id, user_objs):
     print(f"Seeding Tenant Data for {db_name}...")
     
     with transaction.atomic(using=db_name):
+        # 1. Create Userwarehouseaccess in the tenant schema context
+        wh_nashik = Warehouse.objects.using('default').get(db_name='wh_nashik')
+        wh_navsari = Warehouse.objects.using('default').get(db_name='wh_navsari')
+        current_wh = wh_nashik if db_name == 'wh_nashik' else wh_navsari
+        Userwarehouseaccess.objects.using(db_name).get_or_create(userid_id=user_objs['user-deepak'].id, warehouseid_id=current_wh.id)
+
+        # 2. Seed Leads & CRM in the tenant schema context
+        Lead.objects.using(db_name).all().delete()
+        Visit.objects.using(db_name).all().delete()
+        Expense.objects.using(db_name).all().delete()
+
+        stages = ['NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', 'WON', 'LOST']
+        lead_ids = []
+        company = Company.objects.using('default').get(id=company_id)
+        for i in range(12):
+            lead = Lead.objects.using(db_name).create(
+                id=uuid.uuid4().hex[:25],
+                companyid=company,
+                assigned_to=user_objs[random.choice(['user-rakesh', 'user-amit'])],
+                created_by=user_objs['user-rakesh'],
+                company_name=f'Construction Builders {db_name[-3:].upper()} {i}',
+                name=f'Owner {i}',
+                phone=f'9876543{i:03}',
+                status=random.choice(stages),
+                createdat=timezone.now() - timedelta(days=random.randint(1, 100))
+            )
+            lead_ids.append(lead)
+
+        # Visits & Expenses per tenant schema
+        for lead in lead_ids[:5]:
+            for _ in range(2):
+                v_date = timezone.now() - timedelta(days=random.randint(1, 100))
+                Visit.objects.using(db_name).create(
+                    id=uuid.uuid4().hex[:25],
+                    companyid=company,
+                    soemail=lead.assigned_to,
+                    dealername=lead.company_name,
+                    remarks='Product Demo, Positive feedback.',
+                    date=v_date.date(),
+                    createdat=v_date
+                )
+                if random.random() > 0.5:
+                    Expense.objects.using(db_name).create(
+                        id=uuid.uuid4().hex[:25],
+                        companyid=company,
+                        soemail=lead.assigned_to,
+                        category='TRAVEL',
+                        amount=random.randint(500, 2000),
+                        date=v_date.date(),
+                        status='APPROVED',
+                        createdat=v_date
+                    )
+
         # Masters
         u_kg = Unit.objects.using(db_name).create(name='KG', active=True, companyid_id=company_id)
         u_bag = Unit.objects.using(db_name).create(name='BAG (20KG)', active=True, companyid_id=company_id)
         u_ltr = Unit.objects.using(db_name).create(name='LITER', active=True, companyid_id=company_id)
+
 
         c_fg = Category.objects.using(db_name).create(name='Finished Goods', active=True, companyid_id=company_id)
         c_rm = Category.objects.using(db_name).create(name='Raw Materials', active=True, companyid_id=company_id)
@@ -147,7 +151,6 @@ def seed_tenant(db_name, company_id, user_objs):
         dealer1 = Dealer.objects.using(db_name).create(id=uuid.uuid4().hex[:25], dealername='City Hardware', dealercode='CH01', distributorname=dist.distributorname, active=True, companyid_id=company_id)
 
         # Generating 5 Years of Transactions
-        from datetime import timedelta
         start_date = timezone.now() - timedelta(days=365 * 5)
         
         wh_obj = Warehouse.objects.using('default').get(db_name=db_name)
@@ -164,13 +167,13 @@ def seed_tenant(db_name, company_id, user_objs):
             tx_date = start_date + timedelta(days=day)
             
             # Purchase Raw Materials
+            p_qty = random.randint(500, 2000)
             pur_id = f"PUR-{db_name[-3:].upper()}-{day}"
             pur = Purchase.objects.using(db_name).create(
                 id=uuid.uuid4().hex[:25], purchaseid=pur_id, date=tx_date, vendorname=sup.name, 
-                grandtotal=p_qty*15.5, status='Completed', companyid_id=company_id, createdat=tx_date, supplierid=sup
+                grandtotal=p_qty*15.5, status='Completed', companyid_id=company_id, createdat=tx_date, supplierid=sup,
+                warehouseid_id=wh_id
             )
-            
-            p_qty = random.randint(500, 2000)
             Purchaseitem.objects.using(db_name).create(
                 id=uuid.uuid4().hex[:25], purchaseid=pur, productname=p_cement.name, qty=p_qty, rate=15.5, total=p_qty*15.5
             )
@@ -185,8 +188,9 @@ def seed_tenant(db_name, company_id, user_objs):
             ord_id = f"ORD-{db_name[-3:].upper()}-{day}"
             order = Order.objects.using(db_name).create(
                 id=uuid.uuid4().hex[:25], orderid=ord_id, date=tx_date, partyname=dealer1.dealername, 
-                soemail=random.choice(['rakesh@kamla.com', 'amit@kamla.com']), grandtotal=s_qty * 600.0, status='Completed', 
-                dispatchdate=tx_date, companyid_id=company_id, createdat=tx_date
+                partytype='DEALER', distributor=dist.distributorname,
+                soemail=user_objs[random.choice(['user-rakesh', 'user-amit'])], grandtotal=s_qty * 600.0, status='Completed', 
+                companyid_id=company_id, createdat=tx_date
             )
             
             Orderitem.objects.using(db_name).create(

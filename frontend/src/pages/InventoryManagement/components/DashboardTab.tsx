@@ -33,13 +33,23 @@ export const DashboardTab: React.FC = () => {
   const loading = kpisLoading || salesLoading || lowLoading || dailyLoading;
   const error = kpisError ? (kpisError as any).message : null;
 
-  // Mock data for Category Distribution (Pie Chart) if kpis doesn't have it yet
-  const categoryData = [
-    { name: 'Standard', value: 400, color: '#3b82f6' },
-    { name: 'Premium', value: 300, color: '#10b981' },
-    { name: 'Raw', value: 300, color: '#6366f1' },
-    { name: 'Grout', value: 200, color: '#f59e0b' },
-  ];
+  const categoryData = (kpis?.categoryDistribution && kpis.categoryDistribution.length > 0)
+    ? kpis.categoryDistribution
+    : [
+        { name: 'Standard', value: 400, color: '#3b82f6' },
+        { name: 'Premium', value: 300, color: '#10b981' },
+        { name: 'Raw', value: 300, color: '#6366f1' },
+        { name: 'Grout', value: 200, color: '#f59e0b' },
+      ];
+
+  const totalAssetsValue = categoryData.reduce((acc, c) => acc + c.value, 0);
+  const formattedTotalAssets = totalAssetsValue >= 10000000
+    ? `₹${(totalAssetsValue / 10000000).toFixed(1)}Cr`
+    : totalAssetsValue >= 100000
+      ? `₹${(totalAssetsValue / 100000).toFixed(1)}L`
+      : totalAssetsValue >= 1000
+        ? `₹${(totalAssetsValue / 1000).toFixed(1)}K`
+        : `₹${totalAssetsValue}`;
 
   return (
     <SafeDataView data={kpis ? [kpis] : []} isLoading={loading} error={error}>
@@ -52,34 +62,36 @@ export const DashboardTab: React.FC = () => {
             </h1>
             <p className="text-muted-foreground mt-1">Real-time oversight and predictive insights</p>
           </div>
-          <div className="flex items-center gap-2 bg-card/50 border border-border/50 px-4 py-2 rounded-2xl backdrop-blur-md shadow-sm">
-            <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              {daily?.date ? new Date(daily.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Syncing...'}
-            </span>
+          <div className="flex items-center gap-4">
+            {daily?.pendingCount > 0 && (
+              <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs font-bold px-3 py-1.5 rounded-2xl flex items-center gap-1.5 animate-pulse">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin-slow" />
+                {daily.pendingCount} Pending Approvals
+              </div>
+            )}
+            <div className="flex items-center gap-2 bg-card/50 border border-border/50 px-4 py-2 rounded-2xl backdrop-blur-md shadow-sm">
+              <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                {daily?.date ? new Date(daily.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Syncing...'}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Global Performance KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Asset Valuation', value: Currency(kpis?.revenue || 0), sub: '+12.5% from last month', icon: Zap, color: 'text-orange-500', bg: 'bg-orange-500/10', trend: 'up' },
-            { label: 'Active SKUs', value: Num(kpis?.products || 0), sub: 'Across 4 categories', icon: Package, color: 'text-blue-500', bg: 'bg-blue-500/10', trend: 'neutral' },
-            { label: 'Order Velocity', value: Num(kpis?.orders || 0), sub: 'Today (Completed)', icon: Activity, color: 'text-emerald-500', bg: 'bg-emerald-500/10', trend: 'up' },
-            { label: 'Approval Queue', value: Num(daily?.pendingCount || 0), sub: 'Waiting for action', icon: RefreshCw, color: 'text-indigo-500', bg: 'bg-indigo-500/10', trend: 'down' },
+            { label: 'Asset Valuation', value: Currency(kpis?.totalStockValue || 0), sub: 'Total live stock value', icon: Zap, color: 'text-orange-500', bg: 'bg-orange-500/10', trend: 'neutral' },
+            { label: 'Active SKUs', value: Num(kpis?.products || 0), sub: 'Across registered categories', icon: Package, color: 'text-blue-500', bg: 'bg-blue-500/10', trend: 'neutral' },
+            { label: 'Order Velocity', value: Num(kpis?.orders || 0), sub: 'Total orders placed', icon: Activity, color: 'text-emerald-500', bg: 'bg-emerald-500/10', trend: 'neutral' },
+            { label: 'Total Revenue', value: Currency(kpis?.revenue || 0), sub: 'Completed sales revenue', icon: TrendingUp, color: 'text-indigo-500', bg: 'bg-indigo-500/10', trend: 'neutral' },
           ].map((kpi, i) => (
             <motion.div key={kpi.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }}
               className="kpi-card group hover:ring-2 hover:ring-primary/20 transition-all">
               <div className="flex justify-between items-start mb-4">
                 <div className={`p-2.5 rounded-xl ${kpi.bg} ${kpi.color}`}>
-                  <kpi.icon className={`w-5 h-5 ${kpi.label === 'Approval Queue' && (daily?.pendingCount || 0) > 0 ? 'animate-spin-slow' : ''}`} />
+                  <kpi.icon className="w-5 h-5" />
                 </div>
-                {kpi.trend !== 'neutral' && (
-                  <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${kpi.trend === 'up' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                    {kpi.trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                    {kpi.trend === 'up' ? 'High' : 'Low'}
-                  </div>
-                )}
               </div>
               <h3 className="text-xl xl:text-2xl font-black tracking-tight truncate" title={String(kpi.value)}>{kpi.value}</h3>
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mt-1 truncate" title={kpi.label}>{kpi.label}</p>
@@ -194,20 +206,22 @@ export const DashboardTab: React.FC = () => {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip formatter={(value) => Currency(Number(value))} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest">Total Assets</span>
-                  <span className="text-xl font-black">1.2K</span>
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Stock Value</span>
+                  <span className="text-sm font-black truncate max-w-[100px] text-center" title={formattedTotalAssets}>
+                    {formattedTotalAssets}
+                  </span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 mt-4">
                 {categoryData.map(c => (
-                  <div key={c.name} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/40 text-[11px] font-medium">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
-                    <span className="text-muted-foreground">{c.name}</span>
-                    <span className="ml-auto font-bold">{Math.round((c.value/1200)*100)}%</span>
+                  <div key={c.name} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/40 text-[11px] font-medium" title={`${c.name}: ${Currency(c.value)}`}>
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
+                    <span className="text-muted-foreground truncate max-w-[80px]">{c.name}</span>
+                    <span className="ml-auto font-bold shrink-0">{Math.round((c.value / (totalAssetsValue || 1)) * 100)}%</span>
                   </div>
                 ))}
               </div>

@@ -40,8 +40,7 @@ def log_lead_status_event(sender, instance, using=None, **kwargs):
     
     db_name = using or getattr(instance._state, 'db', 'default') or 'default'
     if instance._state.adding:
-        # Initial creation event log
-        log_operational_event('Lead', instance.id, 'None', instance.status, instance.assigned_to_id or 'unassigned', instance.companyid_id)
+        log_operational_event('Lead', instance.id, 'None', instance.status, instance.assigned_to_id or 'unassigned', instance.companyid_id, db_name=db_name)
         return
         
     try:
@@ -74,11 +73,17 @@ def auto_map_cross_db_product_ids(sender, instance, using=None, **kwargs):
     if Product.objects.using(db).filter(id=pid).exists():
         return
         
+    from django.db import connections
     for wh in Warehouse.objects.filter(active=True):
         if not wh.db_name or wh.db_name == db: continue
-        match = Product.objects.using(wh.db_name).filter(id=pid).first()
-        if match and match.productcode:
-            correct_p = Product.objects.using(db).filter(productcode=match.productcode).first()
-            if correct_p:
-                instance.productid_id = correct_p.id
-            break
+        if wh.db_name not in connections: continue
+        try:
+            match = Product.objects.using(wh.db_name).filter(id=pid).first()
+            if match and match.productcode:
+                correct_p = Product.objects.using(db).filter(productcode=match.productcode).first()
+                if correct_p:
+                    instance.productid_id = correct_p.id
+                break
+        except Exception:
+            pass
+

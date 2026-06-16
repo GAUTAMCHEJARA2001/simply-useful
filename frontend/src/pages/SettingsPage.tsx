@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { Settings, Shield, CreditCard, Bell, Building2, Save, Download, Upload, Database } from 'lucide-react';
+import { Settings, Shield, CreditCard, Bell, Building2, Save, Download, Upload, Database, Cloud, Clock, HardDrive, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/api/client';
 
@@ -17,6 +17,99 @@ const SettingsPage: React.FC = () => {
     const bulkFileInputRef = React.useRef<HTMLInputElement>(null);
     const [bulkType, setBulkType] = React.useState('products');
     const [bulkFile, setBulkFile] = React.useState<File | null>(null);
+    const [backupStatus, setBackupStatus] = React.useState<{
+        pg_dump_found: boolean;
+        pg_dump_path: string;
+        local_backup_dir: string;
+        local_backup_enabled: boolean;
+        local_backup_time: string;
+    } | null>(null);
+    const [localBackupDir, setLocalBackupDir] = React.useState(settings.local_backup_dir || 'C:\\SimplyUsefulBackups');
+    const [isDownloadingDump, setIsDownloadingDump] = React.useState(false);
+    const [autoBackupEnabled, setAutoBackupEnabled] = React.useState(settings.local_backup_enabled || false);
+    const [autoBackupTime, setAutoBackupTime] = React.useState(settings.local_backup_time || '02:00');
+    const [isSavingSchedule, setIsSavingSchedule] = React.useState(false);
+
+    React.useEffect(() => {
+        if (settings.local_backup_dir) {
+            setLocalBackupDir(settings.local_backup_dir);
+        }
+    }, [settings.local_backup_dir]);
+
+    React.useEffect(() => {
+        if (settings.local_backup_enabled !== undefined) {
+            setAutoBackupEnabled(settings.local_backup_enabled === true || settings.local_backup_enabled === 'true');
+        }
+        if (settings.local_backup_time) {
+            setAutoBackupTime(settings.local_backup_time);
+        }
+    }, [settings.local_backup_enabled, settings.local_backup_time]);
+
+    const fetchBackupStatus = async () => {
+        try {
+            const res = await api.get('/system/local-backup-status');
+            if (res.data?.success) {
+                setBackupStatus(res.data.data);
+                if (res.data.data.local_backup_dir) {
+                    setLocalBackupDir(res.data.data.local_backup_dir);
+                }
+                if (res.data.data.local_backup_enabled !== undefined) {
+                    setAutoBackupEnabled(res.data.data.local_backup_enabled);
+                }
+                if (res.data.data.local_backup_time) {
+                    setAutoBackupTime(res.data.data.local_backup_time);
+                }
+            }
+        } catch (err) {
+            console.error('Failed to fetch backup status', err);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchBackupStatus();
+    }, []);
+
+    const handleDownloadPostgresDump = async () => {
+        setIsDownloadingDump(true);
+        try {
+            const res = await api.get('/system/download-postgres-dump', { responseType: 'blob' });
+            const timestamp = new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '');
+            downloadBlob(res.data, `db_backup_${timestamp}.dump`);
+            toast.success('PostgreSQL Database Dump downloaded successfully!');
+        } catch (error: any) {
+            toast.error('Failed to download database dump');
+        } finally {
+            setIsDownloadingDump(false);
+        }
+    };
+
+    const handleSaveBackupSchedule = async () => {
+        if (!localBackupDir.trim()) {
+            toast.error('Please enter a Local Backup Directory');
+            return;
+        }
+        setIsSavingSchedule(true);
+        try {
+            await updateSetting('local_backup_dir', localBackupDir.trim());
+            const res = await api.post('/system/auto-backup-schedule', {
+                enabled: autoBackupEnabled,
+                time: autoBackupTime,
+                local_backup_dir: localBackupDir.trim(),
+            });
+            if (res.data?.success) {
+                toast.success(res.data.message || 'Auto-backup schedule updated successfully');
+            } else {
+                toast.error(res.data?.message || 'Failed to update schedule');
+            }
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Failed to save auto-backup schedule');
+        } finally {
+            setIsSavingSchedule(false);
+            fetchBackupStatus();
+        }
+    };
+
+
 
     const settingsItems = [
         {
@@ -437,7 +530,150 @@ const SettingsPage: React.FC = () => {
                         </CardContent>
                     </Card>
                 </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                >
+                    <Card>
+                        <CardHeader className="border-b bg-muted/20">
+                            <CardTitle className="flex items-center text-lg">
+                                <HardDrive className="w-5 h-5 mr-2 text-primary" />
+                                Local Database Backup & Automation
+                            </CardTitle>
+                            <CardDescription>
+                                Back up the PostgreSQL database directly to your server's local disk with optional scheduled daily automation.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-6 space-y-4">
+                            {backupStatus && (
+                                <div className="p-4 rounded-lg bg-secondary/30 space-y-2 border border-border">
+                                    <h4 className="font-bold text-sm">System Environment Status</h4>
+                                    <div className="text-xs space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <span>PostgreSQL pg_dump Utility:</span>
+                                            {backupStatus.pg_dump_found ? (
+                                                <span className="text-green-500 font-semibold flex items-center gap-1.5">
+                                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                                    Available
+                                                </span>
+                                            ) : (
+                                                <span className="text-red-500 font-semibold flex items-center gap-1.5">
+                                                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                                                    Not Found
+                                                </span>
+                                            )}
+                                        </div>
+                                        {backupStatus.pg_dump_found ? (
+                                            <div className="pt-2 border-t border-border mt-2">
+                                                <p className="text-muted-foreground font-semibold">
+                                                    Resolved pg_dump Path:
+                                                </p>
+                                                <code className="block bg-background p-1.5 rounded mt-1 select-all border border-border text-[10px] break-all font-mono">
+                                                    {backupStatus.pg_dump_path}
+                                                </code>
+                                            </div>
+                                        ) : (
+                                            <div className="pt-2 border-t border-border mt-2 text-destructive">
+                                                <p className="font-semibold text-xs text-red-500">Action Required:</p>
+                                                <p className="text-[11px] leading-relaxed mt-1 text-muted-foreground">
+                                                    Ensure PostgreSQL command-line tools are installed, or verify `pg_dump.exe` exists at `C:\Program Files\PostgreSQL\18\bin\pg_dump.exe` or standard bin path.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-2">
+                                <Label htmlFor="local-backup-dir" className="font-bold text-sm flex items-center gap-2">
+                                    <FolderOpen className="w-4 h-4 text-primary" /> Local Backup Folder Path
+                                </Label>
+                                <Input
+                                    id="local-backup-dir"
+                                    type="text"
+                                    placeholder="e.g. C:\SimplyUsefulBackups or D:\Backups"
+                                    value={localBackupDir}
+                                    onChange={(e) => setLocalBackupDir(e.target.value)}
+                                />
+                                <p className="text-[11px] text-muted-foreground leading-normal">
+                                    Offline database dumps will be automatically created in this directory. Backups older than 30 days will be pruned.
+                                </p>
+                            </div>
+
+                            <div className="border-t border-border pt-4 mt-4 space-y-4">
+                                <h4 className="font-bold text-sm flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-primary" /> Automatic Daily Backups (Windows Task Scheduler)
+                                </h4>
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg bg-secondary/10 border border-border">
+                                    <div className="space-y-1">
+                                        <Label className="font-semibold text-sm">Enable Scheduled Daily Backups</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Runs in the background at your chosen time. Requires Postgres and server computer to be running.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Switch
+                                            checked={autoBackupEnabled}
+                                            onCheckedChange={(checked) => setAutoBackupEnabled(checked)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {autoBackupEnabled && (
+                                    <div className="flex items-center gap-3 max-w-[240px]">
+                                        <div className="space-y-1 flex-1">
+                                            <Label htmlFor="auto-backup-time" className="font-semibold text-xs">Run Daily At</Label>
+                                            <Input
+                                                id="auto-backup-time"
+                                                type="time"
+                                                value={autoBackupTime}
+                                                onChange={(e) => setAutoBackupTime(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2 border-t border-border mt-4">
+                                <Button
+                                    variant="outline"
+                                    onClick={handleSaveBackupSchedule}
+                                    disabled={isSavingSchedule || isDownloadingDump}
+                                >
+                                    {isSavingSchedule ? (
+                                        <>
+                                            <div className="w-4 h-4 mr-2 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="w-4 h-4 mr-2" /> Save Backup Settings
+                                        </>
+                                    )}
+                                </Button>
+                                <Button
+                                    onClick={handleDownloadPostgresDump}
+                                    disabled={isDownloadingDump || isSavingSchedule || !backupStatus?.pg_dump_found}
+                                >
+                                    {isDownloadingDump ? (
+                                        <>
+                                            <div className="w-4 h-4 mr-2 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                                            Downloading dump...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Download className="w-4 h-4 mr-2" /> Download Postgres DB Dump
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </motion.div>
             </div>
+
 
             <Card className="bg-secondary/30 border-dashed">
                 <CardHeader>

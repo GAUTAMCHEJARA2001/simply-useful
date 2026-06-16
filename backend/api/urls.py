@@ -6,7 +6,7 @@ from api.views import (
     MarketViewSet, master_settings, DealerViewSet, DistributorViewSet, OrderViewSet,
     VisitViewSet, ExpenseViewSet, BOMViewSet, SupplierViewSet, LabourViewSet,
     user_assignments,
-    bulk_template, bulk_import, database_export,
+    bulk_template, bulk_import, database_export, local_backup_status_view, download_postgres_dump_view, schedule_local_backup_view,
     
     # Reports
     report_dashboard_kpis, report_sales_summary, report_low_stock, report_daily,
@@ -64,6 +64,9 @@ urlpatterns = [
     path('bulk/<str:entity>/template', bulk_template, name='bulk-template'),
     path('bulk/<str:entity>/import', bulk_import, name='bulk-import'),
     path('system/database-export', database_export, name='database-export'),
+    path('system/local-backup-status', local_backup_status_view, name='local-backup-status'),
+    path('system/download-postgres-dump', download_postgres_dump_view, name='download-postgres-dump'),
+    path('system/auto-backup-schedule', schedule_local_backup_view, name='auto-backup-schedule'),
     
     # Reports
     path('reports/dashboard-kpis', report_dashboard_kpis, name='report-dashboard-kpis'),

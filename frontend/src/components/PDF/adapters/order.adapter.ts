@@ -3,6 +3,7 @@ import { calculateItemGST } from '../services/gst.service';
 import { calculateInvoiceTotals } from '../services/totals.service';
 import { formatPDFDate } from '../utils/dateFormat';
 import { layoutRegistry } from '../config/layoutRegistry';
+import { getDetailsFromAddressOrGst, cleanGstNumber } from './stateResolver';
 
 /** Normalizes raw order DTOs into a clean, canonical PrintableInvoice model */
 export const adaptOrderToPrintable = (
@@ -14,28 +15,32 @@ export const adaptOrderToPrintable = (
     contact: string;
     phone?: string;
     logo?: string | null;
+    bankName?: string;
+    bankAccount?: string;
+    bankIfsc?: string;
+    bankBranch?: string;
   },
   documentType: 'TAX INVOICE' | 'QUOTATION' | 'PURCHASE ORDER' | 'DELIVERY CHALLAN'
 ): PrintableInvoice => {
   // 1. Map Company details (safely fall back state codes)
-  const companyState = 'Rajasthan';
-  const companyStateCode = '08'; // Standard Indian state code for Rajasthan
+  const cleanCompGst = cleanGstNumber(companyInfo.gst || '08ABCDE1234F1Z5');
+  const companyDetails = getDetailsFromAddressOrGst(cleanCompGst, companyInfo.address);
 
   const company: PrintableCompany = {
     name: companyInfo.name || 'KAMLA INDUSTRIES',
     address: companyInfo.address || 'Phase-1, Industrial Area, Rajasthan, India',
     contact: companyInfo.contact || '',
     phone: companyInfo.phone || '',
-    gst: companyInfo.gst || '08ABCDE1234F1Z5',
-    pan: companyInfo.gst && companyInfo.gst.length >= 12 ? companyInfo.gst.substring(2, 12) : 'ABCDE1234F',
+    gst: cleanCompGst || undefined,
+    pan: cleanCompGst && cleanCompGst.length >= 12 ? cleanCompGst.substring(2, 12) : undefined,
     cin: 'L45201RJ2001PLC012345',
     bankName: companyInfo.bankName || 'State Bank of India',
     bankAccount: companyInfo.bankAccount || '31234567890',
     bankIfsc: companyInfo.bankIfsc || 'SBIN0001234',
     bankBranch: companyInfo.bankBranch || 'Main Branch',
     logoUrl: companyInfo.logo || null,
-    state: companyState,
-    stateCode: companyStateCode
+    state: companyDetails.state,
+    stateCode: companyDetails.stateCode
   };
 
   // 2. Map Customer/Party details
@@ -43,10 +48,11 @@ export const adaptOrderToPrintable = (
   const partyName = rawOrder.party_name || rawOrder.partyName || partyDetails.name || 'Walk-in Customer';
   const partyAddress = rawOrder.address || partyDetails.address || 'N/A';
   const partyContact = rawOrder.contact || partyDetails.phone || partyDetails.contact || '';
-  const partyGst = rawOrder.gst || partyDetails.gst || '';
+  const rawPartyGst = rawOrder.gst || partyDetails.gst || '';
+  const partyGst = cleanGstNumber(rawPartyGst);
   const partyEmail = rawOrder.soEmail || partyDetails.email || 'customer@example.com';
-  const partyState = 'Gujarat';
-  const partyStateCode = partyGst ? partyGst.substring(0, 2) : '24'; // Standard state code for Gujarat
+  
+  const partyDetailsResolved = getDetailsFromAddressOrGst(partyGst, partyAddress);
 
   const isPO = documentType === 'PURCHASE ORDER';
 
@@ -58,8 +64,8 @@ export const adaptOrderToPrintable = (
     pan: partyGst && partyGst.length >= 12 ? partyGst.substring(2, 12) : undefined,
     mobile: partyContact,
     email: partyEmail,
-    state: partyState,
-    stateCode: partyStateCode,
+    state: partyDetailsResolved.state,
+    stateCode: partyDetailsResolved.stateCode,
     
     // For Purchase Orders, we ship to our own company
     ...(isPO ? {
@@ -108,8 +114,8 @@ export const adaptOrderToPrintable = (
       qty,
       discountPercent,
       taxPercent,
-      companyStateCode,
-      customerStateCode: partyStateCode
+      companyStateCode: company.stateCode,
+      customerStateCode: customer.stateCode
     });
 
     return {

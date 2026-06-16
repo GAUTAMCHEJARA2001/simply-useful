@@ -2,6 +2,8 @@ import { PrintableLedger, PrintableLedgerItem, PrintableLedgerSummary } from '..
 import { PrintableCompany } from '../types/printableInvoice.types';
 import { formatPDFDate } from '../utils/dateFormat';
 
+import { getDetailsFromAddressOrGst, cleanGstNumber } from './stateResolver';
+
 /** Normalizes raw stock ledger payloads into PrintableLedger */
 export const adaptLedgerToPrintable = (
   rawLedger: any,
@@ -13,16 +15,19 @@ export const adaptLedgerToPrintable = (
     logo?: string | null;
   }
 ): PrintableLedger => {
+  const cleanCompGst = cleanGstNumber(companyInfo.gst || '08ABCDE1234F1Z5');
+  const companyDetails = getDetailsFromAddressOrGst(cleanCompGst, companyInfo.address);
+
   const company: PrintableCompany = {
     name: companyInfo.name || 'KAMLA INDUSTRIES',
     address: companyInfo.address || 'Phase-1, Industrial Area, Rajasthan, India',
     contact: companyInfo.contact || '',
-    gst: companyInfo.gst || '08ABCDE1234F1Z5',
-    pan: companyInfo.gst ? companyInfo.gst.substring(2, 12) : 'ABCDE1234F',
+    gst: cleanCompGst || undefined,
+    pan: cleanCompGst && cleanCompGst.length >= 12 ? cleanCompGst.substring(2, 12) : undefined,
     cin: 'L45201RJ2001PLC012345',
     logoUrl: companyInfo.logo || null,
-    state: 'Rajasthan',
-    stateCode: '08'
+    state: companyDetails.state,
+    stateCode: companyDetails.stateCode
   };
 
   const rawSummary = rawLedger.summary || { opening: 0, total_in: 0, total_out: 0, closing: 0 };

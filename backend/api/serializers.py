@@ -1,6 +1,7 @@
 from rest_framework import serializers
+from core.models import Company, User, Warehouse
 from api.models import (
-    Company, User, Product, Category, Brand, Unit, Warehouse, Region, Market,
+    Product, Category, Brand, Unit, Region, Market,
     Dealer, Distributor, Order, Orderitem, Visit, Expense, Bom, Bomitem, Supplier, Labour,
     Purchase, Purchaseitem, Purchaseorder, Purchaseorderitem,
     Lead, LeadFollowUp, LeadStageHistory
@@ -30,7 +31,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class CategorySerializer(serializers.ModelSerializer):
-    companyId = serializers.CharField(source='companyid_id')
+    companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
     parentId = serializers.IntegerField(source='parentid_id', required=False, allow_null=True)
     active = serializers.BooleanField(default=True, required=False)
 
@@ -40,7 +41,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class BrandSerializer(serializers.ModelSerializer):
-    companyId = serializers.CharField(source='companyid_id')
+    companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
     active = serializers.BooleanField(default=True, required=False)
 
     class Meta:
@@ -49,7 +50,7 @@ class BrandSerializer(serializers.ModelSerializer):
 
 
 class UnitSerializer(serializers.ModelSerializer):
-    companyId = serializers.CharField(source='companyid_id')
+    companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
     active = serializers.BooleanField(default=True, required=False)
 
     class Meta:
@@ -58,7 +59,7 @@ class UnitSerializer(serializers.ModelSerializer):
 
 
 class WarehouseSerializer(serializers.ModelSerializer):
-    companyId = serializers.CharField(source='companyid_id')
+    companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
     gstNumber = serializers.CharField(source='gstnumber', required=False, allow_null=True)
     active = serializers.BooleanField(default=True, required=False)
 
@@ -66,9 +67,30 @@ class WarehouseSerializer(serializers.ModelSerializer):
         model = Warehouse
         fields = ['id', 'name', 'active', 'companyId', 'gstNumber', 'location']
 
+    def create(self, validated_data):
+        name = validated_data.get('name', '')
+        import re
+        slug = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower())
+        slug = re.sub(r'_+', '_', slug).strip('_')
+        if not slug:
+            import uuid
+            slug = uuid.uuid4().hex[:10]
+            
+        schema_name = f"wh_{slug}"
+        base_schema = schema_name
+        counter = 1
+        while Warehouse.objects.using('default').filter(schema_name=schema_name).exists():
+            schema_name = f"{base_schema}_{counter}"
+            counter += 1
+            
+        validated_data['schema_name'] = schema_name
+        validated_data['db_name'] = schema_name
+        
+        return super().create(validated_data)
+
 
 class RegionSerializer(serializers.ModelSerializer):
-    companyId = serializers.CharField(source='companyid_id')
+    companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
     active = serializers.BooleanField(default=True, required=False)
 
     class Meta:
@@ -94,7 +116,7 @@ class SupplierSerializer(serializers.ModelSerializer):
     contact_info = serializers.CharField(source='contactinfo', required=False, allow_null=True, allow_blank=True)
     
     gstNumber = serializers.CharField(source='gstnumber', required=False, allow_null=True, allow_blank=True)
-    companyId = serializers.CharField(source='companyid_id')
+    companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
     active = serializers.BooleanField(default=True, required=False)
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
@@ -111,7 +133,7 @@ class LabourSerializer(serializers.ModelSerializer):
     dailyWage = serializers.FloatField(source='dailywage', default=0.0, required=False)
     contactInfo = serializers.CharField(source='contactinfo', required=False, allow_null=True, allow_blank=True)
     contact_info = serializers.CharField(source='contactinfo', required=False, allow_null=True, allow_blank=True)
-    companyId = serializers.CharField(source='companyid_id')
+    companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
     active = serializers.BooleanField(default=True, required=False)
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)

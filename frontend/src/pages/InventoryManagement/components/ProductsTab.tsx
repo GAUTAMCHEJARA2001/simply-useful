@@ -127,7 +127,7 @@ export const ProductsTab: React.FC = () => {
     const payload: Partial<Product> = {
       ...cleanForm,
       rate: Number(cleanForm.rate) || 0,
-      gst: Number(cleanForm.gst) || 18,
+      gst: cleanForm.gst !== undefined && cleanForm.gst !== null ? Number(cleanForm.gst) : 18,
       openingStock: Number(cleanForm.openingStock) || 0,
       minimumStock: Number(cleanForm.minimumStock) || 0,
       // Resolve brandId from nested object if not already set
@@ -260,6 +260,35 @@ export const ProductsTab: React.FC = () => {
               </select>
             </div>
 
+            <div>
+              <label className="text-sm font-medium block mb-1">GST (%)</label>
+              <select value={form.gst !== undefined ? form.gst : 18} onChange={e => {
+                const val = Number(e.target.value);
+                setForm({ ...form, gst: val });
+              }} className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm">
+                <option value={0}>0% (Exempt)</option>
+                <option value={5}>5%</option>
+                <option value={12}>12%</option>
+                <option value={18}>18%</option>
+                <option value={28}>28%</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 p-3 bg-muted/40 rounded-xl border border-border text-center">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-0.5">CGST</label>
+                <div className="text-sm font-bold text-foreground">{(form.gst !== undefined ? form.gst : 18) / 2}%</div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-0.5">SGST</label>
+                <div className="text-sm font-bold text-foreground">{(form.gst !== undefined ? form.gst : 18) / 2}%</div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-0.5">IGST</label>
+                <div className="text-sm font-bold text-foreground">{form.gst !== undefined ? form.gst : 18}%</div>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
               <Button onClick={handleSave}>{form.id ? 'Save Changes' : 'Create Product'}</Button>
             </div>
@@ -296,6 +325,8 @@ export const ProductsTab: React.FC = () => {
             <div><span className="font-semibold text-muted-foreground">Stock:</span> {viewProduct.availableStock || viewProduct.stockQty || 0}</div>
             <div><span className="font-semibold text-muted-foreground">Default Price:</span> {Currency(viewProduct.rate || viewProduct.defaultPrice || 0)}</div>
             <div><span className="font-semibold text-muted-foreground">Warehouse:</span> {warehouses.find((w: any) => w.id === viewProduct.defaultWarehouseId)?.name || '—'}</div>
+            <div><span className="font-semibold text-muted-foreground">GST:</span> {viewProduct.gst !== undefined ? viewProduct.gst : 18}%</div>
+            <div className="col-span-2"><span className="font-semibold text-muted-foreground">CGST / SGST / IGST:</span> {(viewProduct.gst !== undefined ? viewProduct.gst : 18) / 2}% / {(viewProduct.gst !== undefined ? viewProduct.gst : 18) / 2}% / {viewProduct.gst !== undefined ? viewProduct.gst : 18}%</div>
           </div>
         )}
       </Modal>
