@@ -93,7 +93,7 @@ def auth_login(request):
             "companyId": company_id,
             "authorizedWarehouses": [
                 {"id": str(w.id), "name": w.name} 
-                for w in Warehouse.objects.using('default').filter(active=True)
+                for w in Warehouse.objects.using('default').filter(active=True).exclude(schema_name='public')
             ]
         }
         access_token, refresh_token = generate_tokens(
@@ -132,11 +132,11 @@ def auth_login(request):
         
         # Inject Authorized Warehouses
         if user.role == 'SUPERADMIN':
-            warehouses = Warehouse.objects.using('default').filter(active=True)
+            warehouses = Warehouse.objects.using('default').filter(active=True).exclude(schema_name='public')
         else:
             from api.models import Userwarehouseaccess
             uwa = Userwarehouseaccess.objects.using('default').filter(userid_id=user.id)
-            warehouses = Warehouse.objects.using('default').filter(id__in=uwa.values_list('warehouseid', flat=True), active=True)
+            warehouses = Warehouse.objects.using('default').filter(id__in=uwa.values_list('warehouseid', flat=True), active=True).exclude(schema_name='public')
             
         user_data['authorizedWarehouses'] = [
             {"id": str(w.id), "name": w.name} for w in warehouses
