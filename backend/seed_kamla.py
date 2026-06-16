@@ -61,8 +61,12 @@ def seed():
         name='MAIN',
         companyid=company,
         defaults={
+            'schema_name': 'wh_main',
             'active': True,
-            'location': 'Main Facility'
+            'location': 'Main Facility',
+            'db_name': 'wh_main',
+            'db_host': 'localhost',
+            'db_port': 5432
         }
     )
     if created:
