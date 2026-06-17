@@ -440,7 +440,7 @@ const LeadsPage: React.FC = () => {
                 onChange={e => setForm(prev => ({ ...prev, companyName: e.target.value }))}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Phone Number</Label>
                 <Input
@@ -461,7 +461,7 @@ const LeadsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label>City</Label>
                 <Input
@@ -488,7 +488,7 @@ const LeadsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Deal Value (₹) *</Label>
                 <Input
@@ -513,7 +513,7 @@ const LeadsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Lead Source</Label>
                 <Select

@@ -375,7 +375,7 @@ const ProductManagement: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="product-sku">Code (SKU)</Label>
                 <Input id="product-sku" name="productCode" value={form.productCode} onChange={e => uf('productCode', e.target.value)} disabled={!!editing} placeholder="Auto-generated if empty" />
@@ -386,7 +386,7 @@ const ProductManagement: React.FC = () => {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="product-category">Category *</Label>
                 <Select 
@@ -422,7 +422,7 @@ const ProductManagement: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="product-brand">Brand</Label>
                 <Select 
@@ -455,7 +455,7 @@ const ProductManagement: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="product-bag-size">Bag Size *</Label>
                 <Input id="product-bag-size" name="bagSize" value={form.bagSize} onChange={e => uf('bagSize', e.target.value)} placeholder="50 KG" />
@@ -470,7 +470,7 @@ const ProductManagement: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="product-opening-stock">Opening Stock</Label>
                 <Input id="product-opening-stock" name="openingStock" type="number" value={(form.openingStock ?? 0).toString()} onChange={e => uf('openingStock', Number(e.target.value) || 0)} />

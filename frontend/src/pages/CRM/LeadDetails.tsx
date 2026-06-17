@@ -228,7 +228,7 @@ const LeadDetails: React.FC<LeadDetailsProps> = ({ lead, open, onClose, onRefres
           )}
 
           {/* Details Grid */}
-          <div className="grid grid-cols-2 gap-4 text-sm bg-muted/20 p-4 rounded-xl border border-border/40">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm bg-muted/20 p-4 rounded-xl border border-border/40">
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Contact Details</span>
               <div className="space-y-1.5 pt-1">
@@ -314,7 +314,7 @@ const LeadDetails: React.FC<LeadDetailsProps> = ({ lead, open, onClose, onRefres
               <h4 className="font-extrabold text-sm text-foreground flex items-center gap-1.5">
                 <MessageSquare className="w-4 h-4 text-primary" /> Log Activity / Follow-up
               </h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Activity Type</Label>
                   <Select value={followupType} onValueChange={(v: any) => setFollowupType(v)}>

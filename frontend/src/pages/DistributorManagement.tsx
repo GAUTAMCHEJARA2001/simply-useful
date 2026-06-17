@@ -144,7 +144,7 @@ const DistributorManagement: React.FC = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2"><Label>Name *</Label><Input value={form.distributorName} onChange={e => uf('distributorName', e.target.value)} disabled={!!editing} /></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Area *</Label><Input value={form.area} onChange={e => uf('area', e.target.value)} /></div>
               <div className="space-y-2"><Label>Assigned SO *</Label>
                 <Select value={form.assignedSoEmail} onValueChange={v => uf('assignedSoEmail', v)}>
@@ -153,7 +153,7 @@ const DistributorManagement: React.FC = () => {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Contact Person Name</Label>
                 <Input value={form.contactPerson || ''} onChange={e => uf('contactPerson', e.target.value)} placeholder="e.g. Jane Doe" />
@@ -163,7 +163,7 @@ const DistributorManagement: React.FC = () => {
                 <Input value={form.phone || ''} onChange={e => uf('phone', e.target.value)} placeholder="e.g. 9876543210" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Email ID</Label>
                 <Input type="email" value={form.email || ''} onChange={e => uf('email', e.target.value)} placeholder="e.g. dist@example.com" />
@@ -177,11 +177,11 @@ const DistributorManagement: React.FC = () => {
               <Label>Address</Label>
               <Input value={form.address || ''} onChange={e => uf('address', e.target.value)} placeholder="Enter full address" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Territory (Area Code)</Label><Input value={form.territory || ''} onChange={e => uf('territory', e.target.value)} placeholder="e.g. T-WEST" /></div>
               <div className="space-y-2"><Label>Credit Limit</Label><Input type="number" value={form.creditLimit} onChange={e => uf('creditLimit', Number(e.target.value))} /></div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Status</Label>
                 <Select value={form.active ? 'active' : 'blocked'} onValueChange={v => uf('active', v === 'active')}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

@@ -176,7 +176,7 @@ const DealerManagement: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Dealer Code</Label>
                 <Input value={form.dealerCode} onChange={e => updateForm('dealerCode', e.target.value)} disabled={!!editing} />
@@ -186,7 +186,7 @@ const DealerManagement: React.FC = () => {
                 <Input value={form.dealerName} onChange={e => updateForm('dealerName', e.target.value)} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>City *</Label>
                 <Input value={form.city} onChange={e => updateForm('city', e.target.value)} />
@@ -201,7 +201,7 @@ const DealerManagement: React.FC = () => {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Contact Person Name</Label>
                 <Input value={form.contactPerson || ''} onChange={e => updateForm('contactPerson', e.target.value)} placeholder="e.g. John Doe" />
@@ -211,7 +211,7 @@ const DealerManagement: React.FC = () => {
                 <Input value={form.phone || ''} onChange={e => updateForm('phone', e.target.value)} placeholder="e.g. 9876543210" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Email ID</Label>
                 <Input type="email" value={form.email || ''} onChange={e => updateForm('email', e.target.value)} placeholder="e.g. dealer@example.com" />
@@ -225,7 +225,7 @@ const DealerManagement: React.FC = () => {
               <Label>Address</Label>
               <Input value={form.address || ''} onChange={e => updateForm('address', e.target.value)} placeholder="Enter full address" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Distributor *</Label>
                 <Select value={form.distributorName} onValueChange={v => updateForm('distributorName', v)}>
@@ -242,7 +242,7 @@ const DealerManagement: React.FC = () => {
                 <Input type="number" value={form.creditLimit} onChange={e => updateForm('creditLimit', Number(e.target.value))} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Outstanding</Label>
                 <Input type="number" value={form.outstanding} onChange={e => updateForm('outstanding', Number(e.target.value))} />
@@ -252,7 +252,7 @@ const DealerManagement: React.FC = () => {
                 <Input value={form.territory || ''} onChange={e => updateForm('territory', e.target.value)} placeholder="e.g. T-WEST" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={form.active ? 'active' : 'blocked'} onValueChange={v => updateForm('active', v === 'active')}>

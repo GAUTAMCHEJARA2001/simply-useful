@@ -486,7 +486,7 @@ const UserManagement: React.FC = () => {
                 <div className="space-y-2"><Label>Password *</Label><Input type="password" value={form.password || ''} onChange={e => uf('password', e.target.value)} minLength={6} required /></div>
               </>
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Role</Label>
                 <Select value={form.role} onValueChange={v => uf('role', v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -500,7 +500,7 @@ const UserManagement: React.FC = () => {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Territory (Area Code)</Label>
                 <Input value={form.territory || ''} onChange={e => uf('territory', e.target.value)} placeholder="e.g. T-WEST" />
@@ -522,7 +522,7 @@ const UserManagement: React.FC = () => {
                   <Label className="text-xs font-bold text-primary">Assign Warehouse(s)</Label>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Select the warehouses this user should have access to. Unchecked warehouses are hidden from their view.</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2 p-3 border border-border rounded-xl bg-card max-h-32 overflow-y-auto shadow-inner">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 border border-border rounded-xl bg-card max-h-32 overflow-y-auto shadow-inner">
                   {allWarehouses.map(w => (
                     <label key={w.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1 rounded transition-colors">
                       <input 
@@ -746,7 +746,7 @@ const UserManagement: React.FC = () => {
               {((assignUser?.role && (assignUser.role.startsWith('INVENTORY') || assignUser.role.includes('WH') || assignUser.role.includes('MANAGER'))) || assignUser?.role === 'SUPERADMIN' || assignUser?.role === 'ADMIN') && (
                 <div className="space-y-1.5 border-t pt-3 border-border">
                   <Label className="text-xs font-bold text-primary">Assigned Warehouses</Label>
-                  <div className="grid grid-cols-2 gap-2 p-3 border border-border rounded-xl bg-card max-h-32 overflow-y-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 border border-border rounded-xl bg-card max-h-32 overflow-y-auto">
                     {allWarehouses.map(w => (
                       <label key={w.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer p-0.5">
                         <input type="checkbox" checked={userAssignments.warehouses?.includes(w.id)} onChange={e => {
