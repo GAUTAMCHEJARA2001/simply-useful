@@ -474,7 +474,7 @@ class VisitSerializer(serializers.ModelSerializer):
     nextVisitTime = serializers.DateTimeField(source='nextvisittime', required=False, allow_null=True)
     gpsLocation = serializers.CharField(source='gpslocation', required=False, allow_null=True, allow_blank=True)
     companyId = serializers.CharField(source='companyid_id')
-    leadId = serializers.CharField(source='lead_id', required=False, allow_null=True)
+    leadId = serializers.CharField(source='lead_id', required=False, allow_null=True, allow_blank=True)
     visitStatus = serializers.CharField(source='visit_status', read_only=True)
     hrRemark = serializers.CharField(source='hr_remark', read_only=True)
     verifiedBy = serializers.CharField(source='verified_by', read_only=True)
@@ -490,10 +490,10 @@ class VisitSerializer(serializers.ModelSerializer):
         ]
 
     def to_internal_value(self, data):
-        # Coerce empty string datetime fields to None to avoid format validation errors
+        # Coerce empty string datetime fields and foreign keys to None to avoid format validation errors
         mutable = data.copy() if hasattr(data, 'copy') else dict(data)
-        for field in ('nextFollowup', 'nextVisitTime', 'nextfollowup', 'nextvisittime'):
-            if field in mutable and mutable[field] == '':
+        for field in ('nextFollowup', 'nextVisitTime', 'nextfollowup', 'nextvisittime', 'leadId', 'lead_id'):
+            if field in mutable and (mutable[field] == '' or mutable[field] == 'none' or mutable[field] is None):
                 mutable[field] = None
         return super().to_internal_value(mutable)
 
