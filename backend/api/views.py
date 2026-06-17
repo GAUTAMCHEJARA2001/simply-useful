@@ -1657,8 +1657,20 @@ def bulk_import(request, entity):
                     existing.save()
                     updated += 1
                 else:
-                    Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
+                    existing = Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
                     created += 1
+
+                # Upsert inventory for the opening stock
+                if values.get('openingstock') is not None:
+                    from api.models import Inventory
+                    Inventory.objects.update_or_create(
+                        productid=existing,
+                        warehouseid=target_warehouse,
+                        defaults={
+                            'quantity': values['openingstock'],
+                            'avgcost': values.get('rate') or 0.0,
+                        }
+                    )
 
             # Restore original tenant connection context
             if original_tenant:
