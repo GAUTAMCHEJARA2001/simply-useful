@@ -1691,15 +1691,15 @@ def bulk_import(request, entity):
         elif entity == 'recipes':
             grouped = {}
             for index, row in enumerate(rows, start=2):
-                code = (row.get('productCode') or row.get('recipeCode') or row.get('product_code') or '').strip()
-                material = (row.get('materialName') or row.get('productName') or row.get('material_name') or row.get('product_name') or '').strip()
+                code = (row.get('productCode') or row.get('recipeCode') or row.get('product_code') or row.get('finishedProductCode') or row.get('finishedProduct') or '').strip()
+                material = (row.get('materialName') or row.get('rawMaterial') or row.get('material') or row.get('ingredient') or row.get('ingredientName') or row.get('productName') or row.get('material_name') or row.get('product_name') or '').strip()
                 if not code or not material:
                     skipped.append({"row": index, "reason": "productCode and materialName are required"})
                     continue
                 
                 recipe_name = (row.get('recipeName') or row.get('name') or row.get('recipe_name') or code).strip()
-                output_qty = _num(row.get('outputQuantity') or row.get('yieldQuantity') or row.get('output_quantity'), 1.0)
-                item_qty = _num(row.get('quantity') or row.get('qty') or row.get('item_qty'))
+                output_qty = _num(row.get('outputQuantity') or row.get('yieldQuantity') or row.get('yield') or row.get('output_quantity'), 1.0)
+                item_qty = _num(row.get('quantity') or row.get('qty') or row.get('amount') or row.get('item_qty'))
                 item_unit = (row.get('unit') or row.get('item_unit') or '').strip()
                 
                 grouped.setdefault(code, {
