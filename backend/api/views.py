@@ -1219,7 +1219,23 @@ def _read_uploaded_csv(request):
     uploaded = request.FILES.get('file')
     if not uploaded:
         return None, send_error("CSV file is required", 400)
-    content = uploaded.read().decode('utf-8-sig')
+    
+    raw_bytes = uploaded.read()
+    content = None
+    # Try multiple encodings to handle files exported by Excel or other systems
+    for encoding in ('utf-8-sig', 'utf-8', 'latin-1', 'cp1252'):
+        try:
+            content = raw_bytes.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+            
+    if content is None:
+        try:
+            content = raw_bytes.decode('utf-8', errors='replace')
+        except Exception as e:
+            return None, send_error(f"Failed to decode CSV file: {e}", 400)
+
     clean_lines = [line for line in content.splitlines() if line.strip() and not line.strip().startswith('#')]
     clean_content = '\n'.join(clean_lines)
     return list(csv.DictReader(io.StringIO(clean_content))), None
