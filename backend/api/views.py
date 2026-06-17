@@ -1442,13 +1442,14 @@ def bulk_template(request, entity):
     templates = {
         'products': (
             'products_template.csv',
-            ['productCode', 'name', 'bagSize', 'category', 'subcategory', 'brand', 'unit', 'rate', 'gst', 'openingStock', 'minimumStock'],
-            [['FG-001', 'Sample Product', '50 KG', 'FINISHED GOOD', 'Tile Adhesive', 'Default Brand', 'BAG', '100', '18', '0', '10']],
+            ['productCode', 'name', 'bagSize', 'category', 'subcategory', 'brand', 'unit', 'rate', 'gst', 'openingStock', 'minimumStock', 'warehouse'],
+            [['FG-001', 'Sample Product', '50 KG', 'FINISHED GOOD', 'Tile Adhesive', 'Default Brand', 'BAG', '100', '18', '0', '10', 'SURAT']],
             [
                 "INSTRUCTION: Fill in the product details.",
                 "productCode is optional (auto-generated if left blank).",
                 "category and subcategory will be automatically created if they do not exist.",
-                "gst should be a percentage number (e.g. 18)."
+                "gst should be a percentage number (e.g. 18).",
+                "warehouse should be the name of the warehouse where this product belongs (e.g. SURAT)."
             ]
         ),
         'dealers': (
@@ -1517,15 +1518,49 @@ def bulk_import(request, entity):
 
     try:
         if entity == 'products':
+            from django.db import connection
+            original_tenant = getattr(connection, 'tenant', None)
+            
             for index, row in enumerate(rows, start=2):
                 code = (row.get('productCode') or row.get('product_code') or '').strip()
                 name = (row.get('name') or row.get('productName') or '').strip()
                 category_name = (row.get('category') or '').strip()
                 subcategory_name = (row.get('subcategory') or row.get('subCategory') or row.get('sub_category') or '').strip()
+                warehouse_val = (row.get('warehouse') or row.get('warehouseName') or row.get('assignedWarehouse') or '').strip()
                 
                 if not name or (not category_name and not subcategory_name):
                     skipped.append({"row": index, "reason": "productName/name and category/subcategory are required"})
                     continue
+
+                # Determine target warehouse tenant context
+                target_warehouse = None
+                if warehouse_val:
+                    # 1. Resolve by name
+                    target_warehouse = Warehouse.objects.filter(name__iexact=warehouse_val, active=True).first()
+                    # 2. Resolve by schema_name
+                    if not target_warehouse:
+                        target_warehouse = Warehouse.objects.filter(schema_name=warehouse_val, active=True).first()
+                    # 3. Resolve by ID
+                    if not target_warehouse:
+                        try:
+                            target_warehouse = Warehouse.objects.filter(id=int(warehouse_val), active=True).first()
+                        except (ValueError, TypeError):
+                            pass
+
+                # If no warehouse resolved, default to the request's active tenant
+                if not target_warehouse:
+                    target_warehouse = original_tenant
+
+                if not target_warehouse:
+                    # Fallback to first active warehouse if absolutely no tenant is set
+                    target_warehouse = Warehouse.objects.filter(active=True).exclude(schema_name='public').first()
+
+                if not target_warehouse:
+                    skipped.append({"row": index, "reason": "No active warehouse found to assign product"})
+                    continue
+
+                # Switch connection to the target warehouse's schema
+                connection.set_tenant(target_warehouse)
 
                 if not code:
                     company = Company.objects.filter(id=company_id).first()
@@ -1546,12 +1581,12 @@ def bulk_import(request, entity):
 
                 category_to_assign = None
                 if category_name:
-                    category, created = Category.objects.get_or_create(
+                    category, created_cat = Category.objects.get_or_create(
                         name=category_name,
                         companyid_id=company_id,
                         defaults={'parentid': None, 'active': True}
                     )
-                    if not created and category.parentid is not None:
+                    if not created_cat and category.parentid is not None:
                         category.parentid = None
                         category.save()
                     category_to_assign = category
@@ -1567,12 +1602,12 @@ def bulk_import(request, entity):
                             subcategory.save()
                         category_to_assign = subcategory
                 elif subcategory_name:
-                    category, created = Category.objects.get_or_create(
+                    category, created_cat = Category.objects.get_or_create(
                         name=subcategory_name,
                         companyid_id=company_id,
                         defaults={'parentid': None, 'active': True}
                     )
-                    if not created and category.parentid is not None:
+                    if not created_cat and category.parentid is not None:
                         category.parentid = None
                         category.save()
                     category_to_assign = category
@@ -1617,6 +1652,12 @@ def bulk_import(request, entity):
                 else:
                     Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
                     created += 1
+
+            # Restore original tenant connection context
+            if original_tenant:
+                connection.set_tenant(original_tenant)
+            else:
+                connection.set_schema_to_public()
 
         elif entity == 'dealers':
             for index, row in enumerate(rows, start=2):
@@ -2036,8 +2077,9 @@ class DealerViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
-        if get_current_db() == 'default':
+        wh_header = request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
+        is_global = (not wh_header or wh_header == 'GLOBAL' or wh_header == 'none')
+        if is_global:
             from api.models import Warehouse, Dealer
             company_id = self.request.user.companyId
             user_role = (getattr(self.request.user, 'role', '') or '').upper()
@@ -2047,6 +2089,8 @@ class DealerViewSet(viewsets.ModelViewSet):
             seen_ids = set()
             for wh in Warehouse.objects.filter(active=True):
                 if not wh.db_name: continue
+                if company_id and wh.companyid_id != company_id:
+                    continue
                 try:
                     qs = Dealer.objects.using(wh.db_name).all()
                     if company_id:
@@ -2795,11 +2839,45 @@ def report_dashboard_kpis(request):
     if has_wh_assignments and request.user.role == 'INVENTORY':
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
         
-    products_q = Product.objects.filter(companyid_id=company_id) if company_id else Product.objects.all()
-    dealers_q = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
+    wh_header = request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
+    is_global_request = (not wh_header or wh_header == 'GLOBAL' or wh_header == 'none')
     
-    total_products = products_q.count()
-    total_dealers = dealers_q.count()
+    if is_global_request:
+        total_products = 0
+        total_dealers = 0
+        seen_dealer_codes = set()
+        seen_product_codes = set()
+        for wh in Warehouse.objects.filter(active=True):
+            if not wh.db_name: continue
+            if assigned_wh_ids and wh.id not in assigned_wh_ids:
+                continue
+            if company_id and wh.companyid_id != company_id:
+                continue
+            try:
+                # Aggregate active dealers
+                d_qs = Dealer.objects.using(wh.db_name).filter(active=True)
+                if company_id:
+                    d_qs = d_qs.filter(companyid_id=company_id)
+                for d in d_qs:
+                    if d.dealercode not in seen_dealer_codes:
+                        seen_dealer_codes.add(d.dealercode)
+                        total_dealers += 1
+
+                # Aggregate active products
+                p_qs = Product.objects.using(wh.db_name).filter(active=True)
+                if company_id:
+                    p_qs = p_qs.filter(companyid_id=company_id)
+                for p in p_qs:
+                    if p.productcode not in seen_product_codes:
+                        seen_product_codes.add(p.productcode)
+                        total_products += 1
+            except Exception as e:
+                print(f"[DASHBOARD GLOBAL AGGREGATION ERROR] schema={wh.db_name}: {e}")
+    else:
+        products_q = Product.objects.filter(companyid_id=company_id, active=True) if company_id else Product.objects.filter(active=True)
+        dealers_q = Dealer.objects.filter(companyid_id=company_id, active=True) if company_id else Dealer.objects.filter(active=True)
+        total_products = products_q.count()
+        total_dealers = dealers_q.count()
     
     total_orders = 0
     total_revenue = 0.0
