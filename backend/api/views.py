@@ -1216,11 +1216,92 @@ def _csv_response(filename, headers, rows=None, instructions=None):
 def _read_uploaded_csv(request):
     import csv
     import io
+    import zipfile
+    import xml.etree.ElementTree as ET
+    import re
+
     uploaded = request.FILES.get('file')
     if not uploaded:
         return None, send_error("CSV file is required", 400)
     
     raw_bytes = uploaded.read()
+    
+    # Check if the uploaded file is a ZIP archive / Excel Spreadsheet (magic bytes PK\x03\x04)
+    if raw_bytes.startswith(b'PK\x03\x04'):
+        try:
+            file_like = io.BytesIO(raw_bytes)
+            with zipfile.ZipFile(file_like) as z:
+                # 1. Read shared strings
+                shared_strings = []
+                if 'xl/sharedStrings.xml' in z.namelist():
+                    ss_content = z.read('xl/sharedStrings.xml')
+                    ss_tree = ET.fromstring(ss_content)
+                    ns = {'ns': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                    for si in ss_tree.findall('.//ns:si', ns):
+                        t_elements = si.findall('.//ns:t', ns)
+                        text = "".join(t.text or "" for t in t_elements)
+                        shared_strings.append(text)
+                
+                # 2. Read sheet1
+                sheet_content = z.read('xl/worksheets/sheet1.xml')
+                sheet_tree = ET.fromstring(sheet_content)
+                ns = {'ns': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                
+                rows = []
+                for row_elem in sheet_tree.findall('.//ns:row', ns):
+                    row_num = int(row_elem.get('r'))
+                    row_data = {}
+                    for cell in row_elem.findall('.//ns:c', ns):
+                        cell_ref = cell.get('r')
+                        col_match = re.match(r'([A-Z]+)', cell_ref)
+                        if not col_match:
+                            continue
+                        col_letter = col_match.group(1)
+                        
+                        val_elem = cell.find('ns:v', ns)
+                        val = ""
+                        if val_elem is not None:
+                            val = val_elem.text or ""
+                            cell_type = cell.get('t')
+                            if cell_type == 's':
+                                idx = int(val)
+                                if 0 <= idx < len(shared_strings):
+                                    val = shared_strings[idx]
+                            elif cell_type == 'b':
+                                val = 'true' if val == '1' else 'false'
+                        row_data[col_letter] = val
+                    rows.append((row_num, row_data))
+                    
+                rows.sort(key=lambda x: x[0])
+                
+                # Filter out comment rows and empty rows
+                clean_rows = []
+                for r_num, r_data in rows:
+                    first_val = (r_data.get('A') or '').strip()
+                    if first_val.startswith('#'):
+                        continue
+                    if not any(r_data.values()):
+                        continue
+                    clean_rows.append(r_data)
+                    
+                if not clean_rows:
+                    return [], None
+                    
+                header_row = clean_rows[0]
+                headers = {col: header_row[col].strip() for col in header_row if header_row[col]}
+                
+                result = []
+                for r_data in clean_rows[1:]:
+                    row_dict = {}
+                    for col_letter, header_name in headers.items():
+                        row_dict[header_name] = r_data.get(col_letter, '').strip()
+                    result.append(row_dict)
+                    
+                return result, None
+        except Exception as e:
+            return None, send_error(f"Failed to parse Excel file: {e}", 400)
+
+    # Fallback to standard CSV decoding
     content = None
     # Try multiple encodings to handle files exported by Excel or other systems
     for encoding in ('utf-8-sig', 'utf-8', 'latin-1', 'cp1252'):
