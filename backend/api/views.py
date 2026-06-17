@@ -1473,14 +1473,14 @@ def bulk_template(request, entity):
         ),
         'recipes': (
             'recipes_template.csv',
-            ['recipeCode', 'recipeName', 'outputQuantity', 'materialName', 'qty', 'unit'],
+            ['productCode', 'recipeName', 'outputQuantity', 'materialName', 'quantity', 'unit'],
             [
                 ['FG-001', 'Sample Product Recipe', '1', 'Cement', '10', 'KG'],
                 ['FG-001', 'Sample Product Recipe', '1', 'Sand', '20', 'KG'],
             ],
             [
                 "INSTRUCTION: Fill in production recipe details.",
-                "recipeCode and materialName are required.",
+                "productCode (Finished Product Code) and materialName (Ingredient/Raw Material Name) are required.",
                 "outputQuantity is the output yield quantity of the recipe.",
                 "Specify one row per material item belonging to the recipe."
             ]
@@ -1691,20 +1691,26 @@ def bulk_import(request, entity):
         elif entity == 'recipes':
             grouped = {}
             for index, row in enumerate(rows, start=2):
-                code = (row.get('recipeCode') or row.get('productCode') or '').strip()
-                material = (row.get('materialName') or '').strip()
+                code = (row.get('productCode') or row.get('recipeCode') or row.get('product_code') or '').strip()
+                material = (row.get('materialName') or row.get('productName') or row.get('material_name') or row.get('product_name') or '').strip()
                 if not code or not material:
-                    skipped.append({"row": index, "reason": "recipeCode and materialName are required"})
+                    skipped.append({"row": index, "reason": "productCode and materialName are required"})
                     continue
+                
+                recipe_name = (row.get('recipeName') or row.get('name') or row.get('recipe_name') or code).strip()
+                output_qty = _num(row.get('outputQuantity') or row.get('yieldQuantity') or row.get('output_quantity'), 1.0)
+                item_qty = _num(row.get('quantity') or row.get('qty') or row.get('item_qty'))
+                item_unit = (row.get('unit') or row.get('item_unit') or '').strip()
+                
                 grouped.setdefault(code, {
-                    'name': row.get('recipeName') or code,
-                    'outputQuantity': _num(row.get('outputQuantity'), 1.0),
+                    'name': recipe_name,
+                    'outputQuantity': output_qty,
                     'items': []
                 })
                 grouped[code]['items'].append({
                     'materialname': material,
-                    'qty': _num(row.get('qty')),
-                    'unit': row.get('unit') or '',
+                    'qty': item_qty,
+                    'unit': item_unit,
                 })
 
             for code, recipe in grouped.items():
