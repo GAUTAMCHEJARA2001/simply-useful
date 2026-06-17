@@ -448,8 +448,9 @@ class ProductViewSet(viewsets.ModelViewSet):
                     products_qs = Product.objects.using(wh.db_name).select_related(
                         'categoryid', 'categoryid__parentid', 'brandid', 'unitid'
                     )
-                    if request.user.companyId:
-                        products_qs = products_qs.filter(companyid_id=request.user.companyId)
+                    company_id = getattr(request.user, 'companyId', getattr(request.user, 'companyid_id', None))
+                    if company_id:
+                        products_qs = products_qs.filter(companyid_id=company_id)
                         
                     if allowed_product_ids is not None:
                         products_qs = products_qs.filter(id__in=allowed_product_ids)
