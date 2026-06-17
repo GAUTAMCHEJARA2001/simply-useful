@@ -1005,6 +1005,14 @@ from django.http import HttpResponse
 
 SETTINGS_FILE_PATH = os.path.join(settings.BASE_DIR, 'settings_store.json')
 
+def _get_company():
+    """Get the first (and usually only) Company record."""
+    try:
+        from core.models import Company
+        return Company.objects.first()
+    except Exception:
+        return None
+
 def load_settings():
     default_vals = {
         "stock_method": "FIFO",
@@ -1032,76 +1040,75 @@ def load_settings():
         "local_backup_time": "02:00",
         "localBackupTime": "02:00"
     }
-    if os.path.exists(SETTINGS_FILE_PATH):
+
+    data = None
+
+    # 1. Try loading from database (persistent across restarts)
+    try:
+        company = _get_company()
+        if company and company.settings_json:
+            data = json.loads(company.settings_json)
+    except Exception:
+        pass
+
+    # 2. Fallback: try loading from file (for migration / local dev)
+    if data is None and os.path.exists(SETTINGS_FILE_PATH):
         try:
             with open(SETTINGS_FILE_PATH, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # Clean up any literal 'key' and 'value' fields from the dictionary
-                data.pop('key', None)
-                data.pop('value', None)
-
-                # Harmonize snake_case and camelCase keys
-                if 'stock_method' in data:
-                    data['stockMethod'] = data['stock_method']
-                elif 'stockMethod' in data:
-                    data['stock_method'] = data['stockMethod']
-                
-                if 'sku_prefix' in data:
-                    data['skuPrefix'] = data['sku_prefix']
-                elif 'skuPrefix' in data:
-                    data['sku_prefix'] = data['skuPrefix']
-
-                if 'allow_price_edit_sales' in data:
-                    data['allowPriceEditSales'] = data['allow_price_edit_sales']
-                elif 'allowPriceEditSales' in data:
-                    data['allow_price_edit_sales'] = data['allowPriceEditSales']
-
-                if 'show_credit_warnings' in data:
-                    data['showCreditWarnings'] = data['show_credit_warnings']
-                elif 'showCreditWarnings' in data:
-                    data['show_credit_warnings'] = data['showCreditWarnings']
-
-                if 'order_approval_required' in data:
-                    data['orderApprovalRequired'] = data['order_approval_required']
-                elif 'orderApprovalRequired' in data:
-                    data['order_approval_required'] = data['orderApprovalRequired']
-
-                if 'company_name' in data:
-                    data['companyName'] = data['company_name']
-                elif 'companyName' in data:
-                    data['company_name'] = data['companyName']
-
-                if 'auto_backup_enabled' in data:
-                    data['autoBackupEnabled'] = data['auto_backup_enabled']
-                elif 'autoBackupEnabled' in data:
-                    data['auto_backup_enabled'] = data['autoBackupEnabled']
-
-                if 'auto_backup_time' in data:
-                    data['autoBackupTime'] = data['auto_backup_time']
-                elif 'autoBackupTime' in data:
-                    data['auto_backup_time'] = data['autoBackupTime']
-                
-                if 'local_backup_dir' in data:
-                    data['localBackupDir'] = data['local_backup_dir']
-                elif 'localBackupDir' in data:
-                    data['local_backup_dir'] = data['localBackupDir']
-
-                if 'local_backup_enabled' in data:
-                    data['localBackupEnabled'] = data['local_backup_enabled']
-                elif 'localBackupEnabled' in data:
-                    data['local_backup_enabled'] = data['localBackupEnabled']
-
-                if 'local_backup_time' in data:
-                    data['localBackupTime'] = data['local_backup_time']
-                elif 'localBackupTime' in data:
-                    data['local_backup_time'] = data['localBackupTime']
-                
-                return {**default_vals, **data}
+                # Migrate file data to DB if possible
+                try:
+                    company = _get_company()
+                    if company:
+                        company.settings_json = json.dumps(data, ensure_ascii=False)
+                        company.save(update_fields=['settings_json'])
+                except Exception:
+                    pass
         except Exception:
-            return default_vals
-    return default_vals
+            pass
+
+    if data is None:
+        return default_vals
+
+    # Clean up any literal 'key' and 'value' fields from the dictionary
+    data.pop('key', None)
+    data.pop('value', None)
+
+    # Harmonize snake_case and camelCase keys
+    _sync_keys(data, 'stock_method', 'stockMethod')
+    _sync_keys(data, 'sku_prefix', 'skuPrefix')
+    _sync_keys(data, 'allow_price_edit_sales', 'allowPriceEditSales')
+    _sync_keys(data, 'show_credit_warnings', 'showCreditWarnings')
+    _sync_keys(data, 'order_approval_required', 'orderApprovalRequired')
+    _sync_keys(data, 'company_name', 'companyName')
+    _sync_keys(data, 'auto_backup_enabled', 'autoBackupEnabled')
+    _sync_keys(data, 'auto_backup_time', 'autoBackupTime')
+    _sync_keys(data, 'local_backup_dir', 'localBackupDir')
+    _sync_keys(data, 'local_backup_enabled', 'localBackupEnabled')
+    _sync_keys(data, 'local_backup_time', 'localBackupTime')
+
+    return {**default_vals, **data}
+
+
+def _sync_keys(data, snake_key, camel_key):
+    """Ensure both snake_case and camelCase versions exist in data."""
+    if snake_key in data:
+        data[camel_key] = data[snake_key]
+    elif camel_key in data:
+        data[snake_key] = data[camel_key]
+
 
 def save_settings(data):
+    # 1. Save to database (primary, persistent)
+    try:
+        company = _get_company()
+        if company:
+            company.settings_json = json.dumps(data, indent=2, ensure_ascii=False)
+            company.save(update_fields=['settings_json'])
+    except Exception:
+        pass
+
+    # 2. Also save to file as backup (for local dev)
     try:
         with open(SETTINGS_FILE_PATH, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)

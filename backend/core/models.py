@@ -10,6 +10,7 @@ class Company(models.Model):
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
     stockmethod = models.TextField(db_column='stockMethod')
+    settings_json = models.TextField(db_column='settingsJson', blank=True, null=True, default='{}')
 
     class Meta:
         db_table = 'Company'
