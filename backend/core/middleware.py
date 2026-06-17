@@ -49,5 +49,24 @@ class HeaderTenantMiddleware:
             connection.set_tenant(warehouse)
             request.tenant = warehouse
 
-        response = self.get_response(request)
-        return response
+        try:
+            response = self.get_response(request)
+            return response
+        except Exception as e:
+            err_msg = str(e).lower()
+            if 'relation' in err_msg and ('does not exist' in err_msg or 'not found' in err_msg):
+                from django.http import JsonResponse
+                # Return empty dictionary for object endpoints (like KPIs/analytics) 
+                # and empty list for list endpoints (like products/visits/expenses)
+                is_object_endpoint = (
+                    'kpi' in request.path or 
+                    'dashboard' in request.path or 
+                    'settings' in request.path or
+                    'analytics' in request.path
+                )
+                return JsonResponse({
+                    "success": True,
+                    "data": {} if is_object_endpoint else [],
+                    "message": "No active warehouse. Please create a warehouse."
+                }, status=200)
+            raise

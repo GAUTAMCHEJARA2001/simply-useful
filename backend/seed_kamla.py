@@ -58,10 +58,10 @@ def seed():
         
     # 3. Create MAIN Warehouse
     warehouse, created = Warehouse.objects.get_or_create(
-        name='MAIN',
-        companyid=company,
+        schema_name='wh_main',
         defaults={
-            'schema_name': 'wh_main',
+            'name': 'MAIN',
+            'companyid': company,
             'active': True,
             'location': 'Main Facility',
             'db_name': 'wh_main',
