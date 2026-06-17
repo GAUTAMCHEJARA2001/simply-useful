@@ -1622,9 +1622,24 @@ def bulk_import(request, entity):
             for index, row in enumerate(rows, start=2):
                 code = (row.get('dealerCode') or row.get('dealer_code') or '').strip()
                 name = (row.get('dealerName') or row.get('dealer_name') or '').strip()
-                if not code or not name:
-                    skipped.append({"row": index, "reason": "dealerCode and dealerName are required"})
+                if not name:
+                    skipped.append({"row": index, "reason": "dealerName is required"})
                     continue
+                
+                if not code:
+                    import random
+                    import string
+                    attempts = 0
+                    while attempts < 100:
+                        rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                        candidate_code = f"DLR-{rand_suffix}"
+                        if not Dealer.objects.filter(dealercode=candidate_code, companyid_id=company_id).exists():
+                            code = candidate_code
+                            break
+                        attempts += 1
+                    if not code:
+                        skipped.append({"row": index, "reason": "Failed to auto-generate a unique dealer code"})
+                        continue
                 values = {
                     'dealername': name,
                     'city': row.get('city') or '',
@@ -2077,6 +2092,20 @@ class DealerViewSet(viewsets.ModelViewSet):
         import uuid
         if 'id' not in data or not data['id']:
             data['id'] = 'c' + uuid.uuid4().hex[:23]
+            
+        if 'dealerCode' not in data or not str(data.get('dealerCode', '')).strip():
+            import random
+            import string
+            company_id = request.user.companyId
+            attempts = 0
+            while attempts < 100:
+                rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                candidate_code = f"DLR-{rand_suffix}"
+                if not Dealer.objects.filter(dealercode=candidate_code, companyid_id=company_id).exists():
+                    data['dealerCode'] = candidate_code
+                    break
+                attempts += 1
+                
         serializer = DealerSerializer(data=data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
