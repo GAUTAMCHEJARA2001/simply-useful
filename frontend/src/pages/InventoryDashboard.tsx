@@ -232,9 +232,10 @@ const InventoryDashboard: React.FC = () => {
     .filter(o => o.status !== 'Cancelled' && o.status !== 'Completed')
     .flatMap(o => o.items || [])
     .reduce((acc, item) => {
-      const itemProductId = item.productId || item.productid_id || (typeof item.product === 'object' ? item.product?.id : item.product);
+      const itAny = item as any;
+      const itemProductId = itAny.productId || itAny.productid_id || (typeof itAny.product === 'object' ? itAny.product?.id : itAny.product);
       const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
-      const productName = pObj?.name || pObj?.productName || (item.product as any)?.name || item.productName || item.product || 'Unknown Product';
+      const productName = pObj?.name || pObj?.productName || (itAny.product as any)?.name || itAny.productName || itAny.product || 'Unknown Product';
 
       const existing = acc.find(a => a.product === productName);
       if (existing) {
@@ -320,9 +321,15 @@ const InventoryDashboard: React.FC = () => {
 
     let narrationStr = confirmOrder.reason || '';
     if (confirmOrder.action === 'Dispatched') {
-      narrationStr = `[INVOICE: ${confirmOrder.invoiceDetails.trim()}] [WAREHOUSE: ${confirmOrder.warehouseDetails.trim()}] [VEHICLE: ${confirmOrder.vehicleDetails.trim()}] [DRIVER: ${confirmOrder.driverName.trim()}] [DRIVER MOBILE: ${confirmOrder.driverMobile.trim()}] [DISPATCH TIME: ${confirmOrder.action_date} ${confirmOrder.action_time}] ${narrationStr}`.trim();
+      const invoice = (confirmOrder.invoiceDetails || '').trim();
+      const warehouse = (confirmOrder.warehouseDetails || '').trim();
+      const vehicle = (confirmOrder.vehicleDetails || '').trim();
+      const driver = (confirmOrder.driverName || '').trim();
+      const driverMob = (confirmOrder.driverMobile || '').trim();
+      narrationStr = `[INVOICE: ${invoice}] [WAREHOUSE: ${warehouse}] [VEHICLE: ${vehicle}] [DRIVER: ${driver}] [DRIVER MOBILE: ${driverMob}] [DISPATCH TIME: ${confirmOrder.action_date} ${confirmOrder.action_time}] ${narrationStr}`.trim();
     } else if (confirmOrder.action === 'Returned') {
-      narrationStr = `[RETURN REASON: ${confirmOrder.reason.trim()}] [RETURN DATE: ${confirmOrder.action_date}] ${narrationStr}`.trim();
+      const reason = (confirmOrder.reason || '').trim();
+      narrationStr = `[RETURN REASON: ${reason}] [RETURN DATE: ${confirmOrder.action_date}] ${narrationStr}`.trim();
     }
 
     await updateOrderStatus(confirmOrder.id, confirmOrder.action, narrationStr, confirmOrder.action_date);
@@ -473,16 +480,18 @@ const InventoryDashboard: React.FC = () => {
                     </div>
 
                     <p className="text-[10px] text-muted-foreground truncate mb-2" title={o.items.map(i => {
-                      const itemProductId = i.productId || i.productid_id || (typeof i.product === 'object' ? i.product?.id : i.product);
+                      const iAny = i as any;
+                      const itemProductId = iAny.productId || iAny.productid_id || (typeof iAny.product === 'object' ? iAny.product?.id : iAny.product);
                       const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
-                      const pName = pObj?.name || pObj?.productName || i.productName || i.product || 'Unknown Product';
-                      return `${pName} ×${i.qty}`;
+                      const pName = pObj?.name || pObj?.productName || iAny.productName || iAny.product || 'Unknown Product';
+                      return `${pName} ×${iAny.qty}`;
                     }).join(', ')}>
                       {o.items.map(i => {
-                        const itemProductId = i.productId || i.productid_id || (typeof i.product === 'object' ? i.product?.id : i.product);
+                        const iAny = i as any;
+                        const itemProductId = iAny.productId || iAny.productid_id || (typeof iAny.product === 'object' ? iAny.product?.id : iAny.product);
                         const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
-                        const pName = pObj?.name || pObj?.productName || i.productName || i.product || 'Unknown Product';
-                        return `${pName} ×${i.qty}`;
+                        const pName = pObj?.name || pObj?.productName || iAny.productName || iAny.product || 'Unknown Product';
+                        return `${pName} ×${iAny.qty}`;
                       }).join(' | ')}
                     </p>
 
@@ -632,7 +641,7 @@ const InventoryDashboard: React.FC = () => {
             const date = new Date(viewOrder.createdAt || viewOrder.date || new Date()).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
             
             const wh = warehouses.find(w => String(w.id) === String((viewOrder as any).assignedWarehouse));
-            const dealer = dealers.find(d => d.name === partyName || d.dealerName === partyName);
+            const dealer = dealers.find(d => d.dealerName === partyName || d.dealer_name === partyName);
             
             // Check stock status for this order
             const checkResult = viewOrder.status === 'Pending' ? checkOrderShortage(viewOrder) : null;
@@ -706,9 +715,10 @@ const InventoryDashboard: React.FC = () => {
                       </thead>
                       <tbody className="divide-y divide-border bg-card">
                         {viewOrder.items.map((it, idx) => {
-                          const itemProductId = it.productId || it.productid_id || (typeof it.product === 'object' ? it.product?.id : it.product);
+                          const itAny = it as any;
+                          const itemProductId = itAny.productId || itAny.productid_id || (typeof itAny.product === 'object' ? itAny.product?.id : itAny.product);
                           const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
-                          const pName = pObj?.name || pObj?.productName || it.productName || it.product || 'Unknown Product';
+                          const pName = pObj?.name || pObj?.productName || itAny.productName || itAny.product || 'Unknown Product';
                           return (
                             <tr key={idx} className="hover:bg-accent/5 transition-colors">
                               <td className="px-3 py-2 font-medium">

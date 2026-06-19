@@ -493,7 +493,7 @@ const AdminDashboard: React.FC = () => {
             
             const wh = warehouses.find(w => String(w.id) === String((viewOrder as any).assignedWarehouse));
             const soName = users.find(u => u.email === soEmail)?.name || soEmail;
-            const dealer = dealers.find(d => d.name === partyName);
+            const dealer = dealers.find(d => d.dealerName === partyName || d.dealer_name === partyName);
 
             return (
               <div className="space-y-4 mt-2">

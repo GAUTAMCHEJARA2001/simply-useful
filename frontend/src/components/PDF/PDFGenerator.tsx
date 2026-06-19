@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Save, Loader2 } from 'lucide-react';
 import { OrderTemplate } from './templates/OrderTemplate';
 import { ProductionTemplate } from './templates/ProductionTemplate';
+import { adaptProductionToPrintable } from './adapters/production.adapter';
 import { StockLedgerTemplate } from './templates/StockLedgerTemplate';
 import { useData } from '@/contexts/DataContext';
 import { toast } from 'sonner';
@@ -141,16 +142,10 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
         });
       }
 
+      const printable = adaptProductionToPrintable(data, safeCompany);
       return (
         <ProductionTemplate
-          orderNo={safeString(data.order_id)}
-          date={safeString(data.date)}
-          product_name={safeString(data.product_name)}
-          target_qty={Number(data.target_qty || 0)}
-          unit={safeString(data.unit)}
-          bom_items={data.bom_items || []}
-          remarks={safeString(data.remarks)}
-          company={safeCompany}
+          production={printable}
         />
       );
     }
