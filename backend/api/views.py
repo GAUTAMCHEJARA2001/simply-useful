@@ -5749,6 +5749,52 @@ class LeadViewSet(viewsets.ModelViewSet):
         return qs.select_related('assigned_to', 'created_by', 'companyid').prefetch_related('followups', 'stage_history')
 
     def list(self, request, *args, **kwargs):
+        from api.db_router import get_current_db, set_current_db
+        current_db = get_current_db()
+
+        if current_db == 'default':
+            # Global aggregation: Lead table only exists in tenant schemas
+            all_leads = []
+            try:
+                for wh in Warehouse.objects.filter(active=True):
+                    if not wh.db_name:
+                        continue
+                    set_current_db(wh.db_name)
+                    qs = Lead.objects.using(wh.db_name).filter(is_deleted=False)
+                    company_id = _get_company_id(request)
+                    if company_id:
+                        qs = qs.filter(companyid_id=company_id)
+                    user_role = (getattr(request.user, 'role', '') or '').upper()
+                    SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
+                    if user_role in SALES_ROLES:
+                        qs = qs.filter(assigned_to_id=request.user.id)
+                    # Apply query param filters
+                    status_filter = request.query_params.get('status')
+                    if status_filter:
+                        qs = qs.filter(status=status_filter)
+                    priority_filter = request.query_params.get('priority')
+                    if priority_filter:
+                        qs = qs.filter(priority=priority_filter)
+                    assigned_to = request.query_params.get('assigned_to')
+                    if assigned_to:
+                        qs = qs.filter(assigned_to_id=assigned_to)
+                    search = request.query_params.get('search')
+                    if search:
+                        qs = qs.filter(
+                            models.Q(name__icontains=search) |
+                            models.Q(company_name__icontains=search) |
+                            models.Q(phone__icontains=search) |
+                            models.Q(email__icontains=search)
+                        )
+                    qs = _fy_date_filter(request, qs, date_field='createdat')
+                    qs = qs.select_related('assigned_to', 'created_by', 'companyid').prefetch_related('followups', 'stage_history')
+                    all_leads.extend(LeadSerializer(qs, many=True).data)
+            finally:
+                set_current_db('default')
+            # Sort by updatedAt descending
+            all_leads.sort(key=lambda x: x.get('updatedAt', ''), reverse=True)
+            return send_success(all_leads, "Leads fetched successfully")
+
         queryset = self.get_queryset()
         queryset = _fy_date_filter(request, queryset, date_field='createdat')
         serializer = self.get_serializer(queryset, many=True)
