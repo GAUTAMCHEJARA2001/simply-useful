@@ -42,7 +42,7 @@ export const WarehouseProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Initialize from user's authorized warehouses if not set
   useEffect(() => {
     if (user) {
-      if (user.role === 'SUPERADMIN') {
+      if (user.role === 'SUPERADMIN' || user.role === 'ADMIN') {
         if (!activeWarehouseId) {
           setActiveWarehouse('GLOBAL', 'Global Data');
         }
@@ -57,6 +57,12 @@ export const WarehouseProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (!currentValid) {
           const defaultWh = user.authorizedWarehouses[0];
           setActiveWarehouse(defaultWh.id, defaultWh.name);
+        }
+      } else {
+        // If user has no specific warehouses assigned (e.g. Sales Officer only assigned products),
+        // fallback to GLOBAL so they can see their assigned products across all warehouses.
+        if (!activeWarehouseId) {
+          setActiveWarehouse('GLOBAL', 'Global Data');
         }
       }
     }
