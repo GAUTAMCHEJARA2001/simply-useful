@@ -5,13 +5,13 @@ import apiClient, { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Package, CheckCircle, AlertTriangle, Truck, ShoppingBag, XCircle } from 'lucide-react';
+import { Package, CheckCircle, AlertTriangle, Truck, ShoppingBag, XCircle, Users, Star, Warehouse } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Navigate, Link } from 'react-router-dom';
-import { OrderStatus } from '@/types';
+import { OrderStatus, Order } from '@/types';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -23,7 +23,7 @@ const statusStyles: Record<string, string> = {
 
 const InventoryDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { orders, products, warehouses, updateOrderStatus, updateOrderItems, loading: dataLoading } = useData();
+  const { orders, products, warehouses, updateOrderStatus, updateOrderItems, dealers, loading: dataLoading } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
 
@@ -56,6 +56,8 @@ const InventoryDashboard: React.FC = () => {
     driverMobile?: string;
     subAction?: 'Reject' | 'Cancel';
   } | null>(null);
+
+  const [viewOrder, setViewOrder] = useState<Order | null>(null);
 
   const [boms, setBoms] = useState<any[]>([]);
   const [loadingBoms, setLoadingBoms] = useState<boolean>(true);
@@ -421,64 +423,397 @@ const InventoryDashboard: React.FC = () => {
             )}
             {[...pendingOrders, ...dispatchedOrders].map(o => {
               const action = actionLabel(o.status);
-              const orderId = o.orderId || (o as any).order_id;
+              const orderId = o.orderId || (o as any).order_id || o.id || 'Unknown ID';
+              const partyName = o.partyName || (o as any).party_name || 'Party';
+              const soEmail = o.soEmail || (o as any).so_email || 'SO';
+              const grandTotal = o.grandTotal ?? (o as any).grand_total ?? 0;
+              const displayStatus = o.status || 'Pending';
+              const checkResult = o.status === 'Pending' ? checkOrderShortage(o) : null;
+              
+              const badgeStyles: Record<string, string> = {
+                Available: 'bg-green-100 text-green-700 border-green-200',
+                Partial: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+                Unavailable: 'bg-red-100 text-red-700 border-red-200',
+              };
+
+              const badgeTexts: Record<string, string> = {
+                Available: 'Stock Available',
+                Partial: 'Partial Stock',
+                Unavailable: 'Stock Shortage',
+              };
+
               return (
-                <div key={orderId} className="p-3 rounded-lg border border-border bg-card">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="text-sm font-semibold">{orderId}</p>
-                      <p className="text-xs text-muted-foreground">{o.partyName || (o as any).party_name} · {o.date}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{(o.items || []).map((i: any) => {
+                <div key={orderId} className="group flex flex-col bg-card hover:bg-accent/5 transition-colors border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md">
+                  {/* Clickable Order Details Area */}
+                  <div 
+                    className="p-4 cursor-pointer"
+                    onClick={() => setViewOrder(o)}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground text-sm tracking-tight">{orderId}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusStyles[displayStatus]}`}>{displayStatus}</span>
+                      </div>
+                      <span className="font-bold text-primary text-base">₹{grandTotal.toLocaleString()}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-3 text-xs text-muted-foreground mb-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Party Name</p>
+                        <p className="font-medium text-foreground truncate" title={partyName}>{partyName}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Sales Officer / Date</p>
+                        <p className="font-medium text-foreground truncate" title={`${soEmail} · ${o.date}`}>{soEmail} · {o.date}</p>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground truncate mb-3" title={o.items.map(i => {
+                      const itemProductId = i.productId || i.productid_id || (typeof i.product === 'object' ? i.product?.id : i.product);
+                      const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
+                      const pName = pObj?.name || pObj?.productName || i.productName || i.product || 'Unknown Product';
+                      return `${pName} ×${i.qty}`;
+                    }).join(', ')}>
+                      {o.items.map(i => {
                         const itemProductId = i.productId || i.productid_id || (typeof i.product === 'object' ? i.product?.id : i.product);
                         const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
-                        const pName = pObj?.name || pObj?.productName || i.productName || i.product?.name || i.product || 'Unknown Product';
+                        const pName = pObj?.name || pObj?.productName || i.productName || i.product || 'Unknown Product';
                         return `${pName} ×${i.qty}`;
-                      }).join(', ')}</p>
-                    </div>
-                    <div className="text-right space-y-1">
-                      <p className="text-sm font-bold">₹{(o.grandTotal || (o as any).grand_total || 0).toLocaleString()}</p>
-                      <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${statusStyles[o.status]}`}>{o.status}</span>
-                    </div>
-                  </div>
-                  {/* Warehouse Assignment */}
-                  <div className="flex items-center gap-1.5 mt-1 mb-1">
-                    <span className="font-semibold text-foreground/80 text-[11px]">🏭 Warehouse:</span>
-                    {(user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') ? (
-                      warehouses.length > 0 ? (
-                        <Select
-                          value={String((o as any).assignedWarehouse || '')}
-                          onValueChange={(val) => handleAssignWarehouse(orderId, val)}
-                        >
-                          <SelectTrigger className="h-7 py-0 px-2 text-[11px] min-w-[140px] bg-background border border-border/85 rounded-md">
-                            <SelectValue placeholder="Assign Warehouse" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {warehouses.map(wh => (
-                              <SelectItem key={wh.id} value={String(wh.id)} className="text-xs">
-                                {wh.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground italic">No warehouses</span>
-                      )
-                    ) : (
-                      <span className="text-[11px] text-muted-foreground">
-                        {(() => {
-                          const whId = (o as any).assignedWarehouse;
-                          if (!whId) return 'Not assigned';
-                          const wh = warehouses.find(w => String(w.id) === String(whId));
-                          return wh?.name || `Warehouse #${whId}`;
-                        })()}
-                      </span>
+                      }).join(' | ')}
+                    </p>
+
+                    {checkResult && (
+                      <div className="flex items-center justify-between text-xs border-t pt-2 border-border/40">
+                        <span className="font-semibold text-muted-foreground">Stock Status:</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${badgeStyles[checkResult.status]}`}>
+                          {badgeTexts[checkResult.status]}
+                        </span>
+                      </div>
+                    )}
+
+                    {o.narration && (
+                      <p className="text-[11px] text-yellow-700 bg-yellow-500/10 px-2 py-1 rounded-md mt-2 border border-yellow-500/20 truncate">
+                        📝 <span className="font-medium">Narration:</span> {o.narration}
+                      </p>
                     )}
                   </div>
+
+                  {/* Action Bar */}
+                  <div className="bg-secondary/30 p-3 border-t border-border flex flex-col gap-3 mt-auto">
+                    {/* Warehouse Assignment */}
+                    <div className="flex items-center justify-between gap-1.5 w-full">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-foreground/80 text-[11px] flex items-center gap-1"><Warehouse className="w-3.5 h-3.5" /> WH:</span>
+                        {(user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') ? (
+                          warehouses.length > 0 ? (
+                            <Select
+                              value={String((o as any).assignedWarehouse || '')}
+                              onValueChange={(val) => handleAssignWarehouse(orderId, val)}
+                            >
+                              <SelectTrigger className="h-8 py-0 px-2 text-[11px] min-w-[130px] bg-background border border-border rounded-md shadow-sm">
+                                <SelectValue placeholder="Assign Warehouse" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {warehouses.map(wh => (
+                                  <SelectItem key={wh.id} value={String(wh.id)} className="text-xs">
+                                    {wh.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground italic">No warehouses</span>
+                          )
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">
+                            {(() => {
+                              const whId = (o as any).assignedWarehouse;
+                              if (!whId) return 'Not assigned';
+                              const wh = warehouses.find(w => String(w.id) === String(whId));
+                              return wh?.name || `Warehouse #${whId}`;
+                            })()}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Display a quick action trigger if dispatch/complete is allowed */}
+                      {isInventory && action && (
+                        <div className="flex gap-2 shrink-0">
+                          {action.map((a: any) => (
+                            <Button
+                              key={a.next}
+                              size="sm"
+                              className={`h-8 px-3 shadow-sm ${a.color}`}
+                              onClick={() => {
+                                const now = new Date();
+                                setConfirmOrder({ 
+                                  id: orderId, 
+                                  action: a.next, 
+                                  action_date: now.toISOString().split('T')[0],
+                                  action_time: now.toTimeString().split(' ')[0].slice(0, 5),
+                                  invoiceDetails: '',
+                                  warehouseDetails: warehouses[0]?.name || '',
+                                  vehicleDetails: '',
+                                  driverName: '',
+                                  driverMobile: '',
+                                  reason: ''
+                                });
+                              }}
+                            >
+                              <a.icon className="w-3.5 h-3.5 mr-1" /> {a.label}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Admin Quick Approvals on the card itself */}
+                      {o.status === 'Pending' && (user?.role === 'SUPERADMIN' || user?.role === 'ADMIN') && (
+                        <div className="flex gap-1.5 shrink-0">
+                          <Button 
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white h-8 px-2 shadow-sm text-xs"
+                            onClick={() => {
+                              setConfirmOrder({
+                                id: orderId,
+                                action: 'Approved',
+                                action_date: new Date().toISOString().split('T')[0],
+                                reason: ''
+                              });
+                            }}
+                          >
+                            <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                          </Button>
+                          <Button 
+                            size="sm"
+                            variant="destructive"
+                            className="h-8 px-2 shadow-sm text-xs"
+                            onClick={() => {
+                              setConfirmOrder({
+                                id: orderId,
+                                action: 'Cancelled',
+                                subAction: 'Reject',
+                                action_date: new Date().toISOString().split('T')[0],
+                                reason: ''
+                              });
+                            }}
+                          >
+                            <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+      {/* View Full Order Details Dialog */}
+      <Dialog open={!!viewOrder} onOpenChange={() => setViewOrder(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby="full-order-desc">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              📦 Order Details
+              {viewOrder && <span className={`text-xs px-2.5 py-1 rounded-full font-semibold uppercase tracking-wider ${statusStyles[viewOrder.status || 'Pending']}`}>{viewOrder.status || 'Pending'}</span>}
+            </DialogTitle>
+            <DialogDescription id="full-order-desc" className="sr-only">Detailed view of the selected order including party, sales officer, items and stock status.</DialogDescription>
+          </DialogHeader>
+
+          {viewOrder && (() => {
+            const orderId = viewOrder.orderId || viewOrder.order_id || viewOrder.id || 'Unknown ID';
+            const partyName = viewOrder.partyName || viewOrder.party_name || '—';
+            const soEmail = viewOrder.soEmail || viewOrder.so_email || '—';
+            const grandTotal = viewOrder.grandTotal ?? viewOrder.grand_total ?? 0;
+            const date = new Date(viewOrder.createdAt || viewOrder.date || new Date()).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            
+            const wh = warehouses.find(w => String(w.id) === String((viewOrder as any).assignedWarehouse));
+            const dealer = dealers.find(d => d.name === partyName || d.dealerName === partyName);
+            
+            // Check stock status for this order
+            const checkResult = viewOrder.status === 'Pending' ? checkOrderShortage(viewOrder) : null;
+            const action = actionLabel(viewOrder.status);
+
+            const badgeStyles: Record<string, string> = {
+              Available: 'bg-green-100 text-green-700 border-green-200',
+              Partial: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+              Unavailable: 'bg-red-100 text-red-700 border-red-200',
+            };
+
+            const badgeTexts: Record<string, string> = {
+              Available: 'Stock Available',
+              Partial: 'Partial Stock',
+              Unavailable: 'Stock Shortage',
+            };
+
+            return (
+              <div className="space-y-6 mt-2">
+                {/* Header Info */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-secondary/20 p-4 rounded-xl border border-border">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Order ID</p>
+                    <p className="font-semibold">{orderId}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Date</p>
+                    <p className="font-semibold text-sm">{date}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Warehouse</p>
+                    <p className="font-semibold text-sm">{wh ? wh.name : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Total Amount</p>
+                    <p className="font-bold text-primary text-lg leading-none">₹{grandTotal.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* People Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="border border-border rounded-xl p-4">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold flex items-center gap-1.5 mb-2"><Users className="w-3.5 h-3.5" /> Party Details</p>
+                    <p className="font-semibold text-base">{partyName}</p>
+                    {dealer && (
+                      <div className="mt-1.5 text-sm text-muted-foreground space-y-0.5">
+                        <p>{dealer.address}</p>
+                        <p>{dealer.city}{dealer.state ? `, ${dealer.state}` : ''}</p>
+                        <p>{dealer.phone}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="border border-border rounded-xl p-4">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold flex items-center gap-1.5 mb-2"><Star className="w-3.5 h-3.5" /> Sales Officer / Submitter</p>
+                    <p className="font-semibold text-base">{soEmail}</p>
+                  </div>
+                </div>
+
+                {/* Items List */}
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-2">Order Items ({viewOrder.items.length})</p>
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <table className="min-w-full divide-y divide-border text-sm">
+                      <thead className="bg-secondary/40 text-muted-foreground font-semibold text-xs">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left">Product</th>
+                          <th className="px-4 py-2.5 text-center">Qty</th>
+                          <th className="px-4 py-2.5 text-right">Rate</th>
+                          <th className="px-4 py-2.5 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border bg-card">
+                        {viewOrder.items.map((it, idx) => {
+                          const itemProductId = it.productId || it.productid_id || (typeof it.product === 'object' ? it.product?.id : it.product);
+                          const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
+                          const pName = pObj?.name || pObj?.productName || it.productName || it.product || 'Unknown Product';
+                          return (
+                            <tr key={idx} className="hover:bg-accent/5 transition-colors">
+                              <td className="px-4 py-3 font-medium">
+                                {pName}
+                                {it.itemRemark && <p className="text-xs text-muted-foreground font-normal mt-0.5">Note: {it.itemRemark}</p>}
+                              </td>
+                              <td className="px-4 py-3 text-center">{it.qty}</td>
+                              <td className="px-4 py-3 text-right">₹{(it.price || 0).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right font-medium">₹{((it.qty) * (it.price || 0)).toLocaleString()}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Shortage table if status is not 'Available' */}
+                {checkResult && (
+                  <div className="border border-border rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Stock Shortage Check</p>
+                      <span className={`text-[10px] px-2.5 py-1 rounded-full border font-semibold uppercase tracking-wider ${badgeStyles[checkResult.status]}`}>
+                        {badgeTexts[checkResult.status]}
+                      </span>
+                    </div>
+
+                    {checkResult.status !== 'Available' && checkResult.shortages.length > 0 && (
+                      <div className="overflow-x-auto border border-border/40 rounded-xl">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-secondary/40 text-muted-foreground font-semibold border-b border-border/40">
+                            <tr>
+                              <th className="px-3 py-2 text-left">Material/Product</th>
+                              <th className="px-3 py-2 text-right">Req Qty</th>
+                              <th className="px-3 py-2 text-right">Available</th>
+                              <th className="px-3 py-2 text-right">Shortage</th>
+                              <th className="px-3 py-2 text-left">Source Wh</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/20 bg-card">
+                            {checkResult.shortages.map((s, idx) => (
+                              <tr key={idx} className={s.shortageQty > 0 ? "bg-red-500/5" : ""}>
+                                <td className="px-3 py-2.5 font-medium" title={s.productName}>{s.productName}</td>
+                                <td className="px-3 py-2.5 text-right font-medium">{s.requiredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                <td className="px-3 py-2.5 text-right">{s.availableStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                <td className={`px-3 py-2.5 text-right font-bold ${s.shortageQty > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  {s.shortageQty > 0 ? s.shortageQty.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                                </td>
+                                <td className="px-3 py-2.5 text-muted-foreground" title={s.sourceWarehouse}>{s.sourceWarehouse}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {viewOrder.narration && (
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-sm">
+                    <p className="text-[10px] text-yellow-700 uppercase tracking-wider font-bold mb-1">📝 General Narration</p>
+                    <p className="text-foreground">{viewOrder.narration}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <DialogFooter className="gap-2 mt-4 flex-col sm:flex-row pt-4 border-t border-border">
+            <Button variant="outline" onClick={() => setViewOrder(null)}>Close</Button>
+            {viewOrder && (() => {
+              const orderId = viewOrder.orderId || viewOrder.order_id || viewOrder.id || 'Unknown ID';
+              const action = actionLabel(viewOrder.status);
+              const isAdminOrSuper = user?.role === 'SUPERADMIN' || user?.role === 'ADMIN';
+
+              return (
+                <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
+                  {/* Pending actions */}
+                  {viewOrder.status === 'Pending' && isAdminOrSuper && (
+                    <>
+                      <Button variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => {
+                        setConfirmOrder({
+                          id: orderId,
+                          action: 'Cancelled',
+                          subAction: 'Reject',
+                          action_date: new Date().toISOString().split('T')[0],
+                          reason: ''
+                        });
+                        setViewOrder(null);
+                      }}>Reject</Button>
+                      <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => {
+                        setConfirmOrder({
+                          id: orderId,
+                          action: 'Approved',
+                          action_date: new Date().toISOString().split('T')[0],
+                          reason: ''
+                        });
+                        setViewOrder(null);
+                      }}>Approve</Button>
+                    </>
+                  )}
+
+                  {/* Fulfill actions */}
                   {isInventory && action && (
-                    <div className="flex gap-2 w-full mt-1">
+                    <>
                       {action.map((a: any) => (
-                        <button
+                        <Button
                           key={a.next}
+                          className={a.color}
                           onClick={() => {
                             const now = new Date();
                             setConfirmOrder({ 
@@ -493,127 +828,20 @@ const InventoryDashboard: React.FC = () => {
                               driverMobile: '',
                               reason: ''
                             });
+                            setViewOrder(null);
                           }}
-                          className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${a.color}`}
                         >
-                          <a.icon className="w-3.5 h-3.5" /> {a.label}
-                        </button>
+                          <a.icon className="w-3.5 h-3.5 mr-1" /> {a.label}
+                        </Button>
                       ))}
-                    </div>
+                    </>
                   )}
-                  {o.status === 'Pending' && (() => {
-                    const checkResult = checkOrderShortage(o);
-                    
-                    const badgeStyles: Record<string, string> = {
-                      Available: 'bg-green-100 text-green-700 border-green-200',
-                      Partial: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-                      Unavailable: 'bg-red-100 text-red-700 border-red-200',
-                    };
-
-                    const badgeTexts: Record<string, string> = {
-                      Available: '✅ Stock Available',
-                      Partial: '⚠️ Partial Stock',
-                      Unavailable: '❌ Stock Not Available',
-                    };
-
-                    const isAdminOrSuper = user?.role === 'SUPERADMIN' || user?.role === 'ADMIN';
-
-                    return (
-                      <div className="space-y-3 mt-2 border-t pt-2 border-border/40">
-                        {/* Stock Check Summary */}
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-muted-foreground">Stock Status:</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${badgeStyles[checkResult.status]}`}>
-                            {badgeTexts[checkResult.status]}
-                          </span>
-                        </div>
-
-                        {/* Shortage table if status is not 'Available' */}
-                        {checkResult.status !== 'Available' && checkResult.shortages.length > 0 && (
-                          <div className="overflow-x-auto border border-border/40 rounded-lg">
-                            <table className="w-full text-[10px] text-left">
-                              <thead className="bg-muted/50 text-muted-foreground font-semibold border-b border-border/40">
-                                <tr>
-                                  <th className="px-2 py-1.5 text-left">Material/Product</th>
-                                  <th className="px-2 py-1.5 text-right">Req Qty</th>
-                                  <th className="px-2 py-1.5 text-right">Available</th>
-                                  <th className="px-2 py-1.5 text-right">Shortage</th>
-                                  <th className="px-2 py-1.5 text-left">Source Wh</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border/20 bg-card">
-                                {checkResult.shortages.map((s, idx) => (
-                                  <tr key={idx} className={s.shortageQty > 0 ? "bg-red-500/5" : ""}>
-                                    <td className="px-2 py-1.5 font-medium max-w-[120px] truncate" title={s.productName}>{s.productName}</td>
-                                    <td className="px-2 py-1.5 text-right font-medium">{s.requiredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                                    <td className="px-2 py-1.5 text-right">{s.availableStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                                    <td className={`px-2 py-1.5 text-right font-bold ${s.shortageQty > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                      {s.shortageQty > 0 ? s.shortageQty.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
-                                    </td>
-                                    <td className="px-2 py-1.5 text-muted-foreground truncate max-w-[80px]" title={s.sourceWarehouse}>{s.sourceWarehouse}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {/* Admin Action Buttons */}
-                        {isAdminOrSuper ? (
-                          <div className="flex gap-2 w-full pt-1">
-                            <button
-                              onClick={() => {
-                                setConfirmOrder({
-                                  id: orderId,
-                                  action: 'Approved',
-                                  action_date: new Date().toISOString().split('T')[0],
-                                  reason: ''
-                                });
-                              }}
-                              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700 text-white transition-colors"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5" /> Approve
-                            </button>
-                            <button
-                              onClick={() => {
-                                setConfirmOrder({
-                                  id: orderId,
-                                  action: 'Cancelled',
-                                  subAction: 'Reject',
-                                  action_date: new Date().toISOString().split('T')[0],
-                                  reason: ''
-                                });
-                              }}
-                              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 border border-red-200 text-red-700 hover:bg-red-50 transition-colors"
-                            >
-                              <XCircle className="w-3.5 h-3.5" /> Reject
-                            </button>
-                            <button
-                              onClick={() => {
-                                setConfirmOrder({
-                                  id: orderId,
-                                  action: 'Cancelled',
-                                  subAction: 'Cancel',
-                                  action_date: new Date().toISOString().split('T')[0],
-                                  reason: ''
-                                });
-                              }}
-                              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 border border-border text-muted-foreground hover:bg-muted/40 transition-colors"
-                            >
-                              <AlertTriangle className="w-3.5 h-3.5" /> Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <p className="text-[10px] text-muted-foreground text-center mt-1">Waiting for Admin approval</p>
-                        )}
-                      </div>
-                    );
-                  })()}
                 </div>
               );
-            })}
-          </CardContent>
-        </Card>
+            })()}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
 
       {/* Confirmation Dialog */}
