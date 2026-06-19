@@ -2756,10 +2756,30 @@ class VisitViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        queryset = _fy_date_filter(request, queryset, date_field='date')
-        serializer = VisitSerializer(queryset, many=True)
-        return send_success(serializer.data, "Visits fetched successfully")
+        from api.db_router import get_current_db
+        from api.models import Warehouse
+        current_db = get_current_db()
+        
+        all_visits = []
+        if current_db == 'default':
+            from api.db_router import set_current_db
+            try:
+                for wh in Warehouse.objects.filter(active=True):
+                    if not wh.db_name: continue
+                    set_current_db(wh.db_name)
+                    qs = self.get_queryset()
+                    qs = _fy_date_filter(request, qs, date_field='date')
+                    serialized_data = VisitSerializer(qs, many=True).data
+                    all_visits.extend(serialized_data)
+            finally:
+                set_current_db('default')
+        else:
+            qs = self.get_queryset()
+            qs = _fy_date_filter(request, qs, date_field='date')
+            all_visits = VisitSerializer(qs, many=True).data
+            
+        all_visits.sort(key=lambda x: x.get('date', ''), reverse=True)
+        return send_success(all_visits, "Visits fetched successfully")
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
@@ -2817,10 +2837,30 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        queryset = _fy_date_filter(request, queryset, date_field='date')
-        serializer = ExpenseSerializer(queryset, many=True)
-        return send_success(serializer.data, "Expenses fetched successfully")
+        from api.db_router import get_current_db
+        from api.models import Warehouse
+        current_db = get_current_db()
+        
+        all_expenses = []
+        if current_db == 'default':
+            from api.db_router import set_current_db
+            try:
+                for wh in Warehouse.objects.filter(active=True):
+                    if not wh.db_name: continue
+                    set_current_db(wh.db_name)
+                    qs = self.get_queryset()
+                    qs = _fy_date_filter(request, qs, date_field='date')
+                    serialized_data = ExpenseSerializer(qs, many=True).data
+                    all_expenses.extend(serialized_data)
+            finally:
+                set_current_db('default')
+        else:
+            qs = self.get_queryset()
+            qs = _fy_date_filter(request, qs, date_field='date')
+            all_expenses = ExpenseSerializer(qs, many=True).data
+            
+        all_expenses.sort(key=lambda x: x.get('date', ''), reverse=True)
+        return send_success(all_expenses, "Expenses fetched successfully")
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
@@ -3428,7 +3468,13 @@ def recalculate_product_inventory(product_id, warehouse_id=None):
     from django.db.models import Sum
 
     try:
-        product = Product.objects.get(id=product_id)
+        from api.db_router import get_current_db, get_tenant_model_cross_db, set_current_db
+        curr_db = get_current_db()
+        if curr_db == 'default':
+            product = get_tenant_model_cross_db(Product, product_id)
+            set_current_db('default')
+        else:
+            product = Product.objects.using(curr_db).get(id=product_id)
     except Product.DoesNotExist:
         return
 

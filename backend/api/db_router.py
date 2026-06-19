@@ -9,11 +9,13 @@ def set_current_db(db_name):
     _local.current_db = db_name
 
 def get_current_db():
+    if hasattr(_local, 'current_db') and _local.current_db and _local.current_db != 'default':
+        return _local.current_db
     try:
         if hasattr(connection, 'tenant') and connection.tenant:
             schema = connection.tenant.schema_name
             if schema == 'public':
-                return 'default'
+                return getattr(_local, 'current_db', 'default')
             return schema or 'default'
     except Exception:
         pass
