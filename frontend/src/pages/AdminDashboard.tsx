@@ -70,6 +70,7 @@ const AdminDashboard: React.FC = () => {
   const { can } = usePermissions();
   const { filterBySelectedFY, fyLabel, selectedFY } = useFinancialYear();
   const [confirmOrder, setConfirmOrder] = useState<{ order: Order; action: 'Approved' | 'Cancelled'; reason?: string; action_date?: string } | null>(null);
+  const [viewOrder, setViewOrder] = useState<Order | null>(null);
 
   if (!can('view_admin_dashboard')) {
     return <Navigate to="/" replace />;
@@ -221,6 +222,7 @@ const AdminDashboard: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {pendingOrders.map(o => {
               const orderId = o.orderId || o.order_id || o.id || 'Unknown ID';
               const partyName = o.partyName || o.party_name || 'Party';
@@ -229,98 +231,90 @@ const AdminDashboard: React.FC = () => {
               const displayStatus = o.status || 'Pending';
               
               return (
-                <div key={orderId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-card border border-border">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm">{orderId}</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusStyles[displayStatus]}`}>{displayStatus}</span>
+                <div key={orderId} className="group flex flex-col bg-card hover:bg-accent/5 transition-colors border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md">
+                  {/* Clickable Order Details Area */}
+                  <div 
+                    className="p-4 cursor-pointer"
+                    onClick={() => setViewOrder(o)}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground text-sm tracking-tight">{orderId}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusStyles[displayStatus]}`}>{displayStatus}</span>
+                      </div>
+                      <span className="font-bold text-primary text-base">₹{grandTotal.toLocaleString()}</span>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span>{partyName}</span>
-                      <span>·</span>
-                      <div className="inline-flex items-center gap-1.5">
-                        <span className="font-semibold text-foreground/80 text-[11px]">SO:</span>
+
+                    <div className="grid grid-cols-2 gap-y-3 text-xs text-muted-foreground mb-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Party Name</p>
+                        <p className="font-medium text-foreground truncate" title={partyName}>{partyName}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Sales Officer</p>
+                        <p className="font-medium text-foreground truncate" title={soEmail}>{soEmail}</p>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground truncate" title={o.items.map(i => `${i.productName || (typeof i.product === 'object' && i.product ? (i.product as any).name || (i.product as any).productName : i.product)} ×${i.qty}`).join(', ')}>
+                      {o.items.map(i => `${i.productName || (typeof i.product === 'object' && i.product ? (i.product as any).name || (i.product as any).productName : i.product)} ×${i.qty}`).join(' | ')}
+                    </p>
+
+                    {o.narration && (
+                      <p className="text-[11px] text-yellow-700 bg-yellow-500/10 px-2 py-1 rounded-md mt-3 border border-yellow-500/20 truncate">
+                        📝 <span className="font-medium">Narration:</span> {o.narration}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Action Bar */}
+                  <div className="bg-secondary/30 p-3 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3 mt-auto">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                         {(() => {
                           const activeSO = [...salesOfficers];
                           if (soEmail && !activeSO.some(u => u.email.toLowerCase() === soEmail.toLowerCase())) {
                             const match = (users || []).find(u => u.email.toLowerCase() === soEmail.toLowerCase());
-                            if (match) {
-                              activeSO.push(match);
-                            } else {
-                              activeSO.push({ id: soEmail, email: soEmail, name: soEmail, role: 'SALES', active: false } as any);
-                            }
+                            if (match) activeSO.push(match);
+                            else activeSO.push({ id: soEmail, email: soEmail, name: soEmail, role: 'SALES', active: false } as any);
                           }
                           return (
-                            <Select 
-                              value={soEmail || ''} 
-                              onValueChange={(val) => handleReassignSO(orderId, val)}
-                            >
-                              <SelectTrigger className="h-7 py-0 px-2 text-[11px] min-w-[140px] bg-background border border-border/85 rounded-md">
-                                <SelectValue placeholder="Select SO" />
+                            <Select value={soEmail || ''} onValueChange={(val) => handleReassignSO(orderId, val)}>
+                              <SelectTrigger className="h-8 py-0 px-2 text-[11px] w-full sm:w-[130px] bg-background border border-border rounded-md shadow-sm">
+                                <SelectValue placeholder="Assign SO" />
                               </SelectTrigger>
                               <SelectContent>
-                                {activeSO.map(so => (
-                                  <SelectItem key={so.id} value={so.email} className="text-xs">
-                                    {so.name}
-                                  </SelectItem>
-                                ))}
+                                {activeSO.map(so => <SelectItem key={so.id} value={so.email} className="text-xs">{so.name}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           );
                         })()}
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{o.items.map(i => `${i.productName || (typeof i.product === 'object' && i.product ? (i.product as any).name || (i.product as any).productName : i.product)} ×${i.qty}`).join(' | ')}</p>
-                    {o.narration && (
-                      <p className="text-[11px] text-yellow-700 bg-yellow-500/10 px-1.5 py-0.5 rounded mt-1 w-fit border border-yellow-500/20">
-                        📝 General Narration: {o.narration}
-                      </p>
-                    )}
-                    <p className="text-xs font-semibold text-primary mt-1">₹{grandTotal.toLocaleString()}</p>
-                    {/* Allocate Warehouse */}
-                    <div className="inline-flex items-center gap-1.5 mt-1.5">
-                      <span className="font-semibold text-foreground/80 text-[11px]">🏭 Warehouse:</span>
-                      {warehouses.length > 0 ? (
+
                         <Select
                           value={String((o as any).assignedWarehouse || '')}
                           onValueChange={(val) => handleAssignWarehouse(orderId, val)}
                         >
-                          <SelectTrigger className="h-7 py-0 px-2 text-[11px] min-w-[140px] bg-background border border-border/85 rounded-md">
-                            <SelectValue placeholder="Assign Warehouse" />
+                          <SelectTrigger className="h-8 py-0 px-2 text-[11px] w-full sm:w-[130px] bg-background border border-border rounded-md shadow-sm">
+                            <SelectValue placeholder="Warehouse" />
                           </SelectTrigger>
                           <SelectContent>
-                            {warehouses.map(wh => (
-                              <SelectItem key={wh.id} value={String(wh.id)} className="text-xs">
-                                {wh.name}
-                              </SelectItem>
-                            ))}
+                            {warehouses.map(wh => <SelectItem key={wh.id} value={String(wh.id)} className="text-xs">{wh.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground italic">No warehouses</span>
-                      )}
                     </div>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700 text-white text-xs px-3"
-                      onClick={() => setConfirmOrder({ order: o, action: 'Approved' })}
-                    >
-                      <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="text-xs px-3"
-                      onClick={() => setConfirmOrder({ order: o, action: 'Cancelled', action_date: new Date().toISOString().split('T')[0] })}
-                    >
-                      <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
-                    </Button>
+
+                    <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                      <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white flex-1 sm:flex-none h-8 px-3 shadow-sm" onClick={() => setConfirmOrder({ order: o, action: 'Approved' })}>
+                        <CheckCircle className="w-3.5 h-3.5 mr-1.5" /> Approve
+                      </Button>
+                      <Button size="sm" variant="destructive" className="flex-1 sm:flex-none h-8 px-3 shadow-sm" onClick={() => setConfirmOrder({ order: o, action: 'Cancelled', action_date: new Date().toISOString().split('T')[0] })}>
+                        <XCircle className="w-3.5 h-3.5 mr-1.5" /> Reject
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );
             })}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -474,6 +468,127 @@ const AdminDashboard: React.FC = () => {
             >
               {confirmOrder?.action === 'Approved' ? 'Approve' : 'Reject Order'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* View Full Order Details Dialog */}
+      <Dialog open={!!viewOrder} onOpenChange={() => setViewOrder(null)}>
+        <DialogContent className="max-w-2xl" aria-describedby="full-order-desc">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              📦 Order Details
+              {viewOrder && <span className={`text-xs px-2.5 py-1 rounded-full font-semibold uppercase tracking-wider ${statusStyles[viewOrder.status || 'Pending']}`}>{viewOrder.status || 'Pending'}</span>}
+            </DialogTitle>
+            <DialogDescription id="full-order-desc" className="sr-only">Detailed view of the selected order including party, sales officer, and all items.</DialogDescription>
+          </DialogHeader>
+
+          {viewOrder && (() => {
+            const orderId = viewOrder.orderId || viewOrder.order_id || viewOrder.id || 'Unknown ID';
+            const partyName = viewOrder.partyName || viewOrder.party_name || '—';
+            const soEmail = viewOrder.soEmail || viewOrder.so_email || '—';
+            const grandTotal = viewOrder.grandTotal ?? viewOrder.grand_total ?? 0;
+            const date = new Date(viewOrder.createdAt || viewOrder.date || new Date()).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            
+            const wh = warehouses.find(w => String(w.id) === String((viewOrder as any).assignedWarehouse));
+            const soName = users.find(u => u.email === soEmail)?.name || soEmail;
+            const dealer = dealers.find(d => d.name === partyName);
+
+            return (
+              <div className="space-y-6 mt-2">
+                {/* Header Info */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-secondary/20 p-4 rounded-xl border border-border">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Order ID</p>
+                    <p className="font-semibold">{orderId}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Date</p>
+                    <p className="font-semibold text-sm">{date}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Warehouse</p>
+                    <p className="font-semibold text-sm">{wh ? wh.name : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Total Amount</p>
+                    <p className="font-bold text-primary text-lg leading-none">₹{grandTotal.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* People Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="border border-border rounded-xl p-4">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold flex items-center gap-1.5 mb-2"><Users className="w-3.5 h-3.5" /> Party Details</p>
+                    <p className="font-semibold text-base">{partyName}</p>
+                    {dealer && (
+                      <div className="mt-1.5 text-sm text-muted-foreground space-y-0.5">
+                        <p>{dealer.address}</p>
+                        <p>{dealer.city}{dealer.state ? `, ${dealer.state}` : ''}</p>
+                        <p>{dealer.phone}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="border border-border rounded-xl p-4">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold flex items-center gap-1.5 mb-2"><Star className="w-3.5 h-3.5" /> Sales Officer</p>
+                    <p className="font-semibold text-base">{soName}</p>
+                    <p className="text-sm text-muted-foreground mt-1.5">{soEmail}</p>
+                  </div>
+                </div>
+
+                {/* Items List */}
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-2">Order Items ({viewOrder.items.length})</p>
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <table className="min-w-full divide-y divide-border text-sm">
+                      <thead className="bg-secondary/40 text-muted-foreground font-semibold text-xs">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left">Product</th>
+                          <th className="px-4 py-2.5 text-center">Qty</th>
+                          <th className="px-4 py-2.5 text-right">Rate</th>
+                          <th className="px-4 py-2.5 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border bg-card">
+                        {viewOrder.items.map((it, idx) => (
+                          <tr key={idx} className="hover:bg-accent/5 transition-colors">
+                            <td className="px-4 py-3 font-medium">
+                              {it.productName || (typeof it.product === 'object' && it.product ? (it.product as any).name || (it.product as any).productName : it.product)}
+                              {it.itemRemark && <p className="text-xs text-muted-foreground font-normal mt-0.5">Note: {it.itemRemark}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-center">{it.qty}</td>
+                            <td className="px-4 py-3 text-right">₹{(it.price || 0).toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right font-medium">₹{((it.qty) * (it.price || 0)).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {viewOrder.narration && (
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-sm">
+                    <p className="text-[10px] text-yellow-700 uppercase tracking-wider font-bold mb-1">📝 General Narration</p>
+                    <p className="text-foreground">{viewOrder.narration}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <DialogFooter className="gap-2 mt-4 flex-col sm:flex-row pt-4 border-t border-border">
+            <Button variant="outline" onClick={() => setViewOrder(null)}>Close</Button>
+            {viewOrder?.status === 'Pending' && (
+              <>
+                <Button variant="destructive" onClick={() => {
+                  setConfirmOrder({ order: viewOrder, action: 'Cancelled', action_date: new Date().toISOString().split('T')[0] });
+                  setViewOrder(null);
+                }}>Reject Order</Button>
+                <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => {
+                  setConfirmOrder({ order: viewOrder, action: 'Approved' });
+                  setViewOrder(null);
+                }}>Approve Order</Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
