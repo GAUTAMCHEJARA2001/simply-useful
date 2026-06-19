@@ -36,10 +36,11 @@ class HeaderTenantMiddleware:
                 if warehouse:
                     print(f"[TENANT MIDDLEWARE] Warning: Requested warehouse '{warehouse_id}' not found. Falling back to active warehouse: '{warehouse.name}' (schema: {warehouse.schema_name})")
 
-        # 5. Default API requests to first active warehouse if no tenant schema is set,
-        # since tenant-specific tables do not exist in the public schema.
-        # Exclude global master warehouses endpoints which must run in the public schema to manage tenants.
-        if not warehouse and 'masters/warehouses' not in request.path and (request.path.startswith('/api/') or request.path.startswith('/sales/') or request.path.startswith('/inventory/')):
+        # 5. Default API requests to first active warehouse ONLY when no warehouse
+        # header was sent at all. If the client explicitly sent 'GLOBAL', keep the
+        # public schema so that the views' global-aggregation code path runs.
+        is_explicit_global = warehouse_id and warehouse_id.upper() == 'GLOBAL'
+        if not warehouse and not is_explicit_global and 'masters/warehouses' not in request.path and (request.path.startswith('/api/') or request.path.startswith('/sales/') or request.path.startswith('/inventory/')):
             warehouse = WarehouseModel.objects.filter(active=True).exclude(schema_name='public').first()
             if warehouse:
                 print(f"[TENANT MIDDLEWARE] Warning: Defaulting API request to first active warehouse: '{warehouse.name}' (schema: {warehouse.schema_name})")

@@ -409,8 +409,11 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_partyDetails(self, obj):
         from api.models import Dealer, Distributor
         p_type = str(obj.partytype).upper()
+        # Use the database alias the order came from
+        db_alias = getattr(obj._state, 'db', 'default')
+        
         if p_type == 'DEALER':
-            dealer = Dealer.objects.filter(dealername=obj.partyname).first()
+            dealer = Dealer.objects.using(db_alias).filter(dealername=obj.partyname).first()
             if dealer:
                 return {
                     'address': getattr(dealer, 'address', ''),
@@ -420,7 +423,7 @@ class OrderSerializer(serializers.ModelSerializer):
                     'contact_person': getattr(dealer, 'contact_person', '')
                 }
         elif p_type == 'DISTRIBUTOR':
-            distributor = Distributor.objects.filter(distributorname=obj.partyname).first()
+            distributor = Distributor.objects.using(db_alias).filter(distributorname=obj.partyname).first()
             if distributor:
                 return {
                     'address': getattr(distributor, 'address', ''),

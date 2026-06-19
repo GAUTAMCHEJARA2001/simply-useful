@@ -68,6 +68,16 @@ def _extract_order_tag(narration, key, default=''):
     return match.group(1).strip() if match else default
 
 
+def _get_company_id(request):
+    """Safely extract company ID from JWT or Django session user.
+    
+    JWTUser has .companyId, Django User model has .companyid_id.
+    Returns None if neither is available (prevents AttributeError crashes).
+    """
+    user = request.user
+    return getattr(user, 'companyId', None) or getattr(user, 'companyid_id', None)
+
+
 # ----------------------------------------------------
 # 1. AUTHENTICATION & USER MANAGEMENT
 # ----------------------------------------------------
@@ -209,7 +219,7 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         if company_id:
             return User.objects.filter(companyid_id=company_id)
         return User.objects.all()
@@ -231,7 +241,7 @@ class UserViewSet(viewsets.ModelViewSet):
         name = data.get('name')
         role = data.get('role', 'SALES')
         active = data.get('active', True)
-        company_id = request.user.companyId or data.get('companyId')
+        company_id = _get_company_id(request) or data.get('companyId')
 
         if not email or not password:
             return send_error("Email and password are required", 400)
@@ -448,7 +458,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                     products_qs = Product.objects.using(wh.db_name).select_related(
                         'categoryid', 'categoryid__parentid', 'brandid', 'unitid'
                     )
-                    company_id = getattr(request.user, 'companyId', getattr(request.user, 'companyid_id', None))
+                    company_id = _get_company_id(request)
                     if company_id:
                         products_qs = products_qs.filter(companyid_id=company_id)
                         
@@ -488,7 +498,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     def suggest_sku(self, request):
         from api.models import Warehouse, Product, Company
         data = request.data
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         target_name = data.get('name', '').strip()
         target_category_id = data.get('categoryId') or data.get('categoryid')
         target_brand_id = data.get('brandId') or data.get('brandid')
@@ -572,8 +582,8 @@ class ProductViewSet(viewsets.ModelViewSet):
         
         # Override company id to match logged in user
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
         
         # Resolve unit name from frontend 'unit' to 'unitId'
         unit_name = data.get('unit')
@@ -589,7 +599,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Global SKU Assignment logic
         product_code = (data.get('productCode') or data.get('productcode') or '').strip()
         
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         target_name = data.get('name', '').strip()
         target_category_id = data.get('categoryId') or data.get('categoryid')
         target_brand_id = data.get('brandId') or data.get('brandid')
@@ -763,7 +773,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
 
     def list(self, request, *args, **kwargs):
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         queryset = Category.objects.filter(companyid_id=company_id) if company_id else Category.objects.all()
         
 
@@ -772,8 +782,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         serializer = CategorySerializer(data=data)
@@ -788,7 +798,7 @@ class BrandViewSet(viewsets.ModelViewSet):
     serializer_class = BrandSerializer
 
     def list(self, request, *args, **kwargs):
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         queryset = Brand.objects.filter(companyid_id=company_id) if company_id else Brand.objects.all()
         
 
@@ -797,8 +807,8 @@ class BrandViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         serializer = BrandSerializer(data=data)
@@ -813,7 +823,7 @@ class UnitViewSet(viewsets.ModelViewSet):
     serializer_class = UnitSerializer
 
     def list(self, request, *args, **kwargs):
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         queryset = Unit.objects.filter(companyid_id=company_id) if company_id else Unit.objects.all()
         
 
@@ -822,8 +832,8 @@ class UnitViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         serializer = UnitSerializer(data=data)
@@ -838,7 +848,7 @@ class WarehouseViewSet(viewsets.ModelViewSet):
     serializer_class = WarehouseSerializer
 
     def list(self, request, *args, **kwargs):
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         queryset = Warehouse.objects.filter(companyid_id=company_id) if company_id else Warehouse.objects.all()
 
         # Enforce warehouse assignments if they exist for the user and (this is NOT the master warehouses endpoint OR user role is INVENTORY)
@@ -855,8 +865,8 @@ class WarehouseViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         serializer = WarehouseSerializer(data=data)
@@ -871,7 +881,7 @@ class RegionViewSet(viewsets.ModelViewSet):
     serializer_class = RegionSerializer
 
     def list(self, request, *args, **kwargs):
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         queryset = Region.objects.filter(companyid_id=company_id) if company_id else Region.objects.all()
         serializer = RegionSerializer(queryset, many=True)
         return send_success(serializer.data, "Regions fetched successfully")
@@ -883,7 +893,7 @@ class MarketViewSet(viewsets.ModelViewSet):
     serializer_class = MarketSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         if company_id:
             return Market.objects.filter(companyid_id=company_id)
         return Market.objects.all()
@@ -901,7 +911,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         if company_id:
             return Supplier.objects.filter(companyid_id=company_id)
         return Supplier.objects.all()
@@ -916,8 +926,8 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         import uuid
@@ -956,7 +966,7 @@ class LabourViewSet(viewsets.ModelViewSet):
     serializer_class = LabourSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         if company_id:
             return Labour.objects.filter(companyid_id=company_id)
         return Labour.objects.all()
@@ -968,8 +978,8 @@ class LabourViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         
@@ -1661,17 +1671,19 @@ def bulk_import(request, entity):
                     existing = Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
                     created += 1
 
-                # Upsert inventory for the opening stock
-                if values.get('openingstock') is not None:
+                # Upsert inventory for the opening stock (always create record, even for 0)
+                opening_stock = values.get('openingstock')
+                if opening_stock is not None:
                     from api.models import Inventory
                     Inventory.objects.update_or_create(
                         productid=existing,
                         warehouseid=target_warehouse,
                         defaults={
-                            'quantity': values['openingstock'],
+                            'quantity': opening_stock,
                             'avgcost': values.get('rate') or 0.0,
                         }
                     )
+                    print(f"[BULK IMPORT] Product '{code}' -> warehouse '{target_warehouse.name}' (schema: {target_warehouse.schema_name}), stock={opening_stock}")
 
             # Restore original tenant connection context
             if original_tenant:
@@ -2088,7 +2100,7 @@ class DealerViewSet(viewsets.ModelViewSet):
     serializer_class = DealerSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         qs = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
@@ -2101,7 +2113,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         is_global = (not wh_header or wh_header == 'GLOBAL' or wh_header == 'none')
         if is_global:
             from api.models import Warehouse, Dealer
-            company_id = self.request.user.companyId
+            company_id = _get_company_id(self.request)
             user_role = (getattr(self.request.user, 'role', '') or '').upper()
             user_email = getattr(self.request.user, 'email', None)
             
@@ -2155,8 +2167,8 @@ class DealerViewSet(viewsets.ModelViewSet):
             return send_error("Cannot create dealer in global database. Please select a specific warehouse.", 400)
 
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         import uuid
@@ -2166,7 +2178,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         if 'dealerCode' not in data or not str(data.get('dealerCode', '')).strip():
             import random
             import string
-            company_id = request.user.companyId
+            company_id = _get_company_id(request)
             attempts = 0
             while attempts < 100:
                 rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -2186,8 +2198,8 @@ class DealerViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         data = request.data.copy()
         # Preserve company isolation
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
         serializer = DealerSerializer(instance, data=data, partial=partial)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -2209,7 +2221,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
     serializer_class = DistributorSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         qs = Distributor.objects.filter(companyid_id=company_id) if company_id else Distributor.objects.all()
@@ -2221,7 +2233,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         from api.db_router import get_current_db
         if get_current_db() == 'default':
             from api.models import Warehouse, Distributor
-            company_id = self.request.user.companyId
+            company_id = _get_company_id(self.request)
             user_role = (getattr(self.request.user, 'role', '') or '').upper()
             user_email = getattr(self.request.user, 'email', None)
             
@@ -2275,8 +2287,8 @@ class DistributorViewSet(viewsets.ModelViewSet):
             return send_error("Cannot create distributor in global database. Please select a specific warehouse.", 400)
 
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         import uuid
@@ -2291,8 +2303,8 @@ class DistributorViewSet(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
         serializer = DistributorSerializer(instance, data=data, partial=partial)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -2320,7 +2332,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         from api.db_router import get_current_db
         current_db = get_current_db()
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         
         # If the view is forced to return a QuerySet (e.g. for standard DRF methods),
         # return the queryset for the current DB (which will crash if it's 'default').
@@ -2337,7 +2349,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         current_db = get_current_db()
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         pk = self.kwargs[lookup_url_kwarg]
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         
         if current_db == 'default':
             # Search across all warehouses
@@ -2367,7 +2379,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         from api.db_router import get_current_db
         from api.models import Warehouse, Userwarehouseaccess
         current_db = get_current_db()
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         
         wh_qs = Warehouse.objects.filter(active=True)
@@ -2418,8 +2430,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             return send_error("Inventory users are not authorized to create sales orders.", 403)
         
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
         if request.user.email:
             data['soEmail'] = request.user.email
 
@@ -2607,7 +2619,7 @@ class VisitViewSet(viewsets.ModelViewSet):
     serializer_class = VisitSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         qs = Visit.objects.filter(companyid_id=company_id) if company_id else Visit.objects.all()
         
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
@@ -2624,8 +2636,8 @@ class VisitViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         if request.user.email:
@@ -2668,7 +2680,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     serializer_class = ExpenseSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         qs = Expense.objects.filter(companyid_id=company_id) if company_id else Expense.objects.all()
         
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
@@ -2685,8 +2697,8 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         if request.user.email:
@@ -2722,8 +2734,8 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
         if request.user.email and not data.get('soEmail'):
             data['soEmail'] = instance.soemail_id or request.user.email
         data['status'] = data.get('status') or 'PENDING'
@@ -2761,7 +2773,7 @@ class BOMViewSet(viewsets.ModelViewSet):
     serializer_class = BomSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         if company_id:
             return Bom.objects.filter(companyid_id=company_id)
         return Bom.objects.all()
@@ -2771,7 +2783,7 @@ class BOMViewSet(viewsets.ModelViewSet):
         if get_current_db() == 'default':
             from api.models import Warehouse, Bom
             all_boms = []
-            company_id = request.user.companyId
+            company_id = _get_company_id(request)
             
             for wh in Warehouse.objects.filter(active=True):
                 if not wh.db_name: continue
@@ -2800,8 +2812,8 @@ class BOMViewSet(viewsets.ModelViewSet):
             return send_error("You do not have permission to manage recipes", 403)
 
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
 
         import uuid
         if 'id' not in data or not data['id']:
@@ -2823,8 +2835,8 @@ class BOMViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
         serializer = BomSerializer(instance, data=data, partial=partial)
         serializer.is_valid(raise_exception=True)
@@ -2849,7 +2861,7 @@ class BOMViewSet(viewsets.ModelViewSet):
 
 @api_view(['GET'])
 def report_dashboard_kpis(request):
-    company_id = request.user.companyId
+    company_id = _get_company_id(request)
     user_id = request.user.id
     from api.models import Userwarehouseaccess, Product, Dealer, Order, Warehouse, Inventory, Orderitem
     from django.db.models import Sum
@@ -2987,7 +2999,7 @@ def MathRound(val):
 
 @api_view(['GET'])
 def report_sales_summary(request):
-    company_id = request.user.companyId
+    company_id = _get_company_id(request)
     user_id = request.user.id
     from api.models import Userwarehouseaccess, Warehouse, Product
     has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()
@@ -3068,7 +3080,7 @@ def report_sales_summary(request):
 
 @api_view(['GET'])
 def report_low_stock(request):
-    company_id = request.user.companyId
+    company_id = _get_company_id(request)
     user_id = request.user.id
     from api.models import Userwarehouseaccess, Product, Warehouse, Inventory
     from django.db.models import Sum
@@ -3118,7 +3130,7 @@ def report_low_stock(request):
 
 @api_view(['GET'])
 def report_daily(request):
-    company_id = request.user.companyId
+    company_id = _get_company_id(request)
     today = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
     user_id = request.user.id
     
@@ -3169,7 +3181,7 @@ def report_daily(request):
 
 @api_view(['GET'])
 def report_current_stock(request):
-    company_id = request.user.companyId
+    company_id = _get_company_id(request)
     user_id = request.user.id
     from api.models import Userwarehouseaccess, Product, Warehouse, Inventory, Orderitem, Purchaseitem, Stocktransaction
     from django.db.models import Sum
@@ -3374,7 +3386,7 @@ def report_stock_ledger(request, pk):
         product = Product.objects.get(id=pk)
     except Product.DoesNotExist:
         return send_error("Product not found", 404)
-    company_id = request.user.companyId
+    company_id = _get_company_id(request)
     date_from = request.GET.get('dateFrom')
     date_to = request.GET.get('dateTo')
     warehouse_id_param = request.GET.get('warehouse_id')
@@ -3550,7 +3562,7 @@ def report_stock_ledger(request, pk):
 
 @api_view(['GET'])
 def report_aggregate_stock(request):
-    company_id = request.user.companyId
+    company_id = _get_company_id(request)
     user_id = request.user.id
     from api.models import Userwarehouseaccess, Product, Warehouse, Inventory
     from django.db.models import Sum
@@ -4257,8 +4269,8 @@ def transaction_sales(request):
         
     elif request.method == 'POST':
         data = request.data.copy()
-        if not data.get('companyId') and request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if not data.get('companyId') and _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
         if not data.get('soEmail') and request.user.email:
             data['soEmail'] = request.user.email
             
@@ -5526,7 +5538,7 @@ class LeadViewSet(viewsets.ModelViewSet):
     serializer_class = LeadSerializer
 
     def get_queryset(self):
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         
         # Scoped to active manager (Soft deleted leads excluded automatically)
@@ -5576,8 +5588,8 @@ class LeadViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
             
 
         
@@ -5628,8 +5640,8 @@ class LeadViewSet(viewsets.ModelViewSet):
             client_version = instance.version
 
         data = request.data.copy()
-        if request.user.companyId:
-            data['companyId'] = request.user.companyId
+        if _get_company_id(request):
+            data['companyId'] = _get_company_id(request)
 
         # Normalize currency value decimal precision
         if 'value' in data:
@@ -5827,7 +5839,7 @@ class LeadViewSet(viewsets.ModelViewSet):
     def get_dashboard_metrics(self, request):
         from django.db.models import Sum, Count
         from django.core.cache import cache
-        company_id = self.request.user.companyId
+        company_id = _get_company_id(self.request)
         
         # Cache Strategy: Check cached aggregates first
         cache_key = CRMCacheKeys.dashboard(company_id)
@@ -5873,7 +5885,7 @@ def trigger_analytics_etl(request):
         
     try:
         from api.services.analytics_etl import compile_analytical_warehouse
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         compile_analytical_warehouse(company_id)
         return send_success(None, "Analytical Star Schema compiled successfully")
     except Exception as e:
@@ -5887,7 +5899,7 @@ def get_analytics_kpis(request):
         
     try:
         from api.services.semantic_metrics import get_governed_kpis
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         kpis = get_governed_kpis(company_id)
         return send_success(kpis, "Governed KPIs retrieved successfully")
     except Exception as e:
@@ -5901,7 +5913,7 @@ def get_analytics_predictions(request):
         
     try:
         from api.services.predictions import get_predictions_dashboard
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         data = get_predictions_dashboard(company_id)
         return send_success(data, "Predictive forecasts computed successfully")
     except Exception as e:
@@ -5915,7 +5927,7 @@ def get_analytics_alerts(request):
         
     try:
         from django.db import connection
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         
         alerts = []
         with connection.cursor() as cursor:
@@ -6001,7 +6013,7 @@ def get_analytics_cfo_liquidity(request):
         
     try:
         from api.services.cfo_liquidity import get_cfo_liquidity_dashboard
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         data = get_cfo_liquidity_dashboard(company_id)
         return send_success(data, "CFO liquidity metrics computed successfully")
     except Exception as e:
@@ -6015,7 +6027,7 @@ def get_analytics_bottlenecks(request):
         
     try:
         from api.services.bottlenecks import get_operational_bottlenecks
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         data = get_operational_bottlenecks(company_id)
         return send_success(data, "Process bottleneck analysis computed successfully")
     except Exception as e:
@@ -6029,7 +6041,7 @@ def get_analytics_data_quality(request):
         
     try:
         from api.services.data_quality import get_data_quality_report
-        company_id = request.user.companyId
+        company_id = _get_company_id(request)
         data = get_data_quality_report(company_id)
         return send_success(data, "Data quality metrics compiled successfully")
     except Exception as e:

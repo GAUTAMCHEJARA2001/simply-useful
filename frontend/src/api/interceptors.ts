@@ -15,18 +15,9 @@ api.interceptors.request.use(
     }
 
     const warehouseId = localStorage.getItem('activeWarehouseId');
-    if (warehouseId && warehouseId !== 'GLOBAL') {
+    if (warehouseId) {
       const hasHeader = config.headers.has ? config.headers.has('X-Warehouse-ID') : !!config.headers['X-Warehouse-ID'];
       if (!hasHeader) {
-        let isSuperadmin = false;
-        try {
-          const userStr = localStorage.getItem('app_user');
-          if (userStr) {
-            const user = JSON.parse(userStr);
-            isSuperadmin = user.role === 'SUPERADMIN';
-          }
-        } catch (e) {}
-
         if (typeof config.headers.set === 'function') {
           config.headers.set('X-Warehouse-ID', warehouseId);
         } else {
