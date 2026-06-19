@@ -2587,6 +2587,9 @@ class OrderViewSet(viewsets.ModelViewSet):
                 if not wh:
                     return send_error("Warehouse not found.", 400)
                 if wh.db_name:
+                    from django.db import connection
+                    connection.set_tenant(wh)
+                    request.tenant = wh
                     set_current_db(wh.db_name)
                     
                     # Fix cross-database product IDs in payload
@@ -2635,6 +2638,25 @@ class OrderViewSet(viewsets.ModelViewSet):
                 item['id'] = 'c' + uuid.uuid4().hex[:23]
 
         assigned_wh_id = data.get('assignedWarehouse') or data.get('warehouseId')
+        
+        # If in GLOBAL mode (default db), we must set the schema connection
+        # to the database where the order is being saved/updated.
+        from api.db_router import get_current_db
+        if get_current_db() == 'default':
+            target_db = old_db
+            if assigned_wh_id:
+                wh = resolve_warehouse(assigned_wh_id)
+                if wh and wh.db_name:
+                    target_db = wh.db_name
+            
+            from api.models import Warehouse
+            wh = Warehouse.objects.using('default').filter(db_name=target_db).first()
+            if wh:
+                from django.db import connection
+                connection.set_tenant(wh)
+                request.tenant = wh
+                from api.db_router import set_current_db
+                set_current_db(wh.db_name)
         if assigned_wh_id:
             from api.models import Warehouse
             new_wh = Warehouse.objects.using('default').filter(id=assigned_wh_id).first()
