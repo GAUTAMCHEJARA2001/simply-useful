@@ -325,6 +325,9 @@ class UserViewSet(viewsets.ModelViewSet):
 def user_assignments(request, pk):
     from api.models import User, Userproductaccess, Userwarehouseaccess
     from django.db import transaction
+    from api.db_router import get_current_db
+
+    current_db = get_current_db()
 
     # Verify user exists
     try:
@@ -333,50 +336,108 @@ def user_assignments(request, pk):
         return send_error("User not found", 404)
 
     if request.method == 'GET':
-        brand_ids = list(Userproductaccess.objects.filter(userid=user, brandid__isnull=False).values_list('brandid_id', flat=True))
-        category_ids = list(Userproductaccess.objects.filter(userid=user, categoryid__isnull=False).values_list('categoryid_id', flat=True))
-        product_ids = list(Userproductaccess.objects.filter(userid=user, productid__isnull=False).values_list('productid_id', flat=True))
-        warehouse_ids = list(Userwarehouseaccess.objects.filter(userid=user).values_list('warehouseid_id', flat=True))
+        if current_db == 'default':
+            from api.models import Warehouse
+            brand_ids_set = set()
+            category_ids_set = set()
+            product_ids_set = set()
+            warehouse_ids = list(Userwarehouseaccess.objects.filter(userid=user).values_list('warehouseid_id', flat=True))
 
-        data = {
-            "brands": brand_ids,
-            "categories": category_ids,
-            "products": product_ids,
-            "warehouses": warehouse_ids
-        }
+            for wh in Warehouse.objects.filter(active=True):
+                if not wh.db_name: continue
+                try:
+                    brand_ids_set.update(Userproductaccess.objects.using(wh.db_name).filter(userid=user, brandid__isnull=False).values_list('brandid_id', flat=True))
+                    category_ids_set.update(Userproductaccess.objects.using(wh.db_name).filter(userid=user, categoryid__isnull=False).values_list('categoryid_id', flat=True))
+                    product_ids_set.update(Userproductaccess.objects.using(wh.db_name).filter(userid=user, productid__isnull=False).values_list('productid_id', flat=True))
+                except Exception:
+                    pass
+
+            data = {
+                "brands": list(brand_ids_set),
+                "categories": list(category_ids_set),
+                "products": list(product_ids_set),
+                "warehouses": warehouse_ids
+            }
+        else:
+            brand_ids = list(Userproductaccess.objects.filter(userid=user, brandid__isnull=False).values_list('brandid_id', flat=True))
+            category_ids = list(Userproductaccess.objects.filter(userid=user, categoryid__isnull=False).values_list('categoryid_id', flat=True))
+            product_ids = list(Userproductaccess.objects.filter(userid=user, productid__isnull=False).values_list('productid_id', flat=True))
+            warehouse_ids = list(Userwarehouseaccess.objects.filter(userid=user).values_list('warehouseid_id', flat=True))
+
+            data = {
+                "brands": brand_ids,
+                "categories": category_ids,
+                "products": product_ids,
+                "warehouses": warehouse_ids
+            }
         return send_success(data, "User assignments retrieved successfully")
 
     elif request.method == 'POST':
         data = request.data
-        brand_ids = data.get('brands', [])
-        category_ids = data.get('categories', [])
-        product_ids = data.get('products', [])
-        warehouse_ids = data.get('warehouses', [])
+        req_brand_ids = data.get('brands', [])
+        req_category_ids = data.get('categories', [])
+        req_product_ids = data.get('products', [])
+        req_warehouse_ids = data.get('warehouses', [])
 
-        with transaction.atomic():
-            # Delete old assignments
-            Userproductaccess.objects.filter(userid=user).delete()
-            Userwarehouseaccess.objects.filter(userid=user).delete()
+        Userwarehouseaccess.objects.filter(userid=user).delete()
+        for w_id in req_warehouse_ids:
+            if w_id:
+                Userwarehouseaccess.objects.create(userid=user, warehouseid_id=w_id)
 
-            # Insert new brand assignments
-            for b_id in brand_ids:
-                if b_id:
-                    Userproductaccess.objects.create(userid=user, brandid_id=b_id)
-
-            # Insert new category assignments
-            for c_id in category_ids:
-                if c_id:
-                    Userproductaccess.objects.create(userid=user, categoryid_id=c_id)
-
-            # Insert new product assignments
-            for p_id in product_ids:
-                if p_id:
-                    Userproductaccess.objects.create(userid=user, productid_id=p_id)
-
-            # Insert new warehouse assignments
-            for w_id in warehouse_ids:
-                if w_id:
-                    Userwarehouseaccess.objects.create(userid=user, warehouseid_id=w_id)
+        if current_db == 'default':
+            from api.models import Warehouse, Product, Category, Brand
+            brand_names = []
+            category_names = []
+            product_skus = []
+            
+            for wh in Warehouse.objects.filter(active=True):
+                if not wh.db_name: continue
+                try:
+                    b_objs = Brand.objects.using(wh.db_name).filter(id__in=req_brand_ids)
+                    brand_names.extend([b.name for b in b_objs])
+                    
+                    c_objs = Category.objects.using(wh.db_name).filter(id__in=req_category_ids)
+                    category_names.extend([c.name for c in c_objs])
+                    
+                    p_objs = Product.objects.using(wh.db_name).filter(id__in=req_product_ids)
+                    product_skus.extend([p.productcode for p in p_objs if p.productcode])
+                except Exception:
+                    pass
+            
+            brand_names = list(set(brand_names))
+            category_names = list(set(category_names))
+            product_skus = list(set(product_skus))
+            
+            for wh in Warehouse.objects.filter(active=True):
+                if not wh.db_name: continue
+                try:
+                    Userproductaccess.objects.using(wh.db_name).filter(userid=user).delete()
+                    
+                    wh_brand_ids = Brand.objects.using(wh.db_name).filter(name__in=brand_names).values_list('id', flat=True)
+                    for b_id in wh_brand_ids:
+                        Userproductaccess.objects.using(wh.db_name).create(userid=user, brandid_id=b_id)
+                        
+                    wh_cat_ids = Category.objects.using(wh.db_name).filter(name__in=category_names).values_list('id', flat=True)
+                    for c_id in wh_cat_ids:
+                        Userproductaccess.objects.using(wh.db_name).create(userid=user, categoryid_id=c_id)
+                        
+                    wh_prod_ids = Product.objects.using(wh.db_name).filter(productcode__in=product_skus).values_list('id', flat=True)
+                    for p_id in wh_prod_ids:
+                        Userproductaccess.objects.using(wh.db_name).create(userid=user, productid_id=p_id)
+                except Exception:
+                    pass
+        else:
+            with transaction.atomic():
+                Userproductaccess.objects.filter(userid=user).delete()
+                for b_id in req_brand_ids:
+                    if b_id:
+                        Userproductaccess.objects.create(userid=user, brandid_id=b_id)
+                for c_id in req_category_ids:
+                    if c_id:
+                        Userproductaccess.objects.create(userid=user, categoryid_id=c_id)
+                for p_id in req_product_ids:
+                    if p_id:
+                        Userproductaccess.objects.create(userid=user, productid_id=p_id)
 
         return send_success(data, "User assignments updated successfully")
 
@@ -439,10 +500,19 @@ class ProductViewSet(viewsets.ModelViewSet):
             allowed_product_ids = None
             if not skip_assignment_filter:
                 user_id = self.request.user.id
-                has_assignments = Userproductaccess.objects.filter(userid_id=user_id).exists()
-                if has_assignments:
-                    allowed_product_ids = set(Userproductaccess.objects.filter(userid_id=user_id, productid__isnull=False).values_list('productid_id', flat=True))
-                else:
+                allowed_product_ids = set()
+                has_any_assignments = False
+                for wh_check in Warehouse.objects.filter(active=True):
+                    if not wh_check.db_name: continue
+                    try:
+                        wh_has_assignments = Userproductaccess.objects.using(wh_check.db_name).filter(userid_id=user_id).exists()
+                        if wh_has_assignments:
+                            has_any_assignments = True
+                            wh_product_ids = Userproductaccess.objects.using(wh_check.db_name).filter(userid_id=user_id, productid__isnull=False).values_list('productid_id', flat=True)
+                            allowed_product_ids.update(wh_product_ids)
+                    except Exception:
+                        pass
+                if not has_any_assignments:
                     return send_success([], "Products fetched successfully")
 
             all_products = []
@@ -773,10 +843,29 @@ class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
 
     def list(self, request, *args, **kwargs):
+        from api.db_router import get_current_db
         company_id = _get_company_id(request)
-        queryset = Category.objects.filter(companyid_id=company_id) if company_id else Category.objects.all()
         
+        if get_current_db() == 'default':
+            from api.models import Warehouse
+            all_categories = []
+            seen_names = set()
+            for wh in Warehouse.objects.filter(active=True):
+                if not wh.db_name: continue
+                try:
+                    qs = Category.objects.using(wh.db_name).all()
+                    if company_id:
+                        qs = qs.filter(companyid_id=company_id)
+                    for item in qs:
+                        if item.name not in seen_names:
+                            all_categories.append(item)
+                            seen_names.add(item.name)
+                except Exception:
+                    pass
+            serializer = CategorySerializer(all_categories, many=True)
+            return send_success(serializer.data, "Categories fetched successfully")
 
+        queryset = Category.objects.filter(companyid_id=company_id) if company_id else Category.objects.all()
         serializer = CategorySerializer(queryset, many=True)
         return send_success(serializer.data, "Categories fetched successfully")
 
@@ -798,10 +887,29 @@ class BrandViewSet(viewsets.ModelViewSet):
     serializer_class = BrandSerializer
 
     def list(self, request, *args, **kwargs):
+        from api.db_router import get_current_db
         company_id = _get_company_id(request)
-        queryset = Brand.objects.filter(companyid_id=company_id) if company_id else Brand.objects.all()
-        
 
+        if get_current_db() == 'default':
+            from api.models import Warehouse
+            all_brands = []
+            seen_names = set()
+            for wh in Warehouse.objects.filter(active=True):
+                if not wh.db_name: continue
+                try:
+                    qs = Brand.objects.using(wh.db_name).all()
+                    if company_id:
+                        qs = qs.filter(companyid_id=company_id)
+                    for item in qs:
+                        if item.name not in seen_names:
+                            all_brands.append(item)
+                            seen_names.add(item.name)
+                except Exception:
+                    pass
+            serializer = BrandSerializer(all_brands, many=True)
+            return send_success(serializer.data, "Brands fetched successfully")
+
+        queryset = Brand.objects.filter(companyid_id=company_id) if company_id else Brand.objects.all()
         serializer = BrandSerializer(queryset, many=True)
         return send_success(serializer.data, "Brands fetched successfully")
 
@@ -823,10 +931,29 @@ class UnitViewSet(viewsets.ModelViewSet):
     serializer_class = UnitSerializer
 
     def list(self, request, *args, **kwargs):
+        from api.db_router import get_current_db
         company_id = _get_company_id(request)
-        queryset = Unit.objects.filter(companyid_id=company_id) if company_id else Unit.objects.all()
-        
 
+        if get_current_db() == 'default':
+            from api.models import Warehouse
+            all_units = []
+            seen_names = set()
+            for wh in Warehouse.objects.filter(active=True):
+                if not wh.db_name: continue
+                try:
+                    qs = Unit.objects.using(wh.db_name).all()
+                    if company_id:
+                        qs = qs.filter(companyid_id=company_id)
+                    for item in qs:
+                        if item.name not in seen_names:
+                            all_units.append(item)
+                            seen_names.add(item.name)
+                except Exception:
+                    pass
+            serializer = UnitSerializer(all_units, many=True)
+            return send_success(serializer.data, "Units fetched successfully")
+
+        queryset = Unit.objects.filter(companyid_id=company_id) if company_id else Unit.objects.all()
         serializer = UnitSerializer(queryset, many=True)
         return send_success(serializer.data, "Units fetched successfully")
 
