@@ -3238,7 +3238,7 @@ def report_sales_summary(request):
                         if inv and inv.avgcost:
                             cost_price = inv.avgcost
                         else:
-                            prod = Product.objects.using('default').filter(id=item.productid_id).first()
+                            prod = Product.objects.using(wh.db_name).filter(id=item.productid_id).first()
                             cost_price = (prod.rate * 0.7) if prod else 0.0
                     except Exception:
                         cost_price = 0.0
@@ -3279,30 +3279,35 @@ def report_low_stock(request):
     if has_wh_assignments and request.user.role == 'INVENTORY':
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
 
-    products = Product.objects.all().select_related('categoryid', 'unitid')
-    if company_id:
-        products = products.filter(companyid_id=company_id)
+    warehouses = Warehouse.objects.filter(active=True)
+    if assigned_wh_ids:
+        warehouses = warehouses.filter(id__in=assigned_wh_ids)
         
-    product_inv_map = {}
-    for wh in Warehouse.objects.filter(active=True):
+    sku_inv_map = {}
+    sku_to_product = {}
+    
+    for wh in warehouses:
         if not wh.db_name:
             continue
-        if assigned_wh_ids and wh.id not in assigned_wh_ids:
-            continue
+        try:
+            products_qs = Product.objects.using(wh.db_name).select_related('categoryid', 'unitid')
+            if company_id:
+                products_qs = products_qs.filter(companyid_id=company_id)
             
-        inv_sums = Inventory.objects.using(wh.db_name).values('productid_id').annotate(total=Sum('quantity'))
-        for inv in inv_sums:
-            pid = inv['productid_id']
-            product_inv_map[pid] = product_inv_map.get(pid, 0) + (inv['total'] or 0)
-
-    if assigned_wh_ids:
-        from django.db.models import Q
-        products = products.filter(Q(id__in=product_inv_map.keys()))
+            for p in products_qs:
+                inv_total = Inventory.objects.using(wh.db_name).filter(productid_id=p.id).aggregate(Sum('quantity'))['quantity__sum'] or 0
+                sku = p.productcode
+                if sku:
+                    sku_inv_map[sku] = sku_inv_map.get(sku, 0) + float(inv_total or 0)
+                    if sku not in sku_to_product:
+                        sku_to_product[sku] = p
+        except Exception:
+            pass
             
     data = []
-    for p in products:
-        qty = product_inv_map.get(p.id, 0)
+    for sku, qty in sku_inv_map.items():
         if qty < 50:
+            p = sku_to_product[sku]
             data.append({
                 "id": p.id,
                 "productName": p.name,
@@ -3380,20 +3385,27 @@ def report_current_stock(request):
     if has_wh_assignments and request.user.role == 'INVENTORY':
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
 
-    products = Product.objects.select_related('categoryid', 'unitid').all()
-    if company_id:
-        products = products.filter(companyid_id=company_id)
-
     warehouses = Warehouse.objects.filter(active=True)
     if assigned_wh_ids:
         warehouses = warehouses.filter(id__in=assigned_wh_ids)
 
-    name_to_id = {p.name: p.id for p in products}
     stock_map = {}
 
-    # Initialize data structure
-    for p in products:
-        for wh in warehouses:
+    for wh in warehouses:
+        if not wh.db_name:
+            continue
+            
+        try:
+            wh_products = Product.objects.using(wh.db_name).select_related('categoryid', 'unitid').all()
+            if company_id:
+                wh_products = wh_products.filter(companyid_id=company_id)
+        except Exception:
+            continue
+
+        name_to_id = {p.name: p.id for p in wh_products}
+
+        # Initialize data structure for this warehouse
+        for p in wh_products:
             stock_map[(p.id, wh.id)] = {
                 "productId": p.id,
                 "productName": p.name,
@@ -3414,55 +3426,54 @@ def report_current_stock(request):
                 "warehouseName": wh.name
             }
 
-    for wh in warehouses:
-        if not wh.db_name:
-            continue
+        try:
+            # Purchases & Purchase Returns
+            pi_aggs = Purchaseitem.objects.using(wh.db_name).filter(
+                purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']
+            ).values('productname', 'purchaseid__status').annotate(total=Sum('qty'))
             
-        # Purchases & Purchase Returns
-        pi_aggs = Purchaseitem.objects.using(wh.db_name).filter(
-            purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']
-        ).values('productname', 'purchaseid__status').annotate(total=Sum('qty'))
-        
-        # Sales & Sales Returns
-        oi_aggs = Orderitem.objects.using(wh.db_name).filter(
-            orderid__status__in=['Completed', 'Returned']
-        ).values('productid_id', 'orderid__status').annotate(total=Sum('qty'))
-        
-        # Stock Transactions (Production, Consumed, Adjustment)
-        st_aggs = Stocktransaction.objects.using(wh.db_name).values('productid_id', 'transactiontype').annotate(total=Sum('quantity'))
-        
-        for pi in pi_aggs:
-            pid = name_to_id.get(pi['productname'])
-            key = (pid, wh.id)
-            if pid and key in stock_map:
-                if pi['purchaseid__status'] == 'Returned':
-                    stock_map[key]['purchaseReturn'] += float(pi['total'] or 0)
-                else:
-                    stock_map[key]['purchase'] += float(pi['total'] or 0)
-                    
-        for oi in oi_aggs:
-            pid = oi['productid_id']
-            key = (pid, wh.id)
-            if pid and key in stock_map:
-                if oi['orderid__status'] == 'Returned':
-                    stock_map[key]['salesReturn'] += float(oi['total'] or 0)
-                else:
-                    stock_map[key]['sales'] += float(oi['total'] or 0)
-                    
-        for st in st_aggs:
-            pid = st['productid_id']
-            key = (pid, wh.id)
-            if pid and key in stock_map:
-                qty = float(st['total'] or 0)
-                ttype = st['transactiontype']
-                if ttype == 'OPENING_STOCK':
-                    stock_map[key]['openingStock'] = qty
-                elif ttype == 'PRODUCTION':
-                    stock_map[key]['production'] += qty
-                elif ttype == 'CONSUMED':
-                    stock_map[key]['consumed'] += abs(qty)
-                elif ttype == 'ADJUSTMENT':
-                    stock_map[key]['adjustment'] += qty
+            # Sales & Sales Returns
+            oi_aggs = Orderitem.objects.using(wh.db_name).filter(
+                orderid__status__in=['Completed', 'Returned']
+            ).values('productid_id', 'orderid__status').annotate(total=Sum('qty'))
+            
+            # Stock Transactions (Production, Consumed, Adjustment)
+            st_aggs = Stocktransaction.objects.using(wh.db_name).values('productid_id', 'transactiontype').annotate(total=Sum('quantity'))
+            
+            for pi in pi_aggs:
+                pid = name_to_id.get(pi['productname'])
+                key = (pid, wh.id)
+                if pid and key in stock_map:
+                    if pi['purchaseid__status'] == 'Returned':
+                        stock_map[key]['purchaseReturn'] += float(pi['total'] or 0)
+                    else:
+                        stock_map[key]['purchase'] += float(pi['total'] or 0)
+                        
+            for oi in oi_aggs:
+                pid = oi['productid_id']
+                key = (pid, wh.id)
+                if pid and key in stock_map:
+                    if oi['orderid__status'] == 'Returned':
+                        stock_map[key]['salesReturn'] += float(oi['total'] or 0)
+                    else:
+                        stock_map[key]['sales'] += float(oi['total'] or 0)
+                        
+            for st in st_aggs:
+                pid = st['productid_id']
+                key = (pid, wh.id)
+                if pid and key in stock_map:
+                    qty = float(st['total'] or 0)
+                    ttype = st['transactiontype']
+                    if ttype == 'OPENING_STOCK':
+                        stock_map[key]['openingStock'] = qty
+                    elif ttype == 'PRODUCTION':
+                        stock_map[key]['production'] += qty
+                    elif ttype == 'CONSUMED':
+                        stock_map[key]['consumed'] += abs(qty)
+                    elif ttype == 'ADJUSTMENT':
+                        stock_map[key]['adjustment'] += qty
+        except Exception:
+            pass
 
     # Compute final closing stock
     final_stock_list = []
@@ -3576,11 +3587,26 @@ def recalculate_product_inventory(product_id, warehouse_id=None):
 def report_stock_ledger(request, pk):
     from api.models import Product, Purchaseitem, Orderitem, Stocktransaction, Userwarehouseaccess, Warehouse
     from django.utils import timezone
+    from api.db_router import get_current_db
     
-    try:
-        product = Product.objects.get(id=pk)
-    except Product.DoesNotExist:
+    product = None
+    if get_current_db() == 'default':
+        for wh in Warehouse.objects.filter(active=True):
+            if not wh.db_name: continue
+            try:
+                product = Product.objects.using(wh.db_name).get(id=pk)
+                break
+            except Product.DoesNotExist:
+                pass
+    else:
+        try:
+            product = Product.objects.get(id=pk)
+        except Product.DoesNotExist:
+            pass
+
+    if not product:
         return send_error("Product not found", 404)
+        
     company_id = _get_company_id(request)
     date_from = request.GET.get('dateFrom')
     date_to = request.GET.get('dateTo')
@@ -3604,9 +3630,16 @@ def report_stock_ledger(request, pk):
         if assigned_wh_ids and wh.id not in assigned_wh_ids:
             continue
             
+        # Resolve local product ID for this warehouse database
+        local_product = product
+        if wh.db_name != product._state.db:
+            local_product = Product.objects.using(wh.db_name).filter(productcode=product.productcode).first()
+            if not local_product:
+                continue
+
         # 1. Fetch Purchases
         purchases = Purchaseitem.objects.using(wh.db_name).filter(
-            productname=product.name,
+            productname=local_product.name,
             purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']
         ).select_related('purchaseid')
         
@@ -3642,7 +3675,7 @@ def report_stock_ledger(request, pk):
                 
         # 2. Fetch Sales
         sales = Orderitem.objects.using(wh.db_name).filter(
-            productid=product,
+            productid_id=local_product.id,
             orderid__status__in=['Completed', 'Returned']
         ).select_related('orderid')
         
@@ -3676,7 +3709,7 @@ def report_stock_ledger(request, pk):
                 })
                 
         # 3. Fetch StockTransactions
-        st_qs = Stocktransaction.objects.using(wh.db_name).filter(productid=product)
+        st_qs = Stocktransaction.objects.using(wh.db_name).filter(productid_id=local_product.id)
         if date_from:
             st_qs = st_qs.filter(createdat__gte=date_from)
         if date_to:
@@ -3767,30 +3800,38 @@ def report_aggregate_stock(request):
     if has_wh_assignments and request.user.role == 'INVENTORY':
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
 
-    products_q = Product.objects.all().select_related('categoryid', 'unitid')
-    if company_id:
-        products_q = products_q.filter(companyid_id=company_id)
+    warehouses = Warehouse.objects.filter(active=True)
+    if assigned_wh_ids:
+        warehouses = warehouses.filter(id__in=assigned_wh_ids)
         
-    aggregate = []
+    sku_inv_map = {}
+    sku_to_product = {}
     
-    # Pre-calculate inventory across warehouses
-    product_inv_map = {}
-    
-    for wh in Warehouse.objects.filter(active=True):
+    for wh in warehouses:
         if not wh.db_name:
             continue
-        if assigned_wh_ids and wh.id not in assigned_wh_ids:
-            continue
+        try:
+            products_qs = Product.objects.using(wh.db_name).select_related('categoryid', 'unitid')
+            if company_id:
+                products_qs = products_qs.filter(companyid_id=company_id)
             
-        inv_sums = Inventory.objects.using(wh.db_name).values('productid_id').annotate(total=Sum('quantity'))
-        for inv in inv_sums:
-            pid = inv['productid_id']
-            product_inv_map[pid] = product_inv_map.get(pid, 0) + (inv['total'] or 0)
+            # Map inventories for this warehouse
+            inv_sums = Inventory.objects.using(wh.db_name).values('productid_id').annotate(total=Sum('quantity'))
+            inv_map = {inv['productid_id']: float(inv['total'] or 0) for inv in inv_sums}
+            
+            for p in products_qs:
+                qty = inv_map.get(p.id, 0.0)
+                sku = p.productcode or p.name
+                if sku:
+                    sku_inv_map[sku] = sku_inv_map.get(sku, 0.0) + qty
+                    if sku not in sku_to_product:
+                        sku_to_product[sku] = p
+        except Exception:
+            pass
 
-    products_q = products_q.filter(id__in=product_inv_map.keys())
-            
-    for p in products_q:
-        qty = product_inv_map.get(p.id, 0)
+    aggregate = []
+    for sku, qty in sku_inv_map.items():
+        p = sku_to_product[sku]
         aggregate.append({
             "productId": p.id,
             "productName": p.name,
