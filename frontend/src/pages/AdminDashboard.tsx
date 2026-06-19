@@ -353,7 +353,7 @@ const AdminDashboard: React.FC = () => {
 
       {/* Approve / Reject Confirm Dialog */}
       <Dialog open={!!confirmOrder} onOpenChange={() => setConfirmOrder(null)}>
-        <DialogContent className="max-w-md" aria-describedby="order-approval-desc">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" aria-describedby="order-approval-desc">
           <DialogHeader>
             <DialogTitle>{confirmOrder?.action === 'Approved' ? '✅ Approve Order?' : '❌ Reject Order?'}</DialogTitle>
             <DialogDescription id="order-approval-desc" className="sr-only">
@@ -379,7 +379,7 @@ const AdminDashboard: React.FC = () => {
                   </div>
                 )}
 
-                <div className="mt-3 border rounded-lg overflow-hidden">
+                <div className="mt-3 border rounded-lg overflow-y-auto max-h-[220px]">
                   <table className="min-w-full divide-y divide-border text-[11px]">
                     <thead className="bg-secondary/50 text-foreground font-medium">
                       <tr>
