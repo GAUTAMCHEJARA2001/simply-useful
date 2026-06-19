@@ -37,6 +37,7 @@ const OrderPage: React.FC = () => {
   const [showSummary, setShowSummary] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openPartyCombobox, setOpenPartyCombobox] = useState(false);
 
   useEffect(() => {
     if (!id && user?.email) {
@@ -316,14 +317,39 @@ const OrderPage: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 flex flex-col">
               <Label>{partyType} Name</Label>
-              <Select value={selectedParty} onValueChange={setSelectedParty}>
-                <SelectTrigger className="h-12"><SelectValue placeholder={`Select ${partyType}`} /></SelectTrigger>
-                <SelectContent>
-                  {parties.filter(p => p).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Popover open={openPartyCombobox} onOpenChange={setOpenPartyCombobox}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" aria-expanded={openPartyCombobox} className="h-12 w-full justify-between font-normal">
+                    {selectedParty ? selectedParty : <span className="text-muted-foreground">Select {partyType}...</span>}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] sm:w-[400px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder={`Search ${partyType}...`} className="h-9" />
+                    <CommandList>
+                      <CommandEmpty>No {partyType.toLowerCase()} found.</CommandEmpty>
+                      <CommandGroup>
+                        {parties.filter(p => p).map(p => (
+                          <CommandItem
+                            key={p}
+                            value={p}
+                            onSelect={() => {
+                              setSelectedParty(p);
+                              setOpenPartyCombobox(false);
+                            }}
+                          >
+                            <Check className={`mr-2 h-4 w-4 shrink-0 ${selectedParty === p ? "opacity-100" : "opacity-0"}`} />
+                            <span className="truncate">{p}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             {isAdmin && (
               <div className="space-y-2">
