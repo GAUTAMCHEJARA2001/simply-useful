@@ -389,23 +389,27 @@ const InventoryDashboard: React.FC = () => {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">What Customers Need (Active Orders)</CardTitle></CardHeader>
           <CardContent className="p-0">
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-3 text-muted-foreground font-medium">Product</th>
-                <th className="text-right px-4 py-3 text-muted-foreground font-medium">Qty Needed</th>
-                <th className="text-right px-4 py-3 text-muted-foreground font-medium">Orders</th>
-              </tr></thead>
-              <tbody>
-                {productDemand.map((p, index) => (
-                   <tr key={`${p.product || 'unknown-product'}-${index}`} className="border-b border-border/50">
-                    <td className="px-4 py-3 font-medium">{p.product}</td>
-                    <td className="px-4 py-3 text-right font-bold text-primary">{p.qty}</td>
-                    <td className="px-4 py-3 text-right">{p.orders}</td>
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30 text-[10px] text-muted-foreground font-semibold">
+                    <th className="text-left px-3 py-2 font-semibold">Product</th>
+                    <th className="text-right px-3 py-2 font-semibold">Qty Needed</th>
+                    <th className="text-right px-3 py-2 font-semibold">Orders</th>
                   </tr>
-                ))}
-                {productDemand.length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No active orders</td></tr>}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {productDemand.map((p, index) => (
+                     <tr key={`${p.product || 'unknown-product'}-${index}`} className="border-b border-border/50 hover:bg-accent/5 transition-colors">
+                      <td className="px-3 py-2 font-medium">{p.product}</td>
+                      <td className="px-3 py-2 text-right font-bold text-primary">{p.qty}</td>
+                      <td className="px-3 py-2 text-right">{p.orders}</td>
+                    </tr>
+                  ))}
+                  {productDemand.length === 0 && <tr><td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">No active orders</td></tr>}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
 
@@ -446,29 +450,29 @@ const InventoryDashboard: React.FC = () => {
                 <div key={orderId} className="group flex flex-col bg-card hover:bg-accent/5 transition-colors border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md">
                   {/* Clickable Order Details Area */}
                   <div 
-                    className="p-4 cursor-pointer"
+                    className="p-3.5 cursor-pointer"
                     onClick={() => setViewOrder(o)}
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-foreground text-sm tracking-tight">{orderId}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusStyles[displayStatus]}`}>{displayStatus}</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-foreground text-xs tracking-tight">{orderId}</span>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusStyles[displayStatus]}`}>{displayStatus}</span>
                       </div>
-                      <span className="font-bold text-primary text-base">₹{grandTotal.toLocaleString()}</span>
+                      <span className="font-bold text-primary text-sm">₹{grandTotal.toLocaleString()}</span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-y-3 text-xs text-muted-foreground mb-3">
+                    <div className="grid grid-cols-2 gap-x-2.5 gap-y-2 text-xs text-muted-foreground mb-2">
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Party Name</p>
+                        <p className="text-[9px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Party Name</p>
                         <p className="font-medium text-foreground truncate" title={partyName}>{partyName}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Sales Officer / Date</p>
-                        <p className="font-medium text-foreground truncate" title={`${soEmail} · ${o.date}`}>{soEmail} · {o.date}</p>
+                        <p className="text-[9px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Sales Officer / Date</p>
+                        <p className="font-medium text-foreground truncate text-[10px]" title={`${soEmail} · ${o.date}`}>{soEmail} · {o.date}</p>
                       </div>
                     </div>
 
-                    <p className="text-[11px] text-muted-foreground truncate mb-3" title={o.items.map(i => {
+                    <p className="text-[10px] text-muted-foreground truncate mb-2" title={o.items.map(i => {
                       const itemProductId = i.productId || i.productid_id || (typeof i.product === 'object' ? i.product?.id : i.product);
                       const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
                       const pName = pObj?.name || pObj?.productName || i.productName || i.product || 'Unknown Product';
@@ -483,34 +487,34 @@ const InventoryDashboard: React.FC = () => {
                     </p>
 
                     {checkResult && (
-                      <div className="flex items-center justify-between text-xs border-t pt-2 border-border/40">
+                      <div className="flex items-center justify-between text-[10px] border-t pt-1.5 border-border/40">
                         <span className="font-semibold text-muted-foreground">Stock Status:</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${badgeStyles[checkResult.status]}`}>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${badgeStyles[checkResult.status]}`}>
                           {badgeTexts[checkResult.status]}
                         </span>
                       </div>
                     )}
 
                     {o.narration && (
-                      <p className="text-[11px] text-yellow-700 bg-yellow-500/10 px-2 py-1 rounded-md mt-2 border border-yellow-500/20 truncate">
+                      <p className="text-[10px] text-yellow-700 bg-yellow-500/10 px-2 py-1 rounded-md mt-1.5 border border-yellow-500/20 truncate">
                         📝 <span className="font-medium">Narration:</span> {o.narration}
                       </p>
                     )}
                   </div>
 
                   {/* Action Bar */}
-                  <div className="bg-secondary/30 p-3 border-t border-border flex flex-col gap-3 mt-auto">
-                    {/* Warehouse Assignment */}
-                    <div className="flex items-center justify-between gap-1.5 w-full">
+                  <div className="bg-secondary/30 p-2.5 border-t border-border flex flex-col gap-2.5 mt-auto">
+                    <div className="flex flex-col gap-2 w-full sm:flex-row sm:items-center sm:justify-between">
+                      {/* Warehouse Assignment */}
                       <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-foreground/80 text-[11px] flex items-center gap-1"><Warehouse className="w-3.5 h-3.5" /> WH:</span>
+                        <span className="font-semibold text-foreground/80 text-[10px] flex items-center gap-1"><Warehouse className="w-3.5 h-3.5" /> WH:</span>
                         {(user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') ? (
                           warehouses.length > 0 ? (
                             <Select
                               value={String((o as any).assignedWarehouse || '')}
                               onValueChange={(val) => handleAssignWarehouse(orderId, val)}
                             >
-                              <SelectTrigger className="h-8 py-0 px-2 text-[11px] min-w-[130px] bg-background border border-border rounded-md shadow-sm">
+                              <SelectTrigger className="h-7.5 py-0 px-2 text-[10px] w-full sm:w-[130px] bg-background border border-border rounded-md shadow-sm">
                                 <SelectValue placeholder="Assign Warehouse" />
                               </SelectTrigger>
                               <SelectContent>
@@ -522,10 +526,10 @@ const InventoryDashboard: React.FC = () => {
                               </SelectContent>
                             </Select>
                           ) : (
-                            <span className="text-[11px] text-muted-foreground italic">No warehouses</span>
+                            <span className="text-[10px] text-muted-foreground italic">No warehouses</span>
                           )
                         ) : (
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-[10px] text-muted-foreground">
                             {(() => {
                               const whId = (o as any).assignedWarehouse;
                               if (!whId) return 'Not assigned';
@@ -538,12 +542,12 @@ const InventoryDashboard: React.FC = () => {
 
                       {/* Display a quick action trigger if dispatch/complete is allowed */}
                       {isInventory && action && (
-                        <div className="flex gap-2 shrink-0">
+                        <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto shrink-0">
                           {action.map((a: any) => (
                             <Button
                               key={a.next}
                               size="sm"
-                              className={`h-8 px-3 shadow-sm ${a.color}`}
+                              className={`h-7.5 px-2 text-[10px] shadow-sm flex items-center justify-center ${a.color}`}
                               onClick={() => {
                                 const now = new Date();
                                 setConfirmOrder({ 
@@ -568,10 +572,10 @@ const InventoryDashboard: React.FC = () => {
 
                       {/* Admin Quick Approvals on the card itself */}
                       {o.status === 'Pending' && (user?.role === 'SUPERADMIN' || user?.role === 'ADMIN') && (
-                        <div className="flex gap-1.5 shrink-0">
+                        <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto shrink-0">
                           <Button 
                             size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white h-8 px-2 shadow-sm text-xs"
+                            className="bg-green-600 hover:bg-green-700 text-white h-7.5 px-2 shadow-sm text-[10px] flex items-center justify-center"
                             onClick={() => {
                               setConfirmOrder({
                                 id: orderId,
@@ -586,7 +590,7 @@ const InventoryDashboard: React.FC = () => {
                           <Button 
                             size="sm"
                             variant="destructive"
-                            className="h-8 px-2 shadow-sm text-xs"
+                            className="h-7.5 px-2 shadow-sm text-[10px] flex items-center justify-center"
                             onClick={() => {
                               setConfirmOrder({
                                 id: orderId,
@@ -611,11 +615,11 @@ const InventoryDashboard: React.FC = () => {
 
       {/* View Full Order Details Dialog */}
       <Dialog open={!!viewOrder} onOpenChange={() => setViewOrder(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby="full-order-desc">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6" aria-describedby="full-order-desc">
+          <DialogHeader className="pb-2 border-b">
+            <DialogTitle className="flex items-center gap-1.5 text-lg">
               📦 Order Details
-              {viewOrder && <span className={`text-xs px-2.5 py-1 rounded-full font-semibold uppercase tracking-wider ${statusStyles[viewOrder.status || 'Pending']}`}>{viewOrder.status || 'Pending'}</span>}
+              {viewOrder && <span className={`text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusStyles[viewOrder.status || 'Pending']}`}>{viewOrder.status || 'Pending'}</span>}
             </DialogTitle>
             <DialogDescription id="full-order-desc" className="sr-only">Detailed view of the selected order including party, sales officer, items and stock status.</DialogDescription>
           </DialogHeader>
@@ -647,57 +651,57 @@ const InventoryDashboard: React.FC = () => {
             };
 
             return (
-              <div className="space-y-6 mt-2">
+              <div className="space-y-4 mt-2">
                 {/* Header Info */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-secondary/20 p-4 rounded-xl border border-border">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-secondary/20 p-3 rounded-xl border border-border text-xs">
                   <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Order ID</p>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Order ID</p>
                     <p className="font-semibold">{orderId}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Date</p>
-                    <p className="font-semibold text-sm">{date}</p>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Date</p>
+                    <p className="font-semibold">{date}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Warehouse</p>
-                    <p className="font-semibold text-sm">{wh ? wh.name : '—'}</p>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Warehouse</p>
+                    <p className="font-semibold">{wh ? wh.name : '—'}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Total Amount</p>
-                    <p className="font-bold text-primary text-lg leading-none">₹{grandTotal.toLocaleString()}</p>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Total Amount</p>
+                    <p className="font-bold text-primary text-base">₹{grandTotal.toLocaleString()}</p>
                   </div>
                 </div>
 
                 {/* People Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="border border-border rounded-xl p-4">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold flex items-center gap-1.5 mb-2"><Users className="w-3.5 h-3.5" /> Party Details</p>
-                    <p className="font-semibold text-base">{partyName}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="border border-border rounded-xl p-3 text-xs">
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold flex items-center gap-1 mb-1.5"><Users className="w-3.5 h-3.5" /> Party Details</p>
+                    <p className="font-semibold text-sm">{partyName}</p>
                     {dealer && (
-                      <div className="mt-1.5 text-sm text-muted-foreground space-y-0.5">
+                      <div className="mt-1 text-muted-foreground space-y-0.5 text-[11px]">
                         <p>{dealer.address}</p>
                         <p>{dealer.city}{dealer.state ? `, ${dealer.state}` : ''}</p>
                         <p>{dealer.phone}</p>
                       </div>
                     )}
                   </div>
-                  <div className="border border-border rounded-xl p-4">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold flex items-center gap-1.5 mb-2"><Star className="w-3.5 h-3.5" /> Sales Officer / Submitter</p>
-                    <p className="font-semibold text-base">{soEmail}</p>
+                  <div className="border border-border rounded-xl p-3 text-xs">
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold flex items-center gap-1 mb-1.5"><Star className="w-3.5 h-3.5" /> Sales Officer / Submitter</p>
+                    <p className="font-semibold text-sm">{soEmail}</p>
                   </div>
                 </div>
 
                 {/* Items List */}
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-2">Order Items ({viewOrder.items.length})</p>
-                  <div className="border border-border rounded-xl overflow-hidden">
-                    <table className="min-w-full divide-y divide-border text-sm">
-                      <thead className="bg-secondary/40 text-muted-foreground font-semibold text-xs">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5">Order Items ({viewOrder.items.length})</p>
+                  <div className="border border-border rounded-xl overflow-x-auto w-full">
+                    <table className="min-w-full divide-y divide-border text-xs">
+                      <thead className="bg-secondary/40 text-muted-foreground font-semibold text-[10px]">
                         <tr>
-                          <th className="px-4 py-2.5 text-left">Product</th>
-                          <th className="px-4 py-2.5 text-center">Qty</th>
-                          <th className="px-4 py-2.5 text-right">Rate</th>
-                          <th className="px-4 py-2.5 text-right">Total</th>
+                          <th className="px-3 py-2 text-left">Product</th>
+                          <th className="px-3 py-2 text-center">Qty</th>
+                          <th className="px-3 py-2 text-right">Rate</th>
+                          <th className="px-3 py-2 text-right">Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border bg-card">
@@ -707,13 +711,13 @@ const InventoryDashboard: React.FC = () => {
                           const pName = pObj?.name || pObj?.productName || it.productName || it.product || 'Unknown Product';
                           return (
                             <tr key={idx} className="hover:bg-accent/5 transition-colors">
-                              <td className="px-4 py-3 font-medium">
+                              <td className="px-3 py-2 font-medium">
                                 {pName}
-                                {it.itemRemark && <p className="text-xs text-muted-foreground font-normal mt-0.5">Note: {it.itemRemark}</p>}
+                                {it.itemRemark && <p className="text-[10px] text-muted-foreground font-normal mt-0.5">Note: {it.itemRemark}</p>}
                               </td>
-                              <td className="px-4 py-3 text-center">{it.qty}</td>
-                              <td className="px-4 py-3 text-right">₹{(it.price || 0).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right font-medium">₹{((it.qty) * (it.price || 0)).toLocaleString()}</td>
+                              <td className="px-3 py-2 text-center">{it.qty}</td>
+                              <td className="px-3 py-2 text-right">₹{(it.price || 0).toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right font-medium">₹{((it.qty) * (it.price || 0)).toLocaleString()}</td>
                             </tr>
                           );
                         })}
@@ -724,10 +728,10 @@ const InventoryDashboard: React.FC = () => {
 
                 {/* Shortage table if status is not 'Available' */}
                 {checkResult && (
-                  <div className="border border-border rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Stock Shortage Check</p>
-                      <span className={`text-[10px] px-2.5 py-1 rounded-full border font-semibold uppercase tracking-wider ${badgeStyles[checkResult.status]}`}>
+                  <div className="border border-border rounded-xl p-3 space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">Stock Shortage Check</p>
+                      <span className={`text-[9px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${badgeStyles[checkResult.status]}`}>
                         {badgeTexts[checkResult.status]}
                       </span>
                     </div>
@@ -735,25 +739,25 @@ const InventoryDashboard: React.FC = () => {
                     {checkResult.status !== 'Available' && checkResult.shortages.length > 0 && (
                       <div className="overflow-x-auto border border-border/40 rounded-xl">
                         <table className="w-full text-xs text-left">
-                          <thead className="bg-secondary/40 text-muted-foreground font-semibold border-b border-border/40">
+                          <thead className="bg-secondary/40 text-muted-foreground font-semibold border-b border-border/40 text-[10px]">
                             <tr>
-                              <th className="px-3 py-2 text-left">Material/Product</th>
-                              <th className="px-3 py-2 text-right">Req Qty</th>
-                              <th className="px-3 py-2 text-right">Available</th>
-                              <th className="px-3 py-2 text-right">Shortage</th>
-                              <th className="px-3 py-2 text-left">Source Wh</th>
+                              <th className="px-2 py-1.5 text-left">Material/Product</th>
+                              <th className="px-2 py-1.5 text-right">Req Qty</th>
+                              <th className="px-2 py-1.5 text-right">Available</th>
+                              <th className="px-2 py-1.5 text-right">Shortage</th>
+                              <th className="px-2 py-1.5 text-left">Source Wh</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-border/20 bg-card">
+                          <tbody className="divide-y divide-border/20 bg-card text-[11px]">
                             {checkResult.shortages.map((s, idx) => (
                               <tr key={idx} className={s.shortageQty > 0 ? "bg-red-500/5" : ""}>
-                                <td className="px-3 py-2.5 font-medium" title={s.productName}>{s.productName}</td>
-                                <td className="px-3 py-2.5 text-right font-medium">{s.requiredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                                <td className="px-3 py-2.5 text-right">{s.availableStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                                <td className={`px-3 py-2.5 text-right font-bold ${s.shortageQty > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                <td className="px-2 py-1.5 font-medium" title={s.productName}>{s.productName}</td>
+                                <td className="px-2 py-1.5 text-right font-medium">{s.requiredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                <td className="px-2 py-1.5 text-right">{s.availableStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                <td className={`px-2 py-1.5 text-right font-bold ${s.shortageQty > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                   {s.shortageQty > 0 ? s.shortageQty.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
                                 </td>
-                                <td className="px-3 py-2.5 text-muted-foreground" title={s.sourceWarehouse}>{s.sourceWarehouse}</td>
+                                <td className="px-2 py-1.5 text-muted-foreground" title={s.sourceWarehouse}>{s.sourceWarehouse}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -764,8 +768,8 @@ const InventoryDashboard: React.FC = () => {
                 )}
 
                 {viewOrder.narration && (
-                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-sm">
-                    <p className="text-[10px] text-yellow-700 uppercase tracking-wider font-bold mb-1">📝 General Narration</p>
+                  <div className="p-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-xs">
+                    <p className="text-[9px] text-yellow-700 uppercase tracking-wider font-bold mb-0.5">📝 General Narration</p>
                     <p className="text-foreground">{viewOrder.narration}</p>
                   </div>
                 )}
@@ -773,8 +777,8 @@ const InventoryDashboard: React.FC = () => {
             );
           })()}
 
-          <DialogFooter className="gap-2 mt-4 flex-col sm:flex-row pt-4 border-t border-border">
-            <Button variant="outline" onClick={() => setViewOrder(null)}>Close</Button>
+          <DialogFooter className="gap-2 mt-2 flex-row pt-3 border-t border-border justify-end">
+            <Button variant="outline" size="sm" onClick={() => setViewOrder(null)}>Close</Button>
             {viewOrder && (() => {
               const orderId = viewOrder.orderId || viewOrder.order_id || viewOrder.id || 'Unknown ID';
               const action = actionLabel(viewOrder.status);
@@ -785,7 +789,7 @@ const InventoryDashboard: React.FC = () => {
                   {/* Pending actions */}
                   {viewOrder.status === 'Pending' && isAdminOrSuper && (
                     <>
-                      <Button variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => {
+                      <Button variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => {
                         setConfirmOrder({
                           id: orderId,
                           action: 'Cancelled',
@@ -795,7 +799,7 @@ const InventoryDashboard: React.FC = () => {
                         });
                         setViewOrder(null);
                       }}>Reject</Button>
-                      <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => {
+                      <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => {
                         setConfirmOrder({
                           id: orderId,
                           action: 'Approved',
@@ -813,6 +817,7 @@ const InventoryDashboard: React.FC = () => {
                       {action.map((a: any) => (
                         <Button
                           key={a.next}
+                          size="sm"
                           className={a.color}
                           onClick={() => {
                             const now = new Date();

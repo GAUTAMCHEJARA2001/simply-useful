@@ -143,11 +143,11 @@
   }
 
   .page-header {
-    @apply text-2xl font-bold text-foreground mb-1;
+    @apply text-xl md:text-2xl font-bold text-foreground mb-1;
   }
 
   .page-subheader {
-    @apply text-sm text-muted-foreground;
+    @apply text-xs md:text-sm text-muted-foreground;
   }
 
   .action-button {

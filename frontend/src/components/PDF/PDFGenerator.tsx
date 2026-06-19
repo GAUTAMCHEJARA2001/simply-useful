@@ -262,13 +262,13 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
       variant={variant} 
       size={size} 
       disabled={isGenerating}
-      className={`h-8 text-xs transition-all active:scale-95 flex items-center ${isGenerating ? 'opacity-70' : ''}`}
+      className={`${size === 'sm' ? 'h-7.5 text-[10px] px-2' : 'h-8 text-xs px-3'} transition-all active:scale-95 flex items-center ${isGenerating ? 'opacity-70' : ''}`}
       onClick={handleDownload}
     >
       {isGenerating ? (
-        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+        <Loader2 className={`${size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'} mr-1.5 animate-spin`} />
       ) : (
-        <Save className="w-4 h-4 mr-2" />
+        <Save className={`${size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'} mr-1.5`} />
       )}
       {isGenerating ? 'Rendering...' : buttonLabel}
     </Button>
