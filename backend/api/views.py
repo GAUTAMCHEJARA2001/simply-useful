@@ -2767,7 +2767,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                 for wh in Warehouse.objects.filter(active=True):
                     if not wh.db_name: continue
                     set_current_db(wh.db_name)
-                    qs = self.get_queryset()
+                    qs = self.get_queryset().using(wh.db_name)
                     qs = _fy_date_filter(request, qs, date_field='date')
                     serialized_data = VisitSerializer(qs, many=True).data
                     all_visits.extend(serialized_data)
@@ -2848,7 +2848,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                 for wh in Warehouse.objects.filter(active=True):
                     if not wh.db_name: continue
                     set_current_db(wh.db_name)
-                    qs = self.get_queryset()
+                    qs = self.get_queryset().using(wh.db_name)
                     qs = _fy_date_filter(request, qs, date_field='date')
                     serialized_data = ExpenseSerializer(qs, many=True).data
                     all_expenses.extend(serialized_data)
