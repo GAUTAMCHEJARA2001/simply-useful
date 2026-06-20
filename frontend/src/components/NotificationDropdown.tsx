@@ -33,13 +33,26 @@ export const NotificationDropdown: React.FC = () => {
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Load broadcasts and dismissed notification list from localStorage
-  const loadNotifications = () => {
+  // Load broadcasts from backend API and dismissed list from localStorage
+  const loadNotifications = async () => {
     try {
-      const raw = localStorage.getItem('kamla_broadcasts');
-      const loadedBroadcasts = raw ? JSON.parse(raw) : [];
-      setBroadcasts(loadedBroadcasts);
+      const { crudApi } = await import('@/api/crud');
+      const { API_ENDPOINTS } = await import('@/api/endpoints');
+      const role = user?.role?.toUpperCase() || '';
+      const data = await crudApi.list(API_ENDPOINTS.BROADCASTS + `?role=${role}`);
+      setBroadcasts(Array.isArray(data) ? data.map((b: any) => ({
+        id: b.id,
+        message: b.message,
+        date: b.createdAt || b.created_at || new Date().toISOString(),
+        targetRole: b.targetRole || b.target_role || 'ALL',
+        author: b.author || 'Admin',
+      })) : []);
+    } catch (e) {
+      // Fallback: keep existing broadcasts if API fails
+      console.error('Failed to load broadcasts:', e);
+    }
 
+    try {
       const rawDismissed = localStorage.getItem('kamla_dismissed_notifications');
       const loadedDismissed = rawDismissed ? JSON.parse(rawDismissed) : [];
       setDismissedIds(loadedDismissed);
@@ -50,10 +63,10 @@ export const NotificationDropdown: React.FC = () => {
 
   useEffect(() => {
     loadNotifications();
-    // Poll localstorage broadcasts changes
-    const interval = setInterval(loadNotifications, 5000);
+    // Poll API for broadcast changes every 30 seconds
+    const interval = setInterval(loadNotifications, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.role]);
 
   // Close dropdown on click outside
   useEffect(() => {

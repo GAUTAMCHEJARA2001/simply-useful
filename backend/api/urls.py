@@ -5,6 +5,7 @@ from api.views import (
     CategoryViewSet, BrandViewSet, UnitViewSet, WarehouseViewSet, RegionViewSet,
     MarketViewSet, master_settings, DealerViewSet, DistributorViewSet, OrderViewSet,
     VisitViewSet, ExpenseViewSet, BOMViewSet, SupplierViewSet, LabourViewSet,
+    BroadcastViewSet,
     user_assignments,
     bulk_template, bulk_import, database_export, local_backup_status_view, download_postgres_dump_view, schedule_local_backup_view,
     
@@ -50,6 +51,7 @@ router.register('visits', VisitViewSet, basename='visits')
 router.register('expenses', ExpenseViewSet, basename='expenses')
 router.register('bom', BOMViewSet, basename='bom')
 router.register('crm/leads', LeadViewSet, basename='crm-leads')
+router.register('broadcasts', BroadcastViewSet, basename='broadcasts')
 
 urlpatterns = [
     # Auth

@@ -33,7 +33,7 @@ const AdminDashboard: React.FC = () => {
   const [broadcastText, setBroadcastText] = useState('');
   const [targetRole, setTargetRole] = useState('ALL');
 
-  const handleSendBroadcast = () => {
+  const handleSendBroadcast = async () => {
     if (!broadcastText.trim()) {
       toast({
         title: 'Empty Message',
@@ -44,18 +44,12 @@ const AdminDashboard: React.FC = () => {
     }
 
     try {
-      const raw = localStorage.getItem('kamla_broadcasts');
-      const broadcasts = raw ? JSON.parse(raw) : [];
-      
-      const newBroadcast = {
-        id: 'bc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+      const { crudApi } = await import('@/api/crud');
+      const { API_ENDPOINTS } = await import('@/api/endpoints');
+      await crudApi.create(API_ENDPOINTS.BROADCASTS, {
         message: broadcastText.trim(),
-        date: new Date().toISOString(),
         targetRole: targetRole,
-        author: 'Admin',
-      };
-      
-      localStorage.setItem('kamla_broadcasts', JSON.stringify([newBroadcast, ...broadcasts]));
+      });
       setBroadcastText('');
       toast({
         title: '📢 Broadcast Sent',
@@ -64,11 +58,12 @@ const AdminDashboard: React.FC = () => {
     } catch (e: any) {
       toast({
         title: 'Error',
-        description: 'Failed to save broadcast.',
+        description: e?.message || 'Failed to send broadcast.',
         variant: 'destructive',
       });
     }
   };
+
 
   const salesOfficers = useMemo(() => {
     return (users || []).filter(u => (u.role === 'SALES' || u.role === 'SALES_OFFICER') && u.active);

@@ -36,4 +36,5 @@ export const API_ENDPOINTS = {
   VISITS: '/visits',
   EXPENSES: '/expenses',
   LEADS: '/crm/leads',
+  BROADCASTS: '/broadcasts',
 };

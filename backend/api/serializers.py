@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from core.models import Company, User, Warehouse
+from core.models import Company, User, Warehouse, Broadcast
 from api.models import (
     Product, Category, Brand, Unit, Region, Market,
     Dealer, Distributor, Order, Orderitem, Visit, Expense, Bom, Bomitem, Supplier, Labour,
@@ -907,3 +907,13 @@ class LeadSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("Deal value cannot be negative.")
         return value
+
+
+class BroadcastSerializer(serializers.ModelSerializer):
+    targetRole = serializers.CharField(source='target_role')
+    createdAt = serializers.DateTimeField(source='created_at', read_only=True)
+    companyId = serializers.CharField(source='company_id', required=False)
+
+    class Meta:
+        model = Broadcast
+        fields = ['id', 'message', 'targetRole', 'author', 'companyId', 'createdAt', 'active']

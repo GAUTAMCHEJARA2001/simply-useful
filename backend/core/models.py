@@ -88,3 +88,15 @@ def create_warehouse_domain(sender, instance, created, **kwargs):
         pass
 
 
+class Broadcast(models.Model):
+    id = models.CharField(primary_key=True, max_length=40)
+    message = models.TextField()
+    target_role = models.CharField(db_column='targetRole', max_length=30, default='ALL')
+    author = models.CharField(max_length=100, default='Admin')
+    company = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    created_at = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'Broadcast'
+        ordering = ['-created_at']

@@ -6738,4 +6738,57 @@ def get_analytics_data_quality(request):
         return Response({"success": False, "message": f"Failed to compile data quality: {str(e)}"}, status=500)
 
 
+# ─────────────────────────────────────────────
+# Broadcast Notifications (Shared / Public Schema)
+# ─────────────────────────────────────────────
+from core.models import Broadcast
+from api.serializers import BroadcastSerializer
+
+class BroadcastViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for admin broadcast notifications.
+    Broadcasts live in the public schema so they are visible to all users
+    regardless of which warehouse/tenant they are connected to.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = BroadcastSerializer
+
+    def get_queryset(self):
+        company_id = _get_company_id(self.request)
+        qs = Broadcast.objects.using('default').filter(active=True)
+        if company_id:
+            qs = qs.filter(company_id=company_id)
+        return qs.order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        qs = self.get_queryset()
+        # Optional: filter by target role for the requesting user
+        role = request.query_params.get('role')
+        if role:
+            qs = qs.filter(
+                models.Q(target_role='ALL') | models.Q(target_role__iexact=role)
+            )
+        serializer = BroadcastSerializer(qs, many=True)
+        return send_success(serializer.data, "Broadcasts fetched successfully")
+
+    def create(self, request, *args, **kwargs):
+        import uuid
+        data = request.data.copy()
+        data['id'] = 'bc_' + uuid.uuid4().hex[:20]
+        data['companyId'] = _get_company_id(request)
+        data['author'] = getattr(request.user, 'name', None) or getattr(request.user, 'email', 'Admin')
+
+        serializer = BroadcastSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return send_success(serializer.data, "Broadcast sent successfully", 201)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            broadcast = Broadcast.objects.using('default').get(pk=kwargs['pk'])
+            broadcast.active = False
+            broadcast.save(using='default')
+            return send_success(None, "Broadcast removed")
+        except Broadcast.DoesNotExist:
+            return send_error("Broadcast not found", 404)
 
