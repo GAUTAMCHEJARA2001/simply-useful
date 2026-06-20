@@ -35,24 +35,32 @@ const DistributorManagement: React.FC = () => {
   const openAdd = () => { setEditing(null); setForm(emptyDist); setDialogOpen(true); };
   const openEdit = (d: Distributor) => { setEditing(d); setForm({ ...d }); setDialogOpen(true); };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.distributorName || !form.area || !form.assignedSoEmail) {
       toast({ title: 'Missing Fields', description: 'Fill all required fields.', variant: 'destructive' }); return;
     }
-    if (editing) {
-      updateDistributor(editing.distributorName, form);
-      toast({ title: 'Updated', description: `${form.distributorName} updated.` });
-    } else {
-      addDistributor(form);
-      toast({ title: 'Added', description: `${form.distributorName} added.` });
+    try {
+      if (editing) {
+        await updateDistributor(editing.distributorName, form);
+        toast({ title: 'Updated', description: `${form.distributorName} updated.` });
+      } else {
+        await addDistributor(form);
+        toast({ title: 'Added', description: `${form.distributorName} added.` });
+      }
+      setDialogOpen(false);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to save distributor.', variant: 'destructive' });
     }
-    setDialogOpen(false);
   };
 
-  const handleDelete = () => {
-    deleteDistributor(deleteTarget);
-    toast({ title: 'Deleted', description: 'Distributor removed.' });
-    setDeleteDialogOpen(false);
+  const handleDelete = async () => {
+    try {
+      await deleteDistributor(deleteTarget);
+      toast({ title: 'Deleted', description: 'Distributor removed.' });
+      setDeleteDialogOpen(false);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to delete distributor.', variant: 'destructive' });
+    }
   };
 
   const uf = (field: keyof Distributor, value: any) => setForm(prev => ({ ...prev, [field]: value }));

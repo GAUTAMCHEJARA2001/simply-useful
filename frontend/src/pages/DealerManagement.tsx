@@ -55,25 +55,33 @@ const DealerManagement: React.FC = () => {
     setDeleteDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.dealerName || !form.city || !form.assignedSoEmail) {
       toast({ title: 'Missing Fields', description: 'Please fill all required fields.', variant: 'destructive' });
       return;
     }
-    if (editing) {
-      updateDealer(editing.dealerCode, form);
-      toast({ title: 'Dealer Updated', description: `${form.dealerName} updated successfully.` });
-    } else {
-      addDealer(form);
-      toast({ title: 'Dealer Added', description: `${form.dealerName} added successfully.` });
+    try {
+      if (editing) {
+        await updateDealer(editing.dealerCode, form);
+        toast({ title: 'Dealer Updated', description: `${form.dealerName} updated successfully.` });
+      } else {
+        await addDealer(form);
+        toast({ title: 'Dealer Added', description: `${form.dealerName} added successfully.` });
+      }
+      setDialogOpen(false);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to save dealer.', variant: 'destructive' });
     }
-    setDialogOpen(false);
   };
 
-  const handleDelete = () => {
-    deleteDealer(deleteTarget);
-    toast({ title: 'Dealer Deleted', description: 'Dealer has been removed.' });
-    setDeleteDialogOpen(false);
+  const handleDelete = async () => {
+    try {
+      await deleteDealer(deleteTarget);
+      toast({ title: 'Dealer Deleted', description: 'Dealer has been removed.' });
+      setDeleteDialogOpen(false);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to delete dealer.', variant: 'destructive' });
+    }
   };
 
   const updateForm = (field: keyof Dealer, value: any) => setForm(prev => ({ ...prev, [field]: value }));
