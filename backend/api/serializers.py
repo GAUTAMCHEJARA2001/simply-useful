@@ -397,13 +397,21 @@ class OrderSerializer(serializers.ModelSerializer):
     assignedWarehouse = serializers.PrimaryKeyRelatedField(source='assigned_warehouse', queryset=Warehouse.objects.all(), required=False, allow_null=True)
     items = OrderitemSerializer(many=True, required=False, source='orderitem_set')
     partyDetails = serializers.SerializerMethodField(read_only=True)
+    
+    invoiceNumber = serializers.CharField(source='invoicenumber', required=False, allow_null=True, allow_blank=True)
+    vehicleNumber = serializers.CharField(source='vehiclenumber', required=False, allow_null=True, allow_blank=True)
+    driverName = serializers.CharField(source='drivername', required=False, allow_null=True, allow_blank=True)
+    driverMobile = serializers.CharField(source='drivermobile', required=False, allow_null=True, allow_blank=True)
+    dispatchWarehouse = serializers.CharField(source='dispatchwarehouse', required=False, allow_null=True, allow_blank=True)
+    dispatchDate = serializers.CharField(source='dispatchdate', required=False, allow_null=True, allow_blank=True)
 
     class Meta:
         model = Order
         fields = [
             'id', 'orderId', 'date', 'soEmail', 'partyType', 'partyName', 'distributor',
             'narration', 'status', 'grandTotal', 'companyId', 'createdAt', 'updatedAt', 'items',
-            'assignedWarehouse', 'partyDetails'
+            'assignedWarehouse', 'partyDetails',
+            'invoiceNumber', 'vehicleNumber', 'driverName', 'driverMobile', 'dispatchWarehouse', 'dispatchDate'
         ]
 
     def get_partyDetails(self, obj):

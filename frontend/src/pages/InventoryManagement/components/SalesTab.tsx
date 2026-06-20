@@ -81,16 +81,37 @@ export const SalesTab: React.FC = () => {
 
       <SafeDataView data={sales} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable 
-          columns={['Customer', 'Challan', 'Net Amount', 'Date', 'Sales Return']}
-          rows={sales.map((s: any) => [
+          columns={['Customer', 'Challan', 'Net Amount', 'Date', 'Remarks', 'Sales Return']}
+          rows={sales.map((s: any) => {
+            const cleanNarration = s.narration ? s.narration
+              .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
+              .replace(/\[CHALLAN:\s*[^\]]+\]/gi, '')
+              .replace(/\[WAREHOUSE:\s*[^\]]+\]/gi, '')
+              .replace(/\[WAREHOUSE ID:\s*[^\]]+\]/gi, '')
+              .replace(/\[VEHICLE:\s*[^\]]+\]/gi, '')
+              .replace(/\[DRIVER:\s*[^\]]+\]/gi, '')
+              .replace(/\[DRIVER MOBILE:\s*[^\]]+\]/gi, '')
+              .replace(/\[DISPATCH DATE:\s*[^\]]+\]/gi, '')
+              .replace(/\[DISPATCH TIME:\s*[^\]]+\]/gi, '')
+              .replace(/\[REJECTION REASON:\s*[^\]]+\]/gi, '')
+              .replace(/\[REJECTION DATE:\s*[^\]]+\]/gi, '')
+              .replace(/\[RETURN REASON:\s*[^\]]+\]/gi, '')
+              .replace(/\[RETURN DATE:\s*[^\]]+\]/gi, '')
+              .trim() : '';
+
+            return [
               s.customerName || s.partyName || '—', 
-              s.challanNumber || extractChallanNumber(s.narration) || '—', 
+              s.challanNumber || s.invoiceNumber || extractChallanNumber(s.narration) || '—', 
               Currency(s.netAmount || s.grandTotal || s.totalAmount || 0), 
               s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN') : '—',
+              <span key={s.id + '-rem'} className="text-muted-foreground italic text-xs max-w-[200px] truncate block" title={cleanNarration || '—'}>
+                {cleanNarration || '—'}
+              </span>,
               <Button key={s.id} size="sm" variant="outline" onClick={() => openReturn(s)}>
                 <RotateCcw className="w-3.5 h-3.5 mr-1" /> Sales Return
               </Button>
-          ])}
+            ];
+          })}
           onEdit={i => handleEdit(sales[i])}
           onDelete={i => handleDelete(sales[i].id)}
         />

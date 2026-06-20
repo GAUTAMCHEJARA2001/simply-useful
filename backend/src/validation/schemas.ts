@@ -40,6 +40,12 @@ export const createSaleSchema = z.object({
   items: z.array(saleItemSchema).nonempty(),
   narration: z.string().optional(),
   grandTotal: z.number().positive(),
+  invoiceNumber: z.string().optional().nullable(),
+  vehicleNumber: z.string().optional().nullable(),
+  driverName: z.string().optional().nullable(),
+  driverMobile: z.string().optional().nullable(),
+  dispatchWarehouse: z.string().optional().nullable(),
+  dispatchDate: z.string().optional().nullable(),
 });
 
 export const dealerSchema = z.object({

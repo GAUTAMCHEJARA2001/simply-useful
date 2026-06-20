@@ -411,9 +411,14 @@ export const DashboardTab: React.FC = () => {
       const driver = dispatchForm.driverName.trim();
       const driverMob = dispatchForm.driverMobile.trim();
       
-      const narration = `[INVOICE: ${invoice}] [WAREHOUSE: ${warehouse}] [VEHICLE: ${vehicle}] [DRIVER: ${driver}] [DRIVER MOBILE: ${driverMob}] [DISPATCH DATE: ${todayStr}] ${dispatchForm.remarks}`.trim();
-      
-      await updateOrderStatus(orderId, 'Dispatched', narration, todayStr);
+      await updateOrderStatus(orderId, 'Dispatched', dispatchForm.remarks.trim(), todayStr, {
+        invoiceNumber: invoice,
+        warehouseName: warehouse,
+        vehicleNumber: vehicle,
+        driverName: driver,
+        driverMobileNumber: driverMob,
+        dispatchDate: todayStr,
+      });
       
       toast({
         title: 'Order Dispatched',

@@ -158,6 +158,12 @@ model Order {
   company      Company     @relation(fields: [companyId], references: [id])
   salesOfficer User        @relation("SalesOfficerOrders", fields: [soEmail], references: [email])
   items        OrderItem[]
+  invoiceNumber     String?     @map("invoiceNumber")
+  vehicleNumber     String?     @map("vehicleNumber")
+  driverName        String?     @map("driverName")
+  driverMobile      String?     @map("driverMobile")
+  dispatchWarehouse String?     @map("dispatchWarehouse")
+  dispatchDate      String?     @map("dispatchDate")
 
   @@index([createdAt])
   @@index([status])

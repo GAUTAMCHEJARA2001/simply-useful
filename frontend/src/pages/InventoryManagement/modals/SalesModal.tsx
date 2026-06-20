@@ -75,11 +75,28 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
       
       const whId = sale.assignedWarehouse || extractWarehouseId(sale.narration) || sale.warehouseId || sale.warehouse_id || '';
       
+      const cleanNarration = sale.narration ? sale.narration
+        .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
+        .replace(/\[CHALLAN:\s*[^\]]+\]/gi, '')
+        .replace(/\[WAREHOUSE:\s*[^\]]+\]/gi, '')
+        .replace(/\[WAREHOUSE ID:\s*[^\]]+\]/gi, '')
+        .replace(/\[VEHICLE:\s*[^\]]+\]/gi, '')
+        .replace(/\[DRIVER:\s*[^\]]+\]/gi, '')
+        .replace(/\[DRIVER MOBILE:\s*[^\]]+\]/gi, '')
+        .replace(/\[DISPATCH DATE:\s*[^\]]+\]/gi, '')
+        .replace(/\[DISPATCH TIME:\s*[^\]]+\]/gi, '')
+        .replace(/\[REJECTION REASON:\s*[^\]]+\]/gi, '')
+        .replace(/\[REJECTION DATE:\s*[^\]]+\]/gi, '')
+        .replace(/\[RETURN REASON:\s*[^\]]+\]/gi, '')
+        .replace(/\[RETURN DATE:\s*[^\]]+\]/gi, '')
+        .trim() : '';
+
       setForm({
         ...sale,
         customerName: sale.partyName || sale.customerName || '',
-        challanNumber: extractChallanNumber(sale.narration) || sale.challanNumber || '',
+        challanNumber: sale.invoiceNumber || extractChallanNumber(sale.narration) || sale.challanNumber || '',
         warehouse_id: whId,
+        narration: cleanNarration || sale.narration || '',
         lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }]
       });
     } else {
@@ -138,21 +155,19 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
 
   const handleSave = async () => {
     const rawNarration = form.narration || '';
-    // Clean any old bracketed tags from narration to avoid stacking
-    let cleanNarration = rawNarration
-      .replace(/\[CHALLAN:\s*[^\]]+\]/g, '')
-      .replace(/\[WAREHOUSE:\s*[^\]]+\]/g, '')
-      .replace(/\[WAREHOUSE ID:\s*[^\]]+\]/g, '')
+    const cleanNarration = rawNarration
+      .replace(/\[CHALLAN:\s*[^\]]+\]/gi, '')
+      .replace(/\[WAREHOUSE:\s*[^\]]+\]/gi, '')
+      .replace(/\[WAREHOUSE ID:\s*[^\]]+\]/gi, '')
+      .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
+      .replace(/\[VEHICLE:\s*[^\]]+\]/gi, '')
+      .replace(/\[DRIVER:\s*[^\]]+\]/gi, '')
+      .replace(/\[DRIVER MOBILE:\s*[^\]]+\]/gi, '')
+      .replace(/\[DISPATCH DATE:\s*[^\]]+\]/gi, '')
+      .replace(/\[DISPATCH TIME:\s*[^\]]+\]/gi, '')
       .trim();
 
-    if (form.challanNumber) {
-      cleanNarration = `[CHALLAN: ${form.challanNumber}] ${cleanNarration}`.trim();
-    }
-
     const selectedWh = warehouses.find((w: any) => String(w.id) === String(form.warehouse_id));
-    if (selectedWh) {
-      cleanNarration = `[WAREHOUSE: ${selectedWh.name}] [WAREHOUSE ID: ${selectedWh.id}] ${cleanNarration}`.trim();
-    }
 
     const payload = {
       ...form,
@@ -162,6 +177,9 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
       grandTotal: grandTotal,
       narration: cleanNarration,
       warehouse_id: form.warehouse_id || '',
+      invoiceNumber: form.challanNumber || '',
+      dispatchWarehouse: selectedWh ? selectedWh.name : '',
+      dispatchDate: form.dispatchDate || sale?.dispatchDate || new Date().toISOString().split('T')[0],
       items: (form.lineItems || []).map((it: any) => ({
         productId: it.productId,
         qty: it.quantity,
@@ -242,6 +260,12 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
             <label className="text-[11px] font-semibold block mb-1">Invoice/Challan Number</label>
             <input value={form.challanNumber || ''} onChange={e => setForm({ ...form, challanNumber: e.target.value })}
               placeholder="INV-1001" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+          </div>
+          <div className="col-span-2">
+            <label className="text-[11px] font-semibold block mb-1">Remarks / Narration</label>
+            <textarea value={form.narration || ''} onChange={e => setForm({ ...form, narration: e.target.value })}
+              placeholder="Enter remarks/narration notes..."
+              className="w-full border border-border rounded-lg px-3 py-2 bg-background text-xs min-h-16" />
           </div>
         </div>
 

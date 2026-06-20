@@ -43,7 +43,7 @@ interface DataContextType {
   deleteProduct: (code: string) => Promise<void>;
   orders: Order[];
   addOrder: (o: Order) => Promise<void>;
-  updateOrderStatus: (id: string, status: OrderStatus, reason?: string, action_date?: string) => Promise<void>;
+  updateOrderStatus: (id: string, status: OrderStatus, reason?: string, actionDate?: string, extraFields?: any) => Promise<void>;
   updateOrderItems: (id: string, updatedOrder: any) => Promise<void>;
   visits: Visit[];
   addVisit: (v: Visit) => Promise<void>;
@@ -314,10 +314,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [refreshAll, queryClient]);
 
-  const updateOrderStatus = useCallback(async (id: string, status: OrderStatus, reason?: string, actionDate?: string) => {
-    const res = await apiService.orders.updateStatus(id, { status, reason, actionDate });
+  const updateOrderStatus = useCallback(async (id: string, status: OrderStatus, reason?: string, actionDate?: string, extraFields?: any) => {
+    const res = await apiService.orders.updateStatus(id, { status, reason, actionDate, ...extraFields });
     if (res.data.success) {
-      setOrders(prev => prev.map(o => o.orderId === id ? { ...o, status, ...(reason ? { narration: reason } : {}), ...(actionDate ? { dispatchDate: actionDate } : {}) } : o));
+      setOrders(prev => prev.map(o => o.orderId === id ? { ...o, status, ...(reason ? { narration: reason } : {}), ...(actionDate ? { dispatchDate: actionDate } : {}), ...extraFields } : o));
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
       refreshAll();
     }

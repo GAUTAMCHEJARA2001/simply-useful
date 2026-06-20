@@ -29,7 +29,7 @@ export const getSaleById = async (id: string) => {
 };
 
 export const createSale = async (data: any, soEmail: string) => {
-  const { partyType, partyName, distributor, items, narration, grandTotal } = data;
+  const { partyType, partyName, distributor, items, narration, grandTotal, invoiceNumber, vehicleNumber, driverName, driverMobile, dispatchWarehouse, dispatchDate } = data;
 
   // Use a transaction to ensure atomicity
   return prisma.$transaction(async (tx) => {
@@ -45,7 +45,13 @@ export const createSale = async (data: any, soEmail: string) => {
         narration,
         grandTotal,
         status: 'Pending',
-        companyId: 'cmo75yliq0000wesurjpett1n' // Added required companyId
+        companyId: 'cmo75yliq0000wesurjpett1n', // Added required companyId
+        invoiceNumber,
+        vehicleNumber,
+        driverName,
+        driverMobile,
+        dispatchWarehouse,
+        dispatchDate
       },
     });
 

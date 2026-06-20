@@ -177,6 +177,12 @@ class Order(models.Model):
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
+    invoicenumber = models.TextField(db_column='invoiceNumber', blank=True, null=True)
+    vehiclenumber = models.TextField(db_column='vehicleNumber', blank=True, null=True)
+    drivername = models.TextField(db_column='driverName', blank=True, null=True)
+    drivermobile = models.TextField(db_column='driverMobile', blank=True, null=True)
+    dispatchwarehouse = models.TextField(db_column='dispatchWarehouse', blank=True, null=True)
+    dispatchdate = models.TextField(db_column='dispatchDate', blank=True, null=True)
 
     class Meta:
         db_table = 'Order'

@@ -55,6 +55,7 @@ export const ApprovalsTab: React.FC = () => {
     vehicleNumber: '',
     driverName: '',
     driverMobileNumber: '',
+    remarks: '',
   });
   const [statusFilter, setStatusFilter] = useState<'Pending' | 'Ready' | 'History' | 'All'>('Pending');
 
@@ -71,6 +72,8 @@ export const ApprovalsTab: React.FC = () => {
   });
 
   const openDispatch = (approval: any) => {
+    const orderData = approval.data || {};
+    const cleanNar = getCleanNarration(orderData.narration || approval.narration || '');
     setDispatchTarget(approval);
     setDispatchForm({
       dispatchDate: new Date().toISOString().split('T')[0],
@@ -79,6 +82,7 @@ export const ApprovalsTab: React.FC = () => {
       vehicleNumber: '',
       driverName: '',
       driverMobileNumber: '',
+      remarks: cleanNar === '—' ? '' : cleanNar,
     });
   };
 
@@ -368,6 +372,12 @@ export const ApprovalsTab: React.FC = () => {
               <label className="text-[11px] font-semibold block mb-1">Driver Mobile Number</label>
               <input value={dispatchForm.driverMobileNumber} onChange={e => setDispatchForm({ ...dispatchForm, driverMobileNumber: e.target.value })}
                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-[11px] font-semibold block mb-1">Remarks / Narration</label>
+              <textarea value={dispatchForm.remarks || ''} onChange={e => setDispatchForm({ ...dispatchForm, remarks: e.target.value })}
+                placeholder="Enter dispatch remarks/narration notes..."
+                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm min-h-16" />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">

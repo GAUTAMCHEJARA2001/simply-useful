@@ -109,6 +109,16 @@ def _extract_order_tag(narration, key, default=''):
     return match.group(1).strip() if match else default
 
 
+def _get_clean_narration_helper(narration):
+    import re
+    if not narration:
+        return ''
+    text = narration
+    for key in ['INVOICE', 'CHALLAN', 'WAREHOUSE', 'WAREHOUSE ID', 'VEHICLE', 'DRIVER', 'DRIVER MOBILE', 'DISPATCH DATE', 'DISPATCH TIME', 'REJECTION REASON', 'REJECTION DATE', 'REASON']:
+        text = re.sub(rf'\[{re.escape(key)}:\s*[^\]]+\]\s*', '', text, flags=re.IGNORECASE)
+    return text.strip()
+
+
 def _get_company_id(request):
     """Safely extract company ID from JWT or Django session user.
     
@@ -2785,6 +2795,36 @@ class OrderViewSet(viewsets.ModelViewSet):
                     'REJECTION REASON': reason_val or 'No reason provided',
                     'REJECTION DATE': rejection_date
                 })
+            elif status_val == 'Dispatched' or status_val == 'Completed':
+                # Parse explicit fields from request body if available
+                invoice = data.get('invoiceNumber') or data.get('invoice_number')
+                vehicle = data.get('vehicleNumber') or data.get('vehicle_number')
+                driver = data.get('driverName') or data.get('driver_name')
+                mobile = data.get('driverMobileNumber') or data.get('driver_mobile_number') or data.get('driverMobile') or data.get('driver_mobile')
+                wh_name = data.get('warehouse') or data.get('warehouse_id') or data.get('warehouseName') or data.get('warehouse_name') or data.get('dispatchWarehouse')
+                disp_date = data.get('dispatchDate') or data.get('dispatch_date')
+                
+                # Check for legacy bracket tags inside the reason_val (which contains narration) or instance.narration
+                check_str = reason_val or instance.narration or ''
+                if '[' in check_str and ']' in check_str:
+                    if not invoice: invoice = _extract_order_tag(check_str, 'INVOICE') or _extract_order_tag(check_str, 'CHALLAN')
+                    if not vehicle: vehicle = _extract_order_tag(check_str, 'VEHICLE')
+                    if not driver: driver = _extract_order_tag(check_str, 'DRIVER')
+                    if not mobile: mobile = _extract_order_tag(check_str, 'DRIVER MOBILE')
+                    if not wh_name: wh_name = _extract_order_tag(check_str, 'WAREHOUSE')
+                    if not disp_date: disp_date = _extract_order_tag(check_str, 'DISPATCH DATE') or _extract_order_tag(check_str, 'DISPATCH TIME')
+                    
+                    instance.narration = _get_clean_narration_helper(check_str)
+                elif reason_val:
+                    instance.narration = reason_val
+                
+                # Save details directly to separate columns
+                if invoice: instance.invoicenumber = invoice
+                if vehicle: instance.vehiclenumber = vehicle
+                if driver: instance.drivername = driver
+                if mobile: instance.drivermobile = mobile
+                if wh_name: instance.dispatchwarehouse = wh_name
+                if disp_date: instance.dispatchdate = disp_date
             elif reason_val:
                 instance.narration = _append_order_tags(instance.narration, {
                     'REASON': reason_val
@@ -4767,16 +4807,19 @@ def transaction_dispatch(request, pk):
 
     from django.utils import timezone
     order.status = 'Completed'
-    order.narration = _append_order_tags(order.narration, {
-        'DISPATCH DATE': dispatch_date,
-        'INVOICE': invoice_number,
-        'WAREHOUSE': warehouse_name,
-        'WAREHOUSE ID': warehouse_id,
-        'VEHICLE': vehicle_number,
-        'DRIVER': driver_name,
-        'DRIVER MOBILE': driver_mobile,
-        'DISPATCH TIME': timezone.now().strftime('%Y-%m-%d %H:%M:%S'),
-    })
+    order.invoicenumber = invoice_number
+    order.vehiclenumber = vehicle_number
+    order.drivername = driver_name
+    order.drivermobile = driver_mobile
+    order.dispatchwarehouse = warehouse_name
+    order.dispatchdate = dispatch_date
+    
+    remarks = data.get('remarks') or data.get('narration')
+    if remarks:
+        order.narration = remarks
+    elif order.narration:
+        order.narration = _get_clean_narration_helper(order.narration)
+        
     order.updatedat = timezone.now()
     order.save()
 

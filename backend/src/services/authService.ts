@@ -59,7 +59,7 @@ export const loginUser = async (data: any) => {
     throw new Error('User account is deactivated');
   }
 
-  const token = generateToken(user.id, user.email, user.role);
+  const token = generateToken(user.id, user.email, user.role as UserRole);
 
   return {
     user: {
