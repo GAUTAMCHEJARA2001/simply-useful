@@ -149,6 +149,9 @@ def seed_tenant(db_name, company_id, user_objs):
         sup = Supplier.objects.using(db_name).create(id=uuid.uuid4().hex[:25], name='UltraTech Cement Ltd', contactinfo='1234567890', companyid_id=company_id, active=True)
         dist = Distributor.objects.using(db_name).create(id=uuid.uuid4().hex[:25], distributorname='Gujarat Mega Distributors', active=True, companyid_id=company_id)
         dealer1 = Dealer.objects.using(db_name).create(id=uuid.uuid4().hex[:25], dealername='City Hardware', dealercode='CH01', distributorname=dist.distributorname, active=True, companyid_id=company_id)
+        dist2 = Distributor.objects.using(db_name).create(id=uuid.uuid4().hex[:25], distributorname='West Coast Logistics', active=True, companyid_id=company_id)
+        dealer2 = Dealer.objects.using(db_name).create(id=uuid.uuid4().hex[:25], dealername='Apex Tiles & Stone', dealercode='AT02', distributorname=dist2.distributorname, active=True, companyid_id=company_id)
+        dealer_direct = Dealer.objects.using(db_name).create(id=uuid.uuid4().hex[:25], dealername='National Grout House (Direct)', dealercode='NG03', distributorname=None, active=True, companyid_id=company_id)
 
         # Generating 5 Years of Transactions
         start_date = timezone.now() - timedelta(days=365 * 5)

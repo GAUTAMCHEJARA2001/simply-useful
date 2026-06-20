@@ -40,6 +40,16 @@ const STAGE_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive' | '
   LOST: 'destructive',
 };
 
+const WhatsAppIcon = ({ className = "w-3 h-3" }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
+    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.517 2.266 2.27 3.51 5.284 3.507 8.49-.006 6.66-5.344 11.997-11.957 11.997-2.005-.001-3.973-.504-5.714-1.464L0 24zm6.59-11.666c.214.593.414 1.02.624 1.387.21.367.437.587.77.92.333.333.714.614 1.154.84.44.227.813.347 1.254.407.44.06.793.02 1.18-.087.387-.107.727-.32 1.02-.647.293-.327.467-.714.52-1.127.053-.413.013-.787-.12-1.087-.133-.3-.414-.493-.84-.707-.427-.213-1.007-.497-1.16-.547-.154-.05-.267-.073-.38.093-.113.167-.44.547-.54.667-.1.12-.2.133-.413.027-.214-.107-.907-.333-1.727-1.06-.633-.567-1.06-1.267-1.187-1.48-.127-.213-.013-.327.093-.433.097-.097.213-.247.32-.373.107-.127.14-.213.213-.36.073-.147.037-.28-.017-.387-.053-.107-.44-1.06-.603-1.453-.16-.39-.337-.337-.463-.343-.12-.006-.26-.006-.4-.006-.14 0-.367.053-.56.26-.193.207-.733.717-.733 1.747 0 1.03.75 2.023.853 2.16.103.137 1.474 2.25 3.57 3.153.5.214.887.34 1.19.437.502.16.96.137 1.32.083.403-.06 1.233-.503 1.407-.99.173-.487.173-.903.12-.99-.053-.087-.193-.137-.413-.247z"/>
+  </svg>
+);
+
 const LeadDetails: React.FC<LeadDetailsProps> = ({ lead, open, onClose, onRefresh, users, canManage }) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -233,9 +243,20 @@ const LeadDetails: React.FC<LeadDetailsProps> = ({ lead, open, onClose, onRefres
               <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Contact Details</span>
               <div className="space-y-1.5 pt-1">
                 {lead.phone && (
-                  <a href={`tel:${lead.phone}`} className="flex items-center gap-2 hover:text-primary transition-colors text-foreground/90">
-                    <Phone className="w-3.5 h-3.5 text-muted-foreground" /> {lead.phone}
-                  </a>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <a href={`tel:${lead.phone}`} className="flex items-center gap-2 hover:text-primary transition-colors text-foreground/90 font-semibold">
+                      <Phone className="w-3.5 h-3.5 text-muted-foreground" /> {lead.phone}
+                    </a>
+                    <a
+                      href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-2 py-0.5 text-xs font-bold text-emerald-500 bg-emerald-500/10 rounded-full hover:bg-emerald-500/20 transition-all border border-emerald-500/15"
+                      title="Send WhatsApp message"
+                    >
+                      <WhatsAppIcon className="w-3 h-3" /> WhatsApp
+                    </a>
+                  </div>
                 )}
                 {lead.email && (
                   <a href={`mailto:${lead.email}`} className="flex items-center gap-2 hover:text-primary transition-colors text-foreground/90 truncate">

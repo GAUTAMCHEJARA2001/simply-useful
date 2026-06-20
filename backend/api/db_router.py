@@ -59,6 +59,7 @@ setup_dynamic_tenant_databases()
 
 def get_tenant_model_cross_db(ModelClass, pk, prefetch=None):
     from core.models import Warehouse
+    from django.db import connection
     curr_db = get_current_db()
     
     qs = ModelClass.objects
@@ -68,6 +69,12 @@ def get_tenant_model_cross_db(ModelClass, pk, prefetch=None):
     if curr_db != 'default':
         obj = qs.using(curr_db).get(id=pk)
         set_current_db(curr_db)
+        try:
+            wh = Warehouse.objects.filter(db_name=curr_db).first()
+            if wh:
+                connection.set_tenant(wh)
+        except Exception:
+            pass
         return obj
         
     for wh in Warehouse.objects.filter(active=True):
@@ -78,6 +85,7 @@ def get_tenant_model_cross_db(ModelClass, pk, prefetch=None):
             obj = qs.using(alias).get(id=pk)
             obj._state.db = alias
             set_current_db(alias)
+            connection.set_tenant(wh)
             return obj
         except Exception:
             pass
@@ -97,6 +105,7 @@ def get_tenant_model_cross_db(ModelClass, pk, prefetch=None):
                 obj = qs.using(alias).get(**{fallback_field: pk})
                 obj._state.db = alias
                 set_current_db(alias)
+                connection.set_tenant(wh)
                 return obj
             except Exception:
                 pass

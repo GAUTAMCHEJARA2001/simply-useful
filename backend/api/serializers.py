@@ -268,7 +268,7 @@ class DealerSerializer(serializers.ModelSerializer):
     dealerCode = serializers.CharField(source='dealercode')
     dealerName = serializers.CharField(source='dealername')
     assignedSoEmail = serializers.CharField(source='assignedsoemail')
-    distributorName = serializers.CharField(source='distributorname')
+    distributorName = serializers.CharField(source='distributorname', required=False, allow_blank=True, allow_null=True)
     creditLimit = serializers.FloatField(source='creditlimit', default=0.0)
     companyId = serializers.CharField(source='companyid_id')
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
@@ -532,7 +532,8 @@ class BomitemSerializer(serializers.ModelSerializer):
 
     def get_productId(self, obj):
         from api.models import Product
-        prod = Product.objects.filter(name=obj.materialname).first()
+        db = obj._state.db or 'default'
+        prod = Product.objects.using(db).filter(name=obj.materialname).first()
         return prod.id if prod else ""
 
     def validate(self, data):
@@ -586,26 +587,48 @@ class BomSerializer(serializers.ModelSerializer):
         return prod.name if prod else ""
 
     def validate(self, data):
+        from api.db_router import get_current_db, get_tenant_model_cross_db
+        db = get_current_db() or 'default'
+        
         product_id = self.initial_data.get('productId') or self.initial_data.get('product_id')
         if product_id:
             try:
                 from api.models import Product
-                prod = Product.objects.get(id=product_id)
+                if db == 'default':
+                    prod = get_tenant_model_cross_db(Product, product_id)
+                    db = get_current_db() or 'default'
+                else:
+                    try:
+                        prod = Product.objects.using(db).get(id=product_id)
+                    except Exception:
+                        prod = get_tenant_model_cross_db(Product, product_id)
+                        db = get_current_db() or 'default'
                 data['productcode'] = prod.productcode
-            except Product.DoesNotExist:
+            except Exception:
                 raise serializers.ValidationError({"productId": "Product not found"})
         elif not data.get('productcode'):
             raise serializers.ValidationError({"productCode": "This field is required."})
+            
+        product_code = data.get('productcode')
+        if product_code:
+            qs = Bom.objects.using(db).filter(productcode=product_code)
+            if self.instance:
+                qs = qs.exclude(id=self.instance.id)
+            if qs.exists():
+                raise serializers.ValidationError({"productId": "A recipe for this product already exists."})
+                
         return data
 
     def create(self, validated_data):
+        from api.db_router import get_current_db
+        db = get_current_db() or 'default'
         from django.utils import timezone
         now = timezone.now()
         validated_data['createdat'] = now
         validated_data['updatedat'] = now
 
         items_data = validated_data.pop('bomitem_set', validated_data.pop('items', []))
-        bom = Bom.objects.create(**validated_data)
+        bom = Bom.objects.using(db).create(**validated_data)
         for item_data in items_data:
             item_data.pop('productName', None)
             item_data.pop('quantity', None)
@@ -614,10 +637,11 @@ class BomSerializer(serializers.ModelSerializer):
             item_data.pop('bomid', None)
             import uuid
             item_id = 'c' + uuid.uuid4().hex[:23]
-            Bomitem.objects.create(id=item_id, bomid=bom, **item_data)
+            Bomitem.objects.using(db).create(id=item_id, bomid=bom, **item_data)
         return bom
 
     def update(self, instance, validated_data):
+        db = instance._state.db or 'default'
         from django.utils import timezone
         now = timezone.now()
         validated_data['updatedat'] = now
@@ -625,10 +649,10 @@ class BomSerializer(serializers.ModelSerializer):
         items_data = validated_data.pop('bomitem_set', validated_data.pop('items', None))
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        instance.save()
+        instance.save(using=db)
 
         if items_data is not None:
-            Bomitem.objects.filter(bomid=instance).delete()
+            Bomitem.objects.using(db).filter(bomid=instance).delete()
             for item_data in items_data:
                 item_data.pop('productName', None)
                 item_data.pop('quantity', None)
@@ -637,7 +661,7 @@ class BomSerializer(serializers.ModelSerializer):
                 item_data.pop('bomid', None)
                 import uuid
                 item_id = 'c' + uuid.uuid4().hex[:23]
-                Bomitem.objects.create(id=item_id, bomid=instance, **item_data)
+                Bomitem.objects.using(db).create(id=item_id, bomid=instance, **item_data)
         return instance
 
 

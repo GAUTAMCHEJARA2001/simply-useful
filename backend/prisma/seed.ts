@@ -134,7 +134,7 @@ async function main() {
         dealerName: `Dealer Shop ${i}`,
         city: `City ${i}`,
         assignedSoEmail: 'sales@simplyuseful.com',
-        distributorName: seededDistributors[i-1].distributorName,
+        distributorName: i > 3 ? null : seededDistributors[i-1].distributorName,
         creditLimit: 200000,
         outstanding: 25000 * i,
         active: true

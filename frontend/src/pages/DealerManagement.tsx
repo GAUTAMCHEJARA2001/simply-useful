@@ -56,7 +56,7 @@ const DealerManagement: React.FC = () => {
   };
 
   const handleSave = () => {
-    if (!form.dealerName || !form.city || !form.assignedSoEmail || !form.distributorName) {
+    if (!form.dealerName || !form.city || !form.assignedSoEmail) {
       toast({ title: 'Missing Fields', description: 'Please fill all required fields.', variant: 'destructive' });
       return;
     }
@@ -111,7 +111,7 @@ const DealerManagement: React.FC = () => {
                 <div><span className="text-muted-foreground">Credit Limit:</span> <span className="font-medium">₹{d.creditLimit.toLocaleString()}</span></div>
                 <div><span className="text-muted-foreground">Outstanding:</span> <span className="font-medium">₹{d.outstanding.toLocaleString()}</span></div>
                 <div><span className="text-muted-foreground">SO:</span> <span className="font-medium">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</span></div>
-                <div><span className="text-muted-foreground">Distributor:</span> <span className="font-medium">{d.distributorName}</span></div>
+                <div><span className="text-muted-foreground">Distributor:</span> <span className="font-medium">{d.distributorName || 'Direct'}</span></div>
               </div>
               {can('manage_customers') && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
@@ -144,7 +144,7 @@ const DealerManagement: React.FC = () => {
                     <td className="px-4 py-3">{d.city}</td>
                     <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
                     <td className="px-4 py-3 text-xs">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</td>
-                    <td className="px-4 py-3 text-xs">{d.distributorName}</td>
+                    <td className="px-4 py-3 text-xs">{d.distributorName || '—'}</td>
                     <td className="px-4 py-3">₹{d.creditLimit.toLocaleString()}</td>
                     <td className="px-4 py-3">₹{d.outstanding.toLocaleString()}</td>
                     <td className="px-4 py-3">
@@ -227,10 +227,11 @@ const DealerManagement: React.FC = () => {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Distributor *</Label>
-                <Select value={form.distributorName} onValueChange={v => updateForm('distributorName', v)}>
+                <Label>Distributor</Label>
+                <Select value={form.distributorName || 'None'} onValueChange={v => updateForm('distributorName', v === 'None' ? '' : v)}>
                   <SelectTrigger><SelectValue placeholder="Select Distributor" /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="None">None / Direct Dealer</SelectItem>
                     {Array.from(new Set(distributors.map(d => d.distributorName).filter(Boolean))).map(name => (
                       <SelectItem key={name} value={name}>{name}</SelectItem>
                     ))}

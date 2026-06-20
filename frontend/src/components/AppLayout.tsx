@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
 import { FinancialYearProvider } from '@/contexts/FinancialYearContext';
 import FYSelector from '@/components/FYSelector';
-
 import { WarehouseSwitcher } from '@/components/WarehouseSwitcher';
+import { NotificationDropdown } from './NotificationDropdown';
 
 interface NavItem {
   label: string;
@@ -166,6 +166,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           <div className="flex items-center gap-3">
             <WarehouseSwitcher />
             <FYSelector />
+            <NotificationDropdown />
             <span className="text-xs text-muted-foreground hidden sm:block">
               {user.name} &middot; {user.role}
             </span>

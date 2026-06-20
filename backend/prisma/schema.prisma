@@ -113,7 +113,7 @@ model Dealer {
   dealerName      String
   city            String
   assignedSoEmail String
-  distributorName String
+  distributorName String?
   creditLimit     Float    @default(0)
   outstanding     Float    @default(0)
   active          Boolean  @default(true)

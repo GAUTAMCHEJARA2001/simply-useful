@@ -30,6 +30,45 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { orders, dealers, users, warehouses, updateOrderStatus, updateOrderItems } = useData();
   const { toast } = useToast();
+  const [broadcastText, setBroadcastText] = useState('');
+  const [targetRole, setTargetRole] = useState('ALL');
+
+  const handleSendBroadcast = () => {
+    if (!broadcastText.trim()) {
+      toast({
+        title: 'Empty Message',
+        description: 'Please enter a broadcast message.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem('kamla_broadcasts');
+      const broadcasts = raw ? JSON.parse(raw) : [];
+      
+      const newBroadcast = {
+        id: 'bc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        message: broadcastText.trim(),
+        date: new Date().toISOString(),
+        targetRole: targetRole,
+        author: 'Admin',
+      };
+      
+      localStorage.setItem('kamla_broadcasts', JSON.stringify([newBroadcast, ...broadcasts]));
+      setBroadcastText('');
+      toast({
+        title: '📢 Broadcast Sent',
+        description: `Message successfully broadcasted to ${targetRole === 'ALL' ? 'all staff' : targetRole.toLowerCase() + 's'}.`,
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Error',
+        description: 'Failed to save broadcast.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const salesOfficers = useMemo(() => {
     return (users || []).filter(u => (u.role === 'SALES' || u.role === 'SALES_OFFICER') && u.active);
@@ -338,17 +377,47 @@ const AdminDashboard: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Quick Shortcuts</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {quickLinks.map(link => (
-              <button key={link.path} onClick={() => navigate(link.path)} className="w-full flex items-center gap-3 p-4 rounded-xl bg-secondary hover:bg-muted transition-colors text-left">
-                <link.icon className="w-5 h-5 text-primary" /><span className="font-medium text-sm">{link.label}</span>
-              </button>
-            ))}
-          </CardContent>
-        </Card>
+        {/* Quick Shortcuts & Broadcast center */}
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Quick Shortcuts</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {quickLinks.map(link => (
+                <button key={link.path} onClick={() => navigate(link.path)} className="w-full flex items-center gap-3 p-4 rounded-xl bg-secondary hover:bg-muted transition-colors text-left">
+                  <link.icon className="w-5 h-5 text-primary" /><span className="font-medium text-sm">{link.label}</span>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">📢 Broadcast Announcements</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <textarea
+                value={broadcastText}
+                onChange={(e) => setBroadcastText(e.target.value)}
+                placeholder="Write a message to broadcast to staff..."
+                className="w-full text-xs border border-border rounded-xl p-2.5 bg-background min-h-[90px] focus:ring-1 focus:ring-primary outline-none resize-none"
+              />
+              <div className="flex gap-2">
+                <Select value={targetRole} onValueChange={setTargetRole}>
+                  <SelectTrigger className="h-8 text-xs w-full">
+                    <SelectValue placeholder="Target Audience" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL" className="text-xs">All Staff</SelectItem>
+                    <SelectItem value="SALES" className="text-xs">Sales Officers</SelectItem>
+                    <SelectItem value="INVENTORY" className="text-xs">Inventory Managers</SelectItem>
+                    <SelectItem value="HR" className="text-xs">HR Managers</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button size="sm" className="h-8 text-xs px-4" onClick={handleSendBroadcast}>
+                  Broadcast
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Approve / Reject Confirm Dialog */}

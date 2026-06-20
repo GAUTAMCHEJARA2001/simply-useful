@@ -33,7 +33,7 @@ export const deleteDealer = async (req: Request, res: Response, next: NextFuncti
 export const getDistributors = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const dealers = await dealerService.getAllDealers();
-    const distributors = Array.from(new Set(dealers.map(d => d.distributorName)));
+    const distributors = Array.from(new Set(dealers.map(d => d.distributorName).filter(Boolean)));
     sendSuccess(res, distributors, 'Distributors fetched');
   } catch (e) { next(e); }
 };

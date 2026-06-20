@@ -3,6 +3,9 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from django.core.management import call_command
+from api.db_router import setup_dynamic_tenant_databases
+setup_dynamic_tenant_databases()
+
 from api.models import Company, Warehouse, User
 import bcrypt
 import uuid

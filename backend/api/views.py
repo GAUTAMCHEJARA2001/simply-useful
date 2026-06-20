@@ -53,6 +53,47 @@ def resolve_warehouse(wh_id_or_name, using='default'):
     return Warehouse.objects.using(using).filter(name__iexact=str(wh_id_or_name), active=True).first()
 
 
+def ensure_tenant_db_context(request, warehouse_id_field='warehouseId'):
+    """
+    If the current db is 'default', extracts the warehouse ID from headers or request payload,
+    resolves the warehouse, and switches the schema connection using connection.set_tenant().
+    Returns the resolved Warehouse or None.
+    """
+    from api.db_router import get_current_db, set_current_db
+    from django.db import connection
+    from api.models import Warehouse
+    
+    curr_db = get_current_db()
+    if curr_db != 'default':
+        # Already routed to a tenant database schema
+        return Warehouse.objects.filter(db_name=curr_db).first()
+        
+    # We are in GLOBAL mode ('default')
+    # Try resolving from headers first
+    wh_id = request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
+    # Fallback to payload
+    if not wh_id or str(wh_id).upper() == 'GLOBAL' or str(wh_id) == 'none':
+        wh_id = (request.data or {}).get(warehouse_id_field) or (request.data or {}).get('warehouse_id') or (request.data or {}).get('assignedWarehouse') or (request.data or {}).get('warehouseId')
+        
+    if wh_id:
+        wh = resolve_warehouse(wh_id)
+        if wh and wh.db_name:
+            connection.set_tenant(wh)
+            request.tenant = wh
+            set_current_db(wh.db_name)
+            return wh
+            
+    # Fallback: Default to first active warehouse if no warehouse specified at all
+    wh = Warehouse.objects.filter(active=True).first()
+    if wh and wh.db_name:
+        connection.set_tenant(wh)
+        request.tenant = wh
+        set_current_db(wh.db_name)
+        return wh
+        
+    return None
+
+
 def _append_order_tags(narration, tags):
     import re
     text = narration or ''
@@ -2611,7 +2652,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         serializer = OrderSerializer(data=data)
         if not serializer.is_valid():
-            print("🛑 OrderSerializer Validation Errors:", serializer.errors)
+            print("[ERROR] OrderSerializer Validation Errors:", serializer.errors)
             return send_error(f"Validation failed: {serializer.errors}", 400)
         
         order = serializer.save()
@@ -2703,7 +2744,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         serializer = OrderSerializer(instance, data=data, partial=partial)
         if not serializer.is_valid():
-            print("🛑 OrderSerializer Update Validation Errors:", serializer.errors)
+            print("[ERROR] OrderSerializer Update Validation Errors:", serializer.errors)
             return send_error(f"Validation failed: {serializer.errors}", 400)
         order = serializer.save()
 
@@ -2740,9 +2781,14 @@ class OrderViewSet(viewsets.ModelViewSet):
             if status_val == 'Cancelled' or status_val == 'Rejected':
                 from django.utils import timezone
                 rejection_date = data.get('actionDate') or data.get('action_date') or timezone.now().strftime('%Y-%m-%d')
-                instance.narration = f"[REJECTION REASON: {reason_val or 'No reason provided'}] [REJECTION DATE: {rejection_date}]"
+                instance.narration = _append_order_tags(instance.narration, {
+                    'REJECTION REASON': reason_val or 'No reason provided',
+                    'REJECTION DATE': rejection_date
+                })
             elif reason_val:
-                instance.narration = reason_val
+                instance.narration = _append_order_tags(instance.narration, {
+                    'REASON': reason_val
+                })
                 
             instance.save()
             
@@ -4023,6 +4069,7 @@ def transaction_purchases(request):
         return send_success(data, "Purchases fetched")
         
     elif request.method == 'POST':
+        ensure_tenant_db_context(request)
         data = request.data.copy()
         now = timezone.now()
 
@@ -4504,6 +4551,7 @@ def transaction_sales(request):
         return send_success(all_orders, "Sales transactions fetched")
         
     elif request.method == 'POST':
+        ensure_tenant_db_context(request)
         data = request.data.copy()
         if not data.get('companyId') and _get_company_id(request):
             data['companyId'] = _get_company_id(request)
@@ -4747,7 +4795,10 @@ def transaction_reject(request, pk):
         order = get_tenant_model_cross_db(Order, pk, 'orderitem_set')
         order.status = 'Cancelled'
         from django.utils import timezone
-        order.narration = f"[REJECTION REASON: Rejected by Admin] [REJECTION DATE: {timezone.now().strftime('%Y-%m-%d')}]"
+        order.narration = _append_order_tags(order.narration, {
+            'REJECTION REASON': 'Rejected by Admin',
+            'REJECTION DATE': timezone.now().strftime('%Y-%m-%d')
+        })
         order.save()
         for item in order.orderitem_set.all():
             if item.productid_id:
@@ -4756,6 +4807,33 @@ def transaction_reject(request, pk):
         return send_success(serializer.data, "Order rejected successfully")
     except Order.DoesNotExist:
         return send_error("Order not found", 404)
+
+
+def resolve_product_for_db(prod_id, target_db):
+    if not prod_id:
+        return None
+    from api.models import Product
+    # First check if the product exists in target_db with prod_id
+    try:
+        return Product.objects.using(target_db).get(id=prod_id)
+    except Product.DoesNotExist:
+        pass
+    
+    # Otherwise, try to find the product in any schema to get its productcode
+    from api.db_router import get_tenant_model_cross_db, get_current_db, set_current_db
+    try:
+        orig_db = get_current_db()
+        cross_prod = get_tenant_model_cross_db(Product, prod_id)
+        if cross_prod:
+            res_prod = Product.objects.using(target_db).filter(productcode=cross_prod.productcode).first()
+            if orig_db:
+                set_current_db(orig_db)
+            return res_prod
+        if orig_db:
+            set_current_db(orig_db)
+    except Exception:
+        pass
+    return None
 
 
 def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, existing_prod_id=None):
@@ -4777,32 +4855,31 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
             except (ValueError, TypeError):
                 item_qty = 0.0
             if item_prod_id and item_qty > 0:
-                try:
-                    p = Product.objects.get(id=item_prod_id)
+                p = resolve_product_for_db(item_prod_id, wh.db_name)
+                if p:
                     consumptions.append({
-                        "product_id": item_prod_id,
+                        "product_id": p.id,
                         "name": p.name,
                         "qty": item_qty
                     })
-                except Product.DoesNotExist:
-                    pass
     else:
         # Auto-deduct based on standard BOM using ORM to avoid cross-db SQL
         try:
-            prod = Product.objects.get(id=prod_id)
-            bom = Bom.objects.filter(productcode=prod.productcode).first()
-            if not bom:
-                bom = Bom.objects.filter(name=prod.name).first()
-            if bom:
-                bom_items = Bomitem.objects.filter(bomid=bom)
-                for b_item in bom_items:
-                    m_prod = Product.objects.filter(name=b_item.materialname).first()
-                    if m_prod:
-                        consumptions.append({
-                            "product_id": m_prod.id,
-                            "name": m_prod.name,
-                            "qty": b_item.qty * yield_qty
-                        })
+            prod = resolve_product_for_db(prod_id, wh.db_name)
+            if prod:
+                bom = Bom.objects.filter(productcode=prod.productcode).first()
+                if not bom:
+                    bom = Bom.objects.filter(name=prod.name).first()
+                if bom:
+                    bom_items = Bomitem.objects.filter(bomid=bom)
+                    for b_item in bom_items:
+                        m_prod = Product.objects.using(wh.db_name).filter(name=b_item.materialname).first()
+                        if m_prod:
+                            consumptions.append({
+                                "product_id": m_prod.id,
+                                "name": m_prod.name,
+                                "qty": b_item.qty * yield_qty
+                            })
         except Exception:
             pass
 
@@ -4905,9 +4982,8 @@ def transaction_productions(request):
         st_id = 'st_' + uuid.uuid4().hex[:20]
         now = timezone.now()
         
-        try:
-            product = Product.objects.get(id=prod_id)
-        except Product.DoesNotExist:
+        product = resolve_product_for_db(prod_id, wh.db_name)
+        if not product:
             return Response({"success": False, "message": "Product not found"}, status=status.HTTP_400_BAD_REQUEST)
             
         with transaction.atomic(using=wh.db_name):
@@ -4941,8 +5017,8 @@ def transaction_productions(request):
                         item_qty = 0.0
                     
                     if item_prod_id and item_qty > 0:
-                        try:
-                            item_prod = Product.objects.get(id=item_prod_id)
+                        item_prod = resolve_product_for_db(item_prod_id, wh.db_name)
+                        if item_prod:
                             Stocktransaction.objects.using(wh.db_name).create(
                                 id='st_' + uuid.uuid4().hex[:20],
                                 productid=item_prod,
@@ -4960,8 +5036,6 @@ def transaction_productions(request):
                             )
                             item_inv.quantity -= item_qty
                             item_inv.save()
-                        except Product.DoesNotExist:
-                            pass
                             
         return send_success({"id": st_id, **data}, "Production recorded")
 
@@ -5012,9 +5086,8 @@ def transaction_productions_detail(request, pk):
         if not wh or not wh.db_name:
             return Response({"success": False, "message": "Invalid warehouse"}, status=status.HTTP_400_BAD_REQUEST)
             
-        try:
-            prod = Product.objects.get(id=prod_id)
-        except Product.DoesNotExist:
+        prod = resolve_product_for_db(prod_id, wh.db_name)
+        if not prod:
             return Response({"success": False, "message": "Product not found"}, status=status.HTTP_400_BAD_REQUEST)
             
         # 1. Perform negative stock check
@@ -5038,7 +5111,7 @@ def transaction_productions_detail(request, pk):
             now_str = timezone.now()
             
         old_product_ids = set()
-        new_product_ids = {prod_id}
+        new_product_ids = {prod.id}
         
         with transaction.atomic(using=wh.db_name):
             sts = Stocktransaction.objects.using(wh.db_name).filter(Q(id=pk) | Q(referenceid=pk))
@@ -5065,8 +5138,8 @@ def transaction_productions_detail(request, pk):
                     except (ValueError, TypeError):
                         item_qty = 0.0
                     if item_prod_id and item_qty > 0:
-                        try:
-                            item_prod = Product.objects.get(id=item_prod_id)
+                        item_prod = resolve_product_for_db(item_prod_id, wh.db_name)
+                        if item_prod:
                             Stocktransaction.objects.using(wh.db_name).create(
                                 id='st_' + uuid.uuid4().hex[:20],
                                 productid=item_prod,
@@ -5077,8 +5150,6 @@ def transaction_productions_detail(request, pk):
                                 createdat=now_str
                             )
                             new_product_ids.add(item_prod.id)
-                        except Product.DoesNotExist:
-                            pass
             else:
                 # BOM auto-deduct
                 try:
@@ -5086,7 +5157,7 @@ def transaction_productions_detail(request, pk):
                     if not bom: bom = Bom.objects.filter(name=prod.name).first()
                     if bom:
                         for b_item in Bomitem.objects.filter(bomid=bom):
-                            m_prod = Product.objects.filter(name=b_item.materialname).first()
+                            m_prod = Product.objects.using(wh.db_name).filter(name=b_item.materialname).first()
                             if m_prod:
                                 Stocktransaction.objects.using(wh.db_name).create(
                                     id='st_' + uuid.uuid4().hex[:20],
@@ -5160,6 +5231,7 @@ def transaction_adjustments(request):
         return send_success(rows, "Adjustments fetched")
             
     elif request.method == 'POST':
+        ensure_tenant_db_context(request)
         data = request.data.copy()
         prod_id = data.get('productId')
         qty_change = float(data.get('quantityChange') or 0)
@@ -5177,9 +5249,8 @@ def transaction_adjustments(request):
         st_id = 'st_' + uuid.uuid4().hex[:20]
         now = timezone.now()
         
-        try:
-            product = Product.objects.get(id=prod_id)
-        except Product.DoesNotExist:
+        product = resolve_product_for_db(prod_id, wh.db_name)
+        if not product:
             return Response({"success": False, "message": "Product not found"}, status=status.HTTP_400_BAD_REQUEST)
             
         with transaction.atomic(using=wh.db_name):
@@ -5395,6 +5466,7 @@ def transaction_returns(request):
             set_current_db(curr_db)
         else:
             found = False
+            from django.db import connection
             for wh in Warehouse.objects.filter(active=True):
                 if not wh.db_name: continue
                 try:
@@ -5404,6 +5476,7 @@ def transaction_returns(request):
                         order = Order.objects.using(wh.db_name).prefetch_related('orderitem_set').get(id=order_id)
                     order._state.db = wh.db_name
                     set_current_db(wh.db_name)
+                    connection.set_tenant(wh)
                     found = True
                     break
                 except Exception:
@@ -5418,6 +5491,7 @@ def transaction_returns(request):
                             order = Order.objects.using(wh.db_name).prefetch_related('orderitem_set').get(orderid=order_id)
                         order._state.db = wh.db_name
                         set_current_db(wh.db_name)
+                        connection.set_tenant(wh)
                         found = True
                         break
                     except Exception:
@@ -5773,6 +5847,18 @@ class LeadViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsLeadOwnerOrAdmin]
     serializer_class = LeadSerializer
 
+    def get_object(self):
+        from api.db_router import get_tenant_model_cross_db
+        from django.http import Http404
+        pk = self.kwargs.get('pk')
+        try:
+            obj = get_tenant_model_cross_db(Lead, pk)
+        except Lead.DoesNotExist:
+            raise Http404("Lead not found.")
+            
+        self.check_object_permissions(self.request, obj)
+        return obj
+
     def get_queryset(self):
         company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
@@ -5869,6 +5955,7 @@ class LeadViewSet(viewsets.ModelViewSet):
         return send_success(serializer.data, "Lead retrieved successfully")
 
     def create(self, request, *args, **kwargs):
+        ensure_tenant_db_context(request)
         data = request.data.copy()
         if _get_company_id(request):
             data['companyId'] = _get_company_id(request)

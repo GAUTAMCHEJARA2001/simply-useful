@@ -36,7 +36,7 @@ export interface Dealer {
   city: string;
   state?: string;
   assignedSoEmail: string;
-  distributorName: string;
+  distributorName?: string;
   creditLimit: number;
   outstanding: number;
   active: boolean;

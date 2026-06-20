@@ -64,7 +64,7 @@ class Dealer(models.Model):
     dealername = models.TextField(db_column='dealerName')  # Field name made lowercase.
     city = models.TextField()
     assignedsoemail = models.TextField(db_column='assignedSoEmail')  # Field name made lowercase.
-    distributorname = models.TextField(db_column='distributorName')  # Field name made lowercase.
+    distributorname = models.TextField(db_column='distributorName', blank=True, null=True)  # Field name made lowercase.
     creditlimit = models.DecimalField(db_column='creditLimit', max_digits=14, decimal_places=2, default=Decimal('0.00'))  # Field name made lowercase.
     outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     active = models.BooleanField()
