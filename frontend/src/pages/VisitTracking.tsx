@@ -147,6 +147,18 @@ const VisitTracking: React.FC = () => {
     setCameraActive(false);
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setForm(prev => ({ ...prev, photo: reader.result as string }));
+      if (cameraActive) stopCamera();
+      setPunchStep(3); // Advance to details step
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleCapture = async () => {
     if (!videoRef.current || videoRef.current.readyState < 2) return;
     setSavingLoading(true);
@@ -383,6 +395,7 @@ const VisitTracking: React.FC = () => {
       {/* ── Visit Punch Dialog (Full-screen on mobile) ──────── */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
         <DialogContent
+          onOpenAutoFocus={(e) => e.preventDefault()}
           className="
             fixed inset-0 left-0 top-0 translate-x-0 translate-y-0
             sm:left-1/2 sm:top-1/2 sm:translate-x-[-50%] sm:translate-y-[-50%]
@@ -597,27 +610,42 @@ const VisitTracking: React.FC = () => {
                     {/* Big camera prompt */}
                     <button
                       onClick={startCamera}
-                      disabled={!gps}
-                      className={`w-full flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed transition-all active:scale-[0.97] ${
-                        gps ? 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10' : 'border-border bg-muted/50 text-muted-foreground cursor-not-allowed'
-                      }`}
-                      style={{ minHeight: '240px' }}
+                      className="w-full flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 transition-all active:scale-[0.97]"
+                      style={{ minHeight: '200px' }}
                     >
-                      <div className={`w-16 h-16 rounded-full flex items-center justify-center ${gps ? 'bg-primary/10' : 'bg-muted'}`}>
-                        <Camera className="w-8 h-8" />
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center bg-primary/10">
+                        <Camera className="w-8 h-8 text-primary" />
                       </div>
                       <div className="text-center px-4">
-                        <p className="font-bold text-sm">{gps ? 'Open Camera' : 'Waiting for GPS...'}</p>
+                        <p className="font-bold text-sm">Open Camera</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {gps ? 'Your live photo will be GPS & time-stamped' : 'Allow location access first'}
+                          {gps ? 'Your live photo will be GPS & time-stamped' : 'Open camera to capture proof (GPS searching...)'}
                         </p>
                       </div>
                       {!gps && <p className="text-[10px] text-amber-600 font-bold animate-pulse">{gpsStatus}</p>}
                     </button>
 
-                    {/* Optional: upload from gallery */}
+                    {/* File Upload Fallback */}
+                    <div className="relative text-center">
+                      <input
+                        id="photo-upload-input"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 hover:bg-muted"
+                        onClick={() => document.getElementById('photo-upload-input')?.click()}
+                      >
+                        📂 Upload photo from computer
+                      </Button>
+                    </div>
+
                     <p className="text-[10px] text-center text-muted-foreground/60">
-                      📷 Live camera capture required for GPS seal
+                      📷 Live camera capture or document upload allowed
                     </p>
                   </div>
                 )}

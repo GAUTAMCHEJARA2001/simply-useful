@@ -7,6 +7,7 @@ import { SafeDataView } from '@/components/SafeDataView';
 import { motion } from 'framer-motion';
 import apiClient from '@/api/client';
 import { useToast } from '@/hooks/use-toast';
+import { formatDecimal } from '@/utils/format';
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -88,7 +89,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
         return {
           productId: item.productId,
           productName: item.productName || item.materialName,
-          quantity: parseFloat((ratio * (form.quantity || 0)).toFixed(4)) || 0,
+          quantity: parseFloat((ratio * (form.quantity || 0)).toFixed(2)) || 0,
           unit: item.unit
         };
       });
@@ -212,7 +213,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
           columns={['Finished Product', 'Qty Produced', 'Warehouse', 'Date']}
           rows={productions.map((p: any) => [
             p.finishedProductName || p.finished_product?.name || '—', 
-            p.quantityProduced || p.quantity_produced || 0, 
+            formatDecimal(p.quantityProduced || p.quantity_produced || 0), 
             p.warehouseName || p.warehouse?.name || '—', 
             p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—'
           ])}
@@ -448,9 +449,9 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                   {deficitItems.map((item: any, idx: number) => (
                     <tr key={idx} className="bg-card">
                       <td className="px-3 py-2 font-medium text-foreground">{item.name}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-green-600">{item.currentStock}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-primary">{item.consuming}</td>
-                      <td className="px-3 py-2 text-right font-extrabold text-destructive">-{item.deficit}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-green-600">{formatDecimal(item.currentStock)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-primary">{formatDecimal(item.consuming)}</td>
+                      <td className="px-3 py-2 text-right font-extrabold text-destructive">-{formatDecimal(item.deficit)}</td>
                     </tr>
                   ))}
                 </tbody>

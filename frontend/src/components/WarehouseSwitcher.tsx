@@ -34,8 +34,9 @@ export const WarehouseSwitcher: React.FC = () => {
     return null;
   }
 
-  // Only show on inventory management pages for all users
-  if (!location.pathname.startsWith('/inventory')) {
+  // Only show on inventory management, dealers, and distributors pages for all users
+  const allowedPaths = ['/inventory', '/admin/dealers', '/admin/distributors'];
+  if (!allowedPaths.some(p => location.pathname.startsWith(p))) {
     return null;
   }
 

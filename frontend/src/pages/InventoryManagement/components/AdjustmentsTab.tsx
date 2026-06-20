@@ -7,6 +7,7 @@ import { useProducts } from '@/hooks/inventory/useProducts';
 import { useWarehouses } from '@/hooks/inventory/useMasters';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
+import { formatDecimal } from '@/utils/format';
 
 export const AdjustmentsTab: React.FC = () => {
   const { data: adjustments = [], isLoading, error, refetch } = useAdjustments();
@@ -42,7 +43,7 @@ export const AdjustmentsTab: React.FC = () => {
           rows={adjustments.map((a: any) => [
             a.productName || a.product?.name || '—', 
             a.warehouseName || a.warehouse?.name || '—', 
-            (a.quantityChange > 0 ? `+${a.quantityChange}` : a.quantityChange) || 0, 
+            (a.quantityChange > 0 ? `+${formatDecimal(a.quantityChange)}` : formatDecimal(a.quantityChange)) || 0, 
             a.reason, 
             a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-IN') : '—'
           ])}

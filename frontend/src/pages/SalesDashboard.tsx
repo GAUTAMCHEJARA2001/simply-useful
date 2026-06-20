@@ -2,7 +2,7 @@ import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Clock, Users, ArrowUpRight, ArrowDownRight, IndianRupee, Target, CalendarDays, TrendingUp, MapPin, Store, Building2 } from 'lucide-react';
+import { ShoppingCart, Clock, Users, ArrowUpRight, ArrowDownRight, IndianRupee, Target, CalendarDays, TrendingUp, MapPin, Store, Building2, Scale } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,7 @@ const CHART_COLORS = ['hsl(224, 76%, 33%)', 'hsl(199, 89%, 48%)', 'hsl(142, 71%,
 
 const SalesDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { orders, dealers, distributors, visits, users, loading, error, refreshAll } = useData();
+  const { orders, products, dealers, distributors, visits, users, loading, error, refreshAll } = useData();
   const { filterBySelectedFY, fyLabel } = useFinancialYear();
 
   const { can } = usePermissions();
@@ -74,7 +74,25 @@ const SalesDashboard: React.FC = () => {
       });
     });
 
+    const getOrderWeight = (order: any) => {
+      return (order.items || []).reduce((sum: number, item: any) => {
+        const prodId = typeof item.product === 'object' ? item.product?.id : (item.productId || item.product);
+        const prod = (products || []).find(p => 
+          p.id === prodId || 
+          p.productCode === prodId || 
+          p.product_code === prodId ||
+          p.productName === prodId ||
+          p.product_name === prodId ||
+          p.name === prodId
+        );
+        if (!prod) return sum;
+        const match = (prod.bagSize || prod.bag_size || '').match(/(\d+)/);
+        const weight = match ? parseInt(match[1]) : 0;
+        return sum + (weight * (item.qty || 0));
+      }, 0);
+    };
 
+    const totalWeightSold = myOrders.reduce((sum, order) => sum + getOrderWeight(order), 0);
 
     const kpis = [
       {
@@ -94,13 +112,10 @@ const SalesDashboard: React.FC = () => {
         trendUp: targetProgress >= 50,
       },
       {
-        label: 'Money Made',
-        value: `₹${(myOrders.reduce((sum, order) => {
-          const orderTotal = Number(order.grandTotal) || (order.items || []).reduce((iSum: number, item) => iSum + ((Number(item.qty) || 0) * (Number(item.price) || 0)), 0);
-          return sum + (orderTotal || 0);
-        }, 0) / 1000).toFixed(1)}K`,
+        label: 'KG Sold',
+        value: `${totalWeightSold.toLocaleString()} kg`,
         subtext: 'Monthly sales',
-        icon: IndianRupee,
+        icon: Scale,
         trend: '+12.5%',
         trendUp: true,
       },

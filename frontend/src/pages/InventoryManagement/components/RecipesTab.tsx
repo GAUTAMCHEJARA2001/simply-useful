@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWarehouse } from '@/contexts/WarehouseContext';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
+import { formatDecimal } from '@/utils/format';
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -165,7 +166,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
           const rowData = [
             r.name,
             r.productName || '—',
-            r.outputQuantity
+            formatDecimal(r.outputQuantity)
           ];
           if (isGlobal) {
             rowData.push(

@@ -2342,7 +2342,50 @@ class DealerViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         from api.db_router import get_current_db
         if get_current_db() == 'default':
-            return send_error("Cannot create dealer in global database. Please select a specific warehouse.", 400)
+            from api.models import Warehouse
+            from api.db_router import set_current_db
+            from django.db import connection
+            
+            active_warehouses = list(Warehouse.objects.filter(active=True))
+            if not active_warehouses:
+                return send_error("Cannot create dealer: No active warehouses found.", 400)
+            
+            data = request.data.copy()
+            if _get_company_id(request):
+                data['companyId'] = _get_company_id(request)
+                
+            import uuid
+            if 'id' not in data or not data['id']:
+                data['id'] = 'c' + uuid.uuid4().hex[:23]
+                
+            if 'dealerCode' not in data or not str(data.get('dealerCode', '')).strip():
+                import random
+                import string
+                company_id = _get_company_id(request)
+                attempts = 0
+                while attempts < 100:
+                    rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                    candidate_code = f"DLR-{rand_suffix}"
+                    if not Dealer.objects.using(active_warehouses[0].db_name).filter(dealercode=candidate_code, companyid_id=company_id).exists():
+                        data['dealerCode'] = candidate_code
+                        break
+                    attempts += 1
+
+            orig_db = get_current_db()
+            last_serialized_data = None
+            try:
+                for wh in active_warehouses:
+                    if not wh.db_name: continue
+                    set_current_db(wh.db_name)
+                    connection.set_tenant(wh)
+                    serializer = DealerSerializer(data=data)
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save()
+                    last_serialized_data = serializer.data
+            finally:
+                set_current_db(orig_db)
+                connection.set_schema_to_public()
+            return send_success(last_serialized_data, "Dealer created successfully", 201)
 
         data = request.data.copy()
         if _get_company_id(request):
@@ -2373,6 +2416,49 @@ class DealerViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
+        from api.db_router import get_current_db
+        if get_current_db() == 'default':
+            from api.models import Warehouse
+            from api.db_router import set_current_db
+            from django.db import connection
+            
+            active_warehouses = list(Warehouse.objects.filter(active=True))
+            if not active_warehouses:
+                return send_error("No active warehouses found.", 400)
+                
+            orig_db = get_current_db()
+            pk = self.kwargs.get(self.lookup_field, '')
+            updated_data = None
+            
+            try:
+                for wh in active_warehouses:
+                    if not wh.db_name: continue
+                    set_current_db(wh.db_name)
+                    connection.set_tenant(wh)
+                    try:
+                        instance = Dealer.objects.get(dealercode=pk)
+                    except Dealer.DoesNotExist:
+                        try:
+                            instance = Dealer.objects.get(pk=pk)
+                        except (Dealer.DoesNotExist, ValueError):
+                            continue
+                            
+                    data = request.data.copy()
+                    if _get_company_id(request):
+                        data['companyId'] = _get_company_id(request)
+                        
+                    serializer = DealerSerializer(instance, data=data, partial=partial)
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save()
+                    updated_data = serializer.data
+            finally:
+                set_current_db(orig_db)
+                connection.set_schema_to_public()
+                
+            if updated_data is None:
+                return send_error("Dealer not found in any warehouse.", 404)
+            return send_success(updated_data, "Dealer updated successfully")
+
         instance = self.get_object()
         data = request.data.copy()
         # Preserve company isolation
@@ -2388,6 +2474,41 @@ class DealerViewSet(viewsets.ModelViewSet):
         return self.update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
+        from api.db_router import get_current_db
+        if get_current_db() == 'default':
+            from api.models import Warehouse
+            from api.db_router import set_current_db
+            from django.db import connection
+            
+            active_warehouses = list(Warehouse.objects.filter(active=True))
+            orig_db = get_current_db()
+            pk = self.kwargs.get(self.lookup_field, '')
+            deleted = False
+            
+            try:
+                for wh in active_warehouses:
+                    if not wh.db_name: continue
+                    set_current_db(wh.db_name)
+                    connection.set_tenant(wh)
+                    try:
+                        instance = Dealer.objects.get(dealercode=pk)
+                        instance.delete()
+                        deleted = True
+                    except Dealer.DoesNotExist:
+                        try:
+                            instance = Dealer.objects.get(pk=pk)
+                            instance.delete()
+                            deleted = True
+                        except (Dealer.DoesNotExist, ValueError):
+                            pass
+            finally:
+                set_current_db(orig_db)
+                connection.set_schema_to_public()
+                
+            if not deleted:
+                return send_error("Dealer not found in any warehouse.", 404)
+            return send_success({}, "Dealer deleted successfully")
+
         instance = self.get_object()
         instance.delete()
         return send_success({}, "Dealer deleted successfully")
@@ -2462,7 +2583,37 @@ class DistributorViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         from api.db_router import get_current_db
         if get_current_db() == 'default':
-            return send_error("Cannot create distributor in global database. Please select a specific warehouse.", 400)
+            from api.models import Warehouse
+            from api.db_router import set_current_db
+            from django.db import connection
+            
+            active_warehouses = list(Warehouse.objects.filter(active=True))
+            if not active_warehouses:
+                return send_error("Cannot create distributor: No active warehouses found.", 400)
+            
+            data = request.data.copy()
+            if _get_company_id(request):
+                data['companyId'] = _get_company_id(request)
+                
+            import uuid
+            if 'id' not in data or not data['id']:
+                data['id'] = 'c' + uuid.uuid4().hex[:23]
+
+            orig_db = get_current_db()
+            last_serialized_data = None
+            try:
+                for wh in active_warehouses:
+                    if not wh.db_name: continue
+                    set_current_db(wh.db_name)
+                    connection.set_tenant(wh)
+                    serializer = DistributorSerializer(data=data)
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save()
+                    last_serialized_data = serializer.data
+            finally:
+                set_current_db(orig_db)
+                connection.set_schema_to_public()
+            return send_success(last_serialized_data, "Distributor created successfully", 201)
 
         data = request.data.copy()
         if _get_company_id(request):
@@ -2479,6 +2630,49 @@ class DistributorViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
+        from api.db_router import get_current_db
+        if get_current_db() == 'default':
+            from api.models import Warehouse
+            from api.db_router import set_current_db
+            from django.db import connection
+            
+            active_warehouses = list(Warehouse.objects.filter(active=True))
+            if not active_warehouses:
+                return send_error("No active warehouses found.", 400)
+                
+            orig_db = get_current_db()
+            pk = self.kwargs.get(self.lookup_field, '')
+            updated_data = None
+            
+            try:
+                for wh in active_warehouses:
+                    if not wh.db_name: continue
+                    set_current_db(wh.db_name)
+                    connection.set_tenant(wh)
+                    try:
+                        instance = Distributor.objects.get(distributorname=pk)
+                    except Distributor.DoesNotExist:
+                        try:
+                            instance = Distributor.objects.get(pk=pk)
+                        except (Distributor.DoesNotExist, ValueError):
+                            continue
+                            
+                    data = request.data.copy()
+                    if _get_company_id(request):
+                        data['companyId'] = _get_company_id(request)
+                        
+                    serializer = DistributorSerializer(instance, data=data, partial=partial)
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save()
+                    updated_data = serializer.data
+            finally:
+                set_current_db(orig_db)
+                connection.set_schema_to_public()
+                
+            if updated_data is None:
+                return send_error("Distributor not found in any warehouse.", 404)
+            return send_success(updated_data, "Distributor updated successfully")
+
         instance = self.get_object()
         data = request.data.copy()
         if _get_company_id(request):
@@ -2493,6 +2687,41 @@ class DistributorViewSet(viewsets.ModelViewSet):
         return self.update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
+        from api.db_router import get_current_db
+        if get_current_db() == 'default':
+            from api.models import Warehouse
+            from api.db_router import set_current_db
+            from django.db import connection
+            
+            active_warehouses = list(Warehouse.objects.filter(active=True))
+            orig_db = get_current_db()
+            pk = self.kwargs.get(self.lookup_field, '')
+            deleted = False
+            
+            try:
+                for wh in active_warehouses:
+                    if not wh.db_name: continue
+                    set_current_db(wh.db_name)
+                    connection.set_tenant(wh)
+                    try:
+                        instance = Distributor.objects.get(distributorname=pk)
+                        instance.delete()
+                        deleted = True
+                    except Distributor.DoesNotExist:
+                        try:
+                            instance = Distributor.objects.get(pk=pk)
+                            instance.delete()
+                            deleted = True
+                        except (Distributor.DoesNotExist, ValueError):
+                            pass
+            finally:
+                set_current_db(orig_db)
+                connection.set_schema_to_public()
+                
+            if not deleted:
+                return send_error("Distributor not found in any warehouse.", 404)
+            return send_success({}, "Distributor deleted successfully")
+
         instance = self.get_object()
         instance.delete()
         return send_success({}, "Distributor deleted successfully")
@@ -6251,6 +6480,7 @@ class LeadViewSet(viewsets.ModelViewSet):
     def get_dashboard_metrics(self, request):
         from django.db.models import Sum, Count
         from django.core.cache import cache
+        from api.db_router import get_current_db, set_current_db
         company_id = _get_company_id(self.request)
         
         # Cache Strategy: Check cached aggregates first
@@ -6259,28 +6489,76 @@ class LeadViewSet(viewsets.ModelViewSet):
         if cached_stats:
             return send_success(cached_stats, "CRM dashboard metrics retrieved from cache")
 
-        # Scoped queryset
-        leads = Lead.objects.filter(companyid_id=company_id) if company_id else Lead.objects.all()
+        original_db = get_current_db()
         
-        # Scoped aggregations with explicit ordering to protect aggregate scans
-        metrics = leads.order_by('-updatedat').aggregate(
-            total_leads=Count('id'),
-            won_leads=Count('id', filter=models.Q(status='WON')),
-            pipeline_value=Sum('value', filter=models.Q(status__in=['NEW', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION'])),
-            high_priority=Count('id', filter=models.Q(priority='HIGH'))
-        )
+        total_leads = 0
+        won_leads = 0
+        pipeline_value = 0.0
+        high_priority = 0
+        overdue_followups = 0
         
-        # Scoped, optimized query for overdue follow-ups count using select_related
-        overdue_followups = LeadFollowUp.objects.select_related('lead').filter(
-            lead__companyid_id=company_id,
-            next_followup_date__lt=timezone.now()
-        ).count() if company_id else LeadFollowUp.objects.select_related('lead').filter(next_followup_date__lt=timezone.now()).count()
-        
+        try:
+            if original_db == 'default':
+                # Global aggregation: Lead tables exist in tenant schemas
+                for wh in Warehouse.objects.filter(active=True):
+                    if not wh.db_name:
+                        continue
+                    set_current_db(wh.db_name)
+                    
+                    leads = Lead.objects.using(wh.db_name).filter(is_deleted=False)
+                    if company_id:
+                        leads = leads.filter(companyid_id=company_id)
+                        
+                    metrics = leads.aggregate(
+                        total_leads=Count('id'),
+                        won_leads=Count('id', filter=models.Q(status='WON')),
+                        pipeline_value=Sum('value', filter=models.Q(status__in=['NEW', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION'])),
+                        high_priority=Count('id', filter=models.Q(priority='HIGH'))
+                    )
+                    
+                    total_leads += metrics['total_leads'] or 0
+                    won_leads += metrics['won_leads'] or 0
+                    pipeline_value += float(metrics['pipeline_value'] or 0.0)
+                    high_priority += metrics['high_priority'] or 0
+                    
+                    overdue = LeadFollowUp.objects.using(wh.db_name).select_related('lead').filter(
+                        next_followup_date__lt=timezone.now()
+                    )
+                    if company_id:
+                        overdue = overdue.filter(lead__companyid_id=company_id)
+                    overdue_followups += overdue.count()
+            else:
+                # Local/Single schema aggregation
+                leads = Lead.objects.using(original_db).filter(is_deleted=False)
+                if company_id:
+                    leads = leads.filter(companyid_id=company_id)
+                    
+                metrics = leads.aggregate(
+                    total_leads=Count('id'),
+                    won_leads=Count('id', filter=models.Q(status='WON')),
+                    pipeline_value=Sum('value', filter=models.Q(status__in=['NEW', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION'])),
+                    high_priority=Count('id', filter=models.Q(priority='HIGH'))
+                )
+                
+                total_leads = metrics['total_leads'] or 0
+                won_leads = metrics['won_leads'] or 0
+                pipeline_value = float(metrics['pipeline_value'] or 0.0)
+                high_priority = metrics['high_priority'] or 0
+                
+                overdue = LeadFollowUp.objects.using(original_db).select_related('lead').filter(
+                    next_followup_date__lt=timezone.now()
+                )
+                if company_id:
+                    overdue = overdue.filter(lead__companyid_id=company_id)
+                overdue_followups = overdue.count()
+        finally:
+            set_current_db(original_db)
+            
         stats = {
-            "totalLeads": metrics['total_leads'] or 0,
-            "wonLeads": metrics['won_leads'] or 0,
-            "pipelineValue": float(metrics['pipeline_value'] or 0.0),
-            "highPriority": metrics['high_priority'] or 0,
+            "totalLeads": total_leads,
+            "wonLeads": won_leads,
+            "pipelineValue": pipeline_value,
+            "highPriority": high_priority,
             "overdueFollowups": overdue_followups
         }
         

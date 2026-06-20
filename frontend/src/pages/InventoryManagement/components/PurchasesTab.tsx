@@ -8,7 +8,7 @@ import { PurchaseModal } from '../modals/PurchaseModal';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
 
-const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
+const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 export const PurchasesTab: React.FC = () => {
   const { data: purchases = [], isLoading, error, refetch } = usePurchases();
@@ -80,7 +80,7 @@ export const PurchasesTab: React.FC = () => {
           rows={purchases.map((p: any) => [
             p.supplierName || p.supplier?.name || '—', 
             (p.items || []).map((it: any) => it.productName || it.product_name || '—').join(', ') || '—',
-            (p.items || []).map((it: any) => `${Number(it.qty || it.quantity || 0).toLocaleString('en-IN')}`).join(', ') || '—',
+            (p.items || []).map((it: any) => `${Number(it.qty || it.quantity || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`).join(', ') || '—',
             p.challanNumber || '—', 
             (p.vehicleNumber || p.vehicle_number || '—').toUpperCase(), 
             Currency(p.totalTax || 0), 

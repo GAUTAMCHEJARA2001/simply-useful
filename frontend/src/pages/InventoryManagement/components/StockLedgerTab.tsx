@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { SafeDataView } from '@/components/SafeDataView';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatDecimal } from '@/utils/format';
 
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
@@ -152,15 +153,15 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
           rows={filteredStock.map(s => [
             s.productName, `${s.sku}-${s.warehouseName || 'Global'}`, s.categoryName || '—', s.unit?.name || (typeof s.unit === 'string' ? s.unit : '') || '—',
             <span className="text-xs text-muted-foreground">{s.warehouseName || 'Global'}</span>,
-            <span className="text-muted-foreground">{s.openingStock}</span>,
-            <span className="text-blue-600">{s.production}</span>,
-            <span className="text-red-400">{s.consumed || 0}</span>,
-            <span className="text-green-600">{s.purchase}</span>,
-            <span className="text-orange-500">{s.sales}</span>,
-            <span className="text-purple-600">{s.salesReturn}</span>,
-            <span className="text-pink-600">{s.purchaseReturn || 0}</span>,
-            <span className="text-gray-500">{s.adjustment || 0}</span>,
-            <span className={`font-medium ${parseFloat(s.currentStock) <= parseFloat(s.minimumStock) ? 'text-red-500 font-bold' : ''}`}>{s.currentStock}</span>,
+            <span className="text-muted-foreground">{formatDecimal(s.openingStock)}</span>,
+            <span className="text-blue-600">{formatDecimal(s.production)}</span>,
+            <span className="text-red-400">{formatDecimal(s.consumed || 0)}</span>,
+            <span className="text-green-600">{formatDecimal(s.purchase)}</span>,
+            <span className="text-orange-500">{formatDecimal(s.sales)}</span>,
+            <span className="text-purple-600">{formatDecimal(s.salesReturn)}</span>,
+            <span className="text-pink-600">{formatDecimal(s.purchaseReturn || 0)}</span>,
+            <span className="text-gray-500">{formatDecimal(s.adjustment || 0)}</span>,
+            <span className={`font-medium ${parseFloat(s.currentStock) <= parseFloat(s.minimumStock) ? 'text-red-500 font-bold' : ''}`}>{formatDecimal(s.currentStock)}</span>,
             <Button size="sm" variant="link" onClick={() => setSelectedProduct(s)}>View Ledger</Button>
           ])}
         />
@@ -172,10 +173,10 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
         <Modal title={`Stock Ledger: ${selectedProduct.productName}`} onClose={() => setSelectedProduct(null)}>
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-4 gap-3">
-              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Opening Balance</p><p className="text-xl font-bold">{summary.opening}</p></CardContent></Card>
-              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total Inward (Credit)</p><p className="text-xl font-bold text-green-600">+{totalInward}</p></CardContent></Card>
-              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total Outward (Debit)</p><p className="text-xl font-bold text-red-600">-{totalOutward}</p></CardContent></Card>
-              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Available Stock</p><p className="text-xl font-bold text-blue-600">{summary.current}</p></CardContent></Card>
+              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Opening Balance</p><p className="text-xl font-bold">{formatDecimal(summary.opening)}</p></CardContent></Card>
+              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total Inward (Credit)</p><p className="text-xl font-bold text-green-600">+{formatDecimal(totalInward)}</p></CardContent></Card>
+              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Total Outward (Debit)</p><p className="text-xl font-bold text-red-600">-{formatDecimal(totalOutward)}</p></CardContent></Card>
+              <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Available Stock</p><p className="text-xl font-bold text-blue-600">{formatDecimal(summary.current)}</p></CardContent></Card>
             </div>
 
             {/* Popup Filters */}
@@ -260,9 +261,9 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                           <span className="font-medium group-hover:text-primary transition-colors">{l.transactionType}</span>
                         </td>
                         <td className="p-2 text-muted-foreground font-mono">{l.referenceId || '—'}</td>
-                        <td className="p-2 text-right text-red-500">{l.debit > 0 ? l.debit : '—'}</td>
-                        <td className="p-2 text-right text-green-600">{l.credit > 0 ? `+${l.credit}` : '—'}</td>
-                        <td className="p-2 text-right font-semibold">{l.balance}</td>
+                        <td className="p-2 text-right text-red-500">{l.debit > 0 ? formatDecimal(l.debit) : '—'}</td>
+                        <td className="p-2 text-right text-green-600">{l.credit > 0 ? `+${formatDecimal(l.credit)}` : '—'}</td>
+                        <td className="p-2 text-right font-semibold">{formatDecimal(l.balance)}</td>
                       </tr>
                     ))}
                     {ledger.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">No transactions found</td></tr>}
