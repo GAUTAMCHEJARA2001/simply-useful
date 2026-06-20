@@ -13,6 +13,7 @@ import Login from "./features/auth/Login";
 import Signup from "./features/auth/Signup";
 import AppLayout from "./components/AppLayout";
 import { SpeedInsights } from "@vercel/speed-insights/react";
+import { Analytics } from "@vercel/analytics/react";
 
 import SalesDashboard from "./pages/SalesDashboard";
 import OrderPage from "./pages/OrderPage";
@@ -146,6 +147,7 @@ const App = () => {
           <Toaster />
           <Sonner />
           <SpeedInsights />
+          <Analytics />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <AuthProvider>
               <WarehouseProvider>
