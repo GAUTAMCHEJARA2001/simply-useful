@@ -7,16 +7,21 @@ import { PDFFooter } from '../components/PDFFooter';
 import { registerPDFFonts } from '../fonts/registerFonts';
 
 interface BaseLayoutProps {
-  themePreset: ThemePreset;
-  densityMode: PrintDensity;
+  themePreset?: ThemePreset;
+  densityMode?: PrintDensity;
   watermarkText?: WatermarkType;
   showFooter?: boolean;
   children: React.ReactNode;
+  title?: string;
+  docNumber?: string;
+  date?: string;
+  reference?: string;
+  companyInfo?: any;
 }
 
 export const BaseLayout: React.FC<BaseLayoutProps> = React.memo(({
-  themePreset,
-  densityMode,
+  themePreset = 'modern',
+  densityMode = 'comfortable',
   watermarkText = null,
   showFooter = true,
   children

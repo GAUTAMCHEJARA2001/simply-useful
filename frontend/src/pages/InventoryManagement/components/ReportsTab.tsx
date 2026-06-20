@@ -140,7 +140,7 @@ export const ReportsTab: React.FC = () => {
           {analyticsView === 'kpi' && <DecisionIntelligenceTab />}
           {analyticsView === 'alerts' && <ExceptionAlertsTab />}
           {analyticsView === 'forecast' && <PredictiveForecastingTab />}
-          {analyticsView === 'cfo-liquidity' || analyticsView === 'liquidity' ? <CfoLiquidityTab /> : null}
+          {analyticsView === 'liquidity' ? <CfoLiquidityTab /> : null}
           {analyticsView === 'bottlenecks' && <ProcessBottlenecksTab />}
           {analyticsView === 'quality' && <DataQualityTab />}
         </div>

@@ -108,7 +108,7 @@ export const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ isOpen, onCl
   };
 
   return (
-    <Modal isOpen={isOpen} title={returnOrder?.id ? 'Edit Return Order' : 'New Return Order'} onClose={onClose} className="max-w-4xl">
+    <Modal isOpen={isOpen} title={returnOrder?.id ? 'Edit Return Order' : 'New Return Order'} onClose={onClose} maxWidth="max-w-4xl">
       <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
         
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-muted/20 rounded-xl border border-border/40">

@@ -29,9 +29,9 @@ export const PredictiveForecastingTab: React.FC = () => {
     staleTime: 45000,
   });
 
-  const forecasts = data?.demand_forecasts || [];
-  const stockoutRisks = data?.stockout_risks || [];
-  const crmPipeline = data?.crm_weighted_pipeline || { total_raw_value: 0, total_weighted_value: 0, stages: [] };
+  const forecasts = (data as any)?.demand_forecasts || [];
+  const stockoutRisks = (data as any)?.stockout_risks || [];
+  const crmPipeline = (data as any)?.crm_weighted_pipeline || { total_raw_value: 0, total_weighted_value: 0, stages: [] };
 
   // Group forecasts by SKU to build nice sequential Recharts trend lines
   const skuGroups: Record<string, { date: string, quantity: number }[]> = {};
@@ -46,8 +46,8 @@ export const PredictiveForecastingTab: React.FC = () => {
   });
 
   // Re-adjust Recharts structure for a multi-SKU chart
-  const dates = [...new Set(forecasts.map((f: any) => f.forecast_date))].sort();
-  const trendData = dates.map(d => {
+  const dates: any[] = [...new Set(forecasts.map((f: any) => f.forecast_date))].sort();
+  const trendData = dates.map((d: any) => {
     const label = new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     const row: any = { date: label };
     forecasts.filter((f: any) => f.forecast_date === d).forEach((f: any) => {
@@ -56,7 +56,7 @@ export const PredictiveForecastingTab: React.FC = () => {
     return row;
   });
 
-  const skus = [...new Set(forecasts.map((f: any) => f.sku))];
+  const skus: any[] = [...new Set(forecasts.map((f: any) => f.sku))];
   const chartColors = ['#3b82f6', '#10b981', '#6366f1', '#f59e0b', '#ec4899', '#8b5cf6'];
 
   return (

@@ -22,6 +22,7 @@ export interface Lead {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  source?: string;
 }
 
 interface PipelineBoardProps {
@@ -123,7 +124,7 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({ leads, onMoveLead, onSele
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ type: 'spring', damping: 25, stiffness: 250 }}
                     draggable={canManage && stage.id !== 'WON'}
-                    onDragStart={e => handleDragStart(e, lead.id)}
+                    onDragStart={(e: any) => handleDragStart(e, lead.id)}
                     className={`cursor-pointer group relative rounded-lg border border-border/60 bg-background/90 hover:bg-background shadow-sm hover:shadow-md transition-all ${
                       canManage && stage.id !== 'WON' ? 'active:cursor-grabbing hover:border-primary/40' : ''
                     }`}
@@ -157,8 +158,8 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({ leads, onMoveLead, onSele
                       {/* Contacts footer */}
                       <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[10px] text-muted-foreground gap-2">
                         <div className="flex gap-2">
-                          {lead.phone && <Phone className="w-3 h-3 hover:text-foreground" title={lead.phone} />}
-                          {lead.email && <Mail className="w-3 h-3 hover:text-foreground" title={lead.email} />}
+                          {lead.phone && <span title={lead.phone}><Phone className="w-3 h-3 hover:text-foreground" /></span>}
+                          {lead.email && <span title={lead.email}><Mail className="w-3 h-3 hover:text-foreground" /></span>}
                         </div>
                         {lead.assignedTo && (
                           <span className="font-medium bg-muted/60 px-1.5 py-0.5 rounded text-foreground/80 truncate max-w-[80px]" title={lead.assignedTo}>

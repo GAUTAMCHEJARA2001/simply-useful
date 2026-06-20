@@ -59,8 +59,8 @@ export function usePartnerReports({
           id: d.id || `dist_${idx}`,
           name: d.distributorName || 'Unknown Distributor',
           type: 'Distributor',
-          city: d.city || '—',
-          state: d.state || '—',
+          city: (d as any).city || '—',
+          state: (d as any).state || (d as any).area || '—',
           totalOrders: 0,
           totalAmount: 0,
           lastOrderDate: '—'

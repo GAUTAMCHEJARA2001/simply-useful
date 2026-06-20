@@ -13,7 +13,8 @@ interface ReturnsTabProps {
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
 export const ReturnsTab: React.FC<ReturnsTabProps> = ({ returnType }) => {
-  const { data: allReturns = [], isLoading, error, refetch } = useReturns();
+  const { data: returns = [], isLoading, error, refetch } = useReturns();
+  const [selectedReturn, setSelectedReturn] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleOpenModal = (returnOrder: any = null) => {

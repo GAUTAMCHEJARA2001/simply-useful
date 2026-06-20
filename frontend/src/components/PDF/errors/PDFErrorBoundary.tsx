@@ -29,8 +29,8 @@ export class PDFErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
-      if (this.fallbackDocument) {
-        return this.fallbackDocument;
+      if (this.props.fallbackDocument) {
+        return this.props.fallbackDocument;
       }
 
       // Generate a clean minimal fallback PDF so user can still print

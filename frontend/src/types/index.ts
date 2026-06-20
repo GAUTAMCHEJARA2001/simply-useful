@@ -77,7 +77,7 @@ export interface Product {
   productCode: string;
   sku?: string;
   product_code?: string;
-  name: string;
+  name?: string;
   productName?: string;
   product_name?: string;
   category?: string | { id: number | string; name: string } | null;
@@ -163,6 +163,9 @@ export interface Visit {
   verifiedBy?: string;
   verifiedAt?: string;
   visit_status?: string;
+  verified_by?: string;
+  verified_at?: string;
+  hr_remark?: string;
 }
 
 export interface Expense {

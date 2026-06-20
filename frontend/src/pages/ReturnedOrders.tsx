@@ -70,7 +70,7 @@ const ReturnedOrders: React.FC = () => {
               formatDate(o.date),
               o.party_name || o.partyName || '—',
               formatDate(extractDispatchDate(o.narration, o.date || o.createdAt)),
-              formatDate(extractReturnDate(o.narration, o.updatedAt || o.date || o.createdAt)),
+              formatDate(extractReturnDate(o.narration, (o as any).updatedAt || o.date || o.createdAt)),
               <Button key="btn" size="sm" variant="outline" onClick={() => setSelectedOrder(o)}>View Details</Button>
             ])}
           />
@@ -109,7 +109,7 @@ const ReturnedOrders: React.FC = () => {
                 </div>
                 <div className="bg-muted/30 p-3 rounded-lg border border-border flex flex-col justify-end">
                   <p className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1"><Calendar className="w-3 h-3"/> Return Date</p>
-                  <p className="text-sm font-bold text-red-600 mt-0.5">{formatDate(extractReturnDate(selectedOrder.narration, selectedOrder.updatedAt || selectedOrder.date || selectedOrder.createdAt))}</p>
+                  <p className="text-sm font-bold text-red-600 mt-0.5">{formatDate(extractReturnDate(selectedOrder.narration, (selectedOrder as any).updatedAt || selectedOrder.date || selectedOrder.createdAt))}</p>
                 </div>
               </div>
 

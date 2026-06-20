@@ -53,7 +53,7 @@ export function useInventoryReports({
       const matchedProd = products.find(
         p => p.sku === sku || p.productName === prodName || p.productCode === sku
       );
-      const costPrice = matchedProd?.costPrice || (matchedProd?.rate ? matchedProd.rate * 0.7 : 0);
+      const costPrice = (matchedProd as any)?.costPrice || (matchedProd?.rate ? matchedProd.rate * 0.7 : 0);
       const rate = matchedProd?.rate || 0;
       const valuation = currentStock * costPrice;
 
@@ -85,8 +85,8 @@ export function useInventoryReports({
 
     if (selectedProductIds && selectedProductIds.length > 0) {
       const prods = selectedProductIds.map(id => products.find(p => p.productCode === id)).filter(Boolean) as Product[];
-      const pNamesLower = prods.map(p => p.productName.toLowerCase());
-      const skusLower = prods.map(p => p.sku.toLowerCase());
+      const pNamesLower = prods.map(p => (p.productName || p.name || '').toLowerCase());
+      const skusLower = prods.map(p => (p.sku || p.productCode || '').toLowerCase());
 
       filtered = filtered.filter(item => {
         return pNamesLower.some(name => item.product.toLowerCase().includes(name)) || 

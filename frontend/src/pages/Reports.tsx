@@ -350,12 +350,12 @@ const Reports: React.FC = () => {
 
   // Apply sorting
   const finalSortedReportRows = useMemo(() => {
-    return sortRows(filteredReportRows, sortBy, sortOrder);
+    return sortRows(filteredReportRows, sortBy as any, sortOrder);
   }, [filteredReportRows, sortBy, sortOrder]);
 
   // 7. Memoized Totals
   const totalsAggregates = useMemo(() => {
-    const rows = finalSortedReportRows;
+    const rows = finalSortedReportRows as any[];
     if (rows.length === 0) return undefined;
 
     switch (activeDomain) {

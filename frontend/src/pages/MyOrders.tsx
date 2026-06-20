@@ -261,7 +261,7 @@ const MyOrders: React.FC = () => {
                   
                   <div className="text-xs text-muted-foreground mt-3 bg-secondary/35 rounded-lg p-2.5 border border-border/20">
                     <span className="font-medium text-foreground">{orderItems.length} item(s):</span>{' '}
-                    {orderItems.map(i => {
+                    {orderItems.map((i: any) => {
                       const prodId = typeof i.product === 'object' ? i.product?.id : (i.productId || i.product);
                       const prod = (products || []).find(p => 
                         p.id === prodId || 

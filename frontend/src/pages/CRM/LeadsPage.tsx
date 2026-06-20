@@ -62,7 +62,7 @@ const LeadsPage: React.FC = () => {
   const [deleteTargetId, setDeleteTargetId] = useState('');
 
   const salesUsers = users.filter(u => (u.role === 'SALES' || u.role === 'SALES_EXECUTIVE') && u.active);
-  const canManageLeads = can('manage_customers') || user?.role === 'SUPERADMIN' || user?.role === 'ADMIN' || user?.role === 'SALES' || user?.role === 'MANAGER';
+  const canManageLeads = can('manage_customers') || user?.role === 'SUPERADMIN' || user?.role === 'ADMIN' || user?.role === 'SALES' || (user?.role as string) === 'MANAGER';
   
   // Sales Officers always own their leads — they cannot reassign to others
   const SALES_ONLY_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER'];
@@ -316,7 +316,7 @@ const LeadsPage: React.FC = () => {
                 </Select>
               )}
 
-              {(user?.role === 'ADMIN' || user?.role === 'SUPERADMIN' || user?.role === 'MANAGER') && (
+              {(user?.role === 'ADMIN' || user?.role === 'SUPERADMIN' || (user?.role as string) === 'MANAGER') && (
                 <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
                   <SelectTrigger className="w-[150px] bg-background">
                     <SelectValue placeholder="Assigned Exec" />

@@ -193,7 +193,7 @@ const OrderPage: React.FC = () => {
   const groupedProducts = useMemo(() => {
     const groups: Record<string, typeof products> = {};
     products.filter(p => (p.productName || p.name)).forEach(p => {
-      const cat = p.categoryRef?.name || p.categoryName || p.category?.name || p.category || 'Other';
+      const cat = p.categoryRef?.name || p.categoryName || (p.category && typeof p.category === 'object' ? p.category.name : p.category) || 'Other';
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(p);
     });

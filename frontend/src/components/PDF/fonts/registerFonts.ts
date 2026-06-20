@@ -1,4 +1,5 @@
-import { Font } from '@react-pdf/renderer';
+import * as ReactPDF from '@react-pdf/renderer';
+const Font = (ReactPDF as any).Font;
 
 let registered = false;
 

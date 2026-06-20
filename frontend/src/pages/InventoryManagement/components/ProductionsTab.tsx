@@ -66,7 +66,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
         setRecipes(rList);
         
         if (wList.length > 0) {
-          setForm(prev => ({ ...prev, warehouseId: wList[0].id }));
+          setForm((prev: any) => ({ ...prev, warehouseId: wList[0].id }));
         }
       } catch (e) {
         console.error("Failed to load master lists for production", e);
