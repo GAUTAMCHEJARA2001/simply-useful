@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { WarehouseProvider } from "@/contexts/WarehouseContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { getRoleDashboard } from "@/contexts/AuthContext";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import React from "react";
 
 import Login from "./features/auth/Login";
@@ -144,6 +145,7 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <SpeedInsights />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <AuthProvider>
               <WarehouseProvider>
