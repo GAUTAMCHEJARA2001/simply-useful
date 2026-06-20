@@ -65,7 +65,7 @@ interface DataContextType {
   warehouses: Warehouse[];
   loading: boolean;
   error: string | null;
-  refreshAll: () => Promise<void>;
+  refreshAll: (silent?: boolean) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -155,14 +155,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     reject_reason: e.rejectReason || e.reject_reason,
   });
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async (silent = false) => {
     const token = localStorage.getItem('token');
     if (!token) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
 
@@ -213,7 +215,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('🔥 DataContext Load Failure:', err);
       setError('Failed to sync data with server. Check your connection.');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -221,7 +225,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) {
       refreshAll();
       // Auto-refresh every 30 seconds so new orders appear in approval queue
-      const interval = setInterval(refreshAll, 30_000);
+      const interval = setInterval(() => refreshAll(true), 30_000);
       return () => clearInterval(interval);
     } else {
       setLoading(false);
