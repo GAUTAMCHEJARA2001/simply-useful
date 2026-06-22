@@ -1,9 +1,22 @@
-from django.test import TestCase
+from django_tenants.test.cases import TenantTestCase
 from api.models import User, Brand, Category, Product, Userproductaccess
 from core.models import Company
 from api.views import get_allowed_product_ids_for_user
 
-class HealthCheckTest(TestCase):
+class TenantAwareTestCase(TenantTestCase):
+    @classmethod
+    def setup_tenant(cls, tenant):
+        # Create a company on the public database
+        company, _ = Company.objects.get_or_create(
+            id="test-company",
+            defaults={"name": "Test Company", "active": True, "stockmethod": "FIFO"}
+        )
+        tenant.name = "Test Warehouse"
+        tenant.active = True
+        tenant.companyid = company
+        tenant.db_name = cls.get_test_schema_name()
+
+class HealthCheckTest(TenantAwareTestCase):
     def test_health_check_passes(self):
         """
         A basic health check to ensure the Django testing framework runs
@@ -11,10 +24,11 @@ class HealthCheckTest(TestCase):
         """
         self.assertTrue(True)
 
-class UserAssignmentTests(TestCase):
+class UserAssignmentTests(TenantAwareTestCase):
     def setUp(self):
-        # Create a company first
-        self.company = Company.objects.create(id="test-company", name="Test Company", active=True)
+        super().setUp()
+        # Retrieve the company that was created in setup_tenant
+        self.company = Company.objects.get(id="test-company")
         
         # Create a user
         self.user = User.objects.create(
@@ -27,6 +41,7 @@ class UserAssignmentTests(TestCase):
         )
         
         # Create brands (omit explicit string IDs, let AutoField handle it)
+        # Note: Brand is a tenant-specific model in api.models, so it will be created in the tenant schema.
         self.brand_a = Brand.objects.create(name="Brand A", active=True, companyid=self.company)
         self.brand_b = Brand.objects.create(name="Brand B", active=True, companyid=self.company)
         
