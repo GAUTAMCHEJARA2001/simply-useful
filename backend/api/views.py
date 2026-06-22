@@ -493,6 +493,65 @@ def user_assignments(request, pk):
         return send_success(data, "User assignments updated successfully")
 
 
+def get_allowed_product_ids_for_user(db_name, user_id):
+    from api.models import Userproductaccess, Product, Category
+    from django.db.models import Q
+
+    # Fetch user assignments for this database context
+    assignments = Userproductaccess.objects.using(db_name).filter(userid_id=user_id)
+    if not assignments.exists():
+        return None  # None indicates unrestricted (no assignments exist)
+
+    b_ids = list(assignments.filter(brandid__isnull=False).values_list('brandid_id', flat=True))
+    c_ids = list(assignments.filter(categoryid__isnull=False).values_list('categoryid_id', flat=True))
+    p_ids = list(assignments.filter(productid__isnull=False).values_list('productid_id', flat=True))
+
+    # Resolve all descendant category IDs (categories and subcategories)
+    all_cat_ids = set()
+    if c_ids:
+        all_cats = list(Category.objects.using(db_name).all())
+        parent_map = {}
+        for cat in all_cats:
+            if cat.parentid_id:
+                parent_map.setdefault(cat.parentid_id, []).append(cat.id)
+
+        all_cat_ids.update(c_ids)
+        queue = list(c_ids)
+        while queue:
+            curr = queue.pop(0)
+            for child in parent_map.get(curr, []):
+                if child not in all_cat_ids:
+                    all_cat_ids.add(child)
+                    queue.append(child)
+
+    # Build Q expressions according to the logic table
+    q_expr = Q()
+    has_filter = False
+
+    if b_ids and all_cat_ids:
+        # Brand + Category: Selected categories/subcategories within the selected brand(s)
+        q_expr |= Q(brandid_id__in=b_ids, categoryid_id__in=all_cat_ids)
+        has_filter = True
+    elif b_ids:
+        # Brand only: All categories and products under the selected brand(s)
+        q_expr |= Q(brandid_id__in=b_ids)
+        has_filter = True
+    elif all_cat_ids:
+        # Category only: Selected categories/subcategories and products under them
+        q_expr |= Q(categoryid_id__in=all_cat_ids)
+        has_filter = True
+
+    if p_ids:
+        # Individually selected products are always allowed
+        q_expr |= Q(id__in=p_ids)
+        has_filter = True
+
+    if not has_filter:
+        return []
+
+    return list(Product.objects.using(db_name).filter(q_expr).values_list('id', flat=True))
+
+
 # ----------------------------------------------------
 # 2. INVENTORY & PRODUCTS
 # ----------------------------------------------------
@@ -530,11 +589,11 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Filter by explicit user product assignments if they exist
         if self.request.user and not skip_assignment_filter:
             user_id = self.request.user.id
-            from api.models import Userproductaccess
-            has_assignments = Userproductaccess.objects.filter(userid_id=user_id).exists()
-            if has_assignments:
-                product_ids = list(Userproductaccess.objects.filter(userid_id=user_id, productid__isnull=False).values_list('productid_id', flat=True))
-                queryset = queryset.filter(id__in=product_ids)
+            from api.db_router import get_current_db
+            db_name = get_current_db()
+            allowed_ids = get_allowed_product_ids_for_user(db_name, user_id)
+            if allowed_ids is not None:
+                queryset = queryset.filter(id__in=allowed_ids)
 
         return queryset
 
@@ -559,8 +618,9 @@ class ProductViewSet(viewsets.ModelViewSet):
                         wh_has_assignments = Userproductaccess.objects.using(wh_check.db_name).filter(userid_id=user_id).exists()
                         if wh_has_assignments:
                             has_any_assignments = True
-                            wh_product_ids = Userproductaccess.objects.using(wh_check.db_name).filter(userid_id=user_id, productid__isnull=False).values_list('productid_id', flat=True)
-                            allowed_product_ids.update(wh_product_ids)
+                            wh_allowed_ids = get_allowed_product_ids_for_user(wh_check.db_name, user_id)
+                            if wh_allowed_ids:
+                                allowed_product_ids.update(wh_allowed_ids)
                     except Exception:
                         pass
                 if not has_any_assignments:

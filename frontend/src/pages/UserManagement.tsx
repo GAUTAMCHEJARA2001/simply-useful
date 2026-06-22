@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Edit, Trash2, Shield, Lock, Key, Users, Settings2 } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Shield, Lock, Key, Users, Settings2, Tag, Layers, Package, Warehouse } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import apiService from '@/api/apiService';
@@ -61,10 +61,14 @@ const UserManagement: React.FC = () => {
   const [allProducts, setAllProducts] = useState<any[]>([]);
   const [userAssignments, setUserAssignments] = useState<{ brands: any[], categories: any[], warehouses: any[], products: any[] }>({ brands: [], categories: [], warehouses: [], products: [] });
   const [loadingAssignments, setLoadingAssignments] = useState(false);
+
+  // Filter and Search States
   const [selectedParentCat, setSelectedParentCat] = useState<number | null>(null);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<any>(null);
   const [selectedSubCatFilter, setSelectedSubCatFilter] = useState<any>(null);
   const [searchProd, setSearchProd] = useState('');
+  const [searchBrand, setSearchBrand] = useState('');
+  const [searchCat, setSearchCat] = useState('');
 
   const openAssignments = async (u: AppUserRecord) => {
     setAssignUser(u);
@@ -74,6 +78,8 @@ const UserManagement: React.FC = () => {
     setSelectedBrandFilter(null);
     setSelectedSubCatFilter(null);
     setSearchProd('');
+    setSearchBrand('');
+    setSearchCat('');
     setUserAssignments({ brands: [], categories: [], warehouses: [], products: [] });
     try {
       if (allBrands.length === 0) {
@@ -98,8 +104,8 @@ const UserManagement: React.FC = () => {
     if (!assignUser) return;
     try {
       await apiService.users.saveAssignments(assignUser.id, {
-        brands: [],
-        categories: [],
+        brands: userAssignments.brands || [],
+        categories: userAssignments.categories || [],
         warehouses: userAssignments.warehouses || [],
         products: userAssignments.products || []
       });
@@ -108,6 +114,122 @@ const UserManagement: React.FC = () => {
     } catch (e: any) { 
       toast({ title: 'Error', description: e.message, variant: 'destructive' }); 
     }
+  };
+
+  // Select All Handlers
+  const handleSelectAllBrands = (filteredBrandsList: any[]) => {
+    const filteredIds = filteredBrandsList.map(b => b.id);
+    const areAllSelected = filteredIds.every(id => userAssignments.brands?.includes(id));
+    
+    setUserAssignments(f => {
+      const existing = f.brands || [];
+      const updated = areAllSelected
+        ? existing.filter(id => !filteredIds.includes(id))
+        : [...existing, ...filteredIds.filter(id => !existing.includes(id))];
+      return { ...f, brands: updated };
+    });
+  };
+
+  const handleSelectAllCategories = (filteredMainCats: any[]) => {
+    const mainCatIds = filteredMainCats.map(c => c.id);
+    const areAllMainSelected = mainCatIds.every(id => userAssignments.categories?.includes(id));
+
+    setUserAssignments(f => {
+      let newCats = [...(f.categories || [])];
+      if (areAllMainSelected) {
+        // Deselect filtered main categories and all their subcategories
+        newCats = newCats.filter(id => !mainCatIds.includes(id));
+        mainCatIds.forEach(parentId => {
+          const subCatIds = allCategories.filter(c => (c.parentId ?? c.parent_id) === parentId).map(c => c.id);
+          newCats = newCats.filter(id => !subCatIds.includes(id));
+        });
+      } else {
+        // Select all filtered main categories and their subcategories
+        filteredMainCats.forEach(mainCat => {
+          if (!newCats.includes(mainCat.id)) newCats.push(mainCat.id);
+          const subCatIds = allCategories.filter(c => (c.parentId ?? c.parent_id) === mainCat.id).map(c => c.id);
+          subCatIds.forEach(subId => {
+            if (!newCats.includes(subId)) newCats.push(subId);
+          });
+        });
+      }
+      return { ...f, categories: newCats };
+    });
+  };
+
+  const handleSelectAllSubcategories = (filteredMainCats: any[]) => {
+    const allSubsOfFiltered = allCategories.filter(c => {
+      const parentId = c.parentId ?? c.parent_id;
+      return parentId && filteredMainCats.some(mc => mc.id === parentId);
+    });
+    const subCatIds = allSubsOfFiltered.map(c => c.id);
+    const areAllSubSelected = subCatIds.every(id => userAssignments.categories?.includes(id));
+
+    setUserAssignments(f => {
+      let newCats = [...(f.categories || [])];
+      if (areAllSubSelected) {
+        newCats = newCats.filter(id => !subCatIds.includes(id));
+      } else {
+        subCatIds.forEach(id => {
+          if (!newCats.includes(id)) newCats.push(id);
+        });
+      }
+      return { ...f, categories: newCats };
+    });
+  };
+
+  const handleSelectAllProducts = (filteredProds: any[]) => {
+    const filteredIds = filteredProds.map(p => p.id);
+    const areAllSelected = filteredIds.every(id => userAssignments.products?.includes(id));
+
+    setUserAssignments(f => {
+      const existing = f.products || [];
+      const updated = areAllSelected
+        ? existing.filter(id => !filteredIds.includes(id))
+        : [...existing, ...filteredIds.filter(id => !existing.includes(id))];
+      return { ...f, products: updated };
+    });
+  };
+
+  const handleCategoryToggle = (catId: any, isParent: boolean) => {
+    setUserAssignments(f => {
+      const isChecked = f.categories?.includes(catId);
+      let newCats = [...(f.categories || [])];
+
+      if (isChecked) {
+        newCats = newCats.filter(id => id !== catId);
+        if (isParent) {
+          const subCatIds = allCategories.filter(c => (c.parentId ?? c.parent_id) === catId).map(c => c.id);
+          newCats = newCats.filter(id => !subCatIds.includes(id));
+        } else {
+          // If a subcategory is unchecked, the parent category cannot be fully selected
+          const subCatObj = allCategories.find(c => c.id === catId);
+          const parentId = subCatObj ? (subCatObj.parentId ?? subCatObj.parent_id) : null;
+          if (parentId) {
+            newCats = newCats.filter(id => id !== parentId);
+          }
+        }
+      } else {
+        newCats.push(catId);
+        if (isParent) {
+          const subCatIds = allCategories.filter(c => (c.parentId ?? c.parent_id) === catId).map(c => c.id);
+          subCatIds.forEach(subId => {
+            if (!newCats.includes(subId)) newCats.push(subId);
+          });
+        } else {
+          const subCatObj = allCategories.find(c => c.id === catId);
+          const parentId = subCatObj ? (subCatObj.parentId ?? subCatObj.parent_id) : null;
+          if (parentId) {
+            const siblings = allCategories.filter(c => (c.parentId ?? c.parent_id) === parentId).map(c => c.id);
+            const allSiblingsChecked = siblings.every(subId => subId === catId || newCats.includes(subId));
+            if (allSiblingsChecked && !newCats.includes(parentId)) {
+              newCats.push(parentId);
+            }
+          }
+        }
+      }
+      return { ...f, categories: newCats };
+    });
   };
 
   const getFilteredProducts = () => {
@@ -207,17 +329,19 @@ const UserManagement: React.FC = () => {
       if (userId) {
         let existingProducts: any[] = [];
         let existingBrands: any[] = [];
+        let existingCategories: any[] = [];
         try {
           const res = await apiService.users.getAssignments(userId);
           if (res.data.success) {
             existingProducts = res.data.data.products || [];
             existingBrands = res.data.data.brands || [];
+            existingCategories = res.data.data.categories || [];
           }
         } catch (e) {}
 
         await apiService.users.saveAssignments(userId, {
           brands: existingBrands,
-          categories: [],
+          categories: existingCategories,
           warehouses: form.inventoryAccess ? (form.warehouses || []) : [],
           products: existingProducts
         });
@@ -621,73 +745,228 @@ const UserManagement: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           {loadingAssignments ? <div className="p-4 text-center text-muted-foreground text-sm">Loading user assignments...</div> : (
-            <div className="space-y-5 py-2">
-              <div className="bg-muted p-3 rounded-lg"><p className="text-xs font-semibold">User: <span className="font-bold text-sm">{assignUser?.name}</span> ({assignUser?.role})</p></div>
+            <div className="space-y-4 py-2">
+              <div className="bg-muted p-3 rounded-lg flex items-center justify-between">
+                <p className="text-xs font-semibold">User: <span className="font-bold text-sm">{assignUser?.name}</span> ({assignUser?.role})</p>
+                <div className="flex gap-2">
+                  {userAssignments.brands?.length > 0 && <Badge variant="secondary" className="text-[10px]">{userAssignments.brands.length} Brands</Badge>}
+                  {userAssignments.categories?.length > 0 && <Badge variant="secondary" className="text-[10px]">{userAssignments.categories.length} Categories</Badge>}
+                  {userAssignments.products?.length > 0 && <Badge variant="secondary" className="text-[10px]">{userAssignments.products.length} Products</Badge>}
+                </div>
+              </div>
 
-              {((assignUser?.role && (assignUser.role.startsWith('SALES') || assignUser.role.includes('SO'))) || assignUser?.role === 'SUPERADMIN' || assignUser?.role === 'ADMIN') && (
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-primary">1. Select Brand</Label>
-                    <select 
-                      value={selectedBrandFilter || ''} 
-                      onChange={e => {
-                        const val = e.target.value ? (isNaN(Number(e.target.value)) ? e.target.value : parseInt(e.target.value)) : null;
-                        setSelectedBrandFilter(val);
-                        setSelectedParentCat(null);
-                        setSelectedSubCatFilter(null);
-                      }}
-                      className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs"
-                    >
-                      <option value="">-- Choose Brand --</option>
-                      {allBrands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
-                  </div>
+              <Tabs defaultValue="brands-categories" className="w-full">
+                <TabsList className="grid grid-cols-3 w-full">
+                  <TabsTrigger value="brands-categories" className="text-xs gap-1">
+                    <Layers className="w-3.5 h-3.5" /> Brands & Cats
+                  </TabsTrigger>
+                  <TabsTrigger value="products" className="text-xs gap-1">
+                    <Package className="w-3.5 h-3.5" /> Products
+                  </TabsTrigger>
+                  <TabsTrigger value="warehouses" className="text-xs gap-1">
+                    <Warehouse className="w-3.5 h-3.5" /> Warehouses
+                  </TabsTrigger>
+                </TabsList>
 
-                  {selectedBrandFilter && (
-                    <div className="space-y-1.5 border-t pt-3 border-border animate-in fade-in duration-200">
-                      <Label className="text-xs font-bold text-primary">2. Select Main Category</Label>
-                      <select 
-                        value={selectedParentCat || ''} 
-                        onChange={e => {
-                          const val = e.target.value ? parseInt(e.target.value) : null;
-                          setSelectedParentCat(val);
-                          setSelectedSubCatFilter(null);
-                        }}
-                        className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs"
-                      >
-                        <option value="">-- Choose Category --</option>
-                        {getRelatedMainCategories().map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                    </div>
-                  )}
-
-                  {selectedParentCat && (
-                    <div className="space-y-1.5 border-t pt-3 border-border animate-in fade-in duration-200">
-                      <Label className="text-xs font-bold text-primary">3. Select Subcategory</Label>
-                      <select 
-                        value={selectedSubCatFilter || ''} 
-                        onChange={e => setSelectedSubCatFilter(e.target.value ? parseInt(e.target.value) : null)}
-                        className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs"
-                      >
-                        <option value="">-- Choose Subcategory --</option>
-                        {allCategories.filter(c => (c.parentId ?? c.parent_id) === selectedParentCat).map(c => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
+                <TabsContent value="brands-categories" className="space-y-4 pt-2">
+                  {/* Brands & Categories column layout */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Brands box */}
+                    <div className="border border-border rounded-xl p-3 bg-card space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-bold text-primary flex items-center gap-1">
+                          <Tag className="w-3.5 h-3.5" /> Brands ({allBrands.length})
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectAllBrands(allBrands.filter(b => b.name.toLowerCase().includes(searchBrand.toLowerCase())))}
+                          className="text-[10px] text-primary hover:underline font-semibold"
+                        >
+                          Select All
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input 
+                          placeholder="Search brands..." 
+                          value={searchBrand}
+                          onChange={e => setSearchBrand(e.target.value)}
+                          className="pl-8 h-8 text-xs bg-muted/20"
+                        />
+                      </div>
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                        {allBrands.filter(b => b.name.toLowerCase().includes(searchBrand.toLowerCase())).map(b => (
+                          <label key={b.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1.5 rounded transition-all">
+                            <input 
+                              type="checkbox" 
+                              checked={userAssignments.brands?.includes(b.id)} 
+                              onChange={() => {
+                                setUserAssignments(f => {
+                                  const existing = f.brands || [];
+                                  const updated = existing.includes(b.id)
+                                    ? existing.filter(id => id !== b.id)
+                                    : [...existing, b.id];
+                                  return { ...f, brands: updated };
+                                });
+                              }}
+                            />
+                            <span>{b.name}</span>
+                          </label>
                         ))}
-                      </select>
+                        {allBrands.filter(b => b.name.toLowerCase().includes(searchBrand.toLowerCase())).length === 0 && (
+                          <div className="text-center py-4 text-xs text-muted-foreground">No brands found.</div>
+                        )}
+                      </div>
                     </div>
-                  )}
 
-                  <div className="space-y-1.5 border-t pt-3 border-border">
-                    <Label className="text-xs font-bold text-primary">4. Available Products ({getFilteredProducts().length})</Label>
-                    <div className="relative mb-2">
-                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                    {/* Categories box */}
+                    <div className="border border-border rounded-xl p-3 bg-card space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-bold text-primary flex items-center gap-1">
+                          <Layers className="w-3.5 h-3.5" /> Categories
+                        </Label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectAllCategories(allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(searchCat.toLowerCase())))}
+                            className="text-[10px] text-primary hover:underline font-semibold"
+                          >
+                            All Cats
+                          </button>
+                          <span className="text-muted-foreground text-[10px]">|</span>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectAllSubcategories(allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(searchCat.toLowerCase())))}
+                            className="text-[10px] text-primary hover:underline font-semibold"
+                          >
+                            All Subs
+                          </button>
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input 
+                          placeholder="Search categories..." 
+                          value={searchCat}
+                          onChange={e => setSearchCat(e.target.value)}
+                          className="pl-8 h-8 text-xs bg-muted/20"
+                        />
+                      </div>
+                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                        {allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(searchCat.toLowerCase())).map(mainCat => {
+                          const subs = allCategories.filter(c => (c.parentId ?? c.parent_id) === mainCat.id);
+                          return (
+                            <div key={mainCat.id} className="space-y-1">
+                              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer hover:bg-muted/50 p-1 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={userAssignments.categories?.includes(mainCat.id)}
+                                  onChange={() => handleCategoryToggle(mainCat.id, true)}
+                                />
+                                <span>{mainCat.name}</span>
+                              </label>
+                              {subs.length > 0 && (
+                                <div className="pl-4 space-y-1 border-l ml-2 border-border/60">
+                                  {subs.map(subCat => (
+                                    <label key={subCat.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1 rounded">
+                                      <input
+                                        type="checkbox"
+                                        checked={userAssignments.categories?.includes(subCat.id)}
+                                        onChange={() => handleCategoryToggle(subCat.id, false)}
+                                      />
+                                      <span className="text-muted-foreground">{subCat.name}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(searchCat.toLowerCase())).length === 0 && (
+                          <div className="text-center py-4 text-xs text-muted-foreground">No categories found.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="products" className="space-y-4 pt-2">
+                  <div className="border border-border rounded-xl p-3 bg-card space-y-3">
+                    {/* View Filters (dropdowns) for filtering the products checkbox list */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Filter Brand</Label>
+                        <select 
+                          value={selectedBrandFilter || ''} 
+                          onChange={e => {
+                            const val = e.target.value ? (isNaN(Number(e.target.value)) ? e.target.value : parseInt(e.target.value)) : null;
+                            setSelectedBrandFilter(val);
+                            setSelectedParentCat(null);
+                            setSelectedSubCatFilter(null);
+                          }}
+                          className="w-full border border-border rounded px-2 py-1 bg-background text-[11px]"
+                        >
+                          <option value="">All Brands</option>
+                          {allBrands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                        </select>
+                      </div>
+
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Filter Category</Label>
+                        <select 
+                          value={selectedParentCat || ''} 
+                          onChange={e => {
+                            const val = e.target.value ? parseInt(e.target.value) : null;
+                            setSelectedParentCat(val);
+                            setSelectedSubCatFilter(null);
+                          }}
+                          className="w-full border border-border rounded px-2 py-1 bg-background text-[11px]"
+                        >
+                          <option value="">All Categories</option>
+                          {getRelatedMainCategories().map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </div>
+
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Filter Subcategory</Label>
+                        <select 
+                          value={selectedSubCatFilter || ''} 
+                          onChange={e => setSelectedSubCatFilter(e.target.value ? parseInt(e.target.value) : null)}
+                          disabled={!selectedParentCat}
+                          className="w-full border border-border rounded px-2 py-1 bg-background text-[11px] disabled:opacity-50"
+                        >
+                          <option value="">All Subcategories</option>
+                          {allCategories.filter(c => (c.parentId ?? c.parent_id) === selectedParentCat).map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t pt-2 mt-2">
+                      <Label className="text-xs font-bold text-primary flex items-center gap-1">
+                        <Package className="w-3.5 h-3.5" /> Products ({getFilteredProducts().filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())).length})
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectAllProducts(getFilteredProducts().filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())))}
+                        className="text-[10px] text-primary hover:underline font-semibold"
+                      >
+                        Select All (Filtered)
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                       <Input 
-                        placeholder="Search specific products..." 
-                        className="pl-7 h-8 text-[11px] bg-muted/20"
+                        placeholder="Search products..." 
+                        className="pl-8 h-8 text-xs bg-muted/20"
+                        value={searchProd}
                         onChange={e => setSearchProd(e.target.value)}
                       />
                     </div>
-                    <div className="grid grid-cols-1 gap-1 p-3 border border-border rounded-xl bg-card max-h-48 overflow-y-auto shadow-inner">
+
+                    <div className="grid grid-cols-1 gap-1 p-2 border border-border rounded-xl bg-card max-h-52 overflow-y-auto shadow-inner">
                       {getFilteredProducts().filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())).map(p => (
                         <label key={p.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1.5 rounded border border-transparent hover:border-border/40 transition-all">
                           <input 
@@ -711,53 +990,64 @@ const UserManagement: React.FC = () => {
                           )}
                         </label>
                       ))}
-                      {getFilteredProducts().length === 0 && (
-                        <div className="text-center py-4 text-xs text-muted-foreground">No products match the selected filters.</div>
+                      {getFilteredProducts().filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())).length === 0 && (
+                        <div className="text-center py-4 text-xs text-muted-foreground">No products match filters.</div>
                       )}
                     </div>
-                  </div>
 
-                  {userAssignments.products && userAssignments.products.length > 0 && (
-                    <div className="space-y-1.5 border-t pt-3 border-border animate-in fade-in duration-200">
-                      <Label className="text-xs font-bold text-muted-foreground">Currently Assigned Products ({userAssignments.products.length})</Label>
-                      <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-2 border border-border rounded-lg bg-muted/30 shadow-inner">
-                        {userAssignments.products.map(pId => {
-                          const pObj = allProducts.find(p => p.id === pId);
-                          if (!pObj) return null;
-                          return (
-                            <Badge key={pId} variant="outline" className="text-[10px] gap-1.5 py-0.5 pl-2 pr-1.5 bg-card hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors">
-                              {pObj.name}
-                              <button 
-                                type="button"
-                                onClick={() => setUserAssignments(f => ({ ...f, products: (f.products || []).filter((id: any) => id !== pId) }))}
-                                className="hover:bg-destructive/20 p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors font-bold text-[9px] w-3.5 h-3.5 flex items-center justify-center"
-                              >
-                                &times;
-                              </button>
-                            </Badge>
-                          );
-                        })}
+                    {userAssignments.products && userAssignments.products.length > 0 && (
+                      <div className="space-y-1.5 border-t pt-2 animate-in fade-in duration-200">
+                        <Label className="text-[10px] font-bold text-muted-foreground">Currently Assigned Products ({userAssignments.products.length})</Label>
+                        <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-1.5 border border-border rounded-lg bg-muted/30 shadow-inner">
+                          {userAssignments.products.map(pId => {
+                            const pObj = allProducts.find(p => p.id === pId);
+                            if (!pObj) return null;
+                            return (
+                              <Badge key={pId} variant="outline" className="text-[10px] gap-1 py-0.5 pl-2 pr-1.5 bg-card hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors">
+                                {pObj.name}
+                                <button 
+                                  type="button"
+                                  onClick={() => setUserAssignments(f => ({ ...f, products: (f.products || []).filter((id: any) => id !== pId) }))}
+                                  className="hover:bg-destructive/20 p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors font-bold text-[9px] w-3 h-3 flex items-center justify-center"
+                                  title="Remove assignment"
+                                >
+                                  &times;
+                                </button>
+                              </Badge>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {((assignUser?.role && (assignUser.role.startsWith('INVENTORY') || assignUser.role.includes('WH') || assignUser.role.includes('MANAGER'))) || assignUser?.role === 'SUPERADMIN' || assignUser?.role === 'ADMIN') && (
-                <div className="space-y-1.5 border-t pt-3 border-border">
-                  <Label className="text-xs font-bold text-primary">Assigned Warehouses</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 border border-border rounded-xl bg-card max-h-32 overflow-y-auto">
-                    {allWarehouses.map(w => (
-                      <label key={w.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer p-0.5">
-                        <input type="checkbox" checked={userAssignments.warehouses?.includes(w.id)} onChange={e => {
-                          const ch = e.target.checked;
-                          setUserAssignments(f => ({ ...f, warehouses: ch ? [...(f.warehouses || []), w.id] : (f.warehouses || []).filter((id: any) => id !== w.id) }));
-                        }} /> {w.name}
-                      </label>
-                    ))}
+                    )}
                   </div>
-                </div>
-              )}
+                </TabsContent>
+
+                <TabsContent value="warehouses" className="space-y-4 pt-2">
+                  <div className="border border-border rounded-xl p-3 bg-card space-y-3">
+                    <Label className="text-xs font-bold text-primary flex items-center gap-1">
+                      <Warehouse className="w-3.5 h-3.5" /> Assigned Warehouses
+                    </Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 max-h-52 overflow-y-auto">
+                      {allWarehouses.map(w => (
+                        <label key={w.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer p-1 hover:bg-muted/50 rounded transition-all">
+                          <input 
+                            type="checkbox" 
+                            checked={userAssignments.warehouses?.includes(w.id)} 
+                            onChange={e => {
+                              const ch = e.target.checked;
+                              setUserAssignments(f => ({ 
+                                ...f, 
+                                warehouses: ch ? [...(f.warehouses || []), w.id] : (f.warehouses || []).filter((id: any) => id !== w.id) 
+                              }));
+                            }} 
+                          /> 
+                          <span>{w.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           )}
           <DialogFooter className="gap-2">
