@@ -36,11 +36,12 @@ class HeaderTenantMiddleware:
                 if warehouse:
                     print(f"[TENANT MIDDLEWARE] Warning: Requested warehouse '{warehouse_id}' not found. Falling back to active warehouse: '{warehouse.name}' (schema: {warehouse.schema_name})")
 
-        # 5. Default API requests to first active warehouse ONLY when no warehouse
-        # header was sent at all. If the client explicitly sent 'GLOBAL', keep the
-        # public schema so that the views' global-aggregation code path runs.
+        # 5. Default API requests to first active warehouse when no warehouse
+        # header was sent at all, or if the request is a write operation (non-GET)
+        # where a global context is not valid.
         is_explicit_global = warehouse_id and warehouse_id.upper() == 'GLOBAL'
-        if not warehouse and not is_explicit_global and 'masters/warehouses' not in request.path and (request.path.startswith('/api/') or request.path.startswith('/sales/') or request.path.startswith('/inventory/')):
+        is_write_request = request.method not in ('GET', 'HEAD', 'OPTIONS')
+        if not warehouse and (not is_explicit_global or is_write_request) and 'masters/warehouses' not in request.path and (request.path.startswith('/api/') or request.path.startswith('/sales/') or request.path.startswith('/inventory/')):
             warehouse = WarehouseModel.objects.filter(active=True).exclude(schema_name='public').first()
             if warehouse:
                 print(f"[TENANT MIDDLEWARE] Warning: Defaulting API request to first active warehouse: '{warehouse.name}' (schema: {warehouse.schema_name})")
@@ -57,8 +58,6 @@ class HeaderTenantMiddleware:
             err_msg = str(e).lower()
             if 'relation' in err_msg and ('does not exist' in err_msg or 'not found' in err_msg):
                 from django.http import JsonResponse
-                # Return empty dictionary for object endpoints (like KPIs/analytics) 
-                # and empty list for list endpoints (like products/visits/expenses)
                 is_object_endpoint = (
                     'kpi' in request.path or 
                     'dashboard' in request.path or 
@@ -71,3 +70,20 @@ class HeaderTenantMiddleware:
                     "message": "No active warehouse. Please create a warehouse."
                 }, status=200)
             raise
+
+    def process_exception(self, request, exception):
+        err_msg = str(exception).lower()
+        if 'relation' in err_msg and ('does not exist' in err_msg or 'not found' in err_msg):
+            from django.http import JsonResponse
+            is_object_endpoint = (
+                'kpi' in request.path or 
+                'dashboard' in request.path or 
+                'settings' in request.path or
+                'analytics' in request.path
+            )
+            return JsonResponse({
+                "success": True,
+                "data": {} if is_object_endpoint else [],
+                "message": "No active warehouse. Please create a warehouse."
+            }, status=200)
+        return None
