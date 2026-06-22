@@ -417,7 +417,7 @@ const OrderPage: React.FC = () => {
                               {prods.map((p) => (
                                 <CommandItem
                                   key={p.id}
-                                  value={`${p.productName} ${category} - ${p.productCode || p.product_code || ''} - ${p.id}`}
+                                  value={`${p.productName} ${p.brand?.name || ''} ${category} - ${p.productCode || p.product_code || ''} - ${p.id}`}
                                   onSelect={() => {
                                     updateItem(idx, 'product', p.id!);
                                   }}
@@ -425,7 +425,7 @@ const OrderPage: React.FC = () => {
                                   <Check className={`mr-2 h-4 w-4 shrink-0 ${item.product === p.id ? "opacity-100" : "opacity-0"}`} />
                                   <div className="flex flex-col overflow-hidden">
                                     <span className="truncate font-medium">{p.productName}</span>
-                                    <span className="text-[10px] text-muted-foreground">({p.bagSize}) - ₹{p.rate}</span>
+                                    <span className="text-[10px] text-muted-foreground">({p.bagSize}) - ₹{p.rate}{p.brand?.name ? ` - ${p.brand.name}` : ''}</span>
                                   </div>
                                 </CommandItem>
                               ))}

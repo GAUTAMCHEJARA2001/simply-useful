@@ -315,11 +315,11 @@ const CreatePurchaseOrder: React.FC = () => {
                               <CommandEmpty>No product found.</CommandEmpty>
                               <CommandGroup>
                                 {products.map((p) => (
-                                  <CommandItem key={p.id} value={`${p.name} - ${p.productCode || p.product_code || ''} - ${p.id}`} onSelect={() => updateItem(idx, 'product_id', p.id)}>
+                                  <CommandItem key={p.id} value={`${p.name} ${p.brand?.name || ''} - ${p.productCode || p.product_code || ''} - ${p.id}`} onSelect={() => updateItem(idx, 'product_id', p.id)}>
                                     <Check className={`mr-2 h-4 w-4 ${item.product_id === p.id ? "opacity-100" : "opacity-0"}`} />
                                     <div className="flex flex-col">
                                       <span className="font-medium">{p.name}</span>
-                                      <span className="text-[10px] text-muted-foreground">₹{p.rate || 0} / {p.unit?.name || (typeof p.unit === 'string' ? p.unit : '') || 'Unit'}</span>
+                                      <span className="text-[10px] text-muted-foreground">₹{p.rate || 0} / {p.unit?.name || (typeof p.unit === 'string' ? p.unit : '') || 'Unit'}{p.brand?.name ? ` - ${p.brand.name}` : ''}</span>
                                     </div>
                                   </CommandItem>
                                 ))}
