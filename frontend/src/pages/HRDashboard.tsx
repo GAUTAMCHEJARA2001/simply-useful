@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1131,73 +1131,109 @@ const HRDashboard: React.FC = () => {
       {/* ── Visit Photo Lightbox Dialog ─────────────────────── */}
       {selectedVisit && (
         <Dialog open={!!selectedVisit} onOpenChange={(open) => { if (!open) setSelectedVisit(null); }}>
-          <DialogContent className="max-w-2xl bg-card border-border shadow-lg rounded-xl" aria-describedby="visit-proof-desc">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-primary" /> Verified Visit Proof
+          <DialogContent className="max-w-2xl bg-card border border-border/50 shadow-2xl rounded-2xl p-6" aria-describedby="visit-proof-desc">
+            <DialogHeader className="border-b border-border/50 pb-4">
+              <DialogTitle className="text-xl font-bold flex items-center gap-3 text-foreground tracking-tight">
+                <span className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                  <MapPin className="w-5 h-5" />
+                </span>
+                Verified Visit Proof
               </DialogTitle>
-              <DialogDescription id="visit-proof-desc" className="text-xs text-muted-foreground">
-                GPS-sealed visit proof for <span className="font-bold text-foreground">{selectedVisit.dealer_name ?? selectedVisit.dealerName}</span>
+              <DialogDescription id="visit-proof-desc" className="text-xs text-muted-foreground mt-1">
+                GPS-sealed visit proof for <span className="font-semibold text-foreground bg-primary/5 px-2 py-0.5 rounded-md border border-primary/10 ml-0.5">{selectedVisit.dealer_name ?? selectedVisit.dealerName}</span>
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-3 text-sm p-3 rounded-lg bg-secondary/40 border border-border/40">
-                <div>
-                  <span className="text-[9px] uppercase font-bold text-muted-foreground">Sales Officer</span>
-                  <p className="font-semibold text-foreground text-xs truncate mt-0.5">{selectedVisit.so_email ?? selectedVisit.soEmail}</p>
+            <div className="space-y-4 py-2 mt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 rounded-xl bg-secondary/30 border border-border/40 hover:bg-secondary/40 transition-colors">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Sales Officer</span>
+                  <p className="font-semibold text-foreground text-xs truncate mt-1" title={selectedVisit.so_email ?? selectedVisit.soEmail}>
+                    {selectedVisit.so_email ?? selectedVisit.soEmail}
+                  </p>
                 </div>
-                <div>
-                  <span className="text-[9px] uppercase font-bold text-muted-foreground">Visit Date</span>
-                  <p className="font-semibold text-foreground mt-0.5 text-xs">{selectedVisit.date}</p>
+                <div className="p-3 rounded-xl bg-secondary/30 border border-border/40 hover:bg-secondary/40 transition-colors">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Visit Date</span>
+                  <p className="font-semibold text-foreground text-xs mt-1">
+                    {selectedVisit.date ? new Date(selectedVisit.date).toLocaleDateString(undefined, { dateStyle: 'medium' }) : selectedVisit.date}
+                  </p>
                 </div>
-                <div>
-                  <span className="text-[9px] uppercase font-bold text-muted-foreground">Dealer / Contact</span>
-                  <p className="font-bold text-foreground text-xs mt-0.5">{selectedVisit.dealer_name ?? selectedVisit.dealerName}</p>
+                <div className="p-3 rounded-xl bg-secondary/30 border border-border/40 hover:bg-secondary/40 transition-colors">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Dealer / Contact</span>
+                  <p className="font-bold text-foreground text-xs truncate mt-1">
+                    {selectedVisit.dealer_name ?? selectedVisit.dealerName}
+                  </p>
                 </div>
-                <div>
-                  <span className="text-[9px] uppercase font-bold text-muted-foreground">GPS Location</span>
-                  <p className="font-semibold text-foreground mt-0.5 text-xs">{(selectedVisit as any).gpsLocation ?? (selectedVisit as any).gpslocation ?? '—'}</p>
+                <div className="p-3 rounded-xl bg-secondary/30 border border-border/40 hover:bg-secondary/40 transition-colors">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">GPS Location</span>
+                  <p className="font-semibold text-foreground text-xs mt-1 truncate">
+                    {(selectedVisit as any).gpsLocation ?? (selectedVisit as any).gpslocation ?? '—'}
+                  </p>
                 </div>
               </div>
 
-              <div className="text-sm flex items-center gap-4">
-                <div>
-                  <span className="text-[9px] uppercase font-bold text-muted-foreground block mb-0.5">HR Verification Status</span>
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-secondary/20 p-3 rounded-xl border border-border/30">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Verification Status</span>
                   {(() => {
                     const vs = (selectedVisit.visitStatus ?? selectedVisit.visit_status ?? 'PENDING').toUpperCase();
-                    if (vs === 'VERIFIED') return <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 bg-green-500/10 text-green-600 border-green-500/20"><CheckCircle2 className="w-3 h-3" /> Verified</span>;
-                    if (vs === 'FLAGGED') return <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 bg-red-500/10 text-red-600 border-red-500/20"><AlertTriangle className="w-3 h-3" /> Flagged</span>;
-                    return <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20"><Clock className="w-3 h-3" /> Pending Verification</span>;
+                    if (vs === 'VERIFIED') return <span className="text-xs px-2.5 py-1 rounded-lg font-bold border inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/20"><CheckCircle2 className="w-3.5 h-3.5" /> Verified</span>;
+                    if (vs === 'FLAGGED') return <span className="text-xs px-2.5 py-1 rounded-lg font-bold border inline-flex items-center gap-1.5 bg-rose-500/10 text-rose-600 border-rose-500/20"><AlertTriangle className="w-3.5 h-3.5" /> Flagged</span>;
+                    return <span className="text-xs px-2.5 py-1 rounded-lg font-bold border inline-flex items-center gap-1.5 bg-amber-500/10 text-amber-600 border-amber-500/20"><Clock className="w-3.5 h-3.5" /> Pending Verification</span>;
                   })()}
                 </div>
               </div>
 
               {selectedVisit.remarks && (
-                <div className="text-xs p-2.5 rounded-lg border bg-background/50">
-                  <span className="text-[9px] uppercase font-bold text-muted-foreground block mb-0.5">Visit Notes</span>
-                  <p className="text-foreground">{selectedVisit.remarks}</p>
+                <div className="p-3.5 rounded-xl border border-border/40 bg-card/60 relative overflow-hidden shadow-sm">
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/60" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Visit Notes</span>
+                  <p className="text-foreground text-xs italic font-medium leading-relaxed">"{selectedVisit.remarks}"</p>
                 </div>
               )}
 
               {(selectedVisit.hrRemark ?? selectedVisit.hr_remark) && (
-                <div className="text-xs bg-red-500/5 p-2.5 rounded-lg border border-red-500/20">
-                  <span className="text-[10px] font-bold text-red-600 block mb-0.5">HR Flag Reason</span>
-                  <p className="text-red-600 font-medium">{selectedVisit.hrRemark ?? selectedVisit.hr_remark}</p>
+                <div className="p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/5 relative overflow-hidden shadow-sm">
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-rose-500" />
+                  <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider block mb-1">HR Flag Reason</span>
+                  <p className="text-rose-600 font-medium text-xs leading-relaxed">{selectedVisit.hrRemark ?? selectedVisit.hr_remark}</p>
                 </div>
               )}
 
               {selectedVisit.photo && (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground">GPS-Sealed Visit Photo</span>
-                    <div className="flex gap-1.5">
-                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 border-border" onClick={() => setVisitZoom(z => Math.max(0.5, z - 0.25))} title="Zoom Out"><ZoomOut className="w-3 h-3"/></Button>
-                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 text-[9px] border-border font-bold" onClick={() => setVisitZoom(1)} title="Reset">1x</Button>
-                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 border-border" onClick={() => setVisitZoom(z => Math.min(3, z + 0.25))} title="Zoom In"><ZoomIn className="w-3 h-3"/></Button>
-                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 border-border" onClick={() => setVisitRotate(r => r + 90)} title="Rotate"><RotateCw className="w-3 h-3"/></Button>
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">GPS-Sealed Visit Photo</span>
+                  <div className="border border-border/50 rounded-xl overflow-hidden w-full aspect-video relative bg-slate-950 flex items-center justify-center p-1 group shadow-inner">
+                    
+                    {/* Immersive Viewfinder Corners */}
+                    <div className="absolute top-3 left-3 w-3 h-3 border-t-2 border-l-2 border-primary/40 pointer-events-none rounded-tl-sm" />
+                    <div className="absolute top-3 right-3 w-3 h-3 border-t-2 border-r-2 border-primary/40 pointer-events-none rounded-tr-sm" />
+                    <div className="absolute bottom-3 left-3 w-3 h-3 border-b-2 border-l-2 border-primary/40 pointer-events-none rounded-bl-sm" />
+                    <div className="absolute bottom-3 right-3 w-3 h-3 border-b-2 border-r-2 border-primary/40 pointer-events-none rounded-br-sm" />
+                    
+                    {/* Floating Glassmorphic Camera HUD Controls */}
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/60 hover:bg-black/85 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 z-10 transition-all duration-300 opacity-90 group-hover:opacity-100 shadow-lg">
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-white/15 text-white rounded-md transition-colors" onClick={() => setVisitZoom(z => Math.max(0.5, z - 0.25))} title="Zoom Out">
+                        <ZoomOut className="w-3.5 h-3.5"/>
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-white/15 text-white font-mono text-xs rounded-md transition-colors" onClick={() => setVisitZoom(1)} title="Reset">
+                        1x
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-white/15 text-white rounded-md transition-colors" onClick={() => setVisitZoom(z => Math.min(3, z + 0.25))} title="Zoom In">
+                        <ZoomIn className="w-3.5 h-3.5"/>
+                      </Button>
+                      <div className="w-[1px] h-4 bg-white/20 my-auto mx-0.5" />
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-white/15 text-white rounded-md transition-colors" onClick={() => setVisitRotate(r => r + 90)} title="Rotate">
+                        <RotateCw className="w-3.5 h-3.5"/>
+                      </Button>
                     </div>
-                  </div>
-                  <div className="border border-border rounded-lg overflow-hidden w-full aspect-video relative bg-black/10 flex items-center justify-center p-1">
+
+                    {/* Floating Zoom Indicator */}
+                    {visitZoom !== 1 && (
+                      <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md px-2.5 py-0.5 rounded-md border border-white/10 text-[10px] font-mono font-bold text-white/95 tracking-wide z-10 pointer-events-none">
+                        ZOOM: {visitZoom.toFixed(2)}x
+                      </div>
+                    )}
+
                     <img
                       src={selectedVisit.photo}
                       alt="Visit Proof"
@@ -1213,9 +1249,9 @@ const HRDashboard: React.FC = () => {
             {(() => {
               const vs = (selectedVisit.visitStatus ?? selectedVisit.visit_status ?? 'PENDING').toUpperCase();
               if (vs !== 'VERIFIED' && vs !== 'FLAGGED') return (
-                <div className="flex gap-2 border-t border-border pt-4 mt-2">
+                <div className="flex gap-3 border-t border-border/50 pt-4 mt-3">
                   <Button
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold h-10 shadow-sm"
+                    className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold h-11 rounded-xl shadow-md shadow-emerald-950/10 hover:shadow-lg transition-all duration-200"
                     onClick={async () => {
                       if (selectedVisit.id) {
                         await updateVisitStatus(selectedVisit.id, 'VERIFIED');
@@ -1227,7 +1263,7 @@ const HRDashboard: React.FC = () => {
                   </Button>
                   <Button
                     variant="destructive"
-                    className="w-full font-bold h-10 shadow-sm"
+                    className="w-full font-bold h-11 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800"
                     onClick={() => {
                       if (!selectedVisit.id) return;
                       setFlaggingVisit({ id: selectedVisit.id, soEmail: selectedVisit.so_email ?? selectedVisit.soEmail ?? '', dealer: selectedVisit.dealer_name ?? selectedVisit.dealerName ?? '' });
