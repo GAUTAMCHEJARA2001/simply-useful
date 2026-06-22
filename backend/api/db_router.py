@@ -21,11 +21,17 @@ def get_current_db():
         pass
     return getattr(_local, 'current_db', 'default')
 
+_setup_done = False
+
 def setup_dynamic_tenant_databases():
     """
     Dynamically registers connection aliases for each active warehouse schema,
     allowing .using(wh.db_name) queries to work transparently on the single database.
     """
+    global _setup_done
+    if _setup_done:
+        return
+
     from django.conf import settings
     from django.db import connections
     try:
@@ -49,12 +55,10 @@ def setup_dynamic_tenant_databases():
                 db_config['OPTIONS'] = {'options': f'-c search_path={schema},public'}
                 settings.DATABASES[alias] = db_config
                 connections.databases[alias] = db_config
+        _setup_done = True
     except Exception:
         # Suppress errors on startup before migrations are run
         pass
-
-# Register schema connection aliases immediately
-setup_dynamic_tenant_databases()
 
 
 def get_tenant_model_cross_db(ModelClass, pk, prefetch=None):
