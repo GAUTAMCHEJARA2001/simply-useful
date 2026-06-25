@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Edit, Truck } from 'lucide-react';
+import { Edit, Truck, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
@@ -286,6 +286,17 @@ const MyOrders: React.FC = () => {
                       <span className="font-bold text-success">
                         ₹{(order.grandTotal || order.grand_total || 0).toLocaleString()}
                       </span>
+                    </div>
+                  )}
+
+                  {/* Rejection / Cancellation Reason */}
+                  {displayStatus === 'Cancelled' && (order.narration || (order as any).reason) && (
+                    <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs space-y-1 text-red-700">
+                      <span className="font-bold flex items-center gap-1.5">
+                        <XCircle className="w-3.5 h-3.5" /> 
+                        Reason for Cancellation
+                      </span>
+                      <p className="opacity-90">{order.narration || (order as any).reason}</p>
                     </div>
                   )}
 
