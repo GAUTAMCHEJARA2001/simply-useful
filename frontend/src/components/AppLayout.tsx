@@ -155,15 +155,15 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-14 bg-card border-b border-border flex items-center px-4 lg:px-6 shrink-0">
+        <header className="sticky top-0 z-30 h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 shrink-0 overflow-x-auto scrollbar-none w-full">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden mr-3 p-1.5 rounded-lg hover:bg-muted transition-colors"
+            className="lg:hidden mr-1.5 sm:mr-3 p-1 sm:p-1.5 rounded-lg hover:bg-muted transition-colors"
           >
             <Menu className="w-5 h-5 text-foreground" />
           </button>
           <div className="flex-1" />
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             <WarehouseSwitcher />
             <FYSelector />
             <NotificationDropdown />
