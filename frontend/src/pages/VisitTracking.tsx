@@ -319,7 +319,7 @@ const VisitTracking: React.FC = () => {
         </div>
         {/* Floating punch button – bottom-right on mobile */}
         <Button
-          className="action-button group w-full sm:w-auto fixed bottom-6 right-4 z-50 sm:static rounded-full sm:rounded-lg shadow-2xl sm:shadow-sm px-5 sm:px-4 h-14 sm:h-10 text-base sm:text-sm"
+          className="action-button group w-[calc(100%-2rem)] sm:w-auto fixed bottom-6 left-4 sm:left-auto right-4 z-40 sm:static rounded-full sm:rounded-lg shadow-2xl sm:shadow-sm px-5 sm:px-4 h-14 sm:h-10 text-base sm:text-sm"
           onClick={() => { setDialogOpen(true); setPunchStep(1); }}
         >
           <Plus className="w-5 h-5 mr-2" />

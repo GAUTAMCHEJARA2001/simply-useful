@@ -303,7 +303,7 @@ const AdminDashboard: React.FC = () => {
 
                   {/* Action Bar */}
                   <div className="bg-secondary/30 p-2.5 border-t border-border flex flex-col gap-2.5 mt-auto">
-                    <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:items-center sm:w-auto">
+                    <div className="flex flex-col gap-2 w-full sm:flex-row sm:items-center sm:w-auto">
                         {(() => {
                           const activeSO = [...salesOfficers];
                           if (soEmail && !activeSO.some(u => u.email.toLowerCase() === soEmail.toLowerCase())) {
@@ -336,12 +336,12 @@ const AdminDashboard: React.FC = () => {
                         </Select>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto shrink-0">
-                      <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white h-7.5 px-2 text-[10px] shadow-sm flex items-center justify-center" onClick={() => setConfirmOrder({ order: o, action: 'Approved' })}>
-                        <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                    <div className="flex flex-col gap-2 w-full sm:flex-row sm:w-auto shrink-0">
+                      <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white h-9 sm:h-7.5 px-3 text-xs shadow-sm flex items-center justify-center flex-1" onClick={() => setConfirmOrder({ order: o, action: 'Approved' })}>
+                        <CheckCircle className="w-4 h-4 mr-1.5" /> Approve
                       </Button>
-                      <Button size="sm" variant="destructive" className="h-7.5 px-2 text-[10px] shadow-sm flex items-center justify-center" onClick={() => setConfirmOrder({ order: o, action: 'Cancelled', action_date: new Date().toISOString().split('T')[0] })}>
-                        <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                      <Button size="sm" variant="destructive" className="h-9 sm:h-7.5 px-3 text-xs shadow-sm flex items-center justify-center flex-1" onClick={() => setConfirmOrder({ order: o, action: 'Cancelled', action_date: new Date().toISOString().split('T')[0] })}>
+                        <XCircle className="w-4 h-4 mr-1.5" /> Reject
                       </Button>
                     </div>
                   </div>
