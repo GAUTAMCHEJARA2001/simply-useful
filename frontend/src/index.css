@@ -153,8 +153,20 @@
   .action-button {
     @apply h-12 px-6 text-base font-semibold rounded-xl shadow-md active:scale-[0.97] transition-all duration-150;
   }
+
+  /* Safe Area Support */
+  .safe-area-pt { padding-top: env(safe-area-inset-top); }
+  .safe-area-pb { padding-bottom: env(safe-area-inset-bottom); }
+
+  /* iOS Zoom Fix: ensure all inputs are at least 16px on mobile */
+  @media screen and (max-width: 768px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+  }
 }
 
+/* Animations */
 @keyframes spin-slow {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

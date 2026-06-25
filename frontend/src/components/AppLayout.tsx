@@ -12,6 +12,7 @@ import { FinancialYearProvider } from '@/contexts/FinancialYearContext';
 import FYSelector from '@/components/FYSelector';
 import { WarehouseSwitcher } from '@/components/WarehouseSwitcher';
 import { NotificationDropdown } from './NotificationDropdown';
+import BottomNav from './BottomNav';
 
 interface NavItem {
   label: string;
@@ -174,10 +175,13 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 p-2 lg:p-6 overflow-auto pb-20 lg:pb-6">
           {children}
         </main>
       </div>
+
+      {/* Bottom Navigation for Mobile */}
+      <BottomNav onMenuClick={() => setSidebarOpen(true)} />
     </div>
     </FinancialYearProvider>
   );
