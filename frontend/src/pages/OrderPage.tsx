@@ -515,7 +515,7 @@ const OrderPage: React.FC = () => {
               <span className="text-muted-foreground">Party:</span><span className="font-medium">{selectedParty}</span>
               <span className="text-muted-foreground">Distributor:</span><span className="font-medium">{selectedDistInfo?.distributorName || '-'}</span>
             </div>
-            <div className="border border-border rounded-lg overflow-hidden">
+            <div className="border border-border rounded-lg overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="bg-muted"><th className="text-left px-3 py-2">Product</th><th className="text-center px-3 py-2">Qty</th><th className="text-center px-3 py-2">Rate</th><th className="text-right px-3 py-2">{isAdmin ? 'Total' : 'Weight'}</th></tr></thead>
 

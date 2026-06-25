@@ -175,7 +175,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-2 lg:p-6 overflow-auto pb-20 lg:pb-6">
+        <main className="flex-1 p-2 lg:p-6 overflow-auto pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
           {children}
         </main>
       </div>

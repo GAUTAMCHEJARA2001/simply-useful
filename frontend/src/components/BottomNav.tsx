@@ -13,7 +13,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ onMenuClick }) => {
   if (!user) return null;
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-16 bg-card border-t border-border flex items-center justify-around px-2 pb-[env(safe-area-inset-bottom)]">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 min-h-[4rem] bg-card border-t border-border flex items-center justify-around px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
       <NavLink
         to="/sales"
         end
