@@ -71,24 +71,24 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
               onRowClick?.(i);
             }}
           >
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 w-full">
               {row.map((cell, j) => (
-                <div key={j} className={j === 0 ? 'col-span-2 border-b border-border/30 pb-2 mb-1' : 'flex flex-col'}>
-                  <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{columns[j]}</span>
-                  <div className={`text-sm ${j === 0 ? 'font-bold text-foreground text-base' : 'font-medium'}`}>{cell ?? '—'}</div>
+                <div key={j} className={j === 0 ? 'col-span-2 border-b border-border/30 pb-2 mb-1 min-w-0' : 'flex flex-col min-w-0'}>
+                  <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider truncate block">{columns[j]}</span>
+                  <div className={`text-sm break-words whitespace-pre-wrap ${j === 0 ? 'font-bold text-foreground text-base' : 'font-medium'}`}>{cell ?? '—'}</div>
                 </div>
               ))}
             </div>
             {(onDelete || onEdit) && (
-              <div className="flex justify-end gap-2 pt-2 border-t border-border/30">
+              <div className="flex gap-2 pt-3 mt-2 border-t border-border/30">
                 {onEdit && (
-                  <button onClick={() => onEdit(i)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold">
-                    <Edit className="w-3.5 h-3.5" /> Edit
+                  <button onClick={() => onEdit(i)} className="flex-1 flex justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-sm font-semibold transition-colors active:scale-[0.98]">
+                    <Edit className="w-4 h-4" /> Edit
                   </button>
                 )}
                 {onDelete && (
-                  <button onClick={() => onDelete(i)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive text-xs font-semibold">
-                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  <button onClick={() => onDelete(i)} className="flex-1 flex justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm font-semibold transition-colors active:scale-[0.98]">
+                    <Trash2 className="w-4 h-4" /> Delete
                   </button>
                 )}
               </div>
