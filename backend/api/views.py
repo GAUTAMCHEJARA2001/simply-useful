@@ -3078,6 +3078,18 @@ class OrderViewSet(viewsets.ModelViewSet):
                 try:
                     return qs.get(orderid=pk)
                 except Order.DoesNotExist:
+                    # Fallback: search other warehouses in case of cross-warehouse confusion
+                    for wh in Warehouse.objects.filter(active=True):
+                        if not wh.db_name or wh.db_name == current_db: continue
+                        qs_other = Order.objects.using(wh.db_name)
+                        if company_id: qs_other = qs_other.filter(companyid_id=company_id)
+                        try:
+                            return qs_other.get(id=pk)
+                        except Order.DoesNotExist:
+                            try:
+                                return qs_other.get(orderid=pk)
+                            except Order.DoesNotExist:
+                                pass
                     raise exceptions.NotFound("Order not found")
 
     def list(self, request, *args, **kwargs):
