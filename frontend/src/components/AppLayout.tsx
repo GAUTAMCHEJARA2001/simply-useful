@@ -174,7 +174,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden overflow-y-auto min-w-0">
           {children}
         </main>
       </div>

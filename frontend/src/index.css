@@ -97,9 +97,22 @@
     @apply border-border;
   }
 
+  /* ── GLOBAL OVERFLOW FIX ── */
+  /* Prevents the entire page from ever scrolling horizontally on mobile */
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  #root {
+    overflow-x: hidden;
+    max-width: 100vw;
+    min-height: 100vh;
   }
 
   h1, h2, h3, h4, h5, h6 {
