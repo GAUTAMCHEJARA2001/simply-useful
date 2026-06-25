@@ -74,7 +74,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <FinancialYearProvider>
-    <div className="min-h-screen flex w-full bg-background">
+    <div className="h-screen w-full flex bg-background overflow-hidden">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -86,7 +86,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:sticky top-0 left-0 z-50 h-screen w-64 bg-sidebar flex flex-col transition-transform duration-300 lg:translate-x-0",
+          "fixed lg:static top-0 left-0 z-50 h-full w-64 bg-sidebar flex flex-col transition-transform duration-300 lg:translate-x-0 shrink-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -155,7 +155,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 shrink-0 overflow-x-auto scrollbar-none w-full">
+        <header className="flex-none h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 overflow-x-auto scrollbar-none w-full z-30">
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden mr-1.5 sm:mr-3 p-1 sm:p-1.5 rounded-lg hover:bg-muted transition-colors"
