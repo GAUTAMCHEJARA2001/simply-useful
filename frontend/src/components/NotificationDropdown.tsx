@@ -117,7 +117,7 @@ export const NotificationDropdown: React.FC = () => {
           rawNotifications.push({
             id: `sales-order-status-${o.id}-${o.status}`,
             title: `Order Status Updated`,
-            message: `Your order #${o.id.slice(-6).toUpperCase()} status was changed to ${statusText}.`,
+            message: `Your order #${o.id?.toString().slice(-6).toUpperCase()} status was changed to ${statusText}.`,
             date: o.date || new Date().toISOString(),
             icon,
             color
@@ -136,7 +136,7 @@ export const NotificationDropdown: React.FC = () => {
           rawNotifications.push({
             id: `sales-visit-today-${v.id}`,
             title: `Visit Scheduled Today`,
-            message: `You have a visit scheduled today at ${v.partyName || 'Dealer'}.`,
+            message: `You have a visit scheduled today at ${(v as any).partyName || 'Dealer'}.`,
             date: v.date || new Date().toISOString(),
             icon: MapPin,
             color: 'text-sky-500 bg-sky-500/10'
@@ -154,7 +154,7 @@ export const NotificationDropdown: React.FC = () => {
         rawNotifications.push({
           id: `inventory-new-order-${o.id}`,
           title: `New Dispatch Request`,
-          message: `Order #${o.id.slice(-6).toUpperCase()} has been approved. Ready for dispatch packaging.`,
+          message: `Order #${o.id?.toString().slice(-6).toUpperCase()} has been approved. Ready for dispatch packaging.`,
           date: o.date || new Date().toISOString(),
           icon: ShoppingCart,
           color: 'text-indigo-500 bg-indigo-500/10'
@@ -187,7 +187,7 @@ export const NotificationDropdown: React.FC = () => {
         rawNotifications.push({
           id: `admin-new-order-${o.id}`,
           title: `New Order Pending Approval`,
-          message: `Order #${o.id.slice(-6).toUpperCase()} submitted by ${o.soEmail ? o.soEmail.split('@')[0] : 'Sales Executive'} is awaiting your approval.`,
+          message: `Order #${o.id?.toString().slice(-6).toUpperCase()} submitted by ${o.soEmail ? o.soEmail.split('@')[0] : 'Sales Executive'} is awaiting your approval.`,
           date: o.date || new Date().toISOString(),
           icon: Clock,
           color: 'text-amber-500 bg-amber-500/10'
@@ -234,8 +234,8 @@ export const NotificationDropdown: React.FC = () => {
         rawNotifications.push({
           id: `hr-verify-expense-${e.id}`,
           title: `Verify Expense Claim`,
-          message: `Expense claim of ₹${(e.amount || 0).toLocaleString('en-IN')} by ${e.userName || 'Staff'} is awaiting verification.`,
-          date: e.createdAt || new Date().toISOString(),
+          message: `Expense claim of ₹${(e.amount || 0).toLocaleString('en-IN')} by ${(e as any).userName || 'Staff'} is awaiting verification.`,
+          date: (e as any).createdAt || new Date().toISOString(),
           icon: Receipt,
           color: 'text-teal-500 bg-teal-500/10'
         });
