@@ -137,5 +137,48 @@ export const orderRepository = {
     });
 
     return updatedOrder;
+  })),
+
+  updateOrder: (idOrOrderId: string, data: any) => safeQuery(() => prisma.$transaction(async (tx) => {
+    // 1. Find the order by id or orderId
+    const order = await tx.order.findFirst({
+      where: {
+        OR: [
+          { id: idOrOrderId },
+          { orderId: idOrOrderId }
+        ]
+      }
+    });
+
+    if (!order) {
+      throw new AppError('Order not found', 404);
+    }
+
+    // 2. Delete old items
+    await tx.orderItem.deleteMany({ where: { orderId: order.id } });
+    
+    // 3. Create new items and update order details
+    const updatedOrder = await tx.order.update({
+      where: { id: order.id },
+      data: {
+        narration: data.narration,
+        grandTotal: data.grandTotal,
+        partyName: data.partyName,
+        distributor: data.distributor,
+        soEmail: data.soEmail,
+        items: {
+          create: data.items.map((item: any) => ({
+            productId: item.productId,
+            qty: item.qty,
+            price: item.price,
+            total: item.price * item.qty,
+            itemRemark: item.itemRemark
+          }))
+        }
+      },
+      include: { items: true }
+    });
+
+    return updatedOrder;
   }))
 };

@@ -12,7 +12,7 @@ from api.models import Company, User, Warehouse
 from django.utils import timezone
 
 def seed():
-    print("🌱 Seeding Kamla Enterprises database...")
+    print("[SEED] Seeding Kamla Enterprises database...")
     now = timezone.now()
     
     # 1. Create Company
@@ -28,9 +28,9 @@ def seed():
         }
     )
     if created:
-        print(f"🏢 Created Company: {company.name}")
+        print(f"Created Company: {company.name}")
     else:
-        print(f"🏢 Company already exists: {company.name}")
+        print(f"Company already exists: {company.name}")
         
     # 2. Create Superadmin User
     hashed_password = bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt(10)).decode('utf-8')
@@ -49,12 +49,12 @@ def seed():
         }
     )
     if created:
-        print(f"👤 Created Superadmin User: {user.email}")
+        print(f"Created Superadmin User: {user.email}")
     else:
         user.hashedpassword = hashed_password
         user.updatedat = now
         user.save(update_fields=['hashedpassword', 'updatedat'])
-        print(f"👤 Superadmin User already exists: {user.email} (Password reset to admin123)")
+        print(f"Superadmin User already exists: {user.email} (Password reset to admin123)")
         
     # 3. Create MAIN Warehouse
     warehouse, created = Warehouse.objects.get_or_create(
@@ -70,11 +70,11 @@ def seed():
         }
     )
     if created:
-        print(f"🏗️ Created MAIN Warehouse")
+        print(f"Created MAIN Warehouse")
     else:
-        print(f"🏗️ MAIN Warehouse already exists")
+        print(f"MAIN Warehouse already exists")
         
-    print("🏁 Database successfully seeded!")
+    print("Database successfully seeded!")
 
 if __name__ == '__main__':
     seed()

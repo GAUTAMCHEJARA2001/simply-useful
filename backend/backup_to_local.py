@@ -47,6 +47,62 @@ def find_pg_dump():
                 
     return "pg_dump" # fallback
 
+def find_pg_restore():
+    # 1. Try system PATH
+    path_in_env = shutil.which("pg_restore")
+    if path_in_env:
+        return path_in_env
+        
+    # 2. Try standard Windows paths
+    if os.name == 'nt':
+        standard_dirs = [
+            r"C:\Program Files\PostgreSQL\18\bin\pg_restore.exe",
+            r"C:\Program Files\PostgreSQL\17\bin\pg_restore.exe",
+            r"C:\Program Files\PostgreSQL\16\bin\pg_restore.exe",
+            r"C:\Program Files\PostgreSQL\15\bin\pg_restore.exe",
+            r"C:\Program Files\PostgreSQL\14\bin\pg_restore.exe",
+            r"C:\Program Files\PostgreSQL\13\bin\pg_restore.exe",
+            r"C:\Program Files\PostgreSQL\12\bin\pg_restore.exe",
+        ]
+        for path in standard_dirs:
+            if os.path.exists(path):
+                return path
+                
+    return "pg_restore" # fallback
+
+def restore_pg_dump(backup_file_path, db_name=DB_NAME, db_user=DB_USER, db_password=DB_PASSWORD, db_host=DB_HOST, db_port=DB_PORT):
+    pg_restore_path = find_pg_restore()
+    print(f"Using pg_restore path: {pg_restore_path}")
+    print(f"Restoring database '{db_name}' from {backup_file_path}...")
+    
+    env = os.environ.copy()
+    env['PGPASSWORD'] = db_password
+    
+    cmd = [
+        pg_restore_path,
+        '-h', db_host,
+        '-p', db_port,
+        '-U', db_user,
+        '-d', db_name,
+        '--clean',
+        '--if-exists',
+        '-v',
+        backup_file_path
+    ]
+    
+    try:
+        res = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        if res.returncode == 0:
+            print("Database restored successfully.")
+            return True, "Success"
+        else:
+            error_msg = res.stderr or res.stdout or "Unknown pg_restore error"
+            print(f"[ERROR] pg_restore failed: {error_msg}")
+            return False, error_msg
+    except Exception as e:
+        print(f"[ERROR] pg_restore failed: {e}")
+        return False, str(e)
+
 def take_pg_dump(dest_dir):
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     backup_filename = f"db_backup_{timestamp}.dump"
@@ -123,6 +179,28 @@ def load_local_dir_from_settings():
     return None
 
 def main():
+    if '--restore' in sys.argv:
+        try:
+            restore_idx = sys.argv.index('--restore')
+            if restore_idx + 1 < len(sys.argv):
+                restore_file = sys.argv[restore_idx + 1]
+                if not os.path.exists(restore_file):
+                    print(f"Error: File '{restore_file}' does not exist.")
+                    sys.exit(1)
+                success, msg = restore_pg_dump(restore_file)
+                if success:
+                    print("Done!")
+                    sys.exit(0)
+                else:
+                    print(f"Restore failed: {msg}")
+                    sys.exit(1)
+            else:
+                print("Usage: python backup_to_local.py --restore <BACKUP_FILE_PATH>")
+                sys.exit(1)
+        except Exception as e:
+            print(f"Error parsing restore argument: {e}")
+            sys.exit(1)
+
     dest_dir = None
     if len(sys.argv) >= 2:
         dest_dir = sys.argv[1]

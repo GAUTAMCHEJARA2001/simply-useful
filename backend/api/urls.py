@@ -8,6 +8,7 @@ from api.views import (
     BroadcastViewSet,
     user_assignments,
     bulk_template, bulk_import, database_export, local_backup_status_view, download_postgres_dump_view, schedule_local_backup_view,
+    list_local_backups_view, restore_postgres_dump_view,
     
     # Reports
     report_dashboard_kpis, report_sales_summary, report_low_stock, report_daily,
@@ -69,6 +70,8 @@ urlpatterns = [
     path('system/local-backup-status', local_backup_status_view, name='local-backup-status'),
     path('system/download-postgres-dump', download_postgres_dump_view, name='download-postgres-dump'),
     path('system/auto-backup-schedule', schedule_local_backup_view, name='auto-backup-schedule'),
+    path('system/local-backups', list_local_backups_view, name='local-backups'),
+    path('system/restore-postgres-dump', restore_postgres_dump_view, name='restore-postgres-dump'),
     
     # Reports
     path('reports/dashboard-kpis', report_dashboard_kpis, name='report-dashboard-kpis'),

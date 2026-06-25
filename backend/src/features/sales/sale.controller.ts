@@ -65,3 +65,10 @@ export const updateItems = asyncHandler(async (req: AuthRequest, res: Response) 
   const sale = await saleService.updateItems(id, items);
   return sendSuccess(res, sale, 'Order items updated successfully');
 });
+
+export const updateOrder = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const data = req.body;
+  const sale = await saleService.updateOrder(id, data);
+  return sendSuccess(res, sale, 'Order updated successfully');
+});

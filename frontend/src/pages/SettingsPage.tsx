@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { Settings, Shield, CreditCard, Bell, Building2, Save, Download, Upload, Database, Cloud, Clock, HardDrive, FolderOpen } from 'lucide-react';
+import { Settings, Shield, CreditCard, Bell, Building2, Save, Download, Upload, Database, Cloud, Clock, HardDrive, FolderOpen, RefreshCw, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/api/client';
 
@@ -29,6 +29,22 @@ const SettingsPage: React.FC = () => {
     const [autoBackupEnabled, setAutoBackupEnabled] = React.useState(settings.local_backup_enabled || false);
     const [autoBackupTime, setAutoBackupTime] = React.useState(settings.local_backup_time || '02:00');
     const [isSavingSchedule, setIsSavingSchedule] = React.useState(false);
+
+    interface BackupFile {
+        filename: string;
+        size: string;
+        created_at: string;
+    }
+    const [localBackups, setLocalBackups] = React.useState<BackupFile[]>([]);
+    const [isFetchingBackups, setIsFetchingBackups] = React.useState(false);
+    const [restoreFile, setRestoreFile] = React.useState<File | null>(null);
+    const [isRestoring, setIsRestoring] = React.useState(false);
+    
+    // For confirmation dialog/modal
+    const [confirmModalOpen, setConfirmModalOpen] = React.useState(false);
+    const [confirmInput, setConfirmInput] = React.useState('');
+    const [selectedBackupFilename, setSelectedBackupFilename] = React.useState<string | null>(null);
+    const [selectedBackupUpload, setSelectedBackupUpload] = React.useState<File | null>(null);
 
     React.useEffect(() => {
         if (settings.local_backup_dir) {
@@ -65,8 +81,99 @@ const SettingsPage: React.FC = () => {
         }
     };
 
+    const fetchLocalBackups = async () => {
+        setIsFetchingBackups(true);
+        try {
+            const res = await api.get('/system/local-backups');
+            if (res.data?.success) {
+                setLocalBackups(res.data.data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch local backups', err);
+        } finally {
+            setIsFetchingBackups(false);
+        }
+    };
+
+    const handleInitiateLocalRestore = (filename: string) => {
+        setSelectedBackupFilename(filename);
+        setSelectedBackupUpload(null);
+        setConfirmInput('');
+        setConfirmModalOpen(true);
+    };
+
+    const handleInitiateUploadRestore = () => {
+        if (!restoreFile) {
+            toast.error('Please select a .dump file to upload first.');
+            return;
+        }
+        setSelectedBackupFilename(null);
+        setSelectedBackupUpload(restoreFile);
+        setConfirmInput('');
+        setConfirmModalOpen(true);
+    };
+
+    const handleExecuteRestore = async () => {
+        if (confirmInput.trim().toUpperCase() !== 'RESTORE') {
+            toast.error('Please type RESTORE exactly to confirm.');
+            return;
+        }
+        setConfirmModalOpen(false);
+        setIsRestoring(true);
+        
+        const loadToast = toast.loading('Restoring database... This may take a moment.');
+        
+        try {
+            if (selectedBackupUpload) {
+                const formData = new FormData();
+                formData.append('file', selectedBackupUpload);
+                const res = await api.post('/system/restore-postgres-dump', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                    timeout: 60000
+                });
+                if (res.data?.success) {
+                    toast.success(res.data.message || 'Database restored successfully!', { id: loadToast });
+                    setRestoreFile(null);
+                    const fileInput = document.getElementById('restore-file-upload') as HTMLInputElement;
+                    if (fileInput) fileInput.value = '';
+                    
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    toast.error(res.data?.message || 'Restore failed.', { id: loadToast });
+                }
+            } else if (selectedBackupFilename) {
+                const res = await api.post('/system/restore-postgres-dump', {
+                    filename: selectedBackupFilename
+                }, {
+                    timeout: 60000
+                });
+                if (res.data?.success) {
+                    toast.success(res.data.message || 'Database restored successfully!', { id: loadToast });
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    toast.error(res.data?.message || 'Restore failed.', { id: loadToast });
+                }
+            }
+        } catch (error: any) {
+            console.error('Database restore error:', error);
+            const errMsg = error?.response?.data?.message || 'An error occurred during database restoration.';
+            toast.error(errMsg, { id: loadToast });
+        } finally {
+            setIsRestoring(false);
+            setSelectedBackupFilename(null);
+            setSelectedBackupUpload(null);
+            setConfirmInput('');
+            fetchLocalBackups();
+        }
+    };
+
     React.useEffect(() => {
         fetchBackupStatus();
+        fetchLocalBackups();
     }, []);
 
     const handleDownloadPostgresDump = async () => {
@@ -106,6 +213,7 @@ const SettingsPage: React.FC = () => {
         } finally {
             setIsSavingSchedule(false);
             fetchBackupStatus();
+            fetchLocalBackups();
         }
     };
 
@@ -636,6 +744,101 @@ const SettingsPage: React.FC = () => {
                                 )}
                             </div>
 
+                            <div className="border-t border-border pt-4 mt-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="font-bold text-sm flex items-center gap-2">
+                                        <Database className="w-4 h-4 text-primary" /> Database Restoration
+                                    </h4>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={fetchLocalBackups}
+                                        disabled={isFetchingBackups || isRestoring}
+                                        className="h-8 px-2"
+                                    >
+                                        <RefreshCw className={`w-3.5 h-3.5 mr-1 ${isFetchingBackups ? 'animate-spin' : ''}`} />
+                                        Refresh List
+                                    </Button>
+                                </div>
+                                
+                                <p className="text-xs text-muted-foreground leading-normal">
+                                    Restore the master database schema and data from a previously created local backup, or upload a PostgreSQL `.dump` file.
+                                </p>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Local backups list */}
+                                    <div className="space-y-2 border border-border rounded-lg p-3 bg-secondary/10 flex flex-col justify-between">
+                                        <div className="space-y-1">
+                                            <Label className="font-semibold text-xs">Available Local Backups</Label>
+                                            <div className="max-h-[180px] overflow-y-auto space-y-1.5 mt-2 pr-1 select-none">
+                                                {isFetchingBackups ? (
+                                                    <div className="flex items-center justify-center py-6 text-xs text-muted-foreground gap-2">
+                                                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
+                                                        Scanning backups...
+                                                    </div>
+                                                ) : localBackups.length === 0 ? (
+                                                    <div className="text-center py-6 text-xs text-muted-foreground">
+                                                        No backups found in local folder.
+                                                    </div>
+                                                ) : (
+                                                    localBackups.map((b) => (
+                                                        <div key={b.filename} className="flex items-center justify-between p-2 rounded-lg bg-background border border-border text-[11px] hover:border-primary/45 transition-colors">
+                                                            <div className="space-y-0.5 max-w-[70%]">
+                                                                <p className="font-mono truncate font-semibold text-foreground" title={b.filename}>
+                                                                    {b.filename}
+                                                                </p>
+                                                                <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                                                                    <span>{b.size}</span>
+                                                                    <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
+                                                                    <span>{b.created_at}</span>
+                                                                </p>
+                                                            </div>
+                                                            <Button
+                                                                variant="destructive"
+                                                                size="sm"
+                                                                className="h-6 text-[10px] px-2"
+                                                                onClick={() => handleInitiateLocalRestore(b.filename)}
+                                                                disabled={isRestoring}
+                                                            >
+                                                                Restore
+                                                            </Button>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Upload restoration */}
+                                    <div className="space-y-3 border border-border rounded-lg p-3 bg-secondary/10 flex flex-col justify-between">
+                                        <div className="space-y-2">
+                                            <Label className="font-semibold text-xs">Upload & Restore Custom Dump</Label>
+                                            <p className="text-[10px] text-muted-foreground leading-normal">
+                                                Upload a `.dump` backup file created using `pg_dump` to overwrite the current database.
+                                            </p>
+                                            <Input
+                                                id="restore-file-upload"
+                                                type="file"
+                                                accept=".dump"
+                                                onChange={(e) => setRestoreFile(e.target.files?.[0] || null)}
+                                                className="bg-background mt-2 text-xs"
+                                                disabled={isRestoring}
+                                            />
+                                        </div>
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            className="w-full mt-2"
+                                            onClick={handleInitiateUploadRestore}
+                                            disabled={!restoreFile || isRestoring}
+                                        >
+                                            <Upload className="w-3.5 h-3.5 mr-1.5" />
+                                            Upload & Restore File
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="flex justify-end gap-2 pt-2 border-t border-border mt-4">
                                 <Button
                                     variant="outline"
@@ -688,6 +891,74 @@ const SettingsPage: React.FC = () => {
                     </p>
                 </CardContent>
             </Card>
+
+            {/* Confirmation Modal */}
+            {confirmModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="w-full max-w-md p-6 bg-background rounded-lg border border-border shadow-2xl space-y-4"
+                    >
+                        <div className="flex items-center gap-3 text-destructive">
+                            <AlertTriangle className="w-8 h-8 animate-bounce" />
+                            <h3 className="text-lg font-bold">Confirm Database Restoration</h3>
+                        </div>
+                        
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                            You are about to restore the database. This operation is <span className="font-bold text-foreground">highly destructive</span> and will overwrite all current company settings, product lists, dealer accounts, transactions, and reports.
+                        </p>
+                        <div className="p-3 bg-secondary/30 rounded border border-border text-xs text-muted-foreground">
+                            <span className="font-bold text-foreground">Target backup:</span>{' '}
+                            {selectedBackupFilename ? (
+                                <code className="text-primary">{selectedBackupFilename}</code>
+                            ) : selectedBackupUpload ? (
+                                <code className="text-primary">{selectedBackupUpload.name} (Uploaded File)</code>
+                            ) : 'Unknown'}
+                        </div>
+                        
+                        <div className="p-3 bg-red-500/10 rounded border border-red-500/20 text-xs text-red-500">
+                            A safety backup of your current database will be created automatically in your local backup folder prior to restoration.
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <Label htmlFor="restore-confirm" className="text-xs font-semibold">
+                                To confirm, please type <span className="font-bold text-foreground font-mono">RESTORE</span> below:
+                            </Label>
+                            <Input
+                                id="restore-confirm"
+                                type="text"
+                                placeholder="Type RESTORE to confirm"
+                                value={confirmInput}
+                                onChange={(e) => setConfirmInput(e.target.value)}
+                                className="font-mono text-center tracking-widest font-bold bg-background border border-border"
+                            />
+                        </div>
+                        
+                        <div className="flex justify-end gap-2 pt-2">
+                            <Button 
+                                variant="outline" 
+                                onClick={() => {
+                                    setConfirmModalOpen(false);
+                                    setSelectedBackupFilename(null);
+                                    setSelectedBackupUpload(null);
+                                    setConfirmInput('');
+                                }}
+                                disabled={isRestoring}
+                            >
+                                Cancel
+                            </Button>
+                            <Button 
+                                variant="destructive" 
+                                onClick={handleExecuteRestore}
+                                disabled={confirmInput.trim().toUpperCase() !== 'RESTORE' || isRestoring}
+                            >
+                                {isRestoring ? 'Restoring...' : 'Confirm & Restore'}
+                            </Button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
         </div>
     );
 };

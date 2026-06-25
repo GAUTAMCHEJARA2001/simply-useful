@@ -42,3 +42,7 @@ export const getSaleById = async (id: string) => {
 export const updateItems = async (id: string, items: any) => {
   return await orderRepository.updateItems(id, items);
 };
+
+export const updateOrder = async (id: string, data: any) => {
+  return await orderRepository.updateOrder(id, data);
+};

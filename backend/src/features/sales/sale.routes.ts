@@ -34,6 +34,7 @@ router.get('/', protect, saleController.getAll);
 router.post('/', protect, authorize('SALES', 'ADMIN', 'SUPERADMIN'), saleController.create);
 router.get('/:id', protect, saleController.getById);
 router.get('/:id/items', protect, saleController.getItems);
+router.put('/:id', protect, authorize('ADMIN', 'SUPERADMIN', 'SALES'), saleController.updateOrder);
 router.put('/:id/status', protect, authorize('ADMIN', 'SUPERADMIN', 'INVENTORY'), saleController.updateStatus);
 router.put('/:id/items', protect, authorize('ADMIN', 'SUPERADMIN'), saleController.updateItems);
 
