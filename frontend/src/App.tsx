@@ -14,6 +14,7 @@ import Signup from "./features/auth/Signup";
 import AppLayout from "./components/AppLayout";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Analytics } from "@vercel/analytics/react";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 import { Suspense, lazy } from "react";
 
