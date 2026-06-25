@@ -278,7 +278,61 @@ export const NotificationDropdown: React.FC = () => {
     setDismissedIds(updated);
   };
 
-  // Detect new notifications to play sound and show toast
+  // Register Service Worker and request notification permission on mount
+  const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+
+  useEffect(() => {
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then((reg) => {
+        swRegistrationRef.current = reg;
+      }).catch((err) => {
+        console.warn('SW registration failed:', err);
+      });
+    }
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Helper to show a native notification via the service worker
+  const showNativeNotification = (title: string, body: string, tag?: string) => {
+    // Play notification sound
+    try {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.volume = 0.5;
+      audio.play().catch(() => {});
+    } catch (e) {}
+
+    // Show in-app toast as well
+    toast({ title, description: body });
+
+    // Send to service worker for native OS notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      if (swRegistrationRef.current?.active) {
+        swRegistrationRef.current.active.postMessage({
+          type: 'SHOW_NOTIFICATION',
+          title,
+          body,
+          icon: '/android-chrome-192x192.png',
+          tag: tag || 'kamla-' + Date.now(),
+        });
+      } else {
+        // Fallback: use Notification API directly
+        try {
+          new Notification(title, {
+            body,
+            icon: '/android-chrome-192x192.png',
+            tag: tag || 'kamla-' + Date.now(),
+          });
+        } catch (e) {}
+      }
+    }
+  };
+
+  // Detect new notifications to play sound and show native notification
   const activeIdsString = activeNotifications.map(n => n.id).join(',');
   useEffect(() => {
     const currentIds = new Set(activeNotifications.map(n => n.id));
@@ -287,18 +341,8 @@ export const NotificationDropdown: React.FC = () => {
     if (prevIdsRef.current.size > 0) {
       const newNotifs = activeNotifications.filter(n => !prevIdsRef.current.has(n.id));
       if (newNotifs.length > 0) {
-         try {
-           // Short, pleasant notification sound
-           const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-           audio.volume = 0.5;
-           audio.play().catch(() => {});
-         } catch (e) {}
-         
          newNotifs.forEach(n => {
-            toast({
-              title: n.title,
-              description: n.message,
-            });
+            showNativeNotification(n.title, n.message, n.id);
          });
       }
     }
