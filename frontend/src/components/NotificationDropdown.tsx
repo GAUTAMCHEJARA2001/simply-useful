@@ -1,13 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
-import { 
-  Bell, BellRing, CheckCircle2, Volume2, AlertTriangle, 
+import {
+  Bell, BellRing, CheckCircle2, Volume2, AlertTriangle,
   ShoppingCart, Package, Clock, ClipboardList, MapPin, Receipt, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+
+const DISMISSED_STORAGE_KEY = 'kamla_dismissed_notifications';
+const ALERTED_STORAGE_KEY = 'kamla_alerted_notifications';
+
+const readStoredIds = (key: string): string[] => {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+};
+
+const writeStoredIds = (key: string, ids: string[]) => {
+  localStorage.setItem(key, JSON.stringify(Array.from(new Set(ids))));
+};
 
 export interface Broadcast {
   id: string;
@@ -31,10 +50,32 @@ export const NotificationDropdown: React.FC = () => {
   const { orders, products, visits, expenses } = useData();
   const [isOpen, setIsOpen] = useState(false);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
-  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<string[]>(() => readStoredIds(DISMISSED_STORAGE_KEY));
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 340, maxHeight: 480 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const prevIdsRef = useRef<Set<string>>(new Set());
+  const alertedIdsRef = useRef<Set<string>>(new Set(readStoredIds(ALERTED_STORAGE_KEY)));
+  const hasNotificationSnapshotRef = useRef(false);
   const { toast } = useToast();
+
+  const updateDropdownPosition = useCallback(() => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const viewportWidth = window.innerWidth;
+    const sidePadding = viewportWidth < 640 ? 12 : 16;
+    const width = Math.min(viewportWidth - sidePadding * 2, viewportWidth < 640 ? 360 : 340);
+    const left = Math.min(
+      Math.max(sidePadding, rect.right - width),
+      viewportWidth - width - sidePadding
+    );
+    const top = Math.min(rect.bottom + 8, window.innerHeight - 120);
+    const maxHeight = Math.max(240, window.innerHeight - top - sidePadding);
+
+    setDropdownPosition({ top, left, width, maxHeight });
+  }, []);
 
   // Load broadcasts from backend API and dismissed list from localStorage
   const loadNotifications = async () => {
@@ -55,13 +96,8 @@ export const NotificationDropdown: React.FC = () => {
       console.error('Failed to load broadcasts:', e);
     }
 
-    try {
-      const rawDismissed = localStorage.getItem('kamla_dismissed_notifications');
-      const loadedDismissed = rawDismissed ? JSON.parse(rawDismissed) : [];
-      setDismissedIds(loadedDismissed);
-    } catch (e) {
-      console.error(e);
-    }
+    setDismissedIds(readStoredIds(DISMISSED_STORAGE_KEY));
+    alertedIdsRef.current = new Set(readStoredIds(ALERTED_STORAGE_KEY));
   };
 
   useEffect(() => {
@@ -74,13 +110,29 @@ export const NotificationDropdown: React.FC = () => {
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedButton = containerRef.current?.contains(target);
+      const clickedDropdown = dropdownRef.current?.contains(target);
+      if (!clickedButton && !clickedDropdown) {
         setIsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    updateDropdownPosition();
+    window.addEventListener('resize', updateDropdownPosition);
+    window.addEventListener('scroll', updateDropdownPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updateDropdownPosition);
+      window.removeEventListener('scroll', updateDropdownPosition, true);
+    };
+  }, [isOpen, updateDropdownPosition]);
 
   if (!user) return null;
 
@@ -265,8 +317,8 @@ export const NotificationDropdown: React.FC = () => {
 
   // Dismiss notification helper
   const dismissNotification = (id: string) => {
-    const updated = [...dismissedIds, id];
-    localStorage.setItem('kamla_dismissed_notifications', JSON.stringify(updated));
+    const updated = Array.from(new Set([...dismissedIds, id]));
+    writeStoredIds(DISMISSED_STORAGE_KEY, updated);
     setDismissedIds(updated);
   };
 
@@ -274,8 +326,9 @@ export const NotificationDropdown: React.FC = () => {
   const dismissAll = () => {
     const activeIds = activeNotifications.map(n => n.id);
     const updated = Array.from(new Set([...dismissedIds, ...activeIds]));
-    localStorage.setItem('kamla_dismissed_notifications', JSON.stringify(updated));
+    writeStoredIds(DISMISSED_STORAGE_KEY, updated);
     setDismissedIds(updated);
+    setIsOpen(false);
   };
 
   // Register Service Worker and request notification permission on mount
@@ -303,8 +356,8 @@ export const NotificationDropdown: React.FC = () => {
     try {
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
       audio.volume = 0.5;
-      audio.play().catch(() => {});
-    } catch (e) {}
+      audio.play().catch(() => { });
+    } catch (e) { }
 
     // Show in-app toast as well
     toast({ title, description: body });
@@ -318,6 +371,7 @@ export const NotificationDropdown: React.FC = () => {
           body,
           icon: '/android-chrome-192x192.png',
           tag: tag || 'kamla-' + Date.now(),
+          renotify: false,
         });
       } else {
         // Fallback: use Notification API directly
@@ -327,7 +381,7 @@ export const NotificationDropdown: React.FC = () => {
             icon: '/android-chrome-192x192.png',
             tag: tag || 'kamla-' + Date.now(),
           });
-        } catch (e) {}
+        } catch (e) { }
       }
     }
   };
@@ -336,31 +390,136 @@ export const NotificationDropdown: React.FC = () => {
   const activeIdsString = activeNotifications.map(n => n.id).join(',');
   useEffect(() => {
     const currentIds = new Set(activeNotifications.map(n => n.id));
-    
-    // Only alert if we already loaded initial data (prevIdsRef is not empty)
-    if (prevIdsRef.current.size > 0) {
-      const newNotifs = activeNotifications.filter(n => !prevIdsRef.current.has(n.id));
-      if (newNotifs.length > 0) {
-         newNotifs.forEach(n => {
-            showNativeNotification(n.title, n.message, n.id);
-         });
-      }
+
+    if (!hasNotificationSnapshotRef.current) {
+      hasNotificationSnapshotRef.current = true;
+      prevIdsRef.current = currentIds;
+      const alreadyAlerted = Array.from(new Set([...alertedIdsRef.current, ...currentIds]));
+      alertedIdsRef.current = new Set(alreadyAlerted);
+      writeStoredIds(ALERTED_STORAGE_KEY, alreadyAlerted);
+      return;
     }
-    
+
+    const newNotifs = activeNotifications.filter(
+      n => !prevIdsRef.current.has(n.id) && !alertedIdsRef.current.has(n.id)
+    );
+
+    if (newNotifs.length > 0) {
+      newNotifs.forEach(n => {
+        showNativeNotification(n.title, n.message, n.id);
+      });
+
+      const alerted = Array.from(new Set([
+        ...alertedIdsRef.current,
+        ...newNotifs.map(n => n.id),
+      ]));
+      alertedIdsRef.current = new Set(alerted);
+      writeStoredIds(ALERTED_STORAGE_KEY, alerted);
+    }
+
     prevIdsRef.current = currentIds;
   }, [activeIdsString]);
 
+  const dropdown = isOpen ? createPortal(
+    <AnimatePresence>
+      <motion.div
+        ref={dropdownRef}
+        initial={{ opacity: 0, y: 8, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        className="fixed bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl overflow-hidden flex flex-col z-[9999]"
+        style={{
+          top: dropdownPosition.top,
+          left: dropdownPosition.left,
+          width: dropdownPosition.width,
+          maxHeight: dropdownPosition.maxHeight,
+          transformOrigin: 'top right',
+        }}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-muted/30 shrink-0">
+          <div>
+            <h3 className="font-extrabold text-sm text-foreground">Notifications</h3>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {activeNotifications.length === 0 ? 'All caught up' : `${activeNotifications.length} pending items`}
+            </p>
+          </div>
+          {activeNotifications.length > 0 && (
+            <button
+              onClick={dismissAll}
+              className="text-[10px] font-black text-amber-500 hover:text-amber-600 transition-colors"
+            >
+              Clear All
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto divide-y divide-border/40">
+          {activeNotifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2.5 opacity-80" />
+              <p className="text-xs font-bold text-foreground">No pending alerts</p>
+              <p className="text-[10px] text-muted-foreground mt-1 leading-normal max-w-[200px]">
+                Your notifications have been reviewed and cleared!
+              </p>
+            </div>
+          ) : (
+            activeNotifications.map((notif) => (
+              <div
+                key={notif.id}
+                className="p-3.5 flex gap-3 hover:bg-muted/30 transition-colors group relative"
+              >
+                <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", notif.color)}>
+                  <notif.icon className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0 pr-5">
+                  <p className="text-xs font-extrabold text-foreground leading-tight">
+                    {notif.title}
+                  </p>
+                  <p className="text-[10.5px] text-foreground/90 mt-1 leading-relaxed font-medium break-words">
+                    {notif.message}
+                  </p>
+                  <p className="text-[9px] text-muted-foreground mt-2 font-mono">
+                    {new Date(notif.date).toLocaleDateString('en-IN', {
+                      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissNotification(notif.id);
+                  }}
+                  className="absolute right-2.5 top-3.5 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all sm:opacity-0 sm:group-hover:opacity-100"
+                  title="Dismiss notification"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </motion.div>
+    </AnimatePresence>,
+    document.body
+  ) : null;
+
   return (
-    <div ref={containerRef} className="relative z-50">
-      {/* Bell Button */}
+    <div ref={containerRef} className="relative z-50 shrink-0">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={buttonRef}
+        onClick={() => {
+          updateDropdownPosition();
+          setIsOpen(open => !open);
+        }}
         className={cn(
           "relative p-2 rounded-xl border transition-all duration-300 outline-none flex items-center justify-center",
-          isOpen 
-            ? "bg-primary/10 border-primary text-primary" 
+          isOpen
+            ? "bg-primary/10 border-primary text-primary"
             : "bg-card border-border hover:bg-muted/50 text-muted-foreground hover:text-foreground"
         )}
+        aria-label="Open notifications"
+        aria-expanded={isOpen}
       >
         {activeNotifications.length > 0 ? (
           <BellRing className="w-5 h-5 text-amber-500 animate-swing" />
@@ -374,84 +533,7 @@ export const NotificationDropdown: React.FC = () => {
         )}
       </button>
 
-      {/* Dropdown Menu */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="absolute right-0 mt-2 w-80 max-h-[480px] bg-card/95 backdrop-blur-xl border border-border/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col z-[9999]"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-muted/30">
-              <div>
-                <h3 className="font-extrabold text-sm text-foreground">Notifications</h3>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  {activeNotifications.length === 0 ? 'All caught up' : `${activeNotifications.length} pending items`}
-                </p>
-              </div>
-              {activeNotifications.length > 0 && (
-                <button
-                  onClick={dismissAll}
-                  className="text-[10px] font-black text-amber-500 hover:text-amber-600 transition-colors"
-                >
-                  Clear All
-                </button>
-              )}
-            </div>
-
-            {/* List */}
-            <div className="flex-1 overflow-y-auto divide-y divide-border/40 max-h-[360px]">
-              {activeNotifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2.5 opacity-80" />
-                  <p className="text-xs font-bold text-foreground">No pending alerts</p>
-                  <p className="text-[10px] text-muted-foreground mt-1 leading-normal max-w-[200px]">
-                    Your notifications have been reviewed and cleared!
-                  </p>
-                </div>
-              ) : (
-                activeNotifications.map((notif) => (
-                  <div 
-                    key={notif.id} 
-                    className="p-3.5 flex gap-3 hover:bg-muted/30 transition-colors group relative"
-                  >
-                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", notif.color)}>
-                      <notif.icon className="w-4.5 h-4.5" />
-                    </div>
-                    <div className="flex-1 min-w-0 pr-5">
-                      <p className="text-xs font-extrabold text-foreground leading-tight">
-                        {notif.title}
-                      </p>
-                      <p className="text-[10.5px] text-foreground/90 mt-1 leading-relaxed font-medium">
-                        {notif.message}
-                      </p>
-                      <p className="text-[9px] text-muted-foreground mt-2 font-mono">
-                        {new Date(notif.date).toLocaleDateString('en-IN', {
-                          day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-                        })}
-                      </p>
-                    </div>
-                    {/* Dismiss Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        dismissNotification(notif.id);
-                      }}
-                      className="absolute right-2.5 top-3.5 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all opacity-0 group-hover:opacity-100"
-                      title="Dismiss notification"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {dropdown}
     </div>
   );
 };

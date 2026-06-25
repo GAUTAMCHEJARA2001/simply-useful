@@ -21,6 +21,9 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      workbox: {
+        importScripts: ['notification-sw.js'],
+      },
       manifest: {
         name: 'Kamla OTS',
         short_name: 'Kamla OTS',

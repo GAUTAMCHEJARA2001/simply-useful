@@ -15,13 +15,13 @@ self.addEventListener('activate', (event) => {
 // Listen for messages from the main app to show notifications
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
-    const { title, body, icon, tag, data } = event.data;
+    const { title, body, icon, tag, data, renotify } = event.data;
     self.registration.showNotification(title, {
       body: body || '',
       icon: icon || '/android-chrome-192x192.png',
       badge: '/favicon-32x32.png',
       tag: tag || 'kamla-notification',
-      renotify: true,
+      renotify: Boolean(renotify),
       vibrate: [200, 100, 200],
       data: data || {},
     });

@@ -155,7 +155,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="flex-none h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 overflow-x-auto scrollbar-none w-full z-30">
+        <header className="flex-none h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 overflow-visible w-full z-30">
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden mr-1.5 sm:mr-3 p-1 sm:p-1.5 rounded-lg hover:bg-muted transition-colors"
@@ -163,7 +163,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <Menu className="w-5 h-5 text-foreground" />
           </button>
           <div className="flex-1" />
-          <div className="flex items-center gap-1.5 sm:gap-3">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-3 min-w-0">
             <WarehouseSwitcher />
             <FYSelector />
             <NotificationDropdown />
