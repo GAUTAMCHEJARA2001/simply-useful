@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 export interface Broadcast {
   id: string;
@@ -32,6 +33,8 @@ export const NotificationDropdown: React.FC = () => {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const prevIdsRef = useRef<Set<string>>(new Set());
+  const { toast } = useToast();
 
   // Load broadcasts from backend API and dismissed list from localStorage
   const loadNotifications = async () => {
@@ -275,16 +278,33 @@ export const NotificationDropdown: React.FC = () => {
     setDismissedIds(updated);
   };
 
-  // REMOVE AFTER ONE TIME WATCH:
-  // When dropdown is opened and then closed, automatically dismiss all active notifications
+  // Detect new notifications to play sound and show toast
+  const activeIdsString = activeNotifications.map(n => n.id).join(',');
   useEffect(() => {
-    if (!isOpen && activeNotifications.length > 0) {
-      const activeIds = activeNotifications.map(n => n.id);
-      const updated = Array.from(new Set([...dismissedIds, ...activeIds]));
-      localStorage.setItem('kamla_dismissed_notifications', JSON.stringify(updated));
-      setDismissedIds(updated);
+    const currentIds = new Set(activeNotifications.map(n => n.id));
+    
+    // Only alert if we already loaded initial data (prevIdsRef is not empty)
+    if (prevIdsRef.current.size > 0) {
+      const newNotifs = activeNotifications.filter(n => !prevIdsRef.current.has(n.id));
+      if (newNotifs.length > 0) {
+         try {
+           // Short, pleasant notification sound
+           const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+           audio.volume = 0.5;
+           audio.play().catch(() => {});
+         } catch (e) {}
+         
+         newNotifs.forEach(n => {
+            toast({
+              title: n.title,
+              description: n.message,
+            });
+         });
+      }
     }
-  }, [isOpen]);
+    
+    prevIdsRef.current = currentIds;
+  }, [activeIdsString]);
 
   return (
     <div ref={containerRef} className="relative z-50">
