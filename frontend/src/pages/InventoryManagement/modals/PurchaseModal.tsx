@@ -74,7 +74,6 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
         ...purchase,
         date: getFormattedDateString(purchase.date)
       });
-      });
       setInitializedId(purchase.id);
     } else if (!purchase && isOpen) {
       setForm({
