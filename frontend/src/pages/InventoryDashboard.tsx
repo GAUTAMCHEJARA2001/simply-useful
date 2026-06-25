@@ -229,7 +229,7 @@ const InventoryDashboard: React.FC = () => {
   const completedOrders = assignedOrders.filter(o => o.status === 'Completed');
 
   const productDemand = (assignedOrders || [])
-    .filter(o => o.status !== 'Cancelled' && o.status !== 'Completed')
+    .filter(o => o.status === 'Pending' || o.status === 'Approved')
     .flatMap(o => o.items || [])
     .reduce((acc, item) => {
       const itAny = item as any;
