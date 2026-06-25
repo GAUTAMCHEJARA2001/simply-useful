@@ -17,6 +17,7 @@ const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en
 export const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ isOpen, onClose, returnOrder, defaultType = 'Sales Return' }) => {
   const { saveReturn, isSavingReturn } = useReturnMutations();
   const { data: products = [] } = useProducts();
+  const [initializedId, setInitializedId] = useState<string | null>(null);
 
   const [form, setForm] = useState<any>({
     type: defaultType,
@@ -30,7 +31,13 @@ export const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ isOpen, onCl
   });
 
   useEffect(() => {
-    if (returnOrder && isOpen) {
+    if (!isOpen) {
+      setInitializedId(null);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (returnOrder && isOpen && initializedId !== returnOrder.id) {
       const mappedLineItems = (returnOrder.items || []).map((it: any) => ({
         productId: it.productId || it.product_id || it.productid_id || it.product?.id || '',
         qty: it.qty || 0,
@@ -48,7 +55,8 @@ export const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ isOpen, onCl
         returnDate: returnOrder.returnDate || returnOrder.return_date || new Date().toISOString().split('T')[0],
         lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', qty: 0, price: 0 }]
       });
-    } else {
+      setInitializedId(returnOrder.id);
+    } else if (!returnOrder && isOpen) {
       setForm({ 
         type: defaultType,
         partyName: '',

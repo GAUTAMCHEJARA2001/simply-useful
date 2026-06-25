@@ -38,15 +38,18 @@ const OrderPage: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openPartyCombobox, setOpenPartyCombobox] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     if (!id && user?.email) {
       setSoEmail(user.email);
     }
+    // Reset initialization if ID changes (navigating to a different order)
+    setIsInitialized(false);
   }, [id, user]);
 
   useEffect(() => {
-    if (id && orders.length > 0) {
+    if (id && orders.length > 0 && !isInitialized) {
       const existing = orders.find(o => 
         (o.orderId && o.orderId.toLowerCase() === id.toLowerCase()) ||
         (o.id && String(o.id).toLowerCase() === id.toLowerCase()) ||
@@ -62,13 +65,14 @@ const OrderPage: React.FC = () => {
           itemRemark: item.itemRemark ?? item.item_remark ?? item.remark ?? '',
         })));
         setNarration(existing.narration || '');
+        setIsInitialized(true);
       }
     }
     // Fallback warehouse if 1 is not present
     if (warehouses && warehouses.length > 0 && !warehouses.find(w => w.id === warehouseId)) {
         setWarehouseId(warehouses[0].id);
     }
-  }, [id, orders, warehouses, warehouseId]);
+  }, [id, orders, warehouses, warehouseId, isInitialized]);
 
   // Force re-fetch shared states/settings when visiting form view
   useEffect(() => {

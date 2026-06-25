@@ -60,13 +60,23 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
     lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, remark: '' }]
   });
 
+  const [initializedId, setInitializedId] = useState<string | null>(null);
+
   useEffect(() => {
-    if (purchase) {
+    if (!isOpen) {
+      setInitializedId(null);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (purchase && isOpen && initializedId !== purchase.id) {
       setForm({
         ...purchase,
         date: getFormattedDateString(purchase.date)
       });
-    } else {
+      });
+      setInitializedId(purchase.id);
+    } else if (!purchase && isOpen) {
       setForm({
         date: getLocalDateString(),
         lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, remark: '' }]

@@ -62,9 +62,16 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
   });
 
   const { data: products = [] } = useProducts({ warehouseId: form.warehouse_id });
+  const [initializedSaleId, setInitializedSaleId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (sale && isOpen) {
+    if (!isOpen) {
+      setInitializedSaleId(null);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (sale && isOpen && initializedSaleId !== sale.id) {
       // Map Order object to SalesModal form shape
       const mappedLineItems = (sale.items || []).map((it: any) => ({
         productId: it.productId || it.product_id || it.productid_id || it.product?.id || '',
