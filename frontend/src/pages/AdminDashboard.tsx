@@ -20,8 +20,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700',
   Approved: 'bg-blue-100 text-blue-700',
+  'Partially Dispatched': 'bg-violet-100 text-violet-700',
   Dispatched: 'bg-purple-100 text-purple-700',
   Completed: 'bg-green-100 text-green-700',
+  'Partially Returned': 'bg-amber-100 text-amber-700',
   Returned: 'bg-orange-100 text-orange-700',
   Cancelled: 'bg-red-100 text-red-700',
 };

@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Company {
@@ -172,18 +173,54 @@ model Order {
 }
 
 model OrderItem {
-  id         String  @id @default(cuid())
-  orderId    String
-  productId  String
-  qty        Int
-  price      Float
-  total      Float
-  itemRemark String?
-  order      Order   @relation(fields: [orderId], references: [id])
-  product    Product @relation(fields: [productId], references: [id])
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String
+  qty         Int
+  sentQty     Int     @default(0)
+  returnedQty Int     @default(0)
+  price       Float
+  total       Float
+  itemRemark  String?
+  order       Order   @relation(fields: [orderId], references: [id])
+  product     Product @relation(fields: [productId], references: [id])
 
   @@index([orderId])
   @@index([productId])
+}
+
+model DispatchLog {
+  id            String   @id @default(cuid())
+  orderId       String
+  orderItemId   String
+  productId     String
+  qty           Int
+  invoiceNumber String?
+  vehicleNumber String?
+  driverName    String?
+  driverMobile  String?
+  warehouseId   Int?
+  dispatchDate  DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([orderId])
+  @@index([orderItemId])
+}
+
+model ReturnLog {
+  id            String   @id @default(cuid())
+  orderId       String
+  orderItemId   String
+  productId     String
+  qty           Int
+  returnReason  String?
+  challanNumber String?
+  vehicleNumber String?
+  returnDate    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([orderId])
+  @@index([orderItemId])
 }
 
 model Visit {

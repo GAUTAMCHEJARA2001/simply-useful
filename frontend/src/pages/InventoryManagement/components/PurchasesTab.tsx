@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
-import { Plus, RotateCcw } from 'lucide-react';
+import { Plus, RotateCcw, Search } from 'lucide-react';
 import { usePurchases, usePurchaseMutations } from '@/hooks/inventory/usePurchases';
 import { useReturnMutations } from '@/hooks/inventory/useReturns';
 import { PurchaseModal } from '../modals/PurchaseModal';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
+import { Input } from '@/components/ui/input';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -24,6 +25,17 @@ export const PurchasesTab: React.FC = () => {
     returnBillNumber: '',
     returnDate: new Date().toISOString().split('T')[0],
     returnReason: '',
+  });
+  
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredPurchases = purchases.filter((p: any) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    const s = [
+      p.id, p.supplierName, p.supplier?.name, p.challanNumber, p.vehicleNumber, p.vehicle_number, p.status
+    ].filter(Boolean).join(' ').toLowerCase();
+    return s.includes(term);
   });
 
   const handleEdit = (purchase: any) => {
@@ -67,17 +79,29 @@ export const PurchasesTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-xl font-bold">Purchases</h1>
-        <Button size="sm" onClick={handleAdd}>
-          <Plus className="w-4 h-4 mr-1.5" /> New Purchase
-        </Button>
+        
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search purchases..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 bg-background h-9"
+            />
+          </div>
+          <Button size="sm" onClick={handleAdd} className="h-9">
+            <Plus className="w-4 h-4 mr-1.5" /> New Purchase
+          </Button>
+        </div>
       </div>
 
-      <SafeDataView data={purchases} isLoading={isLoading} error={error} onRetry={() => refetch()}>
+      <SafeDataView data={filteredPurchases} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable 
           columns={['Supplier', 'Items', 'Qty', 'Challan', 'Vehicle', 'Tax', 'Net Amount', 'Date', 'Return']}
-          rows={purchases.map((p: any) => [
+          rows={filteredPurchases.map((p: any) => [
             p.supplierName || p.supplier?.name || '—', 
             (p.items || []).map((it: any) => it.productName || it.product_name || '—').join(', ') || '—',
             (p.items || []).map((it: any) => `${Number(it.qty || it.quantity || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`).join(', ') || '—',
@@ -94,8 +118,8 @@ export const PurchasesTab: React.FC = () => {
               </Button>
             )
           ])}
-          onEdit={i => handleEdit(purchases[i])}
-          onDelete={i => handleDelete(purchases[i].id)}
+          onEdit={i => handleEdit(filteredPurchases[i])}
+          onDelete={i => handleDelete(filteredPurchases[i].id)}
         />
       </SafeDataView>
 

@@ -9,6 +9,8 @@ import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { Search } from 'lucide-react';
 
 const extractDispatchDetails = (narration: string) => {
   if (!narration) return null;
@@ -60,6 +62,7 @@ const MyOrders: React.FC = () => {
   // Filter States
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [showAllTime, setShowAllTime] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const formatDate = (dateStr: any) => {
     if (!dateStr) return 'N/A';
@@ -76,8 +79,11 @@ const MyOrders: React.FC = () => {
     const s = (statusStr || 'Pending').trim().toLowerCase();
     if (s === 'pending') return 'Pending';
     if (s === 'approved') return 'Approved';
+    if (s === 'partially dispatched') return 'Partially Dispatched';
     if (s === 'dispatched') return 'Dispatched';
     if (s === 'completed' || s === 'complete') return 'Completed';
+    if (s === 'partially returned') return 'Partially Returned';
+    if (s === 'returned') return 'Returned';
     if (s === 'cancelled' || s === 'rejected') return 'Cancelled';
     return statusStr || 'Pending';
   };
@@ -114,30 +120,61 @@ const MyOrders: React.FC = () => {
     : filterBySelectedFY(orders || [], o => o.date || (o as any).createdAt);
   const totalPlacedCount = fyFilteredOrders.length;
   const filteredOrders = fyFilteredOrders.filter(order => {
-    if (statusFilter === 'All') return true;
-    const orderStatus = getDisplayStatus(order.status);
-    return orderStatus === statusFilter;
+    let matchesStatus = true;
+    if (statusFilter !== 'All') {
+      const orderStatus = getDisplayStatus(order.status);
+      matchesStatus = orderStatus === statusFilter;
+    }
+    
+    let matchesSearch = true;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const s = [
+        order.orderId,
+        order.order_id,
+        order.id,
+        order.partyName,
+        order.party_name,
+        order.narration,
+        order.status
+      ].filter(Boolean).join(' ').toLowerCase();
+      matchesSearch = s.includes(term);
+    }
+    
+    return matchesStatus && matchesSearch;
   });
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="page-header">My Orders</h1>
-        <p className="page-subheader">
-          {showAllTime
-            ? `${totalPlacedCount} orders (All Time)`
-            : statusFilter === 'All'
-              ? `${totalPlacedCount} orders in ${fyLabel}`
-              : `${filteredOrders.length} ${statusFilter} orders in ${fyLabel} (${totalPlacedCount} total)`}
-          {' '}
-          <button
-            onClick={() => setShowAllTime(v => !v)}
-            className="text-primary underline text-xs ml-1"
-          >
-            {showAllTime ? `Show ${fyLabel}` : 'Show All Time'}
-          </button>
-        </p>
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div>
+          <h1 className="page-header">My Orders</h1>
+          <p className="page-subheader">
+            {showAllTime
+              ? `${totalPlacedCount} orders (All Time)`
+              : statusFilter === 'All'
+                ? `${totalPlacedCount} orders in ${fyLabel}`
+                : `${filteredOrders.length} ${statusFilter} orders in ${fyLabel} (${totalPlacedCount} total)`}
+            {' '}
+            <button
+              onClick={() => setShowAllTime(v => !v)}
+              className="text-primary underline text-xs ml-1"
+            >
+              {showAllTime ? `Show ${fyLabel}` : 'Show All Time'}
+            </button>
+          </p>
+        </div>
+        
+        <div className="relative w-full md:max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="Search by ID, Party, Status, Vehicle..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 bg-background"
+          />
+        </div>
       </div>
 
       {/* Pill Filter Bar */}
@@ -147,8 +184,10 @@ const MyOrders: React.FC = () => {
             { id: 'All', label: 'All' },
             { id: 'Pending', label: 'Pending' },
             { id: 'Approved', label: 'Approved' },
+            { id: 'Partially Dispatched', label: 'P. Dispatched' },
             { id: 'Dispatched', label: 'Dispatched' },
             { id: 'Completed', label: 'Completed' },
+            { id: 'Partially Returned', label: 'P. Returned' },
             { id: 'Cancelled', label: 'Cancelled' }
           ] as const
         ).map(f => {
@@ -252,7 +291,10 @@ const MyOrders: React.FC = () => {
                       displayStatus === 'Completed' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
                       displayStatus === 'Cancelled' ? 'bg-red-500/10 text-red-600 border-red-500/20' :
                       displayStatus === 'Dispatched' ? 'bg-purple-500/10 text-purple-600 border-purple-500/20' :
+                      displayStatus === 'Partially Dispatched' ? 'bg-violet-500/10 text-violet-600 border-violet-500/20' :
                       displayStatus === 'Approved' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' :
+                      displayStatus === 'Returned' ? 'bg-orange-500/10 text-orange-600 border-orange-500/20' :
+                      displayStatus === 'Partially Returned' ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
                       'bg-yellow-500/10 text-yellow-600 border-yellow-500/20'
                     }`}>
                       {displayStatus}
@@ -284,7 +326,19 @@ const MyOrders: React.FC = () => {
                     <div className="flex justify-between items-center mt-1">
                       <span className="text-xs text-muted-foreground">Grand Total</span>
                       <span className="font-bold text-success">
-                        ₹{(order.grandTotal || order.grand_total || 0).toLocaleString()}
+                        ₹{(() => {
+                          let displayTotal = Number(order.grandTotal) || Number(order.grand_total) || 0;
+                          if (orderItems && orderItems.length > 0) {
+                            const recalculated = orderItems.reduce((sum: number, item: any) => {
+                              const netQty = Math.max(0, (Number(item.qty) || 0) - (Number(item.returnedQty) || Number(item.returnedqty) || 0));
+                              return sum + (netQty * (Number(item.price) || 0));
+                            }, 0);
+                            if (recalculated > 0 && displayStatus !== 'Pending') {
+                              displayTotal = recalculated;
+                            }
+                          }
+                          return displayTotal.toLocaleString();
+                        })()}
                       </span>
                     </div>
                   )}

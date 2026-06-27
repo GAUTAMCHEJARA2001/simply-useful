@@ -4,14 +4,28 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { DataTable } from '@/components/DataTable';
-import { RefreshCw, MapPin, User, FileText, Calendar, Box, Activity } from 'lucide-react';
+import { Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { Order } from '@/types';
 
 const ReturnedOrders: React.FC = () => {
   const { orders } = useData();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const returnedOrders = orders.filter(o => o.status === 'Returned');
+  const returnedOrders = orders.filter(o => {
+    const isReturned = o.status === 'Returned' || o.status === 'Partially Returned';
+    if (!isReturned) return false;
+    
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const s = [
+        o.id, o.order_id, o.orderId, o.partyName, o.party_name, o.narration
+      ].filter(Boolean).join(' ').toLowerCase();
+      return s.includes(term);
+    }
+    return true;
+  });
 
   const formatDate = (d: string | undefined) => d ? new Date(d).toLocaleString('en-IN') : '—';
   const formatCurrency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -51,11 +65,23 @@ const ReturnedOrders: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="page-header flex items-center gap-2">
-          <RefreshCw className="w-6 h-6 text-red-600" /> Returned Orders
-        </h1>
-        <p className="page-subheader">Review all returned orders and their reasons</p>
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div>
+          <h1 className="page-header flex items-center gap-2">
+            <RefreshCw className="w-6 h-6 text-red-600" /> Returned Orders
+          </h1>
+          <p className="page-subheader">Review all returned orders and their reasons</p>
+        </div>
+        
+        <div className="relative w-full md:max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="Search by ID, Party, Vehicle..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 bg-background"
+          />
+        </div>
       </div>
 
       <Card>

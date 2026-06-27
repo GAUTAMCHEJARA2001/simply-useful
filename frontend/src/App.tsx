@@ -27,7 +27,8 @@ const DistributorManagement = lazy(() => import("./pages/DistributorManagement")
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const HRDashboard = lazy(() => import("./pages/HRDashboard"));
 const InventoryDashboard = lazy(() => import("./pages/InventoryDashboard"));
-const InventoryManagement = lazy(() => import("./pages/InventoryManagement"));
+const InventoryManagement = lazy(() => import('@/pages/InventoryManagement'));
+const DispatchOrderPage = lazy(() => import('@/pages/DispatchOrderPage'));
 const WarehouseManagement = lazy(() => import("./pages/WarehouseManagement"));
 const VisitTracking = lazy(() => import("./pages/VisitTracking"));
 const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
@@ -188,6 +189,7 @@ const App = () => {
                       {/* Inventory */}
                       <Route path="/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />
                       <Route path="/inventory/manage" element={<ProtectedRoute><InventoryManagement /></ProtectedRoute>} />
+                      <Route path="/inventory/dispatch/:id" element={<ProtectedRoute><DispatchOrderPage /></ProtectedRoute>} />
                       <Route path="/inventory/purchase-orders/new" element={<ProtectedRoute><CreatePurchaseOrder /></ProtectedRoute>} />
                       <Route path="/inventory/purchase-orders/edit/:id" element={<ProtectedRoute><CreatePurchaseOrder /></ProtectedRoute>} />
                       <Route path="/inventory/returns" element={<ProtectedRoute><ReturnedOrders /></ProtectedRoute>} />

@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { api } from '@/api/client';
 import apiClient from '@/api/client';
+import { orderService } from '@/api/services/order.service';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const Num = (v: number | string) => Number(v || 0).toLocaleString('en-IN');
@@ -59,7 +60,7 @@ export const DashboardTab: React.FC = () => {
   const { fyLabel } = useFinancialYear();
   
   // Data Source 1: DataContext
-  const { orders = [], products = [], warehouses = [], updateOrderStatus } = useData();
+  const { orders = [], products = [], warehouses = [], updateOrderStatus, refreshAll } = useData();
 
   // Data Source 2: React Query calls
   const { data: productions = [], refetch: refetchProductions } = useProductions();
@@ -77,6 +78,7 @@ export const DashboardTab: React.FC = () => {
 
   // Interactive Action Modal State
   const [selectedDispatchOrder, setSelectedDispatchOrder] = useState<any | null>(null);
+  const [dispatchItems, setDispatchItems] = useState<Record<string, number>>({});
   const [dispatchForm, setDispatchForm] = useState({
     invoiceDetails: '',
     warehouseDetails: '',
@@ -119,7 +121,7 @@ export const DashboardTab: React.FC = () => {
 
   // Ready / Pending dispatches
   const dispatchTodayQueue = useMemo(() => {
-    return orders.filter(o => o.status === 'Approved');
+    return orders.filter(o => o.status === 'Approved' || o.status === 'Partially Dispatched');
   }, [orders]);
 
   // Helper to check stock shortage for an order
@@ -133,13 +135,14 @@ export const DashboardTab: React.FC = () => {
       const prod = products.find(p => p.id === itemProductId || p.productCode === item.product || p.name === item.product);
       const available = prod ? (prod.availableStock ?? prod.stockQty ?? 0) : 0;
       
-      if (available < item.qty) {
+      const remainingToDispatch = (item.qty || 0) - (item.sentQty || 0);
+      if (available < remainingToDispatch) {
         hasShortage = true;
         shortages.push({
           productName: prod?.name || item.productName || 'Unknown Product',
-          qtyNeeded: item.qty,
+          qtyNeeded: remainingToDispatch,
           qtyAvailable: available,
-          shortage: item.qty - available
+          shortage: remainingToDispatch - available
         });
       }
     }
@@ -155,7 +158,7 @@ export const DashboardTab: React.FC = () => {
     twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
 
     orders.forEach(o => {
-      if (o.status === 'Approved') {
+      if (o.status === 'Approved' || o.status === 'Partially Dispatched') {
         const check = checkOrderShortage(o);
         if (check.hasShortage) {
           waiting++;
@@ -388,6 +391,18 @@ export const DashboardTab: React.FC = () => {
   // Handlers for Dispatch Coordinator
   const openDispatchModal = (order: any) => {
     setSelectedDispatchOrder(order);
+    
+    // Initialize dispatch quantities
+    const initialQtys: Record<string, number> = {};
+    (order.items || []).forEach((item: any) => {
+      const pId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
+      if (pId) {
+        const remaining = (item.qty || 0) - (item.sentQty || 0);
+        initialQtys[pId] = remaining > 0 ? remaining : 0;
+      }
+    });
+    setDispatchItems(initialQtys);
+
     setDispatchForm({
       invoiceDetails: `CH-${Math.floor(100000 + Math.random() * 900000)}`,
       warehouseDetails: warehouses[0]?.name || 'Main Warehouse',
@@ -404,20 +419,35 @@ export const DashboardTab: React.FC = () => {
     setIsSubmittingAction(true);
 
     try {
-      const orderId = selectedDispatchOrder.orderId || selectedDispatchOrder.id;
+      const orderId = selectedDispatchOrder.id || selectedDispatchOrder.orderId;
       const invoice = dispatchForm.invoiceDetails.trim();
       const warehouse = dispatchForm.warehouseDetails.trim();
       const vehicle = dispatchForm.vehicleDetails.trim();
       const driver = dispatchForm.driverName.trim();
       const driverMob = dispatchForm.driverMobile.trim();
       
-      await updateOrderStatus(orderId, 'Dispatched', dispatchForm.remarks.trim(), todayStr, {
+      const itemsPayload = Object.entries(dispatchItems)
+        .map(([productId, qty]) => ({ productId, qty }))
+        .filter(item => item.qty > 0);
+
+      if (itemsPayload.length === 0) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please enter at least one item quantity to dispatch.',
+          variant: 'destructive',
+        });
+        setIsSubmittingAction(false);
+        return;
+      }
+
+      await orderService.partialDispatch(orderId, {
         invoiceNumber: invoice,
         warehouseName: warehouse,
         vehicleNumber: vehicle,
         driverName: driver,
         driverMobileNumber: driverMob,
-        dispatchDate: todayStr,
+        remarks: dispatchForm.remarks.trim(),
+        items: itemsPayload,
       });
       
       toast({
@@ -425,10 +455,11 @@ export const DashboardTab: React.FC = () => {
         description: `Order ${orderId} has been successfully dispatched via vehicle ${vehicle}.`,
       });
       setSelectedDispatchOrder(null);
+      refreshAll();
     } catch (err: any) {
       toast({
         title: 'Dispatch Failed',
-        description: err.message || 'An error occurred while saving the dispatch info.',
+        description: err.response?.data?.message || err.message || 'An error occurred while saving the dispatch info.',
         variant: 'destructive',
       });
     } finally {
@@ -604,18 +635,26 @@ export const DashboardTab: React.FC = () => {
                       )}
                       {dispatchTodayQueue.map((o) => {
                         const { hasShortage, shortages } = checkOrderShortage(o);
+                        const isPartial = o.status === 'Partially Dispatched';
                         return (
                           <div key={o.orderId} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border border-border/60 bg-card/80 hover:bg-muted/10 transition-colors gap-3">
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-xs">{o.orderId}</span>
+                                {isPartial && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase bg-violet-100 text-violet-700 border border-violet-200">Partially Sent</span>
+                                )}
                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${hasShortage ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
                                   {hasShortage ? 'Shortage Warning' : 'Stock Ready'}
                                 </span>
                               </div>
                               <p className="text-xs font-semibold text-foreground/80">{o.partyName}</p>
                               <p className="text-[10px] text-muted-foreground line-clamp-1">
-                                {o.items?.map(it => `${it.productName || it.product} (×${it.qty})`).join(', ')}
+                                {o.items?.map((it: any) => {
+                                  const sent = it.sentQty || 0;
+                                  const name = (typeof it.product === 'object' ? it.product?.name : null) || it.productName || it.product;
+                                  return sent > 0 ? `${name} (${sent}/${it.qty})` : `${name} (×${it.qty})`;
+                                }).join(', ')}
                               </p>
                               {hasShortage && (
                                 <p className="text-[9px] text-red-600 font-medium">
@@ -626,7 +665,7 @@ export const DashboardTab: React.FC = () => {
                             <div className="flex items-center gap-2 self-end sm:self-center">
                               <span className="text-xs font-black text-primary mr-2">₹{(o.grandTotal || 0).toLocaleString()}</span>
                               <Button size="sm" onClick={() => openDispatchModal(o)} className="h-8 px-3 text-[11px] font-bold bg-primary hover:bg-primary/90 text-white rounded-lg flex items-center gap-1 shadow-sm">
-                                <Truck className="w-3.5 h-3.5" /> Dispatch
+                                <Truck className="w-3.5 h-3.5" /> {isPartial ? 'Continue Dispatch' : 'Dispatch'}
                               </Button>
                             </div>
                           </div>
@@ -1011,6 +1050,65 @@ export const DashboardTab: React.FC = () => {
         {selectedDispatchOrder && (
           <CustomModal title={`Dispatch Shipments: Order #${selectedDispatchOrder.orderId || selectedDispatchOrder.id}`} onClose={() => setSelectedDispatchOrder(null)}>
             <form onSubmit={handleDispatchSubmit} className="space-y-4">
+              {/* Item-level dispatch quantities */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Items to Dispatch</label>
+                <div className="border border-border rounded-xl overflow-x-auto overflow-y-auto max-h-[40vh] w-full">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <th className="py-2 px-3 text-left min-w-[150px]">Product</th>
+                        <th className="py-2 px-3 text-center whitespace-nowrap">Ordered</th>
+                        <th className="py-2 px-3 text-center whitespace-nowrap">Already Sent</th>
+                        <th className="py-2 px-3 text-center whitespace-nowrap">Remaining</th>
+                        <th className="py-2 px-3 text-center whitespace-nowrap">Dispatch Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selectedDispatchOrder.items || []).map((item: any) => {
+                        const pId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
+                        const pName = (typeof item.product === 'object' ? item.product?.name : null) || item.productName || item.product || '—';
+                        const ordered = item.qty || 0;
+                        const sent = item.sentQty || 0;
+                        const remaining = ordered - sent;
+                        const currentVal = dispatchItems[pId];
+                        return (
+                          <tr key={pId} className="border-t border-border/40">
+                            <td className="py-2 px-3 font-medium">{pName}</td>
+                            <td className="py-2 px-3 text-center">{ordered}</td>
+                            <td className="py-2 px-3 text-center">
+                              {sent > 0 ? <span className="text-emerald-600 font-bold">{sent}</span> : <span className="text-muted-foreground">0</span>}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {remaining > 0 ? <span className="font-bold text-amber-600">{remaining}</span> : <span className="text-emerald-600 font-bold">✓ Done</span>}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {remaining > 0 ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={remaining}
+                                  value={currentVal === undefined ? '' : currentVal}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setDispatchItems(prev => ({ 
+                                      ...prev, 
+                                      [pId]: val === '' ? 0 : Math.min(remaining, Math.max(0, Number(val))) 
+                                    }));
+                                  }}
+                                  onFocus={(e) => e.target.select()}
+                                  className="w-20 text-center border border-border px-2 py-1 rounded-lg bg-background text-xs font-bold focus:ring-2 focus:ring-primary/20"
+                                />
+                              ) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Invoice/Challan Number</label>
@@ -1046,14 +1144,14 @@ export const DashboardTab: React.FC = () => {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Remarks / Dispatch Instructions</label>
-                <textarea rows={3} placeholder="Add any special packing instructions or travel details..." value={dispatchForm.remarks} onChange={e => setDispatchForm({ ...dispatchForm, remarks: e.target.value })}
+                <textarea rows={2} placeholder="Add any special packing instructions or travel details..." value={dispatchForm.remarks} onChange={e => setDispatchForm({ ...dispatchForm, remarks: e.target.value })}
                   className="w-full text-xs border border-border px-3 py-2 rounded-xl bg-background resize-none" />
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t">
                 <Button type="button" variant="outline" onClick={() => setSelectedDispatchOrder(null)}>Cancel</Button>
                 <Button type="submit" disabled={isSubmittingAction} className="bg-primary hover:bg-primary/95 text-white font-bold px-5">
-                  {isSubmittingAction ? 'Processing...' : 'Confirm Dispatch Delivery'}
+                  {isSubmittingAction ? 'Processing...' : 'Confirm Partial Dispatch'}
                 </Button>
               </div>
             </form>

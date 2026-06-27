@@ -101,12 +101,16 @@ export interface Product {
   defaultWarehouseId?: string | number | null;
 }
 
-export type OrderStatus = 'Pending' | 'Approved' | 'Dispatched' | 'Completed' | 'Cancelled' | 'Returned';
+export type OrderStatus = 'Pending' | 'Approved' | 'Partially Dispatched' | 'Dispatched' | 'Completed' | 'Cancelled' | 'Partially Returned' | 'Returned';
 
 export interface OrderItem {
-  product: string;
+  id?: string;
+  product: any;
+  productId?: string;
   productName?: string;
   qty: number;
+  sentQty?: number;
+  returnedQty?: number;
   price: number;
   total: number;
   itemRemark: string;

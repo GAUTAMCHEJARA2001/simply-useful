@@ -100,18 +100,23 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
 
       // Legacy fallback
       const safeItems = ((typeof data.items === 'string' ? JSON.parse(data.items) : data.items) || []).map((i: any) => {
-        const qty = Number(i.qty || i.quantity || 0) || 0;
+        const originalQty = Number(i.qty || i.quantity || 0) || 0;
+        const returnedQty = Number(i.returnedQty || i.returnedqty || 0) || 0;
+        const netQty = Math.max(0, originalQty - returnedQty);
+        
         const rate = sanitizeValue(i.price || i.rate || 0);
         return {
           product_name: safeString(i.productName || i.product_name || (typeof i.product === 'object' && i.product ? (i.product.name || i.product.productName) : i.product) || 'Unknown Product'),
-          qty,
+          qty: netQty,
           unit: safeString(i.unit || 'Bags'),
           rate,
-          total: Number(i.total || (qty * rate) || 0) || 0,
+          total: Number(netQty * rate) || 0,
           remark: safeString(i.item_remark || i.remark)
         };
       });
-      const safeSubtotal = sanitizeValue(data.grand_total || 0);
+      
+      const recalculatedTotal = safeItems.reduce((sum: number, item: any) => sum + item.total, 0);
+      const safeSubtotal = recalculatedTotal > 0 ? recalculatedTotal : sanitizeValue(data.grand_total || data.grandTotal || 0);
 
       return (
         <OrderTemplate

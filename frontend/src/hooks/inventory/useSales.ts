@@ -45,8 +45,35 @@ export const useSaleMutations = () => {
     }
   });
 
+  const saveDispatchMutation = useMutation({
+    mutationFn: (log: any) => {
+      const config = log.warehouse_id ? { headers: { 'X-Warehouse-ID': String(log.warehouse_id) } } : undefined;
+      return api.put(`/transactions/dispatch-logs/${log.id}`, log, config);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      toast({ title: 'Success', description: 'Dispatch updated' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const deleteDispatchMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/transactions/dispatch-logs/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      toast({ title: 'Deleted', description: 'Dispatch record removed' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  });
+
   return {
     saveSale: saveMutation.mutateAsync,
     deleteSale: deleteMutation.mutateAsync,
+    saveDispatchLog: saveDispatchMutation.mutateAsync,
+    deleteDispatchLog: deleteDispatchMutation.mutateAsync,
   };
 };

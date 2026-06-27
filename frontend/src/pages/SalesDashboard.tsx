@@ -45,11 +45,23 @@ const SalesDashboard: React.FC = () => {
   const pendingOrders = myOrders.filter(o => o.status === 'Pending');
   const now = new Date();
   const monthlyTarget = Number(currentOfficer?.monthlyTarget ?? currentOfficer?.monthly_target) || 500000;
-  // For target progress: use FY completed orders
-  const fyCompletedOrders = myOrders.filter(o => o.status === 'Completed');
+  // For target progress: use FY completed and partially returned orders
+  const fyCompletedOrders = myOrders.filter(o => o.status === 'Completed' || o.status === 'Partially Returned');
   const fyAchieved = fyCompletedOrders.reduce((sum, order) => {
-    const fallback = (order.items || []).reduce((iSum: number, item) => iSum + ((Number(item.qty) || 0) * (Number(item.price) || 0)), 0);
-    return sum + (Number(order.grandTotal) || Number(order.grand_total) || fallback || 0);
+    let orderValue = 0;
+    
+    if (order.items && order.items.length > 0) {
+      // Calculate net value: (qty - returnedQty) * price
+      orderValue = order.items.reduce((iSum: number, item: any) => {
+        const netQty = Math.max(0, (Number(item.qty) || 0) - (Number(item.returnedQty) || Number(item.returnedqty) || 0));
+        return iSum + (netQty * (Number(item.price) || 0));
+      }, 0);
+    } else {
+      // Fallback if no items array exists
+      orderValue = Number(order.grandTotal) || Number(order.grand_total) || 0;
+    }
+    
+    return sum + orderValue;
   }, 0);
   const targetProgress = monthlyTarget > 0 ? Math.min(100, Math.round((fyAchieved / monthlyTarget) * 100)) : 0;
   const remainingTarget = Math.max(monthlyTarget - fyAchieved, 0);
@@ -393,7 +405,19 @@ const SalesDashboard: React.FC = () => {
                     <td className="px-4 py-3 font-medium">{order.orderId}</td>
                     <td className="px-4 py-3">{order.partyName}</td>
                     <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground">{order.date}</td>
-                    <td className="px-4 py-3 text-right font-medium">₹{order.grandTotal.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-medium">
+                      ₹{(() => {
+                        let displayTotal = Number(order.grandTotal) || Number(order.grand_total) || 0;
+                        if (order.items && order.items.length > 0) {
+                          const recalculated = order.items.reduce((sum: number, item: any) => {
+                            const netQty = Math.max(0, (Number(item.qty) || 0) - (Number(item.returnedQty) || Number(item.returnedqty) || 0));
+                            return sum + (netQty * (Number(item.price) || 0));
+                          }, 0);
+                          if (recalculated > 0 && order.status !== 'Pending') displayTotal = recalculated;
+                        }
+                        return displayTotal.toLocaleString();
+                      })()}
+                    </td>
                     <td className="px-4 py-3 text-center"><StatusBadge status={order.status} /></td>
                   </tr>
                 ))}
@@ -412,6 +436,9 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     Pending: 'bg-warning/15 text-warning', Approved: 'bg-accent/15 text-accent',
     Dispatched: 'bg-primary/15 text-primary', Completed: 'bg-success/15 text-success',
     Cancelled: 'bg-destructive/15 text-destructive',
+    'Partially Dispatched': 'bg-violet-500/15 text-violet-600',
+    Returned: 'bg-orange-500/15 text-orange-600',
+    'Partially Returned': 'bg-amber-500/15 text-amber-600'
   };
   return <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${styles[status] || ''}`}>{status}</span>;
 };

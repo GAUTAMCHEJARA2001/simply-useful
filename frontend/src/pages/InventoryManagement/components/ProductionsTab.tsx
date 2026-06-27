@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import apiClient from '@/api/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDecimal } from '@/utils/format';
+import { Input } from '@/components/ui/input';
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -199,26 +200,49 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
     }
   };
 
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredProductions = productions.filter((p: any) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    const s = [
+      p.finishedProductName, p.finished_product?.name, p.warehouseName, p.warehouse?.name, p.createdAt, p.date
+    ].filter(Boolean).join(' ').toLowerCase();
+    return s.includes(term);
+  });
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-xl font-bold">Production Log</h1>
-        <Button size="sm" onClick={() => setModal(true)}>
-          <Plus className="w-4 h-4 mr-1.5" /> New Production Run
-        </Button>
+        
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search products, warehouses..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 bg-background h-9"
+            />
+          </div>
+          <Button size="sm" onClick={() => setModal(true)} className="h-9">
+            <Plus className="w-4 h-4 mr-1.5" /> New Production Run
+          </Button>
+        </div>
       </div>
 
-      <SafeDataView data={productions} isLoading={isLoading} error={error} onRetry={() => refetch()}>
+      <SafeDataView data={filteredProductions} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable 
           columns={['Finished Product', 'Qty Produced', 'Warehouse', 'Date']}
-          rows={productions.map((p: any) => [
+          rows={filteredProductions.map((p: any) => [
             p.finishedProductName || p.finished_product?.name || '—', 
             formatDecimal(p.quantityProduced || p.quantity_produced || 0), 
             p.warehouseName || p.warehouse?.name || '—', 
             p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—'
           ])}
           onEdit={async (idx: number) => {
-            const p = productions[idx];
+            const p = filteredProductions[idx];
             try {
               const matRes = await apiClient<any[]>(`/inv/transactions/productions/${p.id}/materials`);
               const mats = matRes && matRes.data ? matRes.data : (Array.isArray(matRes) ? matRes : []);

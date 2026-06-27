@@ -10,6 +10,8 @@ interface SalesModalProps {
   isOpen: boolean;
   onClose: () => void;
   sale?: any;
+  readOnly?: boolean;
+  isDispatchLog?: boolean;
 }
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
@@ -52,9 +54,9 @@ const extractDispatchDetails = (narration: string) => {
   };
 };
 
-export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale }) => {
+export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, readOnly, isDispatchLog }) => {
   const { data: warehouses = [] } = useWarehouses();
-  const { saveSale } = useSaleMutations();
+  const { saveSale, saveDispatchLog } = useSaleMutations();
   const extractedDetails = extractDispatchDetails(sale?.narration || '');
 
   const [form, setForm] = useState<any>({
@@ -77,7 +79,8 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
         productId: it.productId || it.product_id || it.productid_id || it.product?.id || '',
         quantity: it.qty || 0,
         rate: it.price || 0,
-        tax_percent: it.tax_percent || 18
+        tax_percent: it.tax_percent || 18,
+        returnedQty: it.returnedQty || 0
       }));
       
       const whId = sale.assignedWarehouse || extractWarehouseId(sale.narration) || sale.warehouseId || sale.warehouse_id || '';
@@ -104,10 +107,13 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
         challanNumber: sale.invoiceNumber || extractChallanNumber(sale.narration) || sale.challanNumber || '',
         warehouse_id: whId,
         narration: cleanNarration || sale.narration || '',
-        lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }]
+        lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }],
+        vehicleNumber: sale.vehicleNumber || sale.vehiclenumber || extractedDetails.vehicle || '',
+        driverName: sale.driverName || sale.drivername || extractedDetails.driver || '',
+        driverMobile: sale.driverMobileNumber || sale.drivermobile || extractedDetails.mobile || ''
       });
     } else {
-      setForm({ lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }] });
+      setForm({ lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }] });
     }
   }, [sale, isOpen]);
 
@@ -131,7 +137,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
   }, [warehouses, isOpen]); // Note: deliberately excludes form.warehouse_id to prevent loops
 
   const addLineItem = () => {
-    setForm({ ...form, lineItems: [...(form.lineItems || []), { productId: '', quantity: 0, rate: 0, tax_percent: 18 }] });
+    setForm({ ...form, lineItems: [...(form.lineItems || []), { productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }] });
   };
 
   const removeLineItem = (index: number) => {
@@ -157,7 +163,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
   };
 
   const grandTotal = (form.lineItems || []).reduce((acc: number, it: any) => 
-    acc + (it.quantity || 0) * (it.rate || 0) * (1 + (it.tax_percent || 0) / 100), 0
+    acc + ((it.quantity || 0) - (it.returnedQty || 0)) * (it.rate || 0) * (1 + (it.tax_percent || 0) / 100), 0
   );
 
   const handleSave = async () => {
@@ -192,23 +198,41 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
         qty: it.quantity,
         price: it.rate,
         total: (it.quantity || 0) * (it.rate || 0),
-        tax_percent: it.tax_percent || 18
+        tax_percent: it.tax_percent || 18,
+        returnedQty: it.returnedQty || 0
       }))
     };
-    await saveSale(payload);
+    
+    if (isDispatchLog) {
+      await saveDispatchLog({
+        id: sale.id,
+        invoiceNumber: form.challanNumber || '',
+        vehicleNumber: form.vehicleNumber || extractedDetails.vehicle || '',
+        driverName: form.driverName || extractedDetails.driver || '',
+        driverMobile: form.driverMobile || extractedDetails.mobile || '',
+        remarks: cleanNarration,
+        items: payload.items
+      });
+    } else {
+      await saveSale(payload);
+    }
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} title={sale?.id ? 'Edit Sale' : 'New Sale Registration'} onClose={onClose}>
+    <Modal isOpen={isOpen} title={readOnly ? 'View Transaction' : (sale?.id ? (isDispatchLog ? 'Edit Dispatch' : 'Edit Sale') : 'New Sale Registration')} onClose={onClose}>
       <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
-        
+        <fieldset disabled={readOnly} className="space-y-4">
         {sale?.id && (
           <div className="p-4 bg-purple-500/5 border border-purple-500/15 rounded-xl text-xs space-y-3">
             <p className="font-bold uppercase tracking-wider text-purple-700 text-[10px] flex items-center gap-1.5">
               📋 Sale &amp; Fulfillment Context
             </p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-muted-foreground">
+              <div>
+                <span className="font-bold text-foreground/80 block">Order ID</span>
+                <span className="text-foreground font-medium">{sale.orderId || sale.originalOrderId || sale.id || '—'}</span>
+              </div>
               <div>
                 <span className="font-bold text-foreground/80 block">Placed By (Sales Officer)</span>
                 <span className="text-foreground font-medium">{sale.soEmail || '—'}</span>
@@ -274,6 +298,25 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
               placeholder="Enter remarks/narration notes..."
               className="w-full border border-border rounded-lg px-3 py-2 bg-background text-xs min-h-16" />
           </div>
+          {isDispatchLog && (
+            <>
+              <div>
+                <label className="text-[11px] font-semibold block mb-1">Vehicle Number</label>
+                <input value={form.vehicleNumber || ''} onChange={e => setForm({ ...form, vehicleNumber: e.target.value })}
+                  placeholder="MH-15-AB-1234" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold block mb-1">Driver Name</label>
+                <input value={form.driverName || ''} onChange={e => setForm({ ...form, driverName: e.target.value })}
+                  placeholder="Driver Name" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold block mb-1">Driver Mobile</label>
+                <input value={form.driverMobile || ''} onChange={e => setForm({ ...form, driverMobile: e.target.value })}
+                  placeholder="9876543210" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+              </div>
+            </>
+          )}
         </div>
 
         <div className="space-y-2.5">
@@ -300,6 +343,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
                     <label className="text-[10px] font-medium text-muted-foreground block">Qty</label>
                     <input type="number" value={item.quantity} onChange={e => updateLineItem(i, 'quantity', parseFloat(e.target.value))}
                       className="w-full border border-border rounded-md px-2 py-1.5 bg-background text-xs" />
+                    {item.returnedQty > 0 && <span className="text-[9px] text-red-500 font-bold block mt-0.5 whitespace-nowrap">Returned: {item.returnedQty}</span>}
                   </div>
                   <div>
                     <label className="text-[10px] font-medium text-muted-foreground block">Rate</label>
@@ -326,10 +370,17 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale })
             <div className="text-xl font-bold font-mono">{Currency(grandTotal)}</div>
           </div>
         </div>
+        </fieldset>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave}>Save Invoice</Button>
+          {!readOnly ? (
+            <>
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button onClick={handleSave}>Save {isDispatchLog ? 'Dispatch' : 'Invoice'}</Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          )}
         </div>
       </div>
     </Modal>

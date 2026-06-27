@@ -12,7 +12,7 @@ export const loginSchema = z.object({
   password: z.string().min(6),
 });
 
-export const OrderStatusSchema = z.enum(['Pending', 'Approved', 'Dispatched', 'Completed', 'Cancelled', 'Returned']);
+export const OrderStatusSchema = z.enum(['Pending', 'Approved', 'Partially Dispatched', 'Dispatched', 'Completed', 'Cancelled', 'Partially Returned', 'Returned']);
 
 export const productSchema = z.object({
   productCode: z.string().min(2),
@@ -83,3 +83,38 @@ export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type DealerInput = z.infer<typeof dealerSchema>;
 export type VisitInput = z.infer<typeof visitSchema>;
 export type ExpenseInput = z.infer<typeof expenseSchema>;
+
+// Partial Dispatch & Return schemas
+export const partialDispatchItemSchema = z.object({
+  orderItemId: z.string(),
+  productId: z.string(),
+  qty: z.number().int().positive(),
+});
+
+export const partialDispatchSchema = z.object({
+  items: z.array(partialDispatchItemSchema).nonempty(),
+  invoiceNumber: z.string().optional().nullable(),
+  vehicleNumber: z.string().optional().nullable(),
+  driverName: z.string().optional().nullable(),
+  driverMobile: z.string().optional().nullable(),
+  warehouseId: z.number().int().optional().nullable(),
+  dispatchDate: z.string().optional().nullable(),
+});
+
+export const partialReturnItemSchema = z.object({
+  orderItemId: z.string(),
+  productId: z.string(),
+  qty: z.number().int().positive(),
+});
+
+export const partialReturnSchema = z.object({
+  items: z.array(partialReturnItemSchema).nonempty(),
+  returnReason: z.string().optional().nullable(),
+  challanNumber: z.string().optional().nullable(),
+  vehicleNumber: z.string().optional().nullable(),
+  returnDate: z.string().optional().nullable(),
+  warehouseId: z.number().int().optional().nullable(),
+});
+
+export type PartialDispatchInput = z.infer<typeof partialDispatchSchema>;
+export type PartialReturnInput = z.infer<typeof partialReturnSchema>;

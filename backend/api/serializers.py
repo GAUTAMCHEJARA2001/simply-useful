@@ -4,7 +4,8 @@ from api.models import (
     Product, Category, Brand, Unit, Region, Market,
     Dealer, Distributor, Order, Orderitem, Visit, Expense, Bom, Bomitem, Supplier, Labour,
     Purchase, Purchaseitem, Purchaseorder, Purchaseorderitem,
-    Lead, LeadFollowUp, LeadStageHistory
+    Lead, LeadFollowUp, LeadStageHistory,
+    Dispatchlog, Dispatchlogitem, Returnlog, Returnlogitem
 )
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -336,12 +337,14 @@ class OrderitemSerializer(serializers.ModelSerializer):
     id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     orderId = serializers.CharField(source='orderid_id', required=False)
     productId = serializers.CharField(source='productid_id')
+    sentQty = serializers.IntegerField(source='sentqty', required=False, default=0)
+    returnedQty = serializers.IntegerField(source='returnedqty', required=False, default=0)
     itemRemark = serializers.CharField(source='itemremark', required=False, allow_blank=True, allow_null=True)
     product = ProductSerializer(source='productid', read_only=True)
 
     class Meta:
         model = Orderitem
-        fields = ['id', 'orderId', 'productId', 'qty', 'price', 'total', 'itemRemark', 'product']
+        fields = ['id', 'orderId', 'productId', 'qty', 'sentQty', 'returnedQty', 'price', 'total', 'itemRemark', 'product']
 
     def to_representation(self, instance):
         """Handle cross-database FK failures gracefully.
@@ -359,6 +362,8 @@ class OrderitemSerializer(serializers.ModelSerializer):
                 'orderId': instance.orderid_id,
                 'productId': instance.productid_id,
                 'qty': instance.qty,
+                'sentQty': instance.sentqty,
+                'returnedQty': instance.returnedqty,
                 'price': instance.price,
                 'total': instance.total,
                 'itemRemark': instance.itemremark,
@@ -466,13 +471,24 @@ class OrderSerializer(serializers.ModelSerializer):
         instance.save()
         
         if items_data is not None:
+            # Map old sentqty by product ID to preserve it
+            old_items = instance.orderitem_set.all()
+            sentqty_map = {item.productid_id: item.sentqty for item in old_items if item.productid_id}
+            
             # Delete old items
-            instance.orderitem_set.all().delete()
+            old_items.delete()
             # Create new items
             for item_data in items_data:
                 import uuid
                 if 'id' not in item_data or not item_data['id']:
                     item_data['id'] = 'c' + uuid.uuid4().hex[:23]
+                
+                # Preserve sentqty if product matches
+                p_id = item_data.get('productid') or item_data.get('productid_id')
+                if hasattr(p_id, 'id'): p_id = p_id.id
+                if p_id in sentqty_map:
+                    item_data['sentqty'] = sentqty_map[p_id]
+                    
                 Orderitem.objects.create(orderid=instance, **item_data)
                 
         return instance
@@ -917,3 +933,50 @@ class BroadcastSerializer(serializers.ModelSerializer):
     class Meta:
         model = Broadcast
         fields = ['id', 'message', 'targetRole', 'author', 'companyId', 'createdAt', 'active']
+
+
+class DispatchlogitemSerializer(serializers.ModelSerializer):
+    productId = serializers.CharField(source='productid_id')
+    product = ProductSerializer(source='productid', read_only=True)
+
+    class Meta:
+        model = Dispatchlogitem
+        fields = ['id', 'productId', 'qty', 'product']
+
+
+class DispatchlogSerializer(serializers.ModelSerializer):
+    orderId = serializers.CharField(source='orderid_id')
+    dispatchDate = serializers.DateTimeField(source='dispatchdate', read_only=True)
+    invoiceNumber = serializers.CharField(source='invoicenumber', required=False, allow_null=True)
+    vehicleNumber = serializers.CharField(source='vehiclenumber', required=False, allow_null=True)
+    driverName = serializers.CharField(source='drivername', required=False, allow_null=True)
+    driverMobile = serializers.CharField(source='drivermobile', required=False, allow_null=True)
+    createdAt = serializers.DateTimeField(source='createdat', read_only=True)
+    items = DispatchlogitemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Dispatchlog
+        fields = [
+            'id', 'orderId', 'dispatchDate', 'invoiceNumber', 'vehicleNumber',
+            'driverName', 'driverMobile', 'remarks', 'createdAt', 'items'
+        ]
+
+
+class ReturnlogitemSerializer(serializers.ModelSerializer):
+    productId = serializers.CharField(source='productid_id')
+    product = ProductSerializer(source='productid', read_only=True)
+
+    class Meta:
+        model = Returnlogitem
+        fields = ['id', 'productId', 'qty', 'product']
+
+
+class ReturnlogSerializer(serializers.ModelSerializer):
+    orderId = serializers.CharField(source='orderid_id')
+    returnDate = serializers.DateTimeField(source='returndate', read_only=True)
+    createdAt = serializers.DateTimeField(source='createdat', read_only=True)
+    items = ReturnlogitemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Returnlog
+        fields = ['id', 'orderId', 'returnDate', 'remarks', 'createdAt', 'items']

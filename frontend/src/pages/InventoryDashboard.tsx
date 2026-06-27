@@ -10,19 +10,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Navigate, Link } from 'react-router-dom';
+import { Navigate, Link, useNavigate } from 'react-router-dom';
 import { OrderStatus, Order } from '@/types';
+import { orderService } from '@/api/services/order.service';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   Approved: 'bg-blue-100 text-blue-700 border-blue-200',
+  'Partially Dispatched': 'bg-violet-100 text-violet-700 border-violet-200',
   Dispatched: 'bg-purple-100 text-purple-700 border-purple-200',
   Completed: 'bg-green-100 text-green-700 border-green-200',
   Cancelled: 'bg-red-100 text-red-700 border-red-200',
+  Returned: 'bg-orange-100 text-orange-700 border-orange-200',
+  'Partially Returned': 'bg-amber-100 text-amber-700 border-amber-200',
 };
 
 const InventoryDashboard: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { orders, products, warehouses, updateOrderStatus, updateOrderItems, dealers, loading: dataLoading } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
@@ -58,6 +63,9 @@ const InventoryDashboard: React.FC = () => {
   } | null>(null);
 
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
+  
+  const [dispatchItems, setDispatchItems] = useState<Record<string, number>>({});
+  const [returnItems, setReturnItems] = useState<Record<string, number>>({});
 
   const [boms, setBoms] = useState<any[]>([]);
   const [loadingBoms, setLoadingBoms] = useState<boolean>(true);
@@ -224,12 +232,12 @@ const InventoryDashboard: React.FC = () => {
   const assignedOrders = orders.filter(o => o.assignedWarehouse != null);
 
   const approvedOrders = assignedOrders.filter(o => o.status === 'Approved');
-  const dispatchedOrders = assignedOrders.filter(o => o.status === 'Dispatched');
+  const dispatchedOrders = assignedOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
   const pendingOrders = assignedOrders.filter(o => o.status === 'Pending' || o.status === 'Approved');
   const completedOrders = assignedOrders.filter(o => o.status === 'Completed');
 
   const productDemand = (assignedOrders || [])
-    .filter(o => o.status === 'Pending' || o.status === 'Approved')
+    .filter(o => o.status === 'Pending' || o.status === 'Approved' || o.status === 'Partially Dispatched')
     .flatMap(o => o.items || [])
     .reduce((acc, item) => {
       const itAny = item as any;
@@ -237,14 +245,17 @@ const InventoryDashboard: React.FC = () => {
       const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
       const productName = pObj?.name || pObj?.productName || (itAny.product as any)?.name || itAny.productName || itAny.product || 'Unknown Product';
 
+      const pendingQty = Math.max(0, item.qty - (item.sentQty || 0));
+      if (pendingQty <= 0) return acc;
+
       const existing = acc.find(a => a.product === productName);
       if (existing) {
-        existing.qty += item.qty;
+        existing.qty += pendingQty;
         existing.orders++;
       } else {
         acc.push({
           product: productName,
-          qty: item.qty,
+          qty: pendingQty,
           orders: 1
         });
       }
@@ -319,20 +330,64 @@ const InventoryDashboard: React.FC = () => {
       }
     }
 
-    let narrationStr = confirmOrder.reason || '';
-    if (confirmOrder.action === 'Dispatched') {
-      const invoice = (confirmOrder.invoiceDetails || '').trim();
-      const warehouse = (confirmOrder.warehouseDetails || '').trim();
-      const vehicle = (confirmOrder.vehicleDetails || '').trim();
-      const driver = (confirmOrder.driverName || '').trim();
-      const driverMob = (confirmOrder.driverMobile || '').trim();
-      narrationStr = `[INVOICE: ${invoice}] [WAREHOUSE: ${warehouse}] [VEHICLE: ${vehicle}] [DRIVER: ${driver}] [DRIVER MOBILE: ${driverMob}] [DISPATCH TIME: ${confirmOrder.action_date} ${confirmOrder.action_time}] ${narrationStr}`.trim();
-    } else if (confirmOrder.action === 'Returned') {
-      const reason = (confirmOrder.reason || '').trim();
-      narrationStr = `[RETURN REASON: ${reason}] [RETURN DATE: ${confirmOrder.action_date}] ${narrationStr}`.trim();
-    }
+    try {
+      if (confirmOrder.action === 'Dispatched') {
+        const invoice = (confirmOrder.invoiceDetails || '').trim();
+        const warehouse = (confirmOrder.warehouseDetails || '').trim();
+        const vehicle = (confirmOrder.vehicleDetails || '').trim();
+        const driver = (confirmOrder.driverName || '').trim();
+        const driverMob = (confirmOrder.driverMobile || '').trim();
+        
+        const itemsPayload = Object.entries(dispatchItems)
+          .map(([productId, qty]) => ({ productId, qty: Number(qty) }))
+          .filter(item => item.qty > 0);
 
-    await updateOrderStatus(confirmOrder.id, confirmOrder.action, narrationStr, confirmOrder.action_date);
+        if (itemsPayload.length === 0) {
+          toast({ title: 'Error', description: 'Enter at least one dispatch quantity.', variant: 'destructive' });
+          return;
+        }
+        
+        await orderService.partialDispatch(confirmOrder.id, {
+          items: itemsPayload,
+          invoiceNumber: invoice,
+          vehicleNumber: vehicle,
+          driverName: driver,
+          driverMobile: driverMob,
+          remarks: confirmOrder.reason || '',
+        });
+        
+        // Also update warehouse if changed
+        if (warehouse) {
+          const whObj = warehouses.find(w => w.name === warehouse);
+          if (whObj) await updateOrderItems(confirmOrder.id, { assignedWarehouse: Number(whObj.id) });
+        }
+      } else if (confirmOrder.action === 'Returned') {
+        const itemsPayload = Object.entries(returnItems)
+          .map(([productId, qty]) => ({ productId, qty: Number(qty) }))
+          .filter(item => item.qty > 0);
+
+        if (itemsPayload.length === 0) {
+          toast({ title: 'Error', description: 'Enter at least one return quantity.', variant: 'destructive' });
+          return;
+        }
+
+        await orderService.partialReturn(confirmOrder.id, {
+          items: itemsPayload,
+          remarks: confirmOrder.reason || '',
+        });
+      } else {
+        // Fallback for other status changes (Approve, Complete, Cancel)
+        let narrationStr = confirmOrder.reason || '';
+        if (confirmOrder.action === 'Returned') {
+          const reason = (confirmOrder.reason || '').trim();
+          narrationStr = `[RETURN REASON: ${reason}] [RETURN DATE: ${confirmOrder.action_date}] ${narrationStr}`.trim();
+        }
+        await updateOrderStatus(confirmOrder.id, confirmOrder.action, narrationStr, confirmOrder.action_date);
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || err.message || 'Operation failed.', variant: 'destructive' });
+      return;
+    }
     const label = confirmOrder.action === 'Dispatched' 
       ? 'dispatched' 
       : confirmOrder.action === 'Returned' 
@@ -350,13 +405,33 @@ const InventoryDashboard: React.FC = () => {
     setConfirmOrder(null);
   };
 
-  const actionLabel = (status: string) => {
-    if (status === 'Approved') return [{ next: 'Dispatched' as OrderStatus, label: 'Send Out Now', icon: Truck, color: 'bg-purple-600 hover:bg-purple-700 text-white' }];
-    if (status === 'Dispatched') return [
-      { next: 'Completed' as OrderStatus, label: 'Finish Order', icon: CheckCircle, color: 'bg-green-600 hover:bg-green-700 text-white' },
-      { next: 'Returned' as OrderStatus, label: 'Return Items', icon: AlertTriangle, color: 'bg-red-600 hover:bg-red-700 text-white' }
-    ];
-    return null;
+  const actionLabel = (o: any) => {
+    const status = o.status;
+    let hasRemainingToDispatch = false;
+    
+    if (o.items) {
+      hasRemainingToDispatch = o.items.some((item: any) => {
+        const ordered = item.qty || 0;
+        const sent = item.sentQty || 0;
+        return ordered - sent > 0;
+      });
+    }
+
+    const actions = [];
+    
+    if (status === 'Approved' || status === 'Partially Dispatched' || (status === 'Partially Returned' && hasRemainingToDispatch)) {
+      actions.push({ next: 'Dispatched' as OrderStatus, label: 'Send Out Now', icon: Truck, color: 'bg-purple-600 hover:bg-purple-700 text-white' });
+    }
+
+    if (status === 'Partially Dispatched' || status === 'Partially Returned' || status === 'Dispatched') {
+      actions.push({ next: 'Returned' as OrderStatus, label: status === 'Partially Returned' ? 'Return More' : 'Return Items', icon: AlertTriangle, color: 'bg-red-600 hover:bg-red-700 text-white' });
+    }
+
+    if (status === 'Dispatched' || status === 'Partially Returned') {
+      actions.push({ next: 'Completed' as OrderStatus, label: 'Finish Order', icon: CheckCircle, color: 'bg-green-600 hover:bg-green-700 text-white' });
+    }
+
+    return actions.length > 0 ? actions : null;
   };
 
   return (
@@ -433,7 +508,7 @@ const InventoryDashboard: React.FC = () => {
               <p className="text-sm text-muted-foreground text-center py-8">No orders to fulfill</p>
             )}
             {[...pendingOrders, ...dispatchedOrders].map(o => {
-              const action = actionLabel(o.status);
+              const action = actionLabel(o);
               const orderId = o.orderId || (o as any).order_id || o.id || 'Unknown ID';
               const partyName = o.partyName || (o as any).party_name || 'Party';
               const soEmail = o.soEmail || (o as any).so_email || 'SO';
@@ -484,14 +559,22 @@ const InventoryDashboard: React.FC = () => {
                       const itemProductId = iAny.productId || iAny.productid_id || (typeof iAny.product === 'object' ? iAny.product?.id : iAny.product);
                       const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
                       const pName = pObj?.name || pObj?.productName || iAny.productName || iAny.product || 'Unknown Product';
-                      return `${pName} ×${iAny.qty}`;
+                      const ordered = iAny.qty || 0;
+                      const sent = iAny.sentQty || 0;
+                      const pending = Math.max(0, ordered - sent);
+                      if (pending > 0 && sent > 0) return `${pName} (${pending} left of ${ordered})`;
+                      return `${pName} ×${ordered}`;
                     }).join(', ')}>
                       {o.items.map(i => {
                         const iAny = i as any;
                         const itemProductId = iAny.productId || iAny.productid_id || (typeof iAny.product === 'object' ? iAny.product?.id : iAny.product);
                         const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
                         const pName = pObj?.name || pObj?.productName || iAny.productName || iAny.product || 'Unknown Product';
-                        return `${pName} ×${iAny.qty}`;
+                        const ordered = iAny.qty || 0;
+                        const sent = iAny.sentQty || 0;
+                        const pending = Math.max(0, ordered - sent);
+                        if (pending > 0 && sent > 0) return `${pName} (${pending} left of ${ordered})`;
+                        return `${pName} ×${ordered}`;
                       }).join(' | ')}
                     </p>
 
@@ -558,6 +641,11 @@ const InventoryDashboard: React.FC = () => {
                               size="sm"
                               className={`h-7.5 px-2 text-[10px] shadow-sm flex items-center justify-center ${a.color}`}
                               onClick={() => {
+                                if (a.next === 'Dispatched') {
+                                  navigate(`/inventory/dispatch/${orderId}`);
+                                  return;
+                                }
+
                                 const now = new Date();
                                 setConfirmOrder({ 
                                   id: orderId, 
@@ -571,6 +659,21 @@ const InventoryDashboard: React.FC = () => {
                                   driverMobile: '',
                                   reason: ''
                                 });
+
+                                // Initialize items for partial return
+                                if (a.next === 'Returned') {
+                                  const initialQtys: Record<string, number> = {};
+                                  (o.items || []).forEach((item: any) => {
+                                    const pId = item.productId || item.productid_id || (typeof item.product === 'object' ? item.product?.id : item.product);
+                                    if (pId) {
+                                      const dispatched = item.sentQty || item.qty || 0;
+                                      const alreadyReturned = item.returnedQty || 0;
+                                      const returnable = dispatched - alreadyReturned;
+                                      initialQtys[pId] = returnable > 0 ? returnable : 0;
+                                    }
+                                  });
+                                  setReturnItems(initialQtys);
+                                }
                               }}
                             >
                               <a.icon className="w-3.5 h-3.5 mr-1" /> {a.label}
@@ -703,7 +806,7 @@ const InventoryDashboard: React.FC = () => {
                 {/* Items List */}
                 <div>
                   <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5">Order Items ({viewOrder.items.length})</p>
-                  <div className="border border-border rounded-xl overflow-x-auto w-full">
+                  <div className="border border-border rounded-xl overflow-x-auto overflow-y-auto max-h-[40vh] w-full">
                     <table className="min-w-full divide-y divide-border text-xs">
                       <thead className="bg-secondary/40 text-muted-foreground font-semibold text-[10px]">
                         <tr>
@@ -791,7 +894,7 @@ const InventoryDashboard: React.FC = () => {
             <Button variant="outline" size="sm" onClick={() => setViewOrder(null)}>Close</Button>
             {viewOrder && (() => {
               const orderId = viewOrder.orderId || viewOrder.order_id || viewOrder.id || 'Unknown ID';
-              const action = actionLabel(viewOrder.status);
+              const action = actionLabel(viewOrder);
               const isAdminOrSuper = user?.role === 'SUPERADMIN' || user?.role === 'ADMIN';
 
               return (
@@ -828,8 +931,13 @@ const InventoryDashboard: React.FC = () => {
                         <Button
                           key={a.next}
                           size="sm"
-                          className={a.color}
-                          onClick={() => {
+                                      onClick={() => {
+                            if (a.next === 'Dispatched') {
+                              navigate(`/inventory/dispatch/${orderId}`);
+                              setViewOrder(null);
+                              return;
+                            }
+
                             const now = new Date();
                             setConfirmOrder({ 
                               id: orderId, 
@@ -843,6 +951,21 @@ const InventoryDashboard: React.FC = () => {
                               driverMobile: '',
                               reason: ''
                             });
+                            
+                            // Initialize items for partial return
+                            if (a.next === 'Returned') {
+                              const initialQtys: Record<string, number> = {};
+                              (viewOrder.items || []).forEach((item: any) => {
+                                const pId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
+                                if (pId) {
+                                  const dispatched = item.sentQty || item.qty || 0;
+                                  const alreadyReturned = item.returnedQty || 0;
+                                  const returnable = dispatched - alreadyReturned;
+                                  initialQtys[pId] = returnable > 0 ? returnable : 0;
+                                }
+                              });
+                              setReturnItems(initialQtys);
+                            }
                             setViewOrder(null);
                           }}
                         >
@@ -861,7 +984,7 @@ const InventoryDashboard: React.FC = () => {
 
       {/* Confirmation Dialog */}
       <Dialog open={!!confirmOrder} onOpenChange={() => setConfirmOrder(null)}>
-        <DialogContent className="max-w-sm" aria-describedby="order-fulfillment-desc">
+        <DialogContent className={confirmOrder?.action === 'Dispatched' || confirmOrder?.action === 'Returned' ? 'max-w-2xl' : 'max-w-sm'} aria-describedby="order-fulfillment-desc">
           <DialogHeader>
             <DialogTitle>
               {confirmOrder?.action === 'Dispatched' 
@@ -891,97 +1014,214 @@ const InventoryDashboard: React.FC = () => {
                 : `Mark order ${confirmOrder?.id} as COMPLETED? This confirms delivery and updates revenue.`}
             </p>
 
-            {confirmOrder?.action === 'Dispatched' && (
+            {confirmOrder?.action === 'Dispatched' && (() => {
+              const orderToDispatch = orders.find(o => o.id === confirmOrder.id || o.orderId === confirmOrder.id);
+              return (
               <div className="space-y-3 mt-2 border-t pt-3 border-border/40">
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1">Invoice / Challan Number</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. INV-1001"
-                    value={confirmOrder.invoiceDetails || ''} 
-                    onChange={e => setFormConfirmField('invoiceDetails', e.target.value)}
-                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1">Vehicle Details</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. UP-32-AB-1234"
-                    value={confirmOrder.vehicleDetails || ''} 
-                    onChange={e => setFormConfirmField('vehicleDetails', e.target.value.toUpperCase())}
-                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1">Warehouse</label>
-                  <select
-                    value={confirmOrder.warehouseDetails || ''}
-                    onChange={e => setFormConfirmField('warehouseDetails', e.target.value)}
-                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
-                  >
-                    <option value="">Select warehouse</option>
-                    {warehouses.map((warehouse: any) => (
-                      <option key={warehouse.id || warehouse.name} value={warehouse.name}>
-                        {warehouse.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1">Driver Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Ramesh Kumar"
-                    value={confirmOrder.driverName || ''} 
-                    onChange={e => setFormConfirmField('driverName', e.target.value)}
-                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold block mb-1">Driver Mobile Number</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. +91 98765 43210"
-                    value={confirmOrder.driverMobile || ''} 
-                    onChange={e => setFormConfirmField('driverMobile', e.target.value)}
-                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
+                {/* Partial Dispatch Table */}
+                {orderToDispatch && orderToDispatch.items && orderToDispatch.items.length > 0 && (
                   <div>
-                    <label className="text-[11px] font-semibold block mb-1">Dispatch Date</label>
+                    <label className="text-[11px] font-semibold block mb-1">Items to Dispatch</label>
+                    <div className="border border-border rounded-xl overflow-x-auto overflow-y-auto max-h-[30vh] w-full">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <th className="py-2 px-3 text-left min-w-[120px]">Product</th>
+                            <th className="py-2 px-3 text-center">Remaining</th>
+                            <th className="py-2 px-3 text-center">Dispatch Qty</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orderToDispatch.items.map((item: any) => {
+                            const pId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
+                            const pName = (typeof item.product === 'object' ? item.product?.name : null) || item.productName || item.product || '—';
+                            const ordered = item.qty || 0;
+                            const sent = item.sentQty || 0;
+                            const remaining = ordered - sent;
+                            const currentVal = dispatchItems[pId];
+                            
+                            return (
+                              <tr key={pId} className="border-t border-border/40">
+                                <td className="py-2 px-3 font-medium">{pName}</td>
+                                <td className="py-2 px-3 text-center">
+                                  {remaining > 0 ? <span className="font-bold text-amber-600">{remaining}</span> : <span className="text-emerald-600 font-bold">✓ Done</span>}
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  {remaining > 0 ? (
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={remaining}
+                                      value={currentVal === undefined ? '' : currentVal}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setDispatchItems(prev => ({ 
+                                          ...prev, 
+                                          [pId]: val === '' ? 0 : Math.min(remaining, Math.max(0, Number(val))) 
+                                        }));
+                                      }}
+                                      onFocus={(e) => e.target.select()}
+                                      className="w-16 text-center border border-border px-1 py-1 rounded bg-background text-xs font-bold focus:ring-1 focus:ring-primary/50"
+                                    />
+                                  ) : <span className="text-muted-foreground">—</span>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                  <div>
+                    <label className="text-[11px] font-semibold block mb-1">Invoice / Challan Number</label>
                     <input 
-                      type="date"
-                      value={confirmOrder.action_date || ''}
-                      onChange={e => setFormConfirmField('action_date', e.target.value)}
-                      className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                      type="text" 
+                      placeholder="e.g. INV-1001"
+                      value={confirmOrder.invoiceDetails || ''} 
+                      onChange={e => setFormConfirmField('invoiceDetails', e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-semibold block mb-1">Dispatch Time</label>
+                    <label className="text-[11px] font-semibold block mb-1">Vehicle Details</label>
                     <input 
-                      type="time"
-                      value={confirmOrder.action_time || ''}
-                      onChange={e => setFormConfirmField('action_time', e.target.value)}
-                      className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background"
+                      type="text" 
+                      placeholder="e.g. UP-32-AB-1234"
+                      value={confirmOrder.vehicleDetails || ''} 
+                      onChange={e => setFormConfirmField('vehicleDetails', e.target.value.toUpperCase())}
+                      className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
                     />
                   </div>
+                  <div>
+                    <label className="text-[11px] font-semibold block mb-1">Warehouse</label>
+                    <select
+                      value={confirmOrder.warehouseDetails || ''}
+                      onChange={e => setFormConfirmField('warehouseDetails', e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
+                    >
+                      <option value="">Select warehouse</option>
+                      {warehouses.map((warehouse: any) => (
+                        <option key={warehouse.id || warehouse.name} value={warehouse.name}>
+                          {warehouse.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold block mb-1">Driver Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Ramesh Kumar"
+                      value={confirmOrder.driverName || ''} 
+                      onChange={e => setFormConfirmField('driverName', e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold block mb-1">Driver Mobile Number</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. +91 98765 43210"
+                      value={confirmOrder.driverMobile || ''} 
+                      onChange={e => setFormConfirmField('driverMobile', e.target.value)}
+                      className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-semibold block mb-1">Dispatch Date</label>
+                      <input 
+                        type="date"
+                        value={confirmOrder.action_date || ''}
+                        onChange={e => setFormConfirmField('action_date', e.target.value)}
+                        className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold block mb-1">Dispatch Time</label>
+                      <input 
+                        type="time"
+                        value={confirmOrder.action_time || ''}
+                        onChange={e => setFormConfirmField('action_time', e.target.value)}
+                        className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
+                <div className="mt-3">
                   <label className="text-[11px] font-semibold block mb-1">Remarks / Notes (Optional)</label>
                   <textarea 
                     placeholder="Any comments or remarks..."
                     value={confirmOrder.reason || ''} 
                     onChange={e => setFormConfirmField('reason', e.target.value)}
-                    className="w-full text-xs border border-border rounded-lg p-2 bg-background min-h-[50px]"
+                    className="w-full text-xs border border-border rounded-lg p-2 bg-background min-h-[50px] focus:ring-1 focus:ring-primary/50"
                   />
                 </div>
               </div>
-            )}
+              );
+            })()}
 
-            {confirmOrder?.action === 'Returned' && (
+            {confirmOrder?.action === 'Returned' && (() => {
+              const orderToReturn = orders.find(o => o.id === confirmOrder.id || o.orderId === confirmOrder.id);
+              return (
               <div className="space-y-3 mt-2 border-t pt-3 border-border/40">
+                {/* Partial Return Table */}
+                {orderToReturn && orderToReturn.items && orderToReturn.items.length > 0 && (
+                  <div>
+                    <label className="text-[11px] font-semibold block mb-1">Items to Return</label>
+                    <div className="border border-border rounded-xl overflow-x-auto overflow-y-auto max-h-[30vh] w-full">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <th className="py-2 px-3 text-left min-w-[120px]">Product</th>
+                            <th className="py-2 px-3 text-center">Returnable</th>
+                            <th className="py-2 px-3 text-center">Return Qty</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orderToReturn.items.map((item: any) => {
+                            const pId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
+                            const pName = (typeof item.product === 'object' ? item.product?.name : null) || item.productName || item.product || '—';
+                            const dispatched = item.sentQty || item.qty || 0;
+                            const alreadyReturned = item.returnedQty || 0;
+                            const returnable = dispatched - alreadyReturned;
+                            const currentVal = returnItems[pId];
+                            
+                            return (
+                              <tr key={pId} className="border-t border-border/40">
+                                <td className="py-2 px-3 font-medium">{pName}</td>
+                                <td className="py-2 px-3 text-center">
+                                  {returnable > 0 ? <span className="font-bold text-amber-600">{returnable}</span> : <span className="text-emerald-600">✓ Done</span>}
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  {returnable > 0 ? (
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={returnable}
+                                      value={currentVal === undefined ? '' : currentVal}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setReturnItems(prev => ({ 
+                                          ...prev, 
+                                          [pId]: val === '' ? 0 : Math.min(returnable, Math.max(0, Number(val))) 
+                                        }));
+                                      }}
+                                      onFocus={(e) => e.target.select()}
+                                      className="w-16 text-center border border-border px-1 py-1 rounded bg-background text-xs font-bold focus:ring-1 focus:ring-primary/50"
+                                    />
+                                  ) : <span className="text-muted-foreground">—</span>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="text-[11px] font-semibold block mb-1">Return Date</label>
                   <input 
@@ -1001,7 +1241,8 @@ const InventoryDashboard: React.FC = () => {
                   />
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {confirmOrder?.action === 'Cancelled' && (
               <div className="space-y-3 mt-2 border-t pt-3 border-border/40">

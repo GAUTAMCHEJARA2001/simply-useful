@@ -193,12 +193,60 @@ class Orderitem(models.Model):
     orderid = models.ForeignKey(Order, models.DO_NOTHING, db_column='orderId', db_constraint=False)  # Field name made lowercase.
     productid = models.ForeignKey('Product', models.DO_NOTHING, db_column='productId', db_constraint=False)  # Field name made lowercase.
     qty = models.IntegerField()
+    sentqty = models.IntegerField(db_column='sentQty', default=0)
+    returnedqty = models.IntegerField(db_column='returnedQty', default=0)
     price = models.FloatField()
     total = models.FloatField()
     itemremark = models.TextField(db_column='itemRemark', blank=True, null=True)  # Field name made lowercase.
 
     class Meta:
         db_table = 'OrderItem'
+
+
+class Dispatchlog(models.Model):
+    id = models.TextField(primary_key=True)
+    orderid = models.ForeignKey(Order, models.DO_NOTHING, db_column='orderId', db_constraint=False)
+    dispatchdate = models.DateTimeField(db_column='dispatchDate', default=timezone.now)
+    invoicenumber = models.TextField(db_column='invoiceNumber', blank=True, null=True)
+    vehiclenumber = models.TextField(db_column='vehicleNumber', blank=True, null=True)
+    drivername = models.TextField(db_column='driverName', blank=True, null=True)
+    drivermobile = models.TextField(db_column='driverMobile', blank=True, null=True)
+    remarks = models.TextField(blank=True, null=True)
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'DispatchLog'
+
+
+class Dispatchlogitem(models.Model):
+    id = models.TextField(primary_key=True)
+    dispatchlogid = models.ForeignKey(Dispatchlog, models.DO_NOTHING, db_column='dispatchLogId', db_constraint=False, related_name='items')
+    productid = models.ForeignKey('Product', models.DO_NOTHING, db_column='productId', db_constraint=False)
+    qty = models.IntegerField()
+
+    class Meta:
+        db_table = 'DispatchLogItem'
+
+
+class Returnlog(models.Model):
+    id = models.TextField(primary_key=True)
+    orderid = models.ForeignKey(Order, models.DO_NOTHING, db_column='orderId', db_constraint=False)
+    returndate = models.DateTimeField(db_column='returnDate', default=timezone.now)
+    remarks = models.TextField(blank=True, null=True)
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'ReturnLog'
+
+
+class Returnlogitem(models.Model):
+    id = models.TextField(primary_key=True)
+    returnlogid = models.ForeignKey(Returnlog, models.DO_NOTHING, db_column='returnLogId', db_constraint=False, related_name='items')
+    productid = models.ForeignKey('Product', models.DO_NOTHING, db_column='productId', db_constraint=False)
+    qty = models.IntegerField()
+
+    class Meta:
+        db_table = 'ReturnLogItem'
 
 
 class Product(models.Model):

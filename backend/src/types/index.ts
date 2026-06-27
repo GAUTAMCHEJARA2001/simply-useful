@@ -1,6 +1,6 @@
 export type UserRole = 'SALES' | 'ADMIN' | 'HR' | 'INVENTORY' | 'SUPERADMIN';
 
-export type OrderStatus = 'Pending' | 'Approved' | 'Dispatched' | 'Completed' | 'Cancelled' | 'Returned';
+export type OrderStatus = 'Pending' | 'Approved' | 'Partially Dispatched' | 'Dispatched' | 'Completed' | 'Cancelled' | 'Partially Returned' | 'Returned';
 
 
 

@@ -2607,9 +2607,9 @@ class DealerViewSet(viewsets.ModelViewSet):
                         qs = qs.filter(assignedsoemail=user_email)
                     
                     for item in qs:
-                        if item.id not in seen_ids:
+                        if item.dealercode not in seen_ids:
                             all_items.append(item)
-                            seen_ids.add(item.id)
+                            seen_ids.add(item.dealercode)
                 except Exception:
                     pass
 
@@ -2638,13 +2638,19 @@ class DealerViewSet(viewsets.ModelViewSet):
 
 
     def create(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
-        if get_current_db() == 'default':
+        wh_header = request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
+        is_global = (not wh_header or wh_header.upper() == 'GLOBAL' or wh_header.lower() == 'none')
+        
+        if is_global:
             from api.models import Warehouse
-            from api.db_router import set_current_db
+            from api.db_router import set_current_db, get_current_db
             from django.db import connection
             
-            active_warehouses = list(Warehouse.objects.filter(active=True))
+            company_id = _get_company_id(request)
+            qs = Warehouse.objects.filter(active=True)
+            if company_id:
+                qs = qs.filter(companyid_id=company_id)
+            active_warehouses = list(qs)
             if not active_warehouses:
                 return send_error("Cannot create dealer: No active warehouses found.", 400)
             
@@ -3313,6 +3319,226 @@ class OrderViewSet(viewsets.ModelViewSet):
             if p_id:
                 recalculate_product_inventory(p_id, warehouse_id=wh_id)
         return send_success(None, "Order deleted successfully")
+
+    @action(detail=True, methods=['post'], url_path='partial-dispatch')
+    def partial_dispatch(self, request, pk=None):
+        try:
+            instance = self.get_object()
+            data = request.data.copy()
+            items = data.get('items', [])
+            
+            if not items:
+                return send_error("No items specified for dispatch", 400)
+                
+            invoice = data.get('invoiceNumber') or data.get('invoice_number')
+            vehicle = data.get('vehicleNumber') or data.get('vehicle_number')
+            driver = data.get('driverName') or data.get('driver_name')
+            mobile = data.get('driverMobileNumber') or data.get('driver_mobile_number') or data.get('driverMobile') or data.get('driver_mobile')
+            remarks = data.get('remarks') or ''
+            
+            # 1. Validate all quantities
+            from api.models import Orderitem, Product
+            db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
+            
+            for item_data in items:
+                p_id = item_data.get('productId') or item_data.get('product_id')
+                qty_to_send = int(item_data.get('qty', 0))
+                if qty_to_send <= 0:
+                    continue
+                    
+                try:
+                    oi = instance.orderitem_set.using(db_alias).get(productid_id=p_id)
+                except Orderitem.DoesNotExist:
+                    return send_error(f"Product {p_id} not found in this order", 400)
+                    
+                if oi.sentqty + qty_to_send > oi.qty:
+                    return send_error(f"Cannot dispatch {qty_to_send} of {p_id}. Already sent: {oi.sentqty}, Total ordered: {oi.qty}", 400)
+
+            # 2. Record the dispatch
+            import uuid
+            from django.utils import timezone
+            from api.models import Dispatchlog, Dispatchlogitem
+            
+            log_id = 'c' + uuid.uuid4().hex[:23]
+            dispatch_log = Dispatchlog.objects.using(db_alias).create(
+                id=log_id,
+                orderid=instance,
+                dispatchdate=timezone.now(),
+                invoicenumber=invoice,
+                vehiclenumber=vehicle,
+                drivername=driver,
+                drivermobile=mobile,
+                remarks=remarks
+            )
+            
+            for item_data in items:
+                p_id = item_data.get('productId') or item_data.get('product_id')
+                qty_to_send = int(item_data.get('qty', 0))
+                if qty_to_send <= 0:
+                    continue
+                    
+                oi = instance.orderitem_set.using(db_alias).get(productid_id=p_id)
+                oi.sentqty += qty_to_send
+                oi.save(using=db_alias)
+                
+                item_log_id = 'c' + uuid.uuid4().hex[:23]
+                Dispatchlogitem.objects.using(db_alias).create(
+                    id=item_log_id,
+                    dispatchlogid=dispatch_log,
+                    productid_id=p_id,
+                    qty=qty_to_send
+                )
+                
+                # Recalculate inventory
+                recalculate_product_inventory(p_id, warehouse_id=instance.assigned_warehouse_id if hasattr(instance, 'assigned_warehouse_id') else None)
+
+            # 3. Determine status
+            all_dispatched = True
+            for oi in instance.orderitem_set.using(db_alias).all():
+                if oi.sentqty < oi.qty:
+                    all_dispatched = False
+                    break
+                    
+            if all_dispatched:
+                instance.status = 'Completed'
+            else:
+                instance.status = 'Partially Dispatched'
+            
+            # Save invoice info if not set
+            if invoice: instance.invoicenumber = invoice
+            if vehicle: instance.vehiclenumber = vehicle
+            if driver: instance.drivername = driver
+            if mobile: instance.drivermobile = mobile
+            
+            wh_val = getattr(instance, 'assigned_warehouse', None)
+            if wh_val and hasattr(wh_val, 'name'):
+                instance.dispatchwarehouse = wh_val.name
+            elif data.get('warehouseDetails'):
+                instance.dispatchwarehouse = data.get('warehouseDetails')
+                
+            instance.dispatchdate = timezone.now().strftime('%Y-%m-%d')
+            
+            instance.save(using=db_alias)
+            
+            from api.serializers import OrderSerializer
+            return send_success(OrderSerializer(instance).data, f"Order status updated to {instance.status}")
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            return send_error(f"Internal API Error: {str(e)}", 500)
+
+    @action(detail=True, methods=['post'], url_path='partial-return')
+    def partial_return(self, request, pk=None):
+        instance = self.get_object()
+        data = request.data.copy()
+        items = data.get('items', [])
+        
+        if not items:
+            return send_error("No items specified for return", 400)
+            
+        remarks = data.get('remarks') or data.get('returnReason') or ''
+        
+        # 1. Validate returned quantities
+        from api.models import Orderitem, Product
+        db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
+        
+        for item_data in items:
+            p_id = item_data.get('productId') or item_data.get('product_id')
+            qty_to_return = int(item_data.get('qty', 0))
+            if qty_to_return <= 0:
+                continue
+                
+            try:
+                oi = instance.orderitem_set.using(db_alias).get(productid_id=p_id)
+            except Orderitem.DoesNotExist:
+                return send_error(f"Product {p_id} not found in this order", 400)
+                
+            # Fallback for legacy orders that were fully dispatched but sentqty is 0
+            effective_sentqty = oi.sentqty
+            if effective_sentqty == 0 and instance.status in ['Dispatched', 'Completed', 'Partially Returned', 'Returned']:
+                effective_sentqty = oi.qty
+                # Auto-heal the legacy record
+                oi.sentqty = oi.qty
+                oi.save(using=db_alias, update_fields=['sentqty'])
+
+            if oi.returnedqty + qty_to_return > effective_sentqty:
+                return send_error(f"Cannot return {qty_to_return} of {p_id}. Already returned: {oi.returnedqty}, Dispatched: {effective_sentqty}", 400)
+
+        # 2. Record the return
+        import uuid
+        from django.utils import timezone
+        from api.models import Returnlog, Returnlogitem
+        
+        log_id = 'c' + uuid.uuid4().hex[:23]
+        return_log = Returnlog.objects.using(db_alias).create(
+            id=log_id,
+            orderid=instance,
+            returndate=timezone.now(),
+            remarks=remarks
+        )
+        
+        for item_data in items:
+            p_id = item_data.get('productId') or item_data.get('product_id')
+            qty_to_return = int(item_data.get('qty', 0))
+            if qty_to_return <= 0:
+                continue
+                
+            oi = instance.orderitem_set.using(db_alias).get(productid_id=p_id)
+            oi.returnedqty += qty_to_return
+            oi.save(using=db_alias)
+            
+            item_log_id = 'c' + uuid.uuid4().hex[:23]
+            Returnlogitem.objects.using(db_alias).create(
+                id=item_log_id,
+                returnlogid=return_log,
+                productid_id=p_id,
+                qty=qty_to_return
+            )
+            
+            # Recalculate inventory (recalculate_product_inventory handles subtraction automatically)
+            recalculate_product_inventory(p_id, warehouse_id=instance.assigned_warehouse_id if hasattr(instance, 'assigned_warehouse_id') else None)
+
+        # 3. Determine status
+        all_returned = True
+        any_returned = False
+        for oi in instance.orderitem_set.using(db_alias).all():
+            if oi.returnedqty > 0:
+                any_returned = True
+            
+            effective_sentqty = oi.sentqty
+            if effective_sentqty == 0 and instance.status in ['Dispatched', 'Completed', 'Partially Returned', 'Returned']:
+                effective_sentqty = oi.qty
+                
+            if oi.returnedqty < effective_sentqty:
+                all_returned = False
+                
+        if all_returned and any_returned:
+            instance.status = 'Returned'
+        elif any_returned:
+            instance.status = 'Partially Returned'
+            
+        instance.save(using=db_alias)
+        
+        from api.serializers import OrderSerializer
+        return send_success(OrderSerializer(instance).data, f"Order status updated to {instance.status}")
+
+    @action(detail=True, methods=['get'], url_path='dispatch-logs')
+    def dispatch_logs(self, request, pk=None):
+        instance = self.get_object()
+        db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
+        from api.models import Dispatchlog
+        from api.serializers import DispatchlogSerializer
+        logs = Dispatchlog.objects.using(db_alias).filter(orderid=instance).prefetch_related('items__productid').order_by('-createdat')
+        return send_success(DispatchlogSerializer(logs, many=True).data, "Dispatch logs fetched")
+
+    @action(detail=True, methods=['get'], url_path='return-logs')
+    def return_logs(self, request, pk=None):
+        instance = self.get_object()
+        db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
+        from api.models import Returnlog
+        from api.serializers import ReturnlogSerializer
+        logs = Returnlog.objects.using(db_alias).filter(orderid=instance).prefetch_related('items__productid').order_by('-createdat')
+        return send_success(ReturnlogSerializer(logs, many=True).data, "Return logs fetched")
 
     @action(detail=True, methods=['post'], url_path='update-status')
     def update_status(self, request, pk=None):
@@ -4162,15 +4388,25 @@ def recalculate_product_inventory(product_id, warehouse_id=None):
             purchaseid__status='Returned'
         ).aggregate(Sum('qty'))['qty__sum'] or 0.0
         
-        sales = Orderitem.objects.using(wh.db_name).filter(
+        # Count sales for all completed/dispatched/returned orders, subtracting returned quantities
+        sales_items = Orderitem.objects.using(wh.db_name).filter(
             productid_id=local_product.id,
-            orderid__status__in=['Completed', 'Returned']
-        ).aggregate(Sum('qty'))['qty__sum'] or 0.0
+            orderid__status__in=['Completed', 'Returned', 'Dispatched', 'Partially Dispatched', 'Partially Returned']
+        ).select_related('orderid')
+        sales = 0.0
+        for item in sales_items:
+            # If partially dispatched/returned, or if sentqty is explicitly tracked, use sentqty.
+            # Otherwise, for legacy fully 'Dispatched' or 'Completed' orders where sentqty wasn't tracked, fallback to qty.
+            status = getattr(item.orderid, 'status', '') if hasattr(item, 'orderid') else ''
+            
+            dispatched = float(item.sentqty or 0)
+            if dispatched == 0 and status in ['Dispatched', 'Completed', 'Returned']:
+                dispatched = float(item.qty or 0)
+                
+            ret_val = float(item.returnedqty or 0)
+            sales += max(0.0, dispatched - ret_val)
         
-        sales_returns = Orderitem.objects.using(wh.db_name).filter(
-            productid_id=local_product.id,
-            orderid__status='Returned'
-        ).aggregate(Sum('qty'))['qty__sum'] or 0.0
+        sales_returns = 0.0
         
         production = Stocktransaction.objects.using(wh.db_name).filter(
             productid_id=local_product.id,
@@ -5083,51 +5319,141 @@ def transaction_sales(request):
                 
             for wh in wh_qs:
                 if not wh.db_name: continue
-                orders = Order.objects.using(wh.db_name).filter(status='Completed').prefetch_related('orderitem_set__productid')
-                all_orders.extend(OrderSerializer(orders, many=True).data)
+                orders = Order.objects.using(wh.db_name).all().prefetch_related('orderitem_set__productid')
+                serialized = OrderSerializer(orders, many=True).data
+                for s in serialized: s['_db_name'] = wh.db_name
+                all_orders.extend(serialized)
         else:
-            orders = Order.objects.using(current_db).filter(status='Completed').prefetch_related('orderitem_set__productid')
-            all_orders.extend(OrderSerializer(orders, many=True).data)
+            orders = Order.objects.using(current_db).all().prefetch_related('orderitem_set__productid')
+            serialized = OrderSerializer(orders, many=True).data
+            for s in serialized: s['_db_name'] = current_db
+            all_orders.extend(serialized)
             
-        # Dynamically inject netAmount, totalProfit, and challanNumber into serialized data
+        expanded_sales = []
         for d in all_orders:
-            # 1. challanNumber extraction from narration
-            narration = d.get('narration') or ''
-            import re
-            match = re.search(r'\[CHALLAN:\s*([^\]]+)\]', narration)
-            if not match:
-                match = re.search(r'\[INVOICE:\s*([^\]]+)\]', narration)
-            d['challanNumber'] = match.group(1) if match else ''
-            d['driverMobileNumber'] = _extract_order_tag(narration, 'DRIVER MOBILE')
+            db_alias = d.get('_db_name', current_db)
             
-            # 2. netAmount calculation: grandTotal
-            d['netAmount'] = d.get('grandTotal') or 0.0
+            from api.models import Dispatchlog, Dispatchlogitem, Orderitem, Returnlog, Returnlogitem
+            dispatch_logs = Dispatchlog.objects.using(db_alias).filter(orderid=d['id']).prefetch_related('items__productid')
             
-            # 3. totalProfit calculation: grandTotal - totalCost
-            total_profit = 0.0
-            order_items = d.get('items') or []
-            for item in order_items:
-                qty = item.get('qty') or 0
-                price = item.get('price') or 0.0
-                prod_id = item.get('productId')
+            if dispatch_logs.exists():
+                # Parse return logs to allocate returned quantities
+                returns = Returnlog.objects.using(db_alias).filter(orderid=d['id']).prefetch_related('items')
+                invoice_returns = {}
+                global_returns = {}
                 
-                # Fetch product cost
-                from api.models import Inventory, Product
-                cost_price = 0.0
-                if prod_id:
-                    try:
-                        prod = Product.objects.filter(id=prod_id).first()
-                        cost_price = float(prod.rate or 0) * 0.7 if prod else 0.0
-                    except Exception:
+                for rl in returns:
+                    import re
+                    match = re.search(r'\[INVOICE:\s*([^\]]+)\]', rl.remarks or '')
+                    if match:
+                        inv = match.group(1).strip()
+                        if inv not in invoice_returns: invoice_returns[inv] = {}
+                        for rli in rl.items.all():
+                            invoice_returns[inv][rli.productid_id] = invoice_returns[inv].get(rli.productid_id, 0) + rli.qty
+                    else:
+                        for rli in rl.items.all():
+                            global_returns[rli.productid_id] = global_returns.get(rli.productid_id, 0) + rli.qty
+                
+                # Sort dispatch logs descending so global returns apply to the most recent dispatch first
+                for log in dispatch_logs.order_by('-dispatchdate', '-createdat'):
+                    sale = d.copy()
+                    sale['id'] = log.id
+                    sale['originalOrderId'] = d['id']
+                    sale['invoiceNumber'] = log.invoicenumber
+                    sale['challanNumber'] = log.invoicenumber
+                    sale['date'] = log.dispatchdate.strftime('%Y-%m-%d')
+                    sale['isDispatchLog'] = True
+                    sale['driverMobileNumber'] = log.drivermobile
+                    
+                    log_items = log.items.all()
+                    dispatch_items = []
+                    total_amount = 0
+                    total_cost = 0
+                    
+                    total_returned = 0
+                    total_dispatched = 0
+                    
+                    for li in log_items:
+                        oi = Orderitem.objects.using(db_alias).filter(orderid=d['id'], productid=li.productid).first()
+                        price = float(oi.price) if oi and oi.price else 0.0
+                        
+                        from api.models import Product
                         cost_price = 0.0
+                        if li.productid:
+                            prod = Product.objects.using(db_alias).filter(id=li.productid.id).first()
+                            cost_price = float(prod.rate or 0) * 0.7 if prod else 0.0
+                            
+                        specific_ret = invoice_returns.get(log.invoicenumber, {}).get(li.productid_id, 0)
+                        rem = li.qty - specific_ret
+                        glob_ret = 0
+                        if rem > 0 and global_returns.get(li.productid_id, 0) > 0:
+                            glob_ret = min(rem, global_returns[li.productid_id])
+                            global_returns[li.productid_id] -= glob_ret
+                            
+                        actual_ret = specific_ret + glob_ret
+                        total_returned += actual_ret
+                        total_dispatched += li.qty
+                            
+                        dispatch_items.append({
+                            'productId': li.productid_id,
+                            'productName': li.productid.name if li.productid else '',
+                            'qty': li.qty,
+                            'price': price,
+                            'total': (li.qty - actual_ret) * price,
+                            'sentQty': li.qty,
+                            'returnedQty': actual_ret
+                        })
+                        total_amount += ((li.qty - actual_ret) * price)
+                        total_cost += ((li.qty - actual_ret) * cost_price)
+                        
+                    sale['items'] = dispatch_items
+                    sale['grandTotal'] = total_amount
+                    sale['netAmount'] = total_amount
+                    sale['totalProfit'] = max(0.0, total_amount - total_cost)
+                    
+                    if total_returned >= total_dispatched and total_dispatched > 0:
+                        sale['status'] = 'Returned'
+                    elif total_returned > 0:
+                        sale['status'] = 'Partially Returned'
+                    else:
+                        sale['status'] = 'Completed' if d.get('status') == 'Completed' else 'Dispatched'
+                    
+                    expanded_sales.append(sale)
+            else:
+                narration = d.get('narration') or ''
+                import re
+                match = re.search(r'\[CHALLAN:\s*([^\]]+)\]', narration)
+                if not match:
+                    match = re.search(r'\[INVOICE:\s*([^\]]+)\]', narration)
+                d['challanNumber'] = match.group(1) if match else ''
+                d['driverMobileNumber'] = _extract_order_tag(narration, 'DRIVER MOBILE')
                 
-                item_revenue = qty * price
-                item_cost = qty * cost_price
-                total_profit += (item_revenue - item_cost)
+                d['netAmount'] = d.get('grandTotal') or 0.0
                 
-            d['totalProfit'] = max(0.0, total_profit)
-            
-        return send_success(all_orders, "Sales transactions fetched")
+                total_profit = 0.0
+                order_items = d.get('items') or []
+                for item in order_items:
+                    qty = item.get('qty') or 0
+                    price = item.get('price') or 0.0
+                    prod_id = item.get('productId')
+                    
+                    from api.models import Product
+                    cost_price = 0.0
+                    if prod_id:
+                        try:
+                            prod = Product.objects.using(db_alias).filter(id=prod_id).first()
+                            cost_price = float(prod.rate or 0) * 0.7 if prod else 0.0
+                        except Exception:
+                            cost_price = 0.0
+                    
+                    item_revenue = qty * price
+                    item_cost = qty * cost_price
+                    total_profit += (item_revenue - item_cost)
+                    
+                d['totalProfit'] = max(0.0, total_profit)
+                expanded_sales.append(d)
+                
+        return send_success(expanded_sales, "Sales transactions fetched")
         
     elif request.method == 'POST':
         ensure_tenant_db_context(request)
@@ -5353,9 +5679,11 @@ def transaction_dispatch(request, pk):
     order.dispatchwarehouse = warehouse_name
     order.dispatchdate = dispatch_date
     
-    remarks = data.get('remarks') or data.get('narration')
+    remarks = data.get('remarks')
     if remarks:
-        order.narration = remarks
+        order.narration = _append_order_tags(order.narration, {
+            'DISPATCH REMARKS': remarks
+        })
     elif order.narration:
         order.narration = _get_clean_narration_helper(order.narration)
         
@@ -5922,43 +6250,105 @@ def transaction_returns(request):
         all_returns = []
         def process_sales_returns(orders_qs, db_name):
             from api.serializers import OrderSerializer
+            from api.models import Returnlog
             serialized = OrderSerializer(orders_qs, many=True).data
+            
+            # Fetch all Returnlogs for these orders
+            order_ids = [o.id for o in orders_qs]
+            returns_qs = Returnlog.objects.using(db_name).filter(orderid__in=order_ids).prefetch_related('items__productid')
+            returns_by_order = {}
+            for rl in returns_qs:
+                if rl.orderid_id not in returns_by_order:
+                    returns_by_order[rl.orderid_id] = []
+                returns_by_order[rl.orderid_id].append(rl)
             
             for d, o in zip(serialized, orders_qs):
                 orig = o
                 orig_qtys = {}
+                orig_prices = {}
                 for oi in orig.orderitem_set.all():
                     try:
-                        name = oi.productid.name
+                        name = oi.productid.name if oi.productid else getattr(oi, 'productname', '')
                     except Exception:
                         name = getattr(oi, 'productname', '') or ''
                     orig_qtys[name] = float(oi.qty or 0)
+                    orig_prices[oi.productid_id] = float(oi.price or 0)
                 
-                for item in d.get('items', []):
-                    name = item.get('product', {}).get('name') if item.get('product') else item.get('productName')
-                    item['originalQty'] = orig_qtys.get(name, 0)
-                    item['qty'] = float(item.get('qty') or 0)
-                
-                narration = d.get('narration') or ''
-                d['type'] = 'Sales Return'
-                d['challanNumber'] = (
-                    _extract_order_tag(narration, 'SALES RETURN BILL')
-                    or _extract_order_tag(narration, 'INVOICE')
-                    or _extract_order_tag(narration, 'CHALLAN')
-                )
-                d['originalBillNumber'] = orig.orderid if hasattr(orig, 'orderid') else ''
-                d['originalVehicleNumber'] = _extract_order_tag(narration, 'VEHICLE') or ''
-                d['originalDate'] = str(orig.date) if orig.date else ''
-                
-                d['party'] = d.get('partyDetails') or {}
-                d['party']['name'] = d.get('partyName')
-                
-                d['netAmount'] = d.get('grandTotal') or 0.0
-                d['returnDate'] = _extract_order_tag(narration, 'RETURN DATE')
-                d['returnReason'] = _extract_order_tag(narration, 'RETURN REASON')
-                d['vehicleNumber'] = _extract_order_tag(narration, 'RETURN VEHICLE') or _extract_order_tag(narration, 'VEHICLE')
-                
-                all_returns.append(d)
+                # If there are Returnlogs, create an entry for each one
+                if o.id in returns_by_order:
+                    for rl in returns_by_order[o.id]:
+                        ret_entry = d.copy()
+                        ret_entry['id'] = rl.id # Unique ID for table rendering
+                        
+                        items = []
+                        total_amt = 0.0
+                        for rli in rl.items.all():
+                            name = rli.productid.name if rli.productid else ''
+                            price = orig_prices.get(rli.productid_id, 0.0)
+                            items.append({
+                                'productId': rli.productid_id,
+                                'productName': name,
+                                'qty': float(rli.qty),
+                                'originalQty': orig_qtys.get(name, 0),
+                                'price': price,
+                                'total': float(rli.qty * price),
+                            })
+                            total_amt += float(rli.qty * price)
+                            
+                        ret_entry['items'] = items
+                        ret_entry['netAmount'] = total_amt
+                        ret_entry['grandTotal'] = total_amt
+                        
+                        narration = o.narration or ''
+                        remarks = rl.remarks or ''
+                        import re
+                        
+                        inv_match = re.search(r'\[INVOICE:\s*([^\]]+)\]', remarks)
+                        inv_num = inv_match.group(1).strip() if inv_match else ''
+                        
+                        ret_entry['type'] = 'Sales Return'
+                        ret_entry['challanNumber'] = inv_num or _extract_order_tag(narration, 'SALES RETURN BILL') or o.invoicenumber or ''
+                        ret_entry['originalBillNumber'] = o.orderid if hasattr(o, 'orderid') else ''
+                        ret_entry['originalVehicleNumber'] = _extract_order_tag(narration, 'VEHICLE') or o.vehiclenumber or ''
+                        ret_entry['originalDate'] = str(o.date) if o.date else ''
+                        
+                        ret_entry['party'] = ret_entry.get('partyDetails') or {}
+                        ret_entry['party']['name'] = ret_entry.get('partyName')
+                        
+                        ret_entry['returnDate'] = str(rl.returndate.date()) if rl.returndate else ''
+                        
+                        reason = remarks.replace(f'[INVOICE: {inv_num}]', '').strip() if inv_num else remarks
+                        ret_entry['returnReason'] = reason or _extract_order_tag(narration, 'RETURN REASON')
+                        ret_entry['vehicleNumber'] = _extract_order_tag(narration, 'RETURN VEHICLE') or o.vehiclenumber or ''
+                        
+                        all_returns.append(ret_entry)
+                else:
+                    # Fallback for old orders without Returnlog
+                    for item in d.get('items', []):
+                        name = item.get('product', {}).get('name') if item.get('product') else item.get('productName')
+                        item['originalQty'] = orig_qtys.get(name, 0)
+                        item['qty'] = float(item.get('qty') or 0)
+                    
+                    narration = d.get('narration') or ''
+                    d['type'] = 'Sales Return'
+                    d['challanNumber'] = (
+                        _extract_order_tag(narration, 'SALES RETURN BILL')
+                        or _extract_order_tag(narration, 'INVOICE')
+                        or _extract_order_tag(narration, 'CHALLAN')
+                    )
+                    d['originalBillNumber'] = orig.orderid if hasattr(orig, 'orderid') else ''
+                    d['originalVehicleNumber'] = _extract_order_tag(narration, 'VEHICLE') or ''
+                    d['originalDate'] = str(orig.date) if orig.date else ''
+                    
+                    d['party'] = d.get('partyDetails') or {}
+                    d['party']['name'] = d.get('partyName')
+                    
+                    d['netAmount'] = d.get('grandTotal') or 0.0
+                    d['returnDate'] = _extract_order_tag(narration, 'RETURN DATE')
+                    d['returnReason'] = _extract_order_tag(narration, 'RETURN REASON')
+                    d['vehicleNumber'] = _extract_order_tag(narration, 'RETURN VEHICLE') or _extract_order_tag(narration, 'VEHICLE')
+                    
+                    all_returns.append(d)
 
         def append_purchases(purchases_qs, db_name):
             for p in purchases_qs:
@@ -6012,16 +6402,16 @@ def transaction_returns(request):
                 wh_qs = wh_qs.filter(id__in=assigned_wh_ids)
             for wh in wh_qs:
                 if not wh.db_name: continue
-                orders = Order.objects.using(wh.db_name).filter(status='Returned').prefetch_related('orderitem_set__productid')
+                orders = Order.objects.using(wh.db_name).filter(status__in=['Returned', 'Partially Returned']).prefetch_related('orderitem_set__productid')
                 process_sales_returns(orders, wh.db_name)
                 
-                purchases = Purchase.objects.using(wh.db_name).filter(status='Returned').prefetch_related('purchaseitem_set')
+                purchases = Purchase.objects.using(wh.db_name).filter(status__in=['Returned', 'Partially Returned']).prefetch_related('purchaseitem_set')
                 append_purchases(purchases, wh.db_name)
         else:
-            orders = Order.objects.using(current_db).filter(status='Returned').prefetch_related('orderitem_set__productid')
+            orders = Order.objects.using(current_db).filter(status__in=['Returned', 'Partially Returned']).prefetch_related('orderitem_set__productid')
             process_sales_returns(orders, current_db)
             
-            purchases = Purchase.objects.using(current_db).filter(status='Returned').prefetch_related('purchaseitem_set')
+            purchases = Purchase.objects.using(current_db).filter(status__in=['Returned', 'Partially Returned']).prefetch_related('purchaseitem_set')
             if assigned_wh_ids:
                 purchases = purchases.filter(warehouseid_id__in=assigned_wh_ids)
             append_purchases(purchases, current_db)
@@ -6106,14 +6496,16 @@ def transaction_returns(request):
     from django.utils import timezone
     order.status = 'Returned'
     
-    tag_prefix = 'PURCHASE' if is_purchase else 'SALES'
-    order.narration = _append_order_tags(order.narration, {
-        'RETURN VEHICLE': vehicle_number,
-        f'{tag_prefix} RETURN BILL': bill_number,
-        'RETURN DATE': return_date,
-        'RETURN REASON': return_reason,
-        'RETURN TIME': timezone.now().strftime('%Y-%m-%d %H:%M:%S'),
-    })
+    if is_purchase:
+        tag_prefix = 'PURCHASE'
+        order.narration = _append_order_tags(order.narration, {
+            'RETURN VEHICLE': vehicle_number,
+            f'{tag_prefix} RETURN BILL': bill_number,
+            'RETURN DATE': return_date,
+            'RETURN REASON': return_reason,
+            'RETURN TIME': timezone.now().strftime('%Y-%m-%d %H:%M:%S'),
+        })
+        
     order.updatedat = timezone.now()
     order.save()
 
@@ -7101,4 +7493,108 @@ class BroadcastViewSet(viewsets.ModelViewSet):
             return send_success(None, "Broadcast removed")
         except Broadcast.DoesNotExist:
             return send_error("Broadcast not found", 404)
+
+@api_view(['GET', 'PUT', 'DELETE'])
+def transaction_dispatch_log_detail(request, pk):
+    from api.models import Dispatchlog, Dispatchlogitem, Orderitem
+    from api.db_router import get_tenant_model_cross_db
+    try:
+        dispatch_log = get_tenant_model_cross_db(Dispatchlog, pk, 'items')
+    except Dispatchlog.DoesNotExist:
+        return send_error("Dispatch log not found", 404)
+        
+    db_alias = dispatch_log._state.db
+        
+    if request.method == 'GET':
+        return send_success(None, "Fetched dispatch log")
+        
+    elif request.method == 'PUT':
+        data = request.data
+        
+        dispatch_log.invoicenumber = data.get('invoiceNumber', dispatch_log.invoicenumber)
+        dispatch_log.vehiclenumber = data.get('vehicleNumber', dispatch_log.vehiclenumber)
+        dispatch_log.drivername = data.get('driverName', dispatch_log.drivername)
+        dispatch_log.drivermobile = data.get('driverMobile', dispatch_log.drivermobile)
+        dispatch_log.remarks = data.get('remarks', dispatch_log.remarks)
+        
+        # 1. Reverse the old quantities from Orderitem.sentqty
+        old_items = list(dispatch_log.items.all())
+        for old_item in old_items:
+            oi = Orderitem.objects.using(db_alias).filter(orderid=dispatch_log.orderid_id, productid=old_item.productid_id).first()
+            if oi:
+                oi.sentqty = max(0, oi.sentqty - old_item.qty)
+                oi.save(using=db_alias)
+                
+        # 2. Delete old items
+        dispatch_log.items.all().delete()
+        
+        # 3. Add new items
+        items_list = data.get('items', [])
+        import uuid
+        for item in items_list:
+            p_id = item.get('productId') or item.get('product_id')
+            qty = int(item.get('qty', 0))
+            if qty > 0:
+                Dispatchlogitem.objects.using(db_alias).create(
+                    id='c' + uuid.uuid4().hex[:23],
+                    dispatchlogid=dispatch_log,
+                    productid_id=p_id,
+                    qty=qty
+                )
+                oi = Orderitem.objects.using(db_alias).filter(orderid=dispatch_log.orderid_id, productid=p_id).first()
+                if oi:
+                    oi.sentqty += qty
+                    oi.save(using=db_alias)
+                    
+        dispatch_log.save(using=db_alias)
+        
+        # Recalculate inventory
+        all_pids = set([i.productid_id for i in old_items] + [i.get('productId') or i.get('product_id') for i in items_list])
+        for pid in all_pids:
+            if pid: recalculate_product_inventory(pid)
+            
+        # Update order status based on new sentqty
+        order = dispatch_log.orderid
+        all_dispatched = True
+        for oi in order.orderitem_set.using(db_alias).all():
+            if oi.sentqty < oi.qty:
+                all_dispatched = False
+                break
+        order.status = 'Completed' if all_dispatched else 'Partially Dispatched'
+        order.save(using=db_alias)
+        
+        return send_success(None, "Dispatch transaction updated")
+        
+    elif request.method == 'DELETE':
+        # 1. Reverse quantities
+        old_items = list(dispatch_log.items.all())
+        for old_item in old_items:
+            oi = Orderitem.objects.using(db_alias).filter(orderid=dispatch_log.orderid_id, productid=old_item.productid_id).first()
+            if oi:
+                oi.sentqty = max(0, oi.sentqty - old_item.qty)
+                oi.save(using=db_alias)
+                
+        # 2. Delete items and log
+        dispatch_log.items.all().delete()
+        dispatch_log.delete()
+        
+        # 3. Recalculate inventory
+        for old_item in old_items:
+            if old_item.productid_id: recalculate_product_inventory(old_item.productid_id)
+            
+        # 4. Update order status
+        order = dispatch_log.orderid
+        any_dispatched = False
+        all_dispatched = True
+        for oi in order.orderitem_set.using(db_alias).all():
+            if oi.sentqty > 0: any_dispatched = True
+            if oi.sentqty < oi.qty: all_dispatched = False
+            
+        if not any_dispatched:
+            order.status = 'Approved' # fallback status
+        else:
+            order.status = 'Completed' if all_dispatched else 'Partially Dispatched'
+        order.save(using=db_alias)
+        
+        return send_success(None, "Dispatch transaction deleted")
 

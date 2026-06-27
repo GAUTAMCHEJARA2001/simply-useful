@@ -46,3 +46,19 @@ export const updateItems = async (id: string, items: any) => {
 export const updateOrder = async (id: string, data: any) => {
   return await orderRepository.updateOrder(id, data);
 };
+
+export const partialDispatch = async (id: string, data: any) => {
+  return await orderRepository.partialDispatch(id, data);
+};
+
+export const partialReturn = async (id: string, data: any) => {
+  return await orderRepository.partialReturn(id, data);
+};
+
+export const getDispatchLogs = async (id: string) => {
+  return await orderRepository.getDispatchLogs(id);
+};
+
+export const getReturnLogs = async (id: string) => {
+  return await orderRepository.getReturnLogs(id);
+};
