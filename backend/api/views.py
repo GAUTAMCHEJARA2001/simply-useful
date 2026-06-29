@@ -3736,7 +3736,6 @@ class VisitViewSet(viewsets.ModelViewSet):
         data = request.data.copy()
         if _get_company_id(request):
             data['companyId'] = _get_company_id(request)
-            
 
         if request.user.email:
             data['soEmail'] = request.user.email
@@ -3745,6 +3744,16 @@ class VisitViewSet(viewsets.ModelViewSet):
         import uuid
         if 'id' not in data or not data['id']:
             data['id'] = 'c' + uuid.uuid4().hex[:23]
+
+        # Handle photo upload to Cloudinary if it is Base64
+        photo_data = data.get('photo')
+        if photo_data and str(photo_data).startswith('data:image'):
+            import cloudinary.uploader
+            try:
+                upload_res = cloudinary.uploader.upload(photo_data, folder="visit-photos")
+                data['photo'] = upload_res.get('secure_url')
+            except Exception as e:
+                print("Cloudinary upload failed for visit photo:", e)
 
         serializer = VisitSerializer(data=data)
         serializer.is_valid(raise_exception=True)
@@ -3817,7 +3826,6 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         data = request.data.copy()
         if _get_company_id(request):
             data['companyId'] = _get_company_id(request)
-            
 
         if request.user.email:
             data['soEmail'] = request.user.email
@@ -3826,6 +3834,16 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         import uuid
         if 'id' not in data or not data['id']:
             data['id'] = 'c' + uuid.uuid4().hex[:23]
+
+        # Handle photo upload to Cloudinary if it is Base64
+        photo_data = data.get('photo')
+        if photo_data and str(photo_data).startswith('data:image'):
+            import cloudinary.uploader
+            try:
+                upload_res = cloudinary.uploader.upload(photo_data, folder="expense-receipts")
+                data['photo'] = upload_res.get('secure_url')
+            except Exception as e:
+                print("Cloudinary upload failed for expense receipt:", e)
 
         serializer = ExpenseSerializer(data=data)
         serializer.is_valid(raise_exception=True)
