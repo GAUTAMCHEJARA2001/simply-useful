@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { DataTable } from '@/components/DataTable';
-import { Search } from 'lucide-react';
+import { Search, RefreshCw, Activity, Calendar, User, MapPin, Box, FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Order } from '@/types';
 
