@@ -9,9 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Order } from '@/types';
 import { orderService } from '@/api/services/order.service';
 import { useToast } from '@/hooks/use-toast';
+import { Modal } from '@/components/Modal';
 
 const ReturnedOrders: React.FC = () => {
-  const { orders, refreshAll } = useData();
+  const { orders, products, refreshAll } = useData();
   const { toast } = useToast();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,6 +20,71 @@ const ReturnedOrders: React.FC = () => {
   const [returnLogs, setReturnLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [revertingLogId, setRevertingLogId] = useState<string | null>(null);
+
+  // Return Form Modal States
+  const [returnSale, setReturnSale] = useState<Order | null>(null);
+  const [returnItems, setReturnItems] = useState<Record<string, number>>({});
+  const [returnRemarks, setReturnRemarks] = useState('');
+  const [isReturning, setIsReturning] = useState(false);
+
+  const openReturnForm = (order: Order) => {
+    setReturnSale(order);
+    setReturnRemarks('');
+    
+    // Initialize return quantities per item
+    const initialQtys: Record<string, number> = {};
+    (order.items || []).forEach((item: any) => {
+      const pId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
+      if (pId) {
+        const dispatched = item.sentQty || item.qty || 0;
+        const alreadyReturned = item.returnedQty || item.returnedqty || 0;
+        const returnable = dispatched - alreadyReturned;
+        initialQtys[pId] = returnable > 0 ? returnable : 0;
+      }
+    });
+    setReturnItems(initialQtys);
+  };
+
+  const submitReturn = async () => {
+    if (!returnSale) return;
+    setIsReturning(true);
+    
+    try {
+      const itemsPayload = Object.entries(returnItems)
+        .map(([productId, qty]) => {
+          const oi = returnSale.items?.find((item: any) => {
+            const pId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
+            return String(pId) === String(productId);
+          });
+          return {
+            productId,
+            orderItemId: oi?.id || '',
+            qty: Number(qty)
+          };
+        })
+        .filter(item => item.qty > 0);
+
+      if (itemsPayload.length === 0) {
+        toast({ title: 'Error', description: 'Enter at least one return quantity.', variant: 'destructive' });
+        setIsReturning(false);
+        return;
+      }
+
+      await orderService.partialReturn(returnSale.id || returnSale.orderId, {
+        items: itemsPayload,
+        remarks: returnRemarks,
+      });
+
+      toast({ title: 'Returned', description: 'Partial return processed and inventory updated.' });
+      refreshAll(true);
+      setReturnSale(null);
+      setSelectedOrder(null); // Close details dialog as well
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || err.message || 'Return failed.', variant: 'destructive' });
+    } finally {
+      setIsReturning(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedOrder) {
@@ -158,9 +224,22 @@ const ReturnedOrders: React.FC = () => {
       <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" aria-describedby="return-details-desc">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <RefreshCw className="w-5 h-5" />
-              Return Details &middot; <span className="text-foreground">{selectedOrder?.order_id || selectedOrder?.orderId || selectedOrder?.id}</span>
+            <DialogTitle className="flex items-center justify-between text-red-600 w-full pr-6">
+              <span className="flex items-center gap-2">
+                <RefreshCw className="w-5 h-5" />
+                Return Details &middot; <span className="text-foreground text-sm md:text-base">{selectedOrder?.order_id || selectedOrder?.orderId || selectedOrder?.id}</span>
+              </span>
+              {selectedOrder && selectedOrder.status !== 'Returned' && (
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => openReturnForm(selectedOrder)}
+                  className="h-8 text-xs border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 font-semibold flex items-center gap-1 shrink-0"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Return More
+                </Button>
+              )}
             </DialogTitle>
             <DialogDescription id="return-details-desc" className="sr-only">
               View comprehensive details for returned order {selectedOrder?.order_id || selectedOrder?.orderId || selectedOrder?.id}, including reasons, dates, and items.
@@ -296,6 +375,86 @@ const ReturnedOrders: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      <Modal isOpen={!!returnSale} title="Partial Sales Return" onClose={() => setReturnSale(null)}>
+        <div className="space-y-4">
+          <div className="border border-border rounded-xl overflow-x-auto max-h-[40vh] w-full">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr className="border-b border-border/40">
+                  <th className="py-2 px-3 text-left min-w-[150px]">Product</th>
+                  <th className="py-2 px-3 text-center">Ordered</th>
+                  <th className="py-2 px-3 text-center">Dispatched</th>
+                  <th className="py-2 px-3 text-center">Already Returned</th>
+                  <th className="py-2 px-3 text-center">Returnable</th>
+                  <th className="py-2 px-3 text-center">Return Qty</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {(returnSale?.items || []).map((item: any) => {
+                  const pId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
+                  const pObj = products.find((p: any) => String(p.id) === String(pId) || p.productCode === pId || p.name === pId);
+                  const pName = pObj?.name || pObj?.productName || item.productName || (typeof item.product === 'object' ? item.product?.name : null) || item.product || '—';
+                  const ordered = item.qty || 0;
+                  const dispatched = item.sentQty || item.qty || 0;
+                  const alreadyReturned = item.returnedQty || item.returnedqty || 0;
+                  const returnable = dispatched - alreadyReturned;
+                  const currentVal = returnItems[pId];
+                  return (
+                    <tr key={pId} className="hover:bg-muted/5">
+                      <td className="py-2 px-3 font-medium">{pName}</td>
+                      <td className="py-2 px-3 text-center">{ordered}</td>
+                      <td className="py-2 px-3 text-center font-bold text-emerald-600">{dispatched}</td>
+                      <td className="py-2 px-3 text-center">
+                        {alreadyReturned > 0 ? <span className="text-orange-600 font-bold">{alreadyReturned}</span> : '0'}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        {returnable > 0 ? <span className="font-bold text-amber-600">{returnable}</span> : <span className="text-emerald-600 font-semibold">✓</span>}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        {returnable > 0 ? (
+                          <input
+                            type="number"
+                            min={0}
+                            max={returnable}
+                            value={currentVal === undefined ? '' : currentVal}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setReturnItems(prev => ({ 
+                                ...prev, 
+                                [pId]: val === '' ? 0 : Math.min(returnable, Math.max(0, Number(val))) 
+                              }));
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            className="w-20 text-center border border-border px-2 py-1 rounded-lg bg-background text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                          />
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold block mb-1">Return Reason / Remarks</label>
+            <textarea 
+              value={returnRemarks} 
+              onChange={e => setReturnRemarks(e.target.value)}
+              placeholder="Reason for return..."
+              className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm min-h-[80px] resize-none outline-none focus:ring-2 focus:ring-primary/20" 
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-border/60">
+            <Button variant="outline" onClick={() => setReturnSale(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={submitReturn} disabled={isReturning} className="bg-red-600 hover:bg-red-700 text-white">
+              <RotateCcw className="w-4 h-4 mr-1.5" /> {isReturning ? 'Processing...' : 'Confirm Partial Return'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
