@@ -179,23 +179,30 @@ const VisitTracking: React.FC = () => {
     const sourceHeight = video.videoHeight || 960;
     const maxEdge = 1280;
     const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
-    canvas.width = Math.round(sourceWidth * scale);
-    canvas.height = Math.round(sourceHeight * scale);
+    const imgWidth = Math.round(sourceWidth * scale);
+    const imgHeight = Math.round(sourceHeight * scale);
+    const overlayHeight = Math.max(120, Math.round(imgHeight * 0.22));
+    
+    canvas.width = imgWidth;
+    canvas.height = imgHeight + overlayHeight;
+    
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       setSavingLoading(false);
       return;
     }
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Draw un-obscured photo in top part of canvas
+    ctx.drawImage(video, 0, 0, imgWidth, imgHeight);
 
-    const overlayHeight = canvas.height * 0.25;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-    ctx.fillRect(0, canvas.height - overlayHeight, canvas.width, overlayHeight);
+    // Draw dark slate info bar below the photo
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, imgHeight, canvas.width, overlayHeight);
 
     const padding = Math.max(16, canvas.width * 0.025);
     const mapSize = Math.max(72, overlayHeight - (padding * 2));
     const mapX = padding;
-    const mapY = canvas.height - overlayHeight + padding;
+    const mapY = imgHeight + padding;
     const radius = Math.max(10, mapSize * 0.08);
 
     ctx.save();
@@ -204,9 +211,9 @@ const VisitTracking: React.FC = () => {
       ? (ctx as any).roundRect(mapX, mapY, mapSize, mapSize, radius)
       : ctx.rect(mapX, mapY, mapSize, mapSize);
     ctx.clip();
-    ctx.fillStyle = '#102a43';
+    ctx.fillStyle = '#1e293b';
     ctx.fillRect(mapX, mapY, mapSize, mapSize);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
     ctx.lineWidth = 1;
     for (let i = 1; i < 4; i += 1) {
       const offset = (mapSize / 4) * i;
@@ -231,9 +238,9 @@ const VisitTracking: React.FC = () => {
     const textX = mapSize + (padding * 2);
     const availableTextWidth = canvas.width - textX - padding;
     ctx.fillStyle = 'white';
-    const fontSize = Math.max(16, Math.floor(canvas.height * 0.032));
+    const fontSize = Math.max(14, Math.floor(imgHeight * 0.032));
     ctx.font = `bold ${fontSize}px Inter, "Segoe UI", sans-serif`;
-    let textY = canvas.height - overlayHeight + padding + fontSize;
+    let textY = imgHeight + padding + fontSize;
     ctx.fillText(`Location: ${cityState}`, textX, textY, availableTextWidth);
     textY += fontSize + 10;
     ctx.font = `${fontSize * 0.72}px Inter, sans-serif`;
@@ -246,7 +253,6 @@ const VisitTracking: React.FC = () => {
     setForm(prev => ({ ...prev, photo: canvas.toDataURL('image/jpeg', 0.72) }));
     stopCamera();
     setSavingLoading(false);
-    // Auto-advance to details step after capture
     setPunchStep(3);
   };
 
