@@ -3522,6 +3522,84 @@ class OrderViewSet(viewsets.ModelViewSet):
         from api.serializers import OrderSerializer
         return send_success(OrderSerializer(instance).data, f"Order status updated to {instance.status}")
 
+    @action(detail=True, methods=['post'], url_path='revert-return-log')
+    def revert_return_log(self, request, pk=None):
+        try:
+            instance = self.get_object()
+            log_id = request.data.get('logId') or request.data.get('log_id')
+            
+            if not log_id:
+                return send_error("logId is required", 400)
+                
+            db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
+            from api.models import Returnlog, Returnlogitem, Orderitem
+            
+            try:
+                return_log = Returnlog.objects.using(db_alias).get(id=log_id, orderid=instance)
+            except Returnlog.DoesNotExist:
+                return send_error("Return log not found for this order", 404)
+                
+            log_items = Returnlogitem.objects.using(db_alias).filter(returnlogid=return_log)
+            product_ids = []
+            for item in log_items:
+                try:
+                    oi = instance.orderitem_set.using(db_alias).get(productid_id=item.productid_id)
+                    oi.returnedqty = max(0, oi.returnedqty - item.qty)
+                    oi.save(using=db_alias, update_fields=['returnedqty'])
+                    product_ids.append(item.productid_id)
+                except Orderitem.DoesNotExist:
+                    pass
+                    
+            log_items.delete()
+            return_log.delete()
+            
+            for p_id in set(product_ids):
+                recalculate_product_inventory(p_id, warehouse_id=instance.assigned_warehouse_id if hasattr(instance, 'assigned_warehouse_id') else None)
+                
+            # Determine new status
+            all_returned = True
+            any_returned = False
+            for oi in instance.orderitem_set.using(db_alias).all():
+                if oi.returnedqty > 0:
+                    any_returned = True
+                
+                effective_sentqty = oi.sentqty
+                if effective_sentqty == 0 and instance.status in ['Dispatched', 'Completed', 'Partially Returned', 'Returned']:
+                    effective_sentqty = oi.qty
+                    
+                if oi.returnedqty < effective_sentqty:
+                    all_returned = False
+                    
+            if all_returned and any_returned:
+                instance.status = 'Returned'
+            elif any_returned:
+                instance.status = 'Partially Returned'
+            else:
+                # Revert to dispatch/completion status
+                all_dispatched = True
+                any_dispatched = False
+                for oi in instance.orderitem_set.using(db_alias).all():
+                    if oi.sentqty > 0:
+                        any_dispatched = True
+                    if oi.sentqty < oi.qty:
+                        all_dispatched = False
+                        
+                if all_dispatched and any_dispatched:
+                    instance.status = 'Completed'
+                elif any_dispatched:
+                    instance.status = 'Partially Dispatched'
+                else:
+                    instance.status = 'Approved'
+                    
+            instance.save(using=db_alias, update_fields=['status'])
+            
+            from api.serializers import OrderSerializer
+            return send_success(OrderSerializer(instance).data, f"Return log reverted successfully. Status is now {instance.status}")
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            return send_error(f"Internal API Error: {str(e)}", 500)
+
     @action(detail=True, methods=['get'], url_path='dispatch-logs')
     def dispatch_logs(self, request, pk=None):
         instance = self.get_object()

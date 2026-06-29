@@ -28,6 +28,9 @@ export const orderService = {
   getReturnLogs: (id: string | number) =>
     api.get(`${API_ENDPOINTS.ORDERS}/${id}/return-logs`),
 
+  revertReturnLog: (id: string | number, logId: string) =>
+    api.post(`${API_ENDPOINTS.ORDERS}/${id}/revert-return-log`, { logId }),
+
   // Custom Transactions
   getTransactions: () => api.get(API_ENDPOINTS.TRANSACTIONS),
   createTransaction: (data: any) => api.post(API_ENDPOINTS.TRANSACTIONS, data),

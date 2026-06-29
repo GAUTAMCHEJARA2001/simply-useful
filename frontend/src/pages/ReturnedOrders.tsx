@@ -1,17 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { DataTable } from '@/components/DataTable';
-import { Search, RefreshCw, Activity, Calendar, User, MapPin, Box, FileText } from 'lucide-react';
+import { Search, RefreshCw, Activity, Calendar, User, MapPin, Box, FileText, RotateCcw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Order } from '@/types';
+import { orderService } from '@/api/services/order.service';
+import { useToast } from '@/hooks/use-toast';
 
 const ReturnedOrders: React.FC = () => {
-  const { orders } = useData();
+  const { orders, refreshAll } = useData();
+  const { toast } = useToast();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [returnLogs, setReturnLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [revertingLogId, setRevertingLogId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedOrder) {
+      setLoadingLogs(true);
+      orderService.getReturnLogs(selectedOrder.id || selectedOrder.orderId)
+        .then(res => {
+          setReturnLogs(res.data?.data || res.data || []);
+        })
+        .catch(err => {
+          console.error('Error fetching return logs:', err);
+        })
+        .finally(() => {
+          setLoadingLogs(false);
+        });
+    } else {
+      setReturnLogs([]);
+    }
+  }, [selectedOrder]);
+
+  const handleRevertReturn = async (logId: string) => {
+    if (!selectedOrder) return;
+    if (!window.confirm('Are you sure you want to revert this return log? This will deduct the returned items from inventory stock levels.')) {
+      return;
+    }
+
+    try {
+      setRevertingLogId(logId);
+      await orderService.revertReturnLog(selectedOrder.id || selectedOrder.orderId, logId);
+      toast({
+        title: 'Success',
+        description: 'Return log has been reverted and inventory stock level updated successfully.',
+      });
+      refreshAll(true);
+      setSelectedOrder(null);
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: 'Error',
+        description: err.response?.data?.message || err.message || 'Failed to revert return log',
+        variant: 'destructive',
+      });
+    } finally {
+      setRevertingLogId(null);
+    }
+  };
 
   const returnedOrders = orders.filter(o => {
     const isReturned = o.status === 'Returned' || o.status === 'Partially Returned';
@@ -182,6 +234,54 @@ const ReturnedOrders: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* RETURN LOGS (OPTION A) */}
+              <div>
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><RefreshCw className="w-4 h-4" /> Return Logs History</h3>
+                {loadingLogs ? (
+                  <div className="text-xs text-muted-foreground animate-pulse py-2">Loading return logs...</div>
+                ) : returnLogs.length === 0 ? (
+                  <div className="text-xs text-muted-foreground py-2 italic border border-dashed rounded-lg p-3 bg-muted/10">No detailed return logs found.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {returnLogs.map((log) => (
+                      <div key={log.id} className="border border-border/80 rounded-xl p-3 bg-muted/10 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-red-600">{formatDate(log.returnDate)}</span>
+                            {log.remarks && (
+                              <span className="text-[11px] px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-100 font-medium">
+                                {log.remarks}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            <span className="font-semibold text-foreground">Returned: </span>
+                            {(log.items || []).map((it: any, index: number) => {
+                              const pName = it.product?.name || it.product?.productName || it.productId;
+                              return (
+                                <span key={it.id}>
+                                  {pName} (x{it.qty}){index < log.items.length - 1 ? ', ' : ''}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-8 text-xs flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white font-medium"
+                          onClick={() => handleRevertReturn(log.id)}
+                          disabled={revertingLogId === log.id}
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          {revertingLogId === log.id ? 'Reverting...' : 'Revert Return'}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* GENERAL REMARK */}
