@@ -18,31 +18,44 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 import { Suspense, lazy } from "react";
 
-const SalesDashboard = lazy(() => import("./pages/SalesDashboard"));
-const OrderPage = lazy(() => import("./pages/OrderPage"));
-const MyOrders = lazy(() => import("./pages/MyOrders"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
-const DealerManagement = lazy(() => import("./pages/DealerManagement"));
-const DistributorManagement = lazy(() => import("./pages/DistributorManagement"));
-const UserManagement = lazy(() => import("./pages/UserManagement"));
-const HRDashboard = lazy(() => import("./pages/HRDashboard"));
-const InventoryDashboard = lazy(() => import("./pages/InventoryDashboard"));
-const InventoryManagement = lazy(() => import('@/pages/InventoryManagement'));
-const DispatchOrderPage = lazy(() => import('@/pages/DispatchOrderPage'));
-const WarehouseManagement = lazy(() => import("./pages/WarehouseManagement"));
-const VisitTracking = lazy(() => import("./pages/VisitTracking"));
-const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
-const Reports = lazy(() => import("./pages/Reports"));
-const SettingsPage = lazy(() => import("./pages/SettingsPage"));
-const NotFound = lazy(() => import("./pages/NotFound"));
-const BOMManagement = lazy(() => import("./pages/BOMManagement"));
-const ReturnedOrders = lazy(() => import("./pages/ReturnedOrders"));
-const RejectedOrders = lazy(() => import("./pages/RejectedOrders"));
-const CreatePurchaseOrder = lazy(() => import("./pages/CreatePurchaseOrder"));
-const GlobalInventory = lazy(() => import("./pages/GlobalInventory"));
-const LeadsPage = lazy(() => import("./pages/CRM/LeadsPage"));
-const SOMapping = lazy(() => import("./pages/SOMapping"));
-const MyTerritory = lazy(() => import("./pages/MyTerritory"));
+// Safe wrapper for React.lazy to handle chunk load errors gracefully by reloading the page
+const safeLazy = (importFn: () => Promise<{ default: React.ComponentType<any> }>) => {
+  return lazy(async () => {
+    try {
+      return await importFn();
+    } catch (error) {
+      console.warn("Dynamic import failed, reloading page to fetch latest version:", error);
+      window.location.reload();
+      return { default: () => null };
+    }
+  });
+};
+
+const SalesDashboard = safeLazy(() => import("./pages/SalesDashboard"));
+const OrderPage = safeLazy(() => import("./pages/OrderPage"));
+const MyOrders = safeLazy(() => import("./pages/MyOrders"));
+const AdminDashboard = safeLazy(() => import("./pages/AdminDashboard"));
+const DealerManagement = safeLazy(() => import("./pages/DealerManagement"));
+const DistributorManagement = safeLazy(() => import("./pages/DistributorManagement"));
+const UserManagement = safeLazy(() => import("./pages/UserManagement"));
+const HRDashboard = safeLazy(() => import("./pages/HRDashboard"));
+const InventoryDashboard = safeLazy(() => import("./pages/InventoryDashboard"));
+const InventoryManagement = safeLazy(() => import('@/pages/InventoryManagement'));
+const DispatchOrderPage = safeLazy(() => import('@/pages/DispatchOrderPage'));
+const WarehouseManagement = safeLazy(() => import("./pages/WarehouseManagement"));
+const VisitTracking = safeLazy(() => import("./pages/VisitTracking"));
+const ExpenseEntry = safeLazy(() => import("./pages/ExpenseEntry"));
+const Reports = safeLazy(() => import("./pages/Reports"));
+const SettingsPage = safeLazy(() => import("./pages/SettingsPage"));
+const NotFound = safeLazy(() => import("./pages/NotFound"));
+const BOMManagement = safeLazy(() => import("./pages/BOMManagement"));
+const ReturnedOrders = safeLazy(() => import("./pages/ReturnedOrders"));
+const RejectedOrders = safeLazy(() => import("./pages/RejectedOrders"));
+const CreatePurchaseOrder = safeLazy(() => import("./pages/CreatePurchaseOrder"));
+const GlobalInventory = safeLazy(() => import("./pages/GlobalInventory"));
+const LeadsPage = safeLazy(() => import("./pages/CRM/LeadsPage"));
+const SOMapping = safeLazy(() => import("./pages/SOMapping"));
+const MyTerritory = safeLazy(() => import("./pages/MyTerritory"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
