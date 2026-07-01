@@ -27,6 +27,10 @@ export const useSaleMutations = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Success', description: 'Sale recorded' });
     },
     onError: (error: any) => {
@@ -38,6 +42,10 @@ export const useSaleMutations = () => {
     mutationFn: (id: string) => api.delete(`/transactions/sales/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Deleted', description: 'Sale record removed' });
     },
     onError: (error: any) => {
@@ -52,6 +60,10 @@ export const useSaleMutations = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Success', description: 'Dispatch updated' });
     },
     onError: (error: any) => {
@@ -63,6 +75,10 @@ export const useSaleMutations = () => {
     mutationFn: (id: string) => api.delete(`/transactions/dispatch-logs/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Deleted', description: 'Dispatch record removed' });
     },
     onError: (error: any) => {

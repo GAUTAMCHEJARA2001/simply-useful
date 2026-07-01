@@ -28,6 +28,29 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// Listen for Web Push events from the backend server
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (e) {
+    payload = { title: 'New Alert', body: event.data ? event.data.text() : '' };
+  }
+
+  const title = payload.title || 'Notification';
+  const options = {
+    body: payload.body || 'You have a new update.',
+    icon: payload.icon || '/android-chrome-192x192.png',
+    badge: payload.badge || '/favicon-32x32.png',
+    data: payload.data || {},
+    vibrate: [200, 100, 200, 100, 200],
+    sound: '/notification.mp3',
+    requireInteraction: true,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
 // Handle notification click – focus the app window
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

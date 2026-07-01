@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Eye, Plus } from 'lucide-react';
 import { ReturnOrderModal } from '../modals/ReturnOrderModal';
 
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
+
 interface ReturnsTabProps {
   returnType?: 'Sales Return' | 'Purchase Return';
 }
@@ -14,6 +16,7 @@ const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en
 
 export const ReturnsTab: React.FC<ReturnsTabProps> = ({ returnType }) => {
   const { data: returns = [], isLoading, error, refetch } = useReturns();
+  const { filterBySelectedFY } = useFinancialYear();
   const [selectedReturn, setSelectedReturn] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -21,6 +24,8 @@ export const ReturnsTab: React.FC<ReturnsTabProps> = ({ returnType }) => {
     setSelectedReturn(returnOrder);
     setIsModalOpen(true);
   };
+
+  const filteredReturns = filterBySelectedFY(returns, (r: any) => r.returnDate || r.return_date || r.createdAt);
 
   return (
     <div className="space-y-4">
@@ -33,7 +38,7 @@ export const ReturnsTab: React.FC<ReturnsTabProps> = ({ returnType }) => {
       <SafeDataView data={returns} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable
           columns={['Type', 'Customer/Supplier', 'Return Bill', 'Vehicle', 'Reason', 'Net Amount', 'Return Date', 'Action']}
-          rows={returns.map((r: any) => [
+          rows={filteredReturns.filter((r: any) => !returnType || r.type === returnType).map((r: any) => [
             r.type || '-',
             r.party?.name || r.party?.dealerName || r.party?.distributorName || r.partyName || '-',
             r.challanNumber || r.challan_number || '-',

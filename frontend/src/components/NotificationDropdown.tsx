@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { api } from '@/api/client';
 
 const DISMISSED_STORAGE_KEY = 'kamla_dismissed_notifications';
 const ALERTED_STORAGE_KEY = 'kamla_alerted_notifications';
@@ -198,8 +199,8 @@ export const NotificationDropdown: React.FC = () => {
     });
   }
 
-  // 2. INVENTORY OFFICER: Approved orders ready for dispatch & Low stock alerts
-  if (role === 'INVENTORY') {
+  // 2. INVENTORY OFFICER & PRODUCTION: Approved orders ready for dispatch & Low stock alerts
+  if (role === 'INVENTORY' || role === 'PRODUCTION') {
     // New Order ready for dispatch
     orders.forEach(o => {
       if (o.status === 'Approved') {
@@ -335,18 +336,45 @@ export const NotificationDropdown: React.FC = () => {
   const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
-    // Register service worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').then((reg) => {
+      navigator.serviceWorker.register('/sw.js').then(async (reg) => {
         swRegistrationRef.current = reg;
+        
+        if ('Notification' in window) {
+          const perm = await Notification.requestPermission();
+          if (perm === 'granted') {
+             try {
+                let sub = await reg.pushManager.getSubscription();
+                if (!sub) {
+                   const response = await api.get('webpush/vapid-public-key');
+                   const publicVapidKey = response.data.publicKey;
+                   if (publicVapidKey) {
+                     const padding = '='.repeat((4 - publicVapidKey.length % 4) % 4);
+                     const base64 = (publicVapidKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+                     const rawData = window.atob(base64);
+                     const outputArray = new Uint8Array(rawData.length);
+                     for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+                     
+                     sub = await reg.pushManager.subscribe({
+                       userVisibleOnly: true,
+                       applicationServerKey: outputArray
+                     });
+                   }
+                }
+                
+                if (sub) {
+                  await api.post('webpush/subscribe', {
+                     subscription: sub.toJSON()
+                  });
+                }
+             } catch (e) {
+                console.error("Web push subscription failed", e);
+             }
+          }
+        }
       }).catch((err) => {
         console.warn('SW registration failed:', err);
       });
-    }
-
-    // Request notification permission
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
     }
   }, []);
 

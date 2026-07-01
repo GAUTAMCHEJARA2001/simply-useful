@@ -217,3 +217,8 @@ cloudinary.config(
     api_secret=CLOUDINARY_API_SECRET,
     secure=True
 )
+
+# VAPID Keys
+VAPID_PRIVATE_KEY = 'rAOGyrUNZNYBKe92vKNlvMd9YkVnGHQGQcq1QBfMFaQ'
+VAPID_PUBLIC_KEY = 'BCkG42Eu-0utUsFsyX4PtXpC2w_nONCIWQDY9BhMNMI_cDNC7_Rc6l3RrfXKwVsc0bVi2ABf41uLdStO94OAPAo'
+VAPID_ADMIN_EMAIL = 'mailto:admin@example.com'

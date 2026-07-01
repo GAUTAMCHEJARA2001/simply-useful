@@ -109,7 +109,7 @@ class JWTAuthentication(authentication.BaseAuthentication):
             )
 
             # Enforce access control for restricted users
-            if jwt_user.role == 'INVENTORY' and request.tenant:
+            if jwt_user.role in ['INVENTORY', 'PRODUCTION'] and request.tenant:
                 from api.models import Userwarehouseaccess
                 # Userwarehouseaccess lives in the tenant schema
                 if not Userwarehouseaccess.objects.filter(userid_id=jwt_user.id, warehouseid_id=request.tenant.id).exists():

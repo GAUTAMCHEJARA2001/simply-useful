@@ -22,6 +22,10 @@ export const useAdjustmentMutations = () => {
       : api.post('/transactions/adjustments', adjustment),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adjustments'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Success', description: 'Adjustment recorded' });
     },
     onError: (error: any) => {
@@ -33,6 +37,10 @@ export const useAdjustmentMutations = () => {
     mutationFn: (id: string) => api.delete(`/transactions/adjustments/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adjustments'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Deleted', description: 'Adjustment removed' });
     },
     onError: (error: any) => {

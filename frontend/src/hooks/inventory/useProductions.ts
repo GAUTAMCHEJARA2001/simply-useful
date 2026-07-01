@@ -20,6 +20,10 @@ export const useProductionMutations = () => {
     mutationFn: (data: any) => api.post('/transactions/productions', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['productions'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Success', description: 'Production recorded' });
     },
     onError: (e: any) => {

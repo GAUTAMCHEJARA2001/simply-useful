@@ -85,7 +85,7 @@ export interface PrintableTotals {
 }
 
 export interface PrintableInvoice {
-  documentType: 'TAX INVOICE' | 'QUOTATION' | 'PURCHASE ORDER' | 'DELIVERY CHALLAN';
+  documentType: 'SALES ORDER' | 'QUOTATION' | 'PURCHASE ORDER' | 'DELIVERY CHALLAN';
   invoiceNo: string;
   invoiceDate: string;
   dueDate?: string;

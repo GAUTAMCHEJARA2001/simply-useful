@@ -35,7 +35,7 @@ const navItems: NavItem[] = [
   { label: 'Distributors', path: '/admin/distributors', icon: Users, feature: 'manage_customers' },
   { label: 'SO Territory', path: '/admin/so-mapping', icon: UserCheck, feature: 'manage_customers' },
   { label: 'Staff Dashboard', path: '/hr', icon: Users, feature: 'view_reports' },
-  { label: 'Stock Room', path: '/inventory', icon: Package, feature: 'view_inventory_dashboard' },
+  { label: 'Order and Dispatch Room', path: '/inventory', icon: Package, feature: 'view_inventory_dashboard' },
   { label: 'Manage Stock', path: '/inventory/manage', icon: Package, feature: 'view_inventory_dashboard' },
   { label: 'Returns', path: '/inventory/returns', icon: RefreshCw, feature: 'view_inventory_dashboard' },
   { label: 'Warehouse List', path: '/admin/warehouses', icon: Warehouse, feature: 'access_settings' },

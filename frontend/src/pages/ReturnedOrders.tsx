@@ -8,6 +8,8 @@ import { Search, RefreshCw, Activity, Calendar, User, MapPin, Box, FileText, Rot
 import { Input } from '@/components/ui/input';
 import { Order } from '@/types';
 import { orderService } from '@/api/services/order.service';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { useToast } from '@/hooks/use-toast';
 import { Modal } from '@/components/Modal';
 
@@ -20,6 +22,19 @@ const ReturnedOrders: React.FC = () => {
   const [returnLogs, setReturnLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [revertingLogId, setRevertingLogId] = useState<string | null>(null);
+
+  const productsById = React.useMemo(() => {
+    const map = new Map();
+    for (const p of products || []) {
+      map.set(String(p.id), p);
+      if (p.productCode) map.set(p.productCode, p);
+      if (p.product_code) map.set(p.product_code, p);
+      if (p.productName) map.set(p.productName, p);
+      if (p.product_name) map.set(p.product_name, p);
+      if (p.name) map.set(p.name, p);
+    }
+    return map;
+  }, [products]);
 
   // Return Form Modal States
   const [returnSale, setReturnSale] = useState<Order | null>(null);
@@ -131,7 +146,9 @@ const ReturnedOrders: React.FC = () => {
     }
   };
 
-  const returnedOrders = orders.filter(o => {
+  const { filterBySelectedFY } = useFinancialYear();
+
+  const returnedOrders = filterBySelectedFY(orders, o => o.date || o.createdAt).filter(o => {
     const isReturned = o.status === 'Returned' || o.status === 'Partially Returned';
     if (!isReturned) return false;
     
@@ -291,10 +308,10 @@ const ReturnedOrders: React.FC = () => {
                     <thead className="bg-muted/50 border-b border-border text-xs text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2 text-left font-medium">Product</th>
-                        <th className="px-3 py-2 text-center font-medium">Qty</th>
+                        <th className="px-3 py-2 text-center font-medium">Qty (Ret/Ord)</th>
                         <th className="px-3 py-2 text-right font-medium">Rate</th>
                         <th className="px-3 py-2 text-left font-medium">Item Remark</th>
-                        <th className="px-3 py-2 text-right font-medium">Total</th>
+                        <th className="px-3 py-2 text-right font-medium">Return Value</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -304,10 +321,13 @@ const ReturnedOrders: React.FC = () => {
                             {/* React crash fix: render friendly name if product is nested object, fallback to product as string */}
                             {item.productName || (typeof item.product === 'object' && item.product ? (item.product as any).name || (item.product as any).productName : item.product)}
                           </td>
-                          <td className="px-3 py-2 text-center text-primary font-bold">{item.qty}</td>
+                          <td className="px-3 py-2 text-center font-bold">
+                            <span className="text-red-500">{item.returnedQty || 0} Ret</span>
+                            <span className="text-muted-foreground text-[10px] ml-1">/ {item.qty} Ord</span>
+                          </td>
                           <td className="px-3 py-2 text-right">{formatCurrency(item.price)}</td>
                           <td className="px-3 py-2 text-muted-foreground truncate max-w-[150px]" title={item.itemRemark || item.item_remark}>{item.itemRemark || item.item_remark || '—'}</td>
-                          <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.total)}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-red-600">{formatCurrency((item.returnedQty || 0) * (item.price || 0) * (1 + ((item as any).tax_percent || 0)/100))}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -327,13 +347,40 @@ const ReturnedOrders: React.FC = () => {
                     {returnLogs.map((log) => (
                       <div key={log.id} className="border border-border/80 rounded-xl p-3 bg-muted/10 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="text-xs font-bold text-red-600">{formatDate(log.returnDate)}</span>
-                            {log.remarks && (
-                              <span className="text-[11px] px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-100 font-medium">
-                                {log.remarks}
-                              </span>
-                            )}
+                            {(() => {
+                              let cleanRemarks = log.remarks || '';
+                              const tags: {label: string, value: string, color: string}[] = [];
+                              
+                              const extractTag = (regex: RegExp, label: string, color: string) => {
+                                const match = cleanRemarks.match(regex);
+                                if (match) {
+                                  tags.push({ label, value: match[1], color });
+                                  cleanRemarks = cleanRemarks.replace(regex, '').trim();
+                                }
+                              };
+
+                              extractTag(/\[VEHICLE:\s*([^\]]+)\]/i, 'Vehicle', 'bg-blue-50 text-blue-700 border-blue-200');
+                              extractTag(/\[PR NO:\s*([^\]]+)\]/i, 'PR No', 'bg-purple-50 text-purple-700 border-purple-200');
+                              extractTag(/\[SR BILL:\s*([^\]]+)\]/i, 'SR Bill', 'bg-indigo-50 text-indigo-700 border-indigo-200');
+                              extractTag(/\[INVOICE:\s*([^\]]+)\]/i, 'Invoice', 'bg-emerald-50 text-emerald-700 border-emerald-200');
+
+                              return (
+                                <>
+                                  {tags.map((t, i) => (
+                                    <span key={i} className={`text-[10px] px-2 py-0.5 rounded border font-semibold ${t.color}`}>
+                                      {t.label}: {t.value}
+                                    </span>
+                                  ))}
+                                  {cleanRemarks && (
+                                    <span className="text-[11px] px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-100 font-medium">
+                                      {cleanRemarks}
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                           <div className="text-xs text-muted-foreground mt-1">
                             <span className="font-semibold text-foreground">Returned: </span>
@@ -393,7 +440,7 @@ const ReturnedOrders: React.FC = () => {
               <tbody className="divide-y divide-border/40">
                 {(returnSale?.items || []).map((item: any) => {
                   const pId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
-                  const pObj = products.find((p: any) => String(p.id) === String(pId) || p.productCode === pId || p.name === pId);
+                  const pObj = productsById.get(String(pId)) || productsById.get(pId);
                   const pName = pObj?.name || pObj?.productName || item.productName || (typeof item.product === 'object' ? item.product?.name : null) || item.product || '—';
                   const ordered = item.qty || 0;
                   const dispatched = item.sentQty || item.qty || 0;

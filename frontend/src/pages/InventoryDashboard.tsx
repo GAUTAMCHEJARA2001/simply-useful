@@ -13,6 +13,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { Navigate, Link, useNavigate } from 'react-router-dom';
 import { OrderStatus, Order } from '@/types';
 import { orderService } from '@/api/services/order.service';
+import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -28,13 +29,13 @@ const statusStyles: Record<string, string> = {
 const InventoryDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { orders, products, warehouses, updateOrderStatus, updateOrderItems, dealers, loading: dataLoading } = useData();
+  const { orders, products, warehouses, updateOrderStatus, updateOrderItems, dealers, loading: dataLoading, refreshAll } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
 
   const handleAssignWarehouse = async (orderId: string, warehouseId: string) => {
     try {
-      const wh = warehouses.find(w => String(w.id) === warehouseId);
+      const wh = warehouseMaps.byId.get(String(warehouseId));
       await updateOrderItems(orderId, { assignedWarehouse: Number(warehouseId) });
       toast({
         title: 'Warehouse Assigned',
@@ -93,8 +94,51 @@ const InventoryDashboard: React.FC = () => {
     };
   }, []);
 
+  const productMaps = React.useMemo(() => {
+    const byId = new Map();
+    const byCode = new Map();
+    const byName = new Map();
+    for (const p of products) {
+      if (p.id) byId.set(p.id, p);
+      if (p.productCode) byCode.set(p.productCode, p);
+      if (p.product_code) byCode.set(p.product_code, p);
+      if (p.name) byName.set(p.name, p);
+      if (p.productName) byName.set(p.productName, p);
+      if (p.product_name) byName.set(p.product_name, p);
+    }
+    return { byId, byCode, byName };
+  }, [products]);
+
+  const warehouseMaps = React.useMemo(() => {
+    const byId = new Map();
+    const byName = new Map();
+    for (const w of warehouses) {
+      if (w.id) byId.set(String(w.id), w);
+      if (w.name) byName.set(w.name, w);
+    }
+    return { byId, byName };
+  }, [warehouses]);
+
+  const bomMaps = React.useMemo(() => {
+    const byProductId = new Map();
+    const byProductCode = new Map();
+    const byName = new Map();
+    for (const b of boms) {
+      if (b.productId) byProductId.set(b.productId, b);
+      if (b.productCode) byProductCode.set(b.productCode, b);
+      if (b.name) {
+        byName.set(b.name, b);
+        if (b.name.startsWith('BOM for ')) {
+          byName.set(b.name.substring(8), b);
+        }
+      }
+      if (b.productName) byName.set(b.productName, b);
+    }
+    return { byProductId, byProductCode, byName };
+  }, [boms]);
+
   // Helper to check stock shortage for an order
-  const checkOrderShortage = (order: any) => {
+  const checkOrderShortage = React.useCallback((order: any) => {
     const shortages: {
       productId: string;
       productName: string;
@@ -104,6 +148,13 @@ const InventoryDashboard: React.FC = () => {
       shortageQty: number;
       sourceWarehouse: string;
     }[] = [];
+    const finishedGoods: {
+      productId: string;
+      productName: string;
+      requiredQty: number;
+      availableStock: number;
+      shortageQty: number;
+    }[] = [];
 
     const items = order.items || [];
     let hasFgShortage = false;
@@ -111,11 +162,23 @@ const InventoryDashboard: React.FC = () => {
     for (const item of items) {
       // Find product by id
       const itemProductId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
-      const finishedGood = products.find(p => p.id === itemProductId || p.productCode === item.product || p.name === item.product);
+      const finishedGood = productMaps.byId.get(itemProductId) 
+        || productMaps.byCode.get(item.product) 
+        || productMaps.byName.get(item.product);
       
       const fgAvailable = finishedGood
         ? (finishedGood.availableStock !== undefined ? finishedGood.availableStock : (finishedGood.stockQty !== undefined ? finishedGood.stockQty : 0))
         : 0;
+
+      const fgRequired = item.qty || 0;
+      const fgShortage = Math.max(0, fgRequired - fgAvailable);
+      finishedGoods.push({
+        productId: finishedGood?.id || itemProductId || '',
+        productName: finishedGood?.name || finishedGood?.productName || item.productName || (typeof item.product === 'object' ? item.product?.name || item.product?.productName : item.product) || 'Unknown Product',
+        requiredQty: fgRequired,
+        availableStock: fgAvailable,
+        shortageQty: fgShortage,
+      });
 
       if (finishedGood && fgAvailable >= item.qty) {
         // Stock of finished good is sufficient
@@ -125,13 +188,12 @@ const InventoryDashboard: React.FC = () => {
       hasFgShortage = true;
 
       // Stock of finished good is NOT sufficient. Check if there's a BOM recipe
-      const bom = boms.find(b => 
-        (finishedGood && b.productId === finishedGood.id) || 
-        (finishedGood && b.productCode === finishedGood.productCode) || 
-        (finishedGood && finishedGood.product_code && b.productCode === finishedGood.product_code) ||
-        (finishedGood && b.name === `BOM for ${finishedGood.name}`) ||
-        (finishedGood && b.productName === finishedGood.name)
-      );
+      const bom = finishedGood ? (
+        bomMaps.byProductId.get(finishedGood.id) ||
+        bomMaps.byProductCode.get(finishedGood.productCode) ||
+        bomMaps.byProductCode.get(finishedGood.product_code) ||
+        bomMaps.byName.get(finishedGood.name)
+      ) : null;
 
       if (bom && bom.items && bom.items.length > 0) {
         // Resolve raw materials from BOM recipe
@@ -142,12 +204,8 @@ const InventoryDashboard: React.FC = () => {
 
           // Find the raw material product in our products list
           const rawMaterialName = bomItem.productName || bomItem.materialName || bomItem.materialname;
-          const rawMaterial = products.find(p => 
-            p.id === bomItem.productId || 
-            p.name === rawMaterialName ||
-            p.productName === rawMaterialName ||
-            p.product_name === rawMaterialName
-          );
+          const rawMaterial = productMaps.byId.get(bomItem.productId) 
+            || productMaps.byName.get(rawMaterialName);
 
           const rmAvailable = rawMaterial 
             ? (rawMaterial.availableStock !== undefined ? rawMaterial.availableStock : (rawMaterial.stockQty !== undefined ? rawMaterial.stockQty : 0))
@@ -158,7 +216,7 @@ const InventoryDashboard: React.FC = () => {
           // Get default warehouse for raw material
           let whName = '—';
           if (rawMaterial && rawMaterial.defaultWarehouseId) {
-            const wh = warehouses.find(w => String(w.id) === String(rawMaterial.defaultWarehouseId));
+            const wh = warehouseMaps.byId.get(String(rawMaterial.defaultWarehouseId));
             if (wh) whName = wh.name;
           }
 
@@ -178,13 +236,13 @@ const InventoryDashboard: React.FC = () => {
 
         let whName = '—';
         if (finishedGood && finishedGood.defaultWarehouseId) {
-          const wh = warehouses.find(w => String(w.id) === String(finishedGood.defaultWarehouseId));
+          const wh = warehouseMaps.byId.get(String(finishedGood.defaultWarehouseId));
           if (wh) whName = wh.name;
         }
 
         shortages.push({
           productId: finishedGood?.id || itemProductId || '',
-          productName: finishedGood?.name || finishedGood?.productName || item.productName || 'Unknown Product',
+          productName: finishedGood?.name || finishedGood?.productName || item.productName || (typeof item.product === 'object' ? item.product?.name || item.product?.productName : item.product) || 'Unknown Product',
           productCode: finishedGood?.productCode || finishedGood?.product_code || '',
           requiredQty: item.qty,
           availableStock: fgAvailable,
@@ -211,8 +269,9 @@ const InventoryDashboard: React.FC = () => {
     return {
       status,
       shortages,
+      finishedGoods,
     };
-  };
+  }, [productMaps, bomMaps, warehouses]);
 
   if (dataLoading || loadingBoms) {
     return (
@@ -226,7 +285,7 @@ const InventoryDashboard: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
-  const isInventory = user?.role === 'INVENTORY' || user?.role === 'SUPERADMIN' || user?.role === 'ADMIN';
+  const isInventory = user?.role === 'INVENTORY' || user?.role === 'SUPERADMIN' || user?.role === 'ADMIN' || user?.role === 'PRODUCTION';
 
   // Only show orders that have a warehouse assigned
   const assignedOrders = orders.filter(o => o.assignedWarehouse != null);
@@ -243,7 +302,24 @@ const InventoryDashboard: React.FC = () => {
       const itAny = item as any;
       const itemProductId = itAny.productId || itAny.productid_id || (typeof itAny.product === 'object' ? itAny.product?.id : itAny.product);
       const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
-      const productName = pObj?.name || pObj?.productName || (itAny.product as any)?.name || itAny.productName || itAny.product || 'Unknown Product';
+      let productName = pObj?.name || pObj?.productName || itAny.productName || 'Unknown Product';
+      
+      if (productName === 'Unknown Product' && itAny.product) {
+        if (typeof itAny.product === 'object') {
+          productName = itAny.product.name || itAny.product.productName || 'Unknown Product';
+        } else if (typeof itAny.product === 'string') {
+          productName = itAny.product;
+        }
+      }
+      
+      if (typeof productName === 'object' && productName !== null) {
+          productName = (productName as any).name || (productName as any).productName || 'Unknown Product';
+      }
+      
+      // Final fallback to ensure it is always a string
+      if (typeof productName !== 'string') {
+          productName = String(productName);
+      }
 
       const pendingQty = Math.max(0, item.qty - (item.sentQty || 0));
       if (pendingQty <= 0) return acc;
@@ -376,12 +452,7 @@ const InventoryDashboard: React.FC = () => {
           remarks: confirmOrder.reason || '',
         });
       } else {
-        // Fallback for other status changes (Approve, Complete, Cancel)
         let narrationStr = confirmOrder.reason || '';
-        if (confirmOrder.action === 'Returned') {
-          const reason = (confirmOrder.reason || '').trim();
-          narrationStr = `[RETURN REASON: ${reason}] [RETURN DATE: ${confirmOrder.action_date}] ${narrationStr}`.trim();
-        }
         await updateOrderStatus(confirmOrder.id, confirmOrder.action, narrationStr, confirmOrder.action_date);
       }
     } catch (err: any) {
@@ -402,10 +473,14 @@ const InventoryDashboard: React.FC = () => {
       title: `Order ${label}`,
       description: `Order ${confirmOrder.id} marked as ${confirmOrder.action}. SO and Admin have been notified in the system.`,
     });
+    refreshAll();
     setConfirmOrder(null);
   };
 
   const actionLabel = (o: any) => {
+    if (user?.role === 'PRODUCTION') {
+      return null;
+    }
     const status = o.status;
     let hasRemainingToDispatch = false;
     
@@ -419,7 +494,7 @@ const InventoryDashboard: React.FC = () => {
 
     const actions = [];
     
-    if (status === 'Approved' || status === 'Partially Dispatched' || (status === 'Partially Returned' && hasRemainingToDispatch)) {
+    if (status === 'Pending' || status === 'Approved' || status === 'Partially Dispatched' || (status === 'Partially Returned' && hasRemainingToDispatch)) {
       actions.push({ next: 'Dispatched' as OrderStatus, label: 'Send Out Now', icon: Truck, color: 'bg-purple-600 hover:bg-purple-700 text-white' });
     }
 
@@ -438,12 +513,12 @@ const InventoryDashboard: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-header">Stock Room Overview</h1>
+          <h1 className="page-header">My Order Room</h1>
           <p className="page-subheader">Track your products and send out orders</p>
         </div>
         <Link to="/inventory/manage">
           <button className="px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors flex items-center gap-2">
-            <Package className="w-4 h-4" /> Manage Stock Room →
+            <Package className="w-4 h-4" /> Manage Order and Dispatch Room →
           </button>
         </Link>
       </div>
@@ -514,7 +589,7 @@ const InventoryDashboard: React.FC = () => {
               const soEmail = o.soEmail || (o as any).so_email || 'SO';
               const grandTotal = o.grandTotal ?? (o as any).grand_total ?? 0;
               const displayStatus = o.status || 'Pending';
-              const checkResult = o.status === 'Pending' ? checkOrderShortage(o) : null;
+              const checkResult = ['Pending', 'Approved', 'Partially Dispatched', 'Partially Returned'].includes(o.status || 'Pending') ? checkOrderShortage(o) : null;
               
               const badgeStyles: Record<string, string> = {
                 Available: 'bg-green-100 text-green-700 border-green-200',
@@ -579,11 +654,59 @@ const InventoryDashboard: React.FC = () => {
                     </p>
 
                     {checkResult && (
-                      <div className="flex items-center justify-between text-[10px] border-t pt-1.5 border-border/40">
-                        <span className="font-semibold text-muted-foreground">Stock Status:</span>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${badgeStyles[checkResult.status]}`}>
-                          {badgeTexts[checkResult.status]}
-                        </span>
+                      <div className="flex flex-col gap-1.5 border-t pt-2 border-border/40 mt-1.5">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="font-semibold text-muted-foreground">Stock Status:</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${badgeStyles[checkResult.status]}`}>
+                            {badgeTexts[checkResult.status]}
+                          </span>
+                        </div>
+                        
+                        {/* Show Finished Goods stock info */}
+                        {checkResult.finishedGoods && checkResult.finishedGoods.length > 0 && (
+                          <div className="bg-primary/5 rounded-lg p-2.5 border border-primary/10 space-y-1.5 mt-1 text-[10px]">
+                            <p className="font-bold text-primary flex items-center gap-1">📦 Finished Goods Stock Status:</p>
+                            <div className="divide-y divide-border/20">
+                              {checkResult.finishedGoods.map((fg: any, idx: number) => (
+                                <div key={idx} className="flex flex-col py-1 gap-0.5 first:pt-0 last:pb-0">
+                                  <div className="flex justify-between items-center text-[10px]">
+                                    <span className="text-foreground truncate max-w-[150px] font-bold" title={fg.productName}>{fg.productName}</span>
+                                    <span className={`font-semibold ${fg.shortageQty > 0 ? 'text-destructive font-extrabold' : 'text-green-600'}`}>
+                                      {fg.shortageQty > 0 ? `Shortage: ${fg.shortageQty.toFixed(1)}` : 'In Stock'}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[9px] text-muted-foreground">
+                                    <span>Required: {fg.requiredQty.toFixed(1)}</span>
+                                    <span>Available: {fg.availableStock.toFixed(1)}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Show specific shortages and required raw materials */}
+                        {checkResult.status !== 'Available' && checkResult.shortages && checkResult.shortages.length > 0 && (
+                          <div className="bg-destructive/5 rounded-lg p-2.5 border border-destructive/10 space-y-1.5 mt-1 text-[10px]">
+                            <p className="font-bold text-destructive flex items-center gap-1">⚠️ Deficit / Required Raw Materials:</p>
+                            <div className="divide-y divide-border/20">
+                              {checkResult.shortages.map((s: any, idx: number) => (
+                                <div key={idx} className="flex flex-col py-1 gap-0.5 first:pt-0 last:pb-0">
+                                  <div className="flex justify-between items-center text-[10px]">
+                                    <span className="text-foreground truncate max-w-[150px] font-bold" title={s.productName}>{s.productName}</span>
+                                    <span className="font-semibold text-destructive">
+                                      Shortage: {s.shortageQty.toFixed(1)}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[9px] text-muted-foreground">
+                                    <span>Required: {s.requiredQty.toFixed(1)}</span>
+                                    <span>Available: {s.availableStock.toFixed(1)}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -624,8 +747,7 @@ const InventoryDashboard: React.FC = () => {
                           <span className="text-[10px] text-muted-foreground">
                             {(() => {
                               const whId = (o as any).assignedWarehouse;
-                              if (!whId) return 'Not assigned';
-                              const wh = warehouses.find(w => String(w.id) === String(whId));
+                              const wh = warehouseMaps.byId.get(String(whId));
                               return wh?.name || `Warehouse #${whId}`;
                             })()}
                           </span>
@@ -738,16 +860,16 @@ const InventoryDashboard: React.FC = () => {
 
           {viewOrder && (() => {
             const orderId = viewOrder.orderId || viewOrder.order_id || viewOrder.id || 'Unknown ID';
-            const partyName = viewOrder.partyName || viewOrder.party_name || '—';
+            const partyName = typeof viewOrder.partyName === 'object' ? (viewOrder.partyName as any)?.dealerName : viewOrder.partyName;
             const soEmail = viewOrder.soEmail || viewOrder.so_email || '—';
             const grandTotal = viewOrder.grandTotal ?? viewOrder.grand_total ?? 0;
             const date = new Date(viewOrder.createdAt || viewOrder.date || new Date()).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
             
-            const wh = warehouses.find(w => String(w.id) === String((viewOrder as any).assignedWarehouse));
+            const wh = warehouseMaps.byId.get(String((viewOrder as any).assignedWarehouse));
             const dealer = dealers.find(d => d.dealerName === partyName || d.dealer_name === partyName);
             
             // Check stock status for this order
-            const checkResult = viewOrder.status === 'Pending' ? checkOrderShortage(viewOrder) : null;
+            const checkResult = ['Pending', 'Approved', 'Partially Dispatched', 'Partially Returned'].includes(viewOrder.status || 'Pending') ? checkOrderShortage(viewOrder) : null;
             const action = actionLabel(viewOrder.status);
 
             const badgeStyles: Record<string, string> = {
@@ -839,42 +961,77 @@ const InventoryDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Shortage table if status is not 'Available' */}
+                {/* Shortage and Finished Goods table */}
                 {checkResult && (
-                  <div className="border border-border rounded-xl p-3 space-y-2.5 text-xs">
+                  <div className="border border-border rounded-xl p-3 space-y-3.5 text-xs">
                     <div className="flex items-center justify-between">
-                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">Stock Shortage Check</p>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">Stock Availability Analysis</p>
                       <span className={`text-[9px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${badgeStyles[checkResult.status]}`}>
                         {badgeTexts[checkResult.status]}
                       </span>
                     </div>
 
-                    {checkResult.status !== 'Available' && checkResult.shortages.length > 0 && (
-                      <div className="overflow-x-auto border border-border/40 rounded-xl">
-                        <table className="w-full text-xs text-left">
-                          <thead className="bg-secondary/40 text-muted-foreground font-semibold border-b border-border/40 text-[10px]">
-                            <tr>
-                              <th className="px-2 py-1.5 text-left">Material/Product</th>
-                              <th className="px-2 py-1.5 text-right">Req Qty</th>
-                              <th className="px-2 py-1.5 text-right">Available</th>
-                              <th className="px-2 py-1.5 text-right">Shortage</th>
-                              <th className="px-2 py-1.5 text-left">Source Wh</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border/20 bg-card text-[11px]">
-                            {checkResult.shortages.map((s, idx) => (
-                              <tr key={idx} className={s.shortageQty > 0 ? "bg-red-500/5" : ""}>
-                                <td className="px-2 py-1.5 font-medium" title={s.productName}>{s.productName}</td>
-                                <td className="px-2 py-1.5 text-right font-medium">{s.requiredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                                <td className="px-2 py-1.5 text-right">{s.availableStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                                <td className={`px-2 py-1.5 text-right font-bold ${s.shortageQty > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                  {s.shortageQty > 0 ? s.shortageQty.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
-                                </td>
-                                <td className="px-2 py-1.5 text-muted-foreground" title={s.sourceWarehouse}>{s.sourceWarehouse}</td>
+                    {/* Finished Goods Stock Table */}
+                    {checkResult.finishedGoods && checkResult.finishedGoods.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-bold text-primary flex items-center gap-1">📦 Finished Goods Stock Status:</p>
+                        <div className="overflow-x-auto border border-border/40 rounded-xl">
+                          <table className="w-full text-xs text-left border-collapse">
+                            <thead className="bg-secondary/40 text-muted-foreground font-semibold border-b border-border/40 text-[10px]">
+                              <tr>
+                                <th className="px-2 py-1.5 text-left">Finished Good</th>
+                                <th className="px-2 py-1.5 text-right">Req Qty</th>
+                                <th className="px-2 py-1.5 text-right">Available</th>
+                                <th className="px-2 py-1.5 text-right">Shortage</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-border/20 bg-card text-[11px]">
+                              {checkResult.finishedGoods.map((fg: any, idx: number) => (
+                                <tr key={idx} className={fg.shortageQty > 0 ? "bg-red-500/5" : "bg-green-500/5"}>
+                                  <td className="px-2 py-1.5 font-medium" title={fg.productName}>{fg.productName}</td>
+                                  <td className="px-2 py-1.5 text-right font-medium">{fg.requiredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                  <td className="px-2 py-1.5 text-right">{fg.availableStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                  <td className={`px-2 py-1.5 text-right font-bold ${fg.shortageQty > 0 ? 'text-red-600 font-extrabold' : 'text-green-600'}`}>
+                                    {fg.shortageQty > 0 ? fg.shortageQty.toLocaleString(undefined, { maximumFractionDigits: 2 }) : 'In Stock'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Raw Material Shortages Table */}
+                    {checkResult.status !== 'Available' && checkResult.shortages && checkResult.shortages.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-bold text-destructive flex items-center gap-1">⚠️ Deficit / Required Raw Materials:</p>
+                        <div className="overflow-x-auto border border-border/40 rounded-xl">
+                          <table className="w-full text-xs text-left border-collapse">
+                            <thead className="bg-secondary/40 text-muted-foreground font-semibold border-b border-border/40 text-[10px]">
+                              <tr>
+                                <th className="px-2 py-1.5 text-left">Material/Product</th>
+                                <th className="px-2 py-1.5 text-right">Req Qty</th>
+                                <th className="px-2 py-1.5 text-right">Available</th>
+                                <th className="px-2 py-1.5 text-right">Shortage</th>
+                                <th className="px-2 py-1.5 text-left">Source Wh</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/20 bg-card text-[11px]">
+                              {checkResult.shortages.map((s, idx) => (
+                                <tr key={idx} className={s.shortageQty > 0 ? "bg-red-500/5" : ""}>
+                                  <td className="px-2 py-1.5 font-medium" title={s.productName}>{s.productName}</td>
+                                  <td className="px-2 py-1.5 text-right font-medium">{s.requiredQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                  <td className="px-2 py-1.5 text-right">{s.availableStock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                  <td className={`px-2 py-1.5 text-right font-bold ${s.shortageQty > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                    {s.shortageQty > 0 ? s.shortageQty.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-muted-foreground" title={s.sourceWarehouse}>{s.sourceWarehouse}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -890,8 +1047,18 @@ const InventoryDashboard: React.FC = () => {
             );
           })()}
 
-          <DialogFooter className="gap-2 mt-2 flex-row pt-3 border-t border-border justify-end">
-            <Button variant="outline" size="sm" onClick={() => setViewOrder(null)}>Close</Button>
+          <DialogFooter className="gap-2 mt-2 flex-row pt-3 border-t border-border justify-between items-center">
+            {viewOrder && (
+              <PDFGenerator 
+                type="SALES_ORDER" 
+                data={viewOrder}
+                filename={`Order_${viewOrder.orderId || viewOrder.order_id || viewOrder.id || 'N/A'}.pdf`}
+                buttonLabel="Print Sales Order"
+              />
+            )}
+            <div className="flex gap-2 ml-auto">
+              <Button variant="outline" size="sm" onClick={() => setViewOrder(null)}>Close</Button>
+            </div>
             {viewOrder && (() => {
               const orderId = viewOrder.orderId || viewOrder.order_id || viewOrder.id || 'Unknown ID';
               const action = actionLabel(viewOrder);

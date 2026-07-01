@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useProductions, useProductionMutations } from '@/hooks/inventory/useProductions';
+import { useProducts } from '@/hooks/inventory/useProducts';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
 import { Plus, X, Search, RefreshCw, Trash2, AlertTriangle, ShoppingCart } from 'lucide-react';
@@ -9,6 +10,7 @@ import apiClient from '@/api/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDecimal } from '@/utils/format';
 import { Input } from '@/components/ui/input';
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -40,7 +42,6 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   });
   
   // Masters lists
-  const [products, setProducts] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [recipes, setRecipes] = useState<any[]>([]);
 
@@ -51,23 +52,22 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   const [ingSearch, setIngSearch] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  const { data: products = [] } = useProducts({ warehouseId: form.warehouseId || undefined });
+
   useEffect(() => {
     const fetchMasters = async () => {
       try {
-        const [pRes, wRes, rRes] = await Promise.all([
-          apiClient<any[]>('/inv/masters/products').catch(() => null),
+        const [wRes, rRes] = await Promise.all([
           apiClient<any[]>('/inv/masters/warehouses').catch(() => null),
           apiClient<any[]>('/bom').catch(() => null)
         ]);
-        const pList = pRes && pRes.data ? pRes.data : (Array.isArray(pRes) ? pRes : []);
         const wList = wRes && wRes.data ? wRes.data : (Array.isArray(wRes) ? wRes : []);
         const rList = rRes && rRes.data ? rRes.data : (Array.isArray(rRes) ? rRes : []);
         
-        setProducts(pList);
         setWarehouses(wList);
         setRecipes(rList);
         
-        if (wList.length > 0) {
+        if (wList.length > 0 && !form.warehouseId) {
           setForm((prev: any) => ({ ...prev, warehouseId: wList[0].id }));
         }
       } catch (e) {
@@ -97,10 +97,25 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       setBatchItems(newItems);
     }
   }, [form.quantity, selectedRecipe]);
+  const recipesByProduct = React.useMemo(() => {
+    const map = new Map();
+    for (const r of recipes) {
+      if (r.productCode) map.set(r.productCode, r);
+      if (r.productName) map.set(r.productName, r);
+      if (r.name) map.set(r.name, r);
+    }
+    return map;
+  }, [recipes]);
+
+  const productsById = React.useMemo(() => {
+    const map = new Map();
+    for (const p of products) map.set(String(p.id), p);
+    return map;
+  }, [products]);
 
   const selectFinishedProduct = (p: any) => {
     // Locate the standard recipe/BOM mapping for this product
-    const recipe = recipes.find((r: any) => r.productCode === p.productCode || r.productName === p.name || r.name === p.name);
+    const recipe = recipesByProduct.get(p.productCode) || recipesByProduct.get(p.name);
     
     setForm({ ...form, productId: p.id, productName: p.name });
     setSelectedRecipe(recipe || null);
@@ -202,7 +217,9 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
 
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredProductions = productions.filter((p: any) => {
+  const { filterBySelectedFY } = useFinancialYear();
+
+  const filteredProductions = filterBySelectedFY(productions, (p: any) => p.date || p.createdAt).filter((p: any) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     const s = [
@@ -234,12 +251,21 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
 
       <SafeDataView data={filteredProductions} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable 
-          columns={['Finished Product', 'Qty Produced', 'Warehouse', 'Date']}
+          columns={['Finished Product', 'Qty Produced', 'Warehouse', 'Date', 'Status']}
           rows={filteredProductions.map((p: any) => [
             p.finishedProductName || p.finished_product?.name || '—', 
             formatDecimal(p.quantityProduced || p.quantity_produced || 0), 
             p.warehouseName || p.warehouse?.name || '—', 
-            p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—'
+            p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—',
+            <span className={`inline-block text-[10px] px-2.5 py-0.5 rounded-full border font-bold uppercase tracking-wider ${
+              (p.status || '').toUpperCase() === 'APPROVED'
+                ? 'bg-success/15 text-success border-success/30'
+                : (p.status || '').toUpperCase() === 'PENDING'
+                ? 'bg-warning/15 text-warning border-warning/30'
+                : 'bg-destructive/15 text-destructive border-destructive/30'
+            }`} key={p.id}>
+              {p.status || 'Approved'}
+            </span>
           ])}
           onEdit={async (idx: number) => {
             const p = filteredProductions[idx];
@@ -260,7 +286,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 setSelectedRecipe({ items: [] }); // Set non-null to bypass auto-scaling
               } else {
                 // Fall back: locate standard recipe/BOM for this product so they can still see/adjust ingredients
-                const recipe = recipes.find((r: any) => r.productName === p.finishedProductName || r.productCode === p.productCode || r.name === p.finishedProductName);
+                const recipe = recipesByProduct.get(p.productCode) || recipesByProduct.get(p.finishedProductName);
                 if (recipe) {
                   setSelectedRecipe(recipe); // The auto-scaling useEffect will automatically run and populate batchItems based on recipe and quantity!
                 } else {
@@ -310,7 +336,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
                   {products
                     .filter(p => {
-                      const cat = (p.categoryRef?.name || p.categoryName || p.category?.name || '').toUpperCase();
+                      const catName = typeof p.category === 'string' ? p.category : p.category?.name;
+                      const cat = (p.categoryRef?.name || p.categoryName || catName || '').toUpperCase();
                       return cat === 'FINISHED GOOD' || cat === 'SEMI FINISHED GOOD' || cat === 'TILES ADHESIVE' || cat === 'JOINT FILLER';
                     })
                     .filter(p => !productSearch || (p.name && p.name.toLowerCase().includes(productSearch.toLowerCase())))
@@ -397,26 +424,47 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
               </div>
 
               <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
-                {batchItems.map((item: any, idx: number) => (
-                  <div key={idx} className="flex items-center gap-3 bg-muted/30 p-2 rounded-lg border border-border/40">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold truncate">{item.productName}</p>
-                      <p className="text-[10px] text-muted-foreground">{item.unit || 'KG'}</p>
+                {batchItems.map((item: any, idx: number) => {
+                  const pObj = productsById.get(String(item.productId));
+                  const available = pObj ? (pObj.availableStock ?? pObj.stockQty ?? 0) : 0;
+                  const required = item.quantity || 0;
+                  const isAvailable = available >= required;
+
+                  return (
+                    <div key={idx} className="flex items-center gap-3 bg-muted/30 p-2 rounded-lg border border-border/40">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold truncate text-foreground">{item.productName}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-muted-foreground">{item.unit || 'KG'}</span>
+                          <span className="text-[10px] text-muted-foreground/30">|</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            Avail: <span className={`font-semibold ${isAvailable ? 'text-green-600' : 'text-red-500'}`}>{available}</span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/30">|</span>
+                          <span className={`text-[9px] px-1 py-0.2 rounded font-bold uppercase tracking-wider ${
+                            isAvailable 
+                              ? 'bg-green-500/10 text-green-600 border border-green-500/20' 
+                              : 'bg-red-500/10 text-red-500 border border-red-500/20'
+                          }`}>
+                            {isAvailable ? 'In Stock' : 'Deficit'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-28 flex items-center gap-1.5">
+                        <input 
+                          type="number" 
+                          step="any"
+                          value={item.quantity} 
+                          onChange={e => updateIngQty(idx, e.target.value)}
+                          className="w-full border border-border rounded px-2 py-1 text-xs bg-background text-right focus:outline-none focus:ring-2 focus:ring-primary/10" 
+                        />
+                      </div>
+                      <button onClick={() => removeIngredient(idx)} className="p-1 hover:text-destructive transition-colors">
+                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                      </button>
                     </div>
-                    <div className="w-28 flex items-center gap-1.5">
-                      <input 
-                        type="number" 
-                        step="any"
-                        value={item.quantity} 
-                        onChange={e => updateIngQty(idx, e.target.value)}
-                        className="w-full border border-border rounded px-2 py-1 text-xs bg-background text-right focus:outline-none focus:ring-2 focus:ring-primary/10" 
-                      />
-                    </div>
-                    <button onClick={() => removeIngredient(idx)} className="p-1 hover:text-destructive transition-colors">
-                      <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
                 {batchItems.length === 0 && (
                   <div className="text-center py-6 border-2 border-dashed border-border rounded-xl text-xs text-muted-foreground">
                     No raw materials in this run yet. Search above to add custom raw materials.

@@ -10,7 +10,7 @@ from api.models import (
     Company, Warehouse, User, Userwarehouseaccess, Userproductaccess,
     Category, Brand, Unit, Product, Supplier, Dealer, Distributor,
     Lead, Visit, Expense, Purchaseorder, Purchaseorderitem, Purchase, Purchaseitem,
-    Order, Orderitem, Stocktransaction, Inventory, Bom, Bomitem
+    Order, Orderitem, Stocktransaction, Bom, Bomitem
 )
 from django.db import transaction
 
@@ -134,7 +134,6 @@ def seed_tenant(db_name, company_id, user_objs):
         Userproductaccess.objects.using(db_name).create(userid=user_objs['user-amit'], productid=p_filler, companyid_id=company_id)
 
         # BOM
-        bom1 = Bom.objects.using(db_name).create(productid=p_gold, name='Standard Gold Recipe', output_quantity=1, active=True, companyid_id=company_id)
         Bomitem.objects.using(db_name).create(bomid=bom1, raw_materialid=p_cement, quantity=18.5, companyid_id=company_id)
         Bomitem.objects.using(db_name).create(bomid=bom1, raw_materialid=p_poly, quantity=1.5, companyid_id=company_id)
         Bomitem.objects.using(db_name).create(bomid=bom1, raw_materialid=p_bag, quantity=1, companyid_id=company_id)
@@ -149,7 +148,6 @@ def seed_tenant(db_name, company_id, user_objs):
         
         inv = {}
         for p in [p_cement, p_poly, p_bag, p_gold, p_silver, p_filler]:
-            i = Inventory.objects.using(db_name).create(productid=p, quantity=0, companyid_id=company_id)
             inv[p.id] = i
 
         current_date = START_DATE
@@ -173,8 +171,6 @@ def seed_tenant(db_name, company_id, user_objs):
                 inv[p_cement.id].quantity += 5000; inv[p_cement.id].save()
                 inv[p_poly.id].quantity += 500; inv[p_poly.id].save()
                 
-                Stocktransaction.objects.using(db_name).create(productid=p_cement, type='PURCHASE', quantity=5000, reference_id=str(pur.id), date=current_date+timedelta(days=2), companyid_id=company_id)
-                Stocktransaction.objects.using(db_name).create(productid=p_poly, type='PURCHASE', quantity=500, reference_id=str(pur.id), date=current_date+timedelta(days=2), companyid_id=company_id)
 
             # Produce Finished Goods (Adjustment) every 3 iterations
             if idx % 3 == 0:
@@ -183,7 +179,6 @@ def seed_tenant(db_name, company_id, user_objs):
                     inv[p_cement.id].quantity -= prod_qty * 18.5; inv[p_cement.id].save()
                     inv[p_poly.id].quantity -= prod_qty * 1.5; inv[p_poly.id].save()
                     inv[p_gold.id].quantity += prod_qty; inv[p_gold.id].save()
-                    Stocktransaction.objects.using(db_name).create(productid=p_gold, type='MANUFACTURING', quantity=prod_qty, date=current_date, companyid_id=company_id)
 
             # Sales Orders (every iteration)
             sale_product = random.choice([p_gold, p_silver, p_filler])
@@ -195,12 +190,10 @@ def seed_tenant(db_name, company_id, user_objs):
                 Orderitem.objects.using(db_name).create(orderid=order, productid=sale_product, quantity=qty, unit_price=sale_product.selling_price, total_price=qty*sale_product.selling_price, companyid_id=company_id)
                 
                 inv[sale_product.id].quantity -= qty; inv[sale_product.id].save()
-                Stocktransaction.objects.using(db_name).create(productid=sale_product, type='SALE', quantity=-qty, reference_id=str(order.id), date=current_date, companyid_id=company_id)
             elif status == 'RETURNED':
                 order = Order.objects.using(db_name).create(dealerid=dealer1, status='RETURNED', total_amount=qty*sale_product.selling_price, companyid_id=company_id, created_at=current_date)
                 Orderitem.objects.using(db_name).create(orderid=order, productid=sale_product, quantity=qty, unit_price=sale_product.selling_price, total_price=qty*sale_product.selling_price, companyid_id=company_id)
                 # simulate stock returned
-                Stocktransaction.objects.using(db_name).create(productid=sale_product, type='RETURN', quantity=qty, reference_id=str(order.id), date=current_date, companyid_id=company_id)
                 inv[sale_product.id].quantity += qty; inv[sale_product.id].save()
 
 try:

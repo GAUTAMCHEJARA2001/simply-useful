@@ -3,14 +3,14 @@ import os, django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
-from api.models import Warehouse, Product, Orderitem, Purchaseorderitem, Purchaseitem, Stocktransaction, Bomitem, Inventory
+from api.models import Warehouse, Product, Orderitem, Purchaseorderitem, Purchaseitem, Stocktransaction, Bomitem
 
 def fix_all_models():
     models_to_check = [
         (Orderitem, 'productid_id', 'Orderitem'),
         (Purchaseorderitem, 'productid_id', 'Purchaseorderitem'),
         (Stocktransaction, 'productid_id', 'Stocktransaction'),
-        (Inventory, 'productid_id', 'Inventory'),
+        ( 'productid_id', ''),
     ]
 
     # Pre-cache all products by db and code for extreme speed
@@ -61,7 +61,6 @@ def fix_all_models():
                 # Find the local product ID for this code
                 correct_local_id = products_by_db[wh.db_name].get(pcode)
                 if correct_local_id:
-                    if name == 'Inventory':
                         # Check if target inventory already exists
                         existing = Model.objects.using(wh.db_name).filter(productid_id=correct_local_id, warehouseid_id=item.warehouseid_id).first()
                         if existing and existing.id != item.id:

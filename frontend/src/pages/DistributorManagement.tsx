@@ -81,8 +81,8 @@ const DistributorManagement: React.FC = () => {
       </div>
 
       <div className="lg:hidden space-y-3">
-        {filtered.map(d => (
-          <Card key={d.distributorName}>
+        {filtered.map((d, idx) => (
+          <Card key={d.id || `${d.distributorName}-${idx}`}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
@@ -118,8 +118,8 @@ const DistributorManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(d => (
-                <tr key={d.distributorName} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+              {filtered.map((d, idx) => (
+                <tr key={d.id || `${d.distributorName}-${idx}`} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-3 font-medium">{d.distributorName}</td>
                   <td className="px-4 py-3">{d.area}</td>
                   <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>

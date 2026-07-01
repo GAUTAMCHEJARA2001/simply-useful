@@ -7,6 +7,7 @@ import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
 import { Send, Truck } from 'lucide-react';
 import { useProducts } from '@/hooks/inventory/useProducts';
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
 
 const extractDispatchDetails = (narration: string) => {
   if (!narration) return null;
@@ -59,17 +60,19 @@ export const ApprovalsTab: React.FC = () => {
   });
   const [statusFilter, setStatusFilter] = useState<'Pending' | 'Ready' | 'History' | 'All'>('Pending');
 
-  const pendingCount = approvals.filter((a: any) => a.status === 'Pending').length;
-  const readyCount = approvals.filter((a: any) => a.status === 'Approved').length;
-  const historyCount = approvals.filter((a: any) => !['Pending', 'Approved'].includes(a.status)).length;
-  const totalCount = approvals.length;
+  const { filterBySelectedFY } = useFinancialYear();
 
-  const filteredApprovals = approvals.filter((a: any) => {
+  const filteredApprovals = filterBySelectedFY(approvals, (a: any) => a.date || a.createdAt || (a.data && a.data.createdAt)).filter((a: any) => {
     if (statusFilter === 'Pending') return a.status === 'Pending';
     if (statusFilter === 'Ready') return a.status === 'Approved';
     if (statusFilter === 'History') return !['Pending', 'Approved'].includes(a.status);
     return true;
   });
+
+  const pendingCount = filteredApprovals.filter((a: any) => a.status === 'Pending').length;
+  const readyCount = filteredApprovals.filter((a: any) => a.status === 'Approved').length;
+  const historyCount = filteredApprovals.filter((a: any) => !['Pending', 'Approved'].includes(a.status)).length;
+  const totalCount = filteredApprovals.length;
 
   const openDispatch = (approval: any) => {
     const orderData = approval.data || {};

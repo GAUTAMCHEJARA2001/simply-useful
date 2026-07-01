@@ -10,7 +10,7 @@ from api.models import (
     Company, Warehouse, User, Userwarehouseaccess, Userproductaccess,
     Category, Brand, Unit, Product, Supplier, Dealer, Distributor,
     Lead, Visit, Expense, Purchaseorder, Purchaseorderitem, Purchase, Purchaseitem,
-    Order, Orderitem, Stocktransaction, Inventory, Bom, Bomitem
+    Order, Orderitem, Stocktransaction, Bom, Bomitem
 )
 from django.db import transaction
 
@@ -60,9 +60,6 @@ def seed_tenant(db_name, company_id, user_objs):
         Userwarehouseaccess.objects.using(db_name).get_or_create(userid_id=user_objs['user-deepak'].id, warehouseid_id=current_wh.id)
 
         # 2. Seed Leads & CRM in the tenant schema context
-        Lead.objects.using(db_name).all().delete()
-        Visit.objects.using(db_name).all().delete()
-        Expense.objects.using(db_name).all().delete()
 
         stages = ['NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', 'WON', 'LOST']
         lead_ids = []
@@ -159,11 +156,7 @@ def seed_tenant(db_name, company_id, user_objs):
         wh_obj = Warehouse.objects.using('default').get(db_name=db_name)
         wh_id = wh_obj.id
 
-        # 1. Opening Balances (Inventory)
-        inv_cement, _ = Inventory.objects.using(db_name).get_or_create(productid=p_cement, warehouseid_id=wh_id, defaults={'quantity': 5000, 'avgcost': 15.0})
-        inv_poly, _ = Inventory.objects.using(db_name).get_or_create(productid=p_poly, warehouseid_id=wh_id, defaults={'quantity': 1000, 'avgcost': 120.0})
-        inv_bag, _ = Inventory.objects.using(db_name).get_or_create(productid=p_bag, warehouseid_id=wh_id, defaults={'quantity': 5000, 'avgcost': 12.0})
-        inv_gold, _ = Inventory.objects.using(db_name).get_or_create(productid=p_gold, warehouseid_id=wh_id, defaults={'quantity': 500, 'avgcost': 450.0})
+        # 1. Opening Balances ()
         
         # Seed Purchases & Sales over 5 years
         for day in range(0, 365 * 5, 14): # Every 2 weeks

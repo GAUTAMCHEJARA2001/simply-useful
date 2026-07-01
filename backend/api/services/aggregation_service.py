@@ -1,7 +1,7 @@
 import concurrent.futures
 from django.core.cache import cache
 from django.db.models import Sum, Count
-from api.models import Warehouse, Inventory, Order, Purchase
+from api.models import Warehouse, Order, Purchase, Purchaseitem, Orderitem, Stocktransaction
 from api.db_router import set_current_db
 
 def _fetch_warehouse_kpis(warehouse):
@@ -12,11 +12,16 @@ def _fetch_warehouse_kpis(warehouse):
     set_current_db(warehouse.db_name)
     
     try:
-        # 2. Query KPIs dynamically
-        total_stock = Inventory.objects.using(warehouse.db_name).aggregate(Sum('quantity'))['quantity__sum'] or 0
+        # Calculate total stock dynamically
+        opening = float(Warehouse.objects.using(warehouse.db_name).aggregate(Sum('product__openingstock'))['product__openingstock__sum'] or 0)
+        pur = float(Purchaseitem.objects.using(warehouse.db_name).filter(purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']).aggregate(Sum('qty'))['qty__sum'] or 0)
+        pur_ret = float(Purchaseitem.objects.using(warehouse.db_name).filter(purchaseid__status='Returned').aggregate(Sum('qty'))['qty__sum'] or 0)
+        sal = float(Orderitem.objects.using(warehouse.db_name).filter(orderid__status='Completed').aggregate(Sum('qty'))['qty__sum'] or 0)
+        sal_ret = float(Orderitem.objects.using(warehouse.db_name).filter(orderid__status='Returned').aggregate(Sum('qty'))['qty__sum'] or 0)
+        st_sum = float(Stocktransaction.objects.using(warehouse.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).aggregate(Sum('quantity'))['quantity__sum'] or 0)
         
-        # Determine low stock (stock <= 50)
-        low_stock_count = Inventory.objects.using(warehouse.db_name).filter(quantity__lte=50).count()
+        total_stock = opening + pur - pur_ret - sal + sal_ret + st_sum
+        low_stock_count = 0  # Dynamic low stock calculation too heavy for KPI list
         
         # Pending orders
         pending_orders = Order.objects.using(warehouse.db_name).filter(status='Pending').count()

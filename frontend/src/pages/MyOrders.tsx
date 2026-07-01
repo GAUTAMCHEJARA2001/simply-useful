@@ -88,17 +88,31 @@ const MyOrders: React.FC = () => {
     return statusStr || 'Pending';
   };
 
+  const productsById = useMemo(() => {
+    const map = new Map();
+    for (const p of products || []) {
+      map.set(String(p.id), p);
+      if (p.productCode) map.set(p.productCode, p);
+      if (p.product_code) map.set(p.product_code, p);
+      if (p.productName) map.set(p.productName, p);
+      if (p.product_name) map.set(p.product_name, p);
+      if (p.name) map.set(p.name, p);
+    }
+    return map;
+  }, [products]);
+
+  const usersByEmail = useMemo(() => {
+    const map = new Map();
+    for (const u of users || []) {
+      if (u.email) map.set(u.email.toLowerCase(), u);
+    }
+    return map;
+  }, [users]);
+
   const getOrderWeight = (order: any) => {
     return (order.items || []).reduce((sum: number, item: any) => {
       const prodId = typeof item.product === 'object' ? item.product?.id : (item.productId || item.product);
-      const prod = (products || []).find(p => 
-        p.id === prodId || 
-        p.productCode === prodId || 
-        p.product_code === prodId ||
-        p.productName === prodId ||
-        p.product_name === prodId ||
-        p.name === prodId
-      );
+      const prod = productsById.get(String(prodId)) || productsById.get(prodId);
       if (!prod) return sum;
       const match = (prod.bagSize || prod.bag_size || '').match(/(\d+)/);
       const weight = match ? parseInt(match[1]) : 0;
@@ -256,7 +270,7 @@ const MyOrders: React.FC = () => {
                               const activeSO = [...salesOfficers];
                               const currentEmail = order.soEmail;
                               if (currentEmail && !activeSO.some(u => u.email.toLowerCase() === currentEmail.toLowerCase())) {
-                                const match = (users || []).find(u => u.email.toLowerCase() === currentEmail.toLowerCase());
+                                const match = usersByEmail.get(currentEmail.toLowerCase());
                                 if (match) {
                                   activeSO.push(match);
                                 } else {
@@ -305,11 +319,7 @@ const MyOrders: React.FC = () => {
                     <span className="font-medium text-foreground">{orderItems.length} item(s):</span>{' '}
                     {orderItems.map((i: any) => {
                       const prodId = typeof i.product === 'object' ? i.product?.id : (i.productId || i.product);
-                      const prod = (products || []).find(p => 
-                        p.id === prodId || 
-                        p.productName === prodId || 
-                        p.name === prodId
-                      );
+                      const prod = productsById.get(String(prodId)) || productsById.get(prodId);
                       const fallbackName = typeof i.product === 'object' 
                         ? (i.product?.name || i.product?.productName) 
                         : (i.productName || i.product_name || i.product);
@@ -411,7 +421,7 @@ const MyOrders: React.FC = () => {
                         type="SALES_ORDER" 
                         data={order}
                         filename={`Order_${displayId}.pdf`}
-                        buttonLabel="Print Invoice"
+                        buttonLabel="Print Sales Order"
                       />
                     </div>
                   )}

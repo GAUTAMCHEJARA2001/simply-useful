@@ -5,14 +5,14 @@ django.setup()
 from django.db import transaction, connections
 from api.models import (
     Order, Orderitem, Purchase, Purchaseitem, Purchaseorder, Purchaseorderitem,
-    Stocktransaction, Stockbatch, Inventory,
+    Stocktransaction,
     Product, Category, Brand, Supplier, Unit, Bom, Bomitem, Labour,
     Lead, LeadFollowUp, LeadStageHistory, Dealer, Distributor, Visit, Expense, Userproductaccess, Userwarehouseaccess
 )
 
 tenant_models = [
     Orderitem, Order, Purchaseitem, Purchase, Purchaseorderitem, Purchaseorder,
-    Stocktransaction, Stockbatch, Inventory,
+    Stocktransaction,
     Bomitem, Bom, Product, Category, Brand, Supplier, Unit, Labour,
     Userproductaccess, Dealer, Distributor
 ]

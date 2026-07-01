@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from api.views_push import subscribe, unsubscribe, vapid_public_key
 from api.views import (
     auth_login, auth_register, auth_permissions, UserViewSet, ProductViewSet,
     CategoryViewSet, BrandViewSet, UnitViewSet, WarehouseViewSet, RegionViewSet,
@@ -12,7 +13,7 @@ from api.views import (
     
     # Reports
     report_dashboard_kpis, report_sales_summary, report_low_stock, report_daily,
-    report_current_stock, report_aggregate_stock, report_global_inventory, report_stock_ledger,
+    report_current_stock, report_aggregate_stock, report_stock_ledger, report_global_inventory,
     
     # Transactions
     transaction_purchases, transaction_purchase_detail, transaction_sales,
@@ -58,6 +59,11 @@ router.register('broadcasts', BroadcastViewSet, basename='broadcasts')
 urlpatterns = [
     # Auth
     path('auth/login', auth_login, name='auth-login'),
+    
+    # Push Notifications
+    path('webpush/subscribe', subscribe, name='webpush-subscribe'),
+    path('webpush/unsubscribe', unsubscribe, name='webpush-unsubscribe'),
+    path('webpush/vapid-public-key', vapid_public_key, name='webpush-vapid-public-key'),
     path('auth/register', auth_register, name='auth-register'),
     path('auth/permissions', auth_permissions, name='auth-permissions'),
     
@@ -83,6 +89,7 @@ urlpatterns = [
     path('reports/stock-ledger/<str:pk>', report_stock_ledger, name='report-stock-ledger'),
     path('reports/aggregate-stock', report_aggregate_stock, name='report-aggregate-stock'),
     path('reports/global-inventory', report_global_inventory, name='report-global-inventory'),
+
     
     # Analytics & Decision Intelligence
     path('analytics/trigger-etl', trigger_analytics_etl, name='analytics-trigger-etl'),

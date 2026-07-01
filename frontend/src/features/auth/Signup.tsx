@@ -91,6 +91,7 @@ const Signup: React.FC = () => {
                     <SelectItem value="SALES">Sales Officer</SelectItem>
                     <SelectItem value="HR">HR Manager</SelectItem>
                     <SelectItem value="INVENTORY">Inventory Manager</SelectItem>
+                    <SelectItem value="PRODUCTION">Production Manager</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

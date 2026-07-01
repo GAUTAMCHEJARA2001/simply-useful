@@ -20,7 +20,7 @@ interface RenderInvoiceProps {
     bankIfsc?: string;
     bankBranch?: string;
   };
-  documentType: 'TAX INVOICE' | 'QUOTATION' | 'PURCHASE ORDER' | 'DELIVERY CHALLAN';
+  documentType: 'SALES ORDER' | 'QUOTATION' | 'PURCHASE ORDER' | 'DELIVERY CHALLAN';
   themePreset?: ThemePreset;
   densityMode?: PrintDensity;
   watermarkText?: WatermarkType;

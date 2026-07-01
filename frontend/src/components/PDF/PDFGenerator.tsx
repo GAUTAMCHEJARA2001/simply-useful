@@ -92,7 +92,7 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
         return renderInvoicePDF({
           rawOrder: data,
           companyInfo: safeCompany,
-          documentType: type === 'SALES_ORDER' ? 'TAX INVOICE' : 'PURCHASE ORDER',
+          documentType: type === 'SALES_ORDER' ? 'SALES ORDER' : 'PURCHASE ORDER',
           themePreset: type === 'SALES_ORDER' ? 'zoho' : 'modern',
           densityMode: 'comfortable'
         });

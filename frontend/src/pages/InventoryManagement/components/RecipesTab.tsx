@@ -110,7 +110,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
     ? ['Recipe Name', 'Finished Product', 'Yield Qty', 'Warehouse', 'Actions']
     : ['Recipe Name', 'Finished Product', 'Yield Qty', 'Actions'];
 
-  const isInventory = user?.role === 'INVENTORY';
+  const isInventory = user?.role === 'INVENTORY' || user?.role === 'PRODUCTION';
 
   const handleView = async (i: number) => {
       const r = filteredRecipes[i];

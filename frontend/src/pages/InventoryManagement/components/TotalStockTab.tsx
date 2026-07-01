@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export const TotalStockTab: React.FC = () => {
   const { user } = useAuth();
-  const isInventoryOnly = user?.role === 'INVENTORY';
+  const isInventoryOnly = user?.role === 'INVENTORY' || user?.role === 'PRODUCTION';
   
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(isInventoryOnly ? '' : 'all');
   

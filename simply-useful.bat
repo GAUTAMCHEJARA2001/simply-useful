@@ -2,15 +2,11 @@
 setlocal enabledelayedexpansion
 
 :: =================================================================
-::  SIMPLY USEFUL - ELITE PLATFORM MANAGER v2.0 (PLATFORM EDITION)
+::  SIMPLY USEFUL - ELITE PLATFORM MANAGER v2.1 (PLATFORM EDITION)
 :: =================================================================
-:: v2.0 Updates:
-:: - Added [8] OPEN APP  shortcut to launch both UI and API in browser
-:: - AUDIT now runs 5 steps: Django check, migrations, TypeScript, Vite build,
-::   + new dependency drift check (pip + npm outdated)
-:: - HEALTH CHECK now verifies both Backend (port 4000) and Frontend (port 8080)
-:: - START shows platform URLs clearly after warm-up
-:: - Version banner updated to v2.0
+:: v2.1 Updates:
+:: - Added Production Approvals stock validation workflow & Production Manager role
+:: - Version banner updated to v2.1
 :: =================================================================
 
 set "BASE_DIR=%~dp0"
@@ -19,7 +15,7 @@ set "BASE_DIR=%~dp0"
 cls
 echo.
 echo  ###############################################################
-echo   SIMPLY USEFUL  -  ELITE PLATFORM MANAGER  v2.0
+echo   SIMPLY USEFUL  -  ELITE PLATFORM MANAGER  v2.1
 echo  ###############################################################
 echo.
 echo   PLATFORM
@@ -174,6 +170,7 @@ echo  Active Modules:
 echo    Sales Dashboard        /sales
 echo    Admin Panel            /admin
 echo    Inventory              /inventory
+echo    Production Approvals   /inventory/manage (approvals)
 echo    CRM Leads              /sales/crm
 echo    SO Territory Mapping   /admin/so-mapping
 echo    Reports (SuperAdmin)   /reports

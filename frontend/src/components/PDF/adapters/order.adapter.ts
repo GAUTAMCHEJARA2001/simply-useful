@@ -20,7 +20,7 @@ export const adaptOrderToPrintable = (
     bankIfsc?: string;
     bankBranch?: string;
   },
-  documentType: 'TAX INVOICE' | 'QUOTATION' | 'PURCHASE ORDER' | 'DELIVERY CHALLAN'
+  documentType: 'SALES ORDER' | 'QUOTATION' | 'PURCHASE ORDER' | 'DELIVERY CHALLAN'
 ): PrintableInvoice => {
   // 1. Map Company details (safely fall back state codes)
   const cleanCompGst = cleanGstNumber(companyInfo.gst || '08ABCDE1234F1Z5');
@@ -179,7 +179,7 @@ export const adaptOrderToPrintable = (
     signatureName: 'Authorized Representative',
     showWatermark: rawOrder.status === 'Cancelled',
     watermarkText: rawOrder.status === 'Cancelled' ? 'CANCELLED' : undefined,
-    showBankDetails: layoutRegistry[documentType === 'TAX INVOICE' ? 'SALES_ORDER' : 'PURCHASE_ORDER']?.showBankDetails ?? true,
+    showBankDetails: layoutRegistry[documentType === 'SALES ORDER' ? 'SALES_ORDER' : 'PURCHASE_ORDER']?.showBankDetails ?? true,
     
     // Hardening Governance Mappings
     documentVersion: 'invoice-v2',

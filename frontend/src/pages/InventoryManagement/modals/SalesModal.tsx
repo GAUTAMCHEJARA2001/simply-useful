@@ -340,10 +340,16 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] font-medium text-muted-foreground block">Qty</label>
-                    <input type="number" value={item.quantity} onChange={e => updateLineItem(i, 'quantity', parseFloat(e.target.value))}
-                      className="w-full border border-border rounded-md px-2 py-1.5 bg-background text-xs" />
-                    {item.returnedQty > 0 && <span className="text-[9px] text-red-500 font-bold block mt-0.5 whitespace-nowrap">Returned: {item.returnedQty}</span>}
+                    <label className="text-[10px] font-medium text-muted-foreground flex justify-between items-center mb-1">
+                      <span>{item.returnedQty > 0 ? 'Ordered Qty' : 'Qty'}</span>
+                      {item.returnedQty > 0 && (
+                        <span className="text-[10px] text-red-500 font-extrabold whitespace-nowrap bg-red-500/10 px-1 rounded">
+                          (-{item.returnedQty} Ret) = {item.quantity - item.returnedQty} Net
+                        </span>
+                      )}
+                    </label>
+                    <input type="number" min={item.returnedQty || 1} value={item.quantity || ''} onChange={e => updateLineItem(i, 'quantity', Number(e.target.value))}
+                      placeholder="0" className="w-full border border-border rounded-md px-2 py-1.5 bg-background text-xs" />
                   </div>
                   <div>
                     <label className="text-[10px] font-medium text-muted-foreground block">Rate</label>

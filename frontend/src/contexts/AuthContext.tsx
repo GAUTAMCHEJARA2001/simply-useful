@@ -3,7 +3,7 @@ import { authService as authApi } from '@/api/services/auth.service';
 import { setTokens, getAccessToken, clearTokens } from '@/api/client';
 import { User, RegisterInput } from '@/types';
 
-export type UserRole = 'SALES' | 'ADMIN' | 'HR' | 'INVENTORY' | 'SUPERADMIN';
+export type UserRole = 'SALES' | 'ADMIN' | 'HR' | 'INVENTORY' | 'SUPERADMIN' | 'PRODUCTION';
 
 export interface AppUser extends User {}
 
@@ -29,7 +29,7 @@ export const getRoleDashboard = (role: string): string => {
   if (r.startsWith('SALES')) return '/sales';
   if (r.startsWith('ADMIN') || r === 'SUPERADMIN') return '/admin';
   if (r.startsWith('HR')) return '/hr';
-  if (r.startsWith('INVENTORY') || r.includes('WAREHOUSE')) return '/inventory';
+  if (r.startsWith('INVENTORY') || r.includes('WAREHOUSE') || r === 'PRODUCTION') return '/inventory';
   return '/';
 };
 

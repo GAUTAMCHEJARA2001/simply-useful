@@ -9,6 +9,7 @@ import { Modal } from '@/components/Modal';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { useToast } from '@/hooks/use-toast';
 import apiClient from '@/api/client';
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
@@ -33,7 +34,9 @@ export const PurchaseOrdersTab: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const { toast } = useToast();
 
-  const filteredOrders = purchaseOrders.filter((po: any) => {
+  const { filterBySelectedFY } = useFinancialYear();
+
+  const filteredOrders = filterBySelectedFY(purchaseOrders, (po: any) => po.order_date || po.orderDate || po.created_at || po.createdAt).filter((po: any) => {
     const matchesSearch = !search || 
       (po.po_number || po.poNumber || '').toLowerCase().includes(search.toLowerCase()) || 
       (po.supplier_name || po.supplier?.name || '').toLowerCase().includes(search.toLowerCase());

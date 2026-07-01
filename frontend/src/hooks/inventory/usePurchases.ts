@@ -22,6 +22,10 @@ export const usePurchaseMutations = () => {
       : api.post('/transactions/purchases', purchase),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Success', description: 'Purchase recorded' });
     },
     onError: (error: any) => {
@@ -33,6 +37,10 @@ export const usePurchaseMutations = () => {
     mutationFn: (id: string) => api.delete(`/transactions/purchases/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       toast({ title: 'Deleted', description: 'Purchase record removed' });
     },
     onError: (error: any) => {

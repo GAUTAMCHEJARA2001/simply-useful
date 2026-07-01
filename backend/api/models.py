@@ -127,19 +127,6 @@ class Expense(models.Model):
         db_table = 'Expense'
 
 
-class Inventory(models.Model):
-    productid = models.ForeignKey('Product', models.DO_NOTHING, db_column='productId', db_constraint=False)  # Field name made lowercase.
-    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', db_constraint=False)  # Field name made lowercase.
-    quantity = models.IntegerField()
-    avgcost = models.FloatField(db_column='avgCost')  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
-
-    class Meta:
-        db_table = 'Inventory'
-        unique_together = (('productid', 'warehouseid'),)
-
-
 class Labour(models.Model):
     name = models.TextField()
     active = models.BooleanField()
@@ -341,18 +328,6 @@ class Purchaseorderitem(models.Model):
         db_table = 'PurchaseOrderItem'
 
 
-class Refreshtoken(models.Model):
-    id = models.TextField(primary_key=True)
-    token = models.TextField(unique=True)
-    userid = models.TextField(db_column='userId')  # Field name made lowercase.
-    expiresat = models.DateTimeField(db_column='expiresAt')  # Field name made lowercase.
-    revoked = models.BooleanField()
-    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
-
-    class Meta:
-        db_table = 'RefreshToken'
-
-
 class Region(models.Model):
     name = models.TextField()
     active = models.BooleanField()
@@ -361,21 +336,6 @@ class Region(models.Model):
     class Meta:
         db_table = 'Region'
         unique_together = (('name', 'companyid'),)
-
-
-class Stockbatch(models.Model):
-    id = models.TextField(primary_key=True)
-    productid = models.ForeignKey(Product, models.DO_NOTHING, db_column='productId', db_constraint=False)  # Field name made lowercase.
-    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', db_constraint=False)  # Field name made lowercase.
-    quantity = models.IntegerField()
-    remaining = models.IntegerField()
-    cost = models.FloatField()
-    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
-    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
-
-    class Meta:
-        db_table = 'StockBatch'
 
 
 class Supplier(models.Model):
@@ -584,3 +544,13 @@ class Stocktransaction(models.Model):
 
     class Meta:
         db_table = 'StockTransaction'
+
+class PushSubscription(models.Model):
+    user = models.ForeignKey('core.User', models.CASCADE, related_name='push_subscriptions', db_constraint=False)
+    endpoint = models.TextField(unique=True)
+    p256dh = models.CharField(max_length=100)
+    auth = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'PushSubscription'

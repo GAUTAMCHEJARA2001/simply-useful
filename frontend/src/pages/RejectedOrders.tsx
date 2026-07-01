@@ -6,12 +6,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { DataTable } from '@/components/DataTable';
 import { XCircle, MapPin, User, FileText, Calendar, Box, Activity } from 'lucide-react';
 import { Order } from '@/types';
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
 
 const RejectedOrders: React.FC = () => {
   const { orders } = useData();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-  const rejectedOrders = orders.filter(o => o.status === 'Cancelled');
+  const { filterBySelectedFY } = useFinancialYear();
+  const rejectedOrders = filterBySelectedFY(orders, o => o.date || o.createdAt).filter(o => o.status === 'Cancelled');
 
   const formatDate = (d: string | undefined) => d ? new Date(d).toLocaleString('en-IN') : '—';
   const formatCurrency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;

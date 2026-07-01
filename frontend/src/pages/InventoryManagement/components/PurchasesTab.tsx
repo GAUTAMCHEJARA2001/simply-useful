@@ -8,6 +8,7 @@ import { PurchaseModal } from '../modals/PurchaseModal';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
 import { Input } from '@/components/ui/input';
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -29,7 +30,9 @@ export const PurchasesTab: React.FC = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredPurchases = purchases.filter((p: any) => {
+  const { filterBySelectedFY } = useFinancialYear();
+
+  const filteredPurchases = filterBySelectedFY(purchases, (p: any) => p.date || p.createdAt).filter((p: any) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     const s = [

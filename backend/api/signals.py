@@ -24,6 +24,18 @@ def log_order_status_event(sender, instance, using=None, **kwargs):
     if instance._state.adding:
         # Initial creation event log
         log_operational_event('Order', instance.id, 'None', instance.status, instance.soemail_id, instance.companyid_id, db_name=db_name)
+        
+        try:
+            from api.push_service import broadcast_push_to_role
+            short_id = str(instance.id)[-6:].upper()
+            if instance.status == 'Pending':
+                broadcast_push_to_role('ADMIN', 'New Order Pending', f"Order #{short_id} is awaiting approval.")
+            elif instance.status == 'Approved':
+                broadcast_push_to_role('INVENTORY', 'New Dispatch Request', f"Order #{short_id} approved and ready for dispatch.")
+                broadcast_push_to_role('PRODUCTION', 'New Dispatch Request', f"Order #{short_id} approved and ready for dispatch.")
+        except Exception as e:
+            print("Failed to send push:", e)
+            
         return
         
     try:
@@ -31,6 +43,17 @@ def log_order_status_event(sender, instance, using=None, **kwargs):
         if old_instance.status != instance.status:
             # Operational transition logged automatically
             log_operational_event('Order', instance.id, old_instance.status, instance.status, instance.soemail_id, instance.companyid_id, db_name=db_name)
+            
+            try:
+                from api.push_service import broadcast_push_to_role
+                short_id = str(instance.id)[-6:].upper()
+                if instance.status == 'Pending':
+                    broadcast_push_to_role('ADMIN', 'New Order Pending', f"Order #{short_id} is awaiting approval.")
+                elif instance.status == 'Approved':
+                    broadcast_push_to_role('INVENTORY', 'New Dispatch Request', f"Order #{short_id} approved and ready for dispatch.")
+                    broadcast_push_to_role('PRODUCTION', 'New Dispatch Request', f"Order #{short_id} approved and ready for dispatch.")
+            except Exception as e:
+                print("Failed to send push:", e)
     except Order.DoesNotExist:
         pass
 
@@ -55,13 +78,12 @@ def log_lead_status_event(sender, instance, using=None, **kwargs):
 # This signal intercepts all inventory transaction items and ensures their productId
 # is mapped to the target database context. If a cross-database UUID is detected,
 # it automatically finds the productcode and replaces it with the local UUID.
-from api.models import Orderitem, Purchaseorderitem, Purchaseitem, Stocktransaction, Bomitem, Inventory
+from api.models import Orderitem, Purchaseorderitem, Purchaseitem, Stocktransaction, Bomitem
 @receiver(pre_save, sender=Orderitem)
 @receiver(pre_save, sender=Purchaseorderitem)
 @receiver(pre_save, sender=Purchaseitem)
 @receiver(pre_save, sender=Stocktransaction)
 @receiver(pre_save, sender=Bomitem)
-@receiver(pre_save, sender=Inventory)
 def auto_map_cross_db_product_ids(sender, instance, using=None, **kwargs):
     db = using or getattr(instance._state, 'db', 'default') or 'default'
     if db == 'default': return

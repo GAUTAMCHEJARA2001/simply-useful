@@ -240,24 +240,98 @@ class ProductSerializer(serializers.ModelSerializer):
         return None
 
     def get_availableStock(self, obj):
+        if self.context.get('skip_stock'):
+            return 0
+
+        # Fast path: if sku_qty_map was precomputed by the global list endpoint, use it
         if 'sku_qty_map' in self.context and getattr(obj, 'productcode', None):
             return self.context['sku_qty_map'].get(obj.productcode, 0)
-            
-        from api.models import Inventory
+
+        # ── Calculate stock from actual transaction records (mirrors Stock Ledger) ──
+        from api.models import Purchaseitem, Orderitem, Stocktransaction, Warehouse
+        from api.models import Userwarehouseaccess
         from django.db.models import Sum
         from django.db.utils import ProgrammingError, OperationalError
+
         try:
+            # Determine warehouses in scope
             request = self.context.get('request')
+            assigned_wh_ids = None
             if request and request.user:
                 user = request.user
-                from api.models import Userwarehouseaccess
-                has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user.id).exists()
-                if has_wh_assignments and getattr(user, 'role', '') == 'INVENTORY':
-                    assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user.id).values_list('warehouseid_id', flat=True))
-                    total = Inventory.objects.filter(productid_id=obj.id, warehouseid_id__in=assigned_wh_ids).aggregate(Sum('quantity'))['quantity__sum']
-                    return total or 0
-            total = Inventory.objects.filter(productid_id=obj.id).aggregate(Sum('quantity'))['quantity__sum']
-            return total or 0
+                role = (getattr(user, 'role', '') or '').upper()
+                if role in ('INVENTORY', 'PRODUCTION'):
+                    has_wh = Userwarehouseaccess.objects.filter(userid_id=user.id).exists()
+                    if has_wh:
+                        assigned_wh_ids = list(
+                            Userwarehouseaccess.objects.filter(userid_id=user.id)
+                            .values_list('warehouseid_id', flat=True)
+                        )
+
+            # Start with the product's opening stock
+            total = float(obj.openingstock or 0)
+
+            warehouses = Warehouse.objects.filter(active=True)
+            if assigned_wh_ids is not None:
+                warehouses = warehouses.filter(id__in=assigned_wh_ids)
+
+            for wh in warehouses:
+                if not wh.db_name:
+                    continue
+
+                # Resolve the local product in this warehouse DB (by product code)
+                from api.models import Product as ProductModel
+                local_product = None
+                try:
+                    if obj._state.db == wh.db_name:
+                        local_product = obj
+                    else:
+                        local_product = ProductModel.objects.using(wh.db_name).filter(
+                            productcode=obj.productcode
+                        ).first()
+                except Exception:
+                    pass
+                if not local_product:
+                    continue
+
+                # 1. Purchases (inward)
+                pur_total = Purchaseitem.objects.using(wh.db_name).filter(
+                    productname=local_product.name,
+                    purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']
+                ).aggregate(s=Sum('qty'))['s'] or 0
+                total += float(pur_total)
+
+                # Purchase returns (outward)
+                pur_ret_total = Purchaseitem.objects.using(wh.db_name).filter(
+                    productname=local_product.name,
+                    purchaseid__status='Returned'
+                ).aggregate(s=Sum('qty'))['s'] or 0
+                total -= float(pur_ret_total)
+
+                # 2. Sales / dispatches (outward) — only completed orders
+                sal_total = Orderitem.objects.using(wh.db_name).filter(
+                    productid_id=local_product.id,
+                    orderid__status='Completed'
+                ).aggregate(s=Sum('qty'))['s'] or 0
+                total -= float(sal_total)
+
+                # Sales returns (inward)
+                sal_ret_total = Orderitem.objects.using(wh.db_name).filter(
+                    productid_id=local_product.id,
+                    orderid__status='Returned'
+                ).aggregate(s=Sum('qty'))['s'] or 0
+                total += float(sal_ret_total)
+
+                # 3. StockTransactions (production, consumed, adjustments, etc.)
+                #    Exclude pending/rejected entries — they haven't taken effect yet
+                st_total = Stocktransaction.objects.using(wh.db_name).filter(
+                    productid_id=local_product.id
+                ).exclude(
+                    reason__in=['PENDING_APPROVAL', 'REJECTED']
+                ).aggregate(s=Sum('quantity'))['s'] or 0
+                total += float(st_total)
+
+            return total
         except (ProgrammingError, OperationalError):
             return 0
 
@@ -425,27 +499,25 @@ class OrderSerializer(serializers.ModelSerializer):
         # Use the database alias the order came from
         db_alias = getattr(obj._state, 'db', 'default')
         
+        if not hasattr(self, '_party_cache'):
+            self._party_cache = {}
+            
+        cache_key = (db_alias, p_type, obj.partyname)
+        if cache_key in self._party_cache:
+            return self._party_cache[cache_key]
+        
+        result = None
         if p_type == 'DEALER':
             dealer = Dealer.objects.using(db_alias).filter(dealername=obj.partyname).first()
             if dealer:
-                return {
-                    'address': getattr(dealer, 'address', ''),
-                    'phone': getattr(dealer, 'phone', ''),
-                    'email': getattr(dealer, 'email', ''),
-                    'gst': getattr(dealer, 'gst', ''),
-                    'contact_person': getattr(dealer, 'contact_person', '')
-                }
+                result = DealerSerializer(dealer).data
         elif p_type == 'DISTRIBUTOR':
             distributor = Distributor.objects.using(db_alias).filter(distributorname=obj.partyname).first()
             if distributor:
-                return {
-                    'address': getattr(distributor, 'address', ''),
-                    'phone': getattr(distributor, 'phone', ''),
-                    'email': getattr(distributor, 'email', ''),
-                    'gst': getattr(distributor, 'gst', ''),
-                    'contact_person': getattr(distributor, 'contact_person', '')
-                }
-        return None
+                result = DistributorSerializer(distributor).data
+                
+        self._party_cache[cache_key] = result
+        return result
 
 
     def create(self, validated_data):

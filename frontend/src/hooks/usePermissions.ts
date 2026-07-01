@@ -27,7 +27,7 @@ export const usePermissions = () => {
             if (role.startsWith('SALES') && salesFeatures.includes(feature)) return true;
 
             const inventoryFeatures = ['view_inventory_dashboard'];
-            if (role.startsWith('INVENTORY') && inventoryFeatures.includes(feature)) return true;
+            if ((role.startsWith('INVENTORY') || role === 'PRODUCTION') && inventoryFeatures.includes(feature)) return true;
             
             // Warehouse Manager specific
             const workerFeatures = ['view_inventory_dashboard', 'access_settings'];

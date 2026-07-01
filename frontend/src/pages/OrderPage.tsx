@@ -109,12 +109,31 @@ const OrderPage: React.FC = () => {
       }
     }
     return activeSO;
+    return activeSO;
   }, [users, soEmail]);
 
-  const selectedDealerInfo = partyType === 'Dealer' ? dealers.find(d => d.dealerName === selectedParty) : null;
+  const dealersByName = useMemo(() => {
+    const map = new Map();
+    for (const d of dealers) map.set(d.dealerName, d);
+    return map;
+  }, [dealers]);
+
+  const distributorsByName = useMemo(() => {
+    const map = new Map();
+    for (const d of distributors) map.set(d.distributorName, d);
+    return map;
+  }, [distributors]);
+
+  const productsById = useMemo(() => {
+    const map = new Map();
+    for (const p of products) map.set(p.id, p);
+    return map;
+  }, [products]);
+
+  const selectedDealerInfo = partyType === 'Dealer' ? dealersByName.get(selectedParty) : null;
   const selectedDistInfo = partyType === 'Distributor'
-    ? distributors.find(d => d.distributorName === selectedParty)
-    : distributors.find(d => d.distributorName === selectedDealerInfo?.distributorName);
+    ? distributorsByName.get(selectedParty)
+    : distributorsByName.get(selectedDealerInfo?.distributorName);
 
   const creditWarning = useMemo(() => {
     // Check if credit warnings are enabled in global settings
@@ -177,12 +196,12 @@ const OrderPage: React.FC = () => {
 
   const grandTotal = items.reduce((s, i) => s + i.total, 0);
 
-  const updateItem = (index: number, field: keyof OrderItem, value: string | number) => {
+  const updateItem = (index: number, field: keyof OrderItem, value: any) => {
     const updated = [...items];
     (updated[index] as any)[field] = value;
     if (field === 'qty' || field === 'price' || field === 'product') {
       if (field === 'product') {
-        const prod = products.find(p => p.id === value);
+        const prod = productsById.get(value);
         if (prod) updated[index].price = prod.rate;
       }
       updated[index].total = updated[index].qty * updated[index].price;
@@ -302,7 +321,7 @@ const OrderPage: React.FC = () => {
               items: items.filter(i => i.product)
             }}
             filename={`Order_${id}.pdf`}
-            buttonLabel="Print Order"
+            buttonLabel="Print Sales Order"
           />
         )}
       </div>
@@ -403,7 +422,7 @@ const OrderPage: React.FC = () => {
                       <Button variant="outline" role="combobox" className="w-full justify-between font-normal text-left h-11 px-3">
                         {item.product ? (
                           <span className="truncate">
-                            {products.find(p => p.id === item.product)?.productName || item.product}
+                            {productsById.get(item.product)?.productName || item.product}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">Search and select product...</span>
@@ -523,7 +542,11 @@ const OrderPage: React.FC = () => {
                   {items.filter(i => i.product).map((item, idx) => (
                     <tr key={idx} className="border-t border-border">
                       <td className="px-3 py-2">
-                        {products.find(p => p.id === item.product)?.productName || item.product}
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="font-medium text-slate-900">
+                          {productsById.get(item.product)?.productName || item.product}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-center">{item.qty}</td>
                       <td className="px-3 py-2 text-center">₹{item.price}</td>

@@ -203,7 +203,7 @@ const UserManagement: React.FC = () => {
           newCats = newCats.filter(id => !subCatIds.includes(id));
         } else {
           // If a subcategory is unchecked, the parent category cannot be fully selected
-          const subCatObj = allCategories.find(c => c.id === catId);
+          const subCatObj = categoriesById.get(catId);
           const parentId = subCatObj ? (subCatObj.parentId ?? subCatObj.parent_id) : null;
           if (parentId) {
             newCats = newCats.filter(id => id !== parentId);
@@ -217,7 +217,7 @@ const UserManagement: React.FC = () => {
             if (!newCats.includes(subId)) newCats.push(subId);
           });
         } else {
-          const subCatObj = allCategories.find(c => c.id === catId);
+          const subCatObj = categoriesById.get(catId);
           const parentId = subCatObj ? (subCatObj.parentId ?? subCatObj.parent_id) : null;
           if (parentId) {
             const siblings = allCategories.filter(c => (c.parentId ?? c.parent_id) === parentId).map(c => c.id);
@@ -231,6 +231,30 @@ const UserManagement: React.FC = () => {
       return { ...f, categories: newCats };
     });
   };
+
+  const categoriesById = React.useMemo(() => {
+    const map = new Map();
+    for (const c of allCategories) map.set(c.id, c);
+    return map;
+  }, [allCategories]);
+
+  const brandsById = React.useMemo(() => {
+    const map = new Map();
+    for (const b of allBrands) map.set(b.id, b);
+    return map;
+  }, [allBrands]);
+
+  const productsById = React.useMemo(() => {
+    const map = new Map();
+    for (const p of allProducts) map.set(p.id, p);
+    return map;
+  }, [allProducts]);
+
+  const permissionsByRoleFeature = React.useMemo(() => {
+    const map = new Map();
+    for (const p of permissions) map.set(`${p.role}_${p.feature}`, p);
+    return map;
+  }, [permissions]);
 
   const getFilteredProducts = () => {
     let list = allProducts;
@@ -543,7 +567,7 @@ const UserManagement: React.FC = () => {
                           </p>
                         </td>
                         {roles.map(role => {
-                          const perm = permissions.find(p => p.role === role && p.feature === feature);
+                          const perm = permissionsByRoleFeature.get(`${role}_${feature}`);
                           if (!perm) return <td key={role} className="px-4 py-3 text-center">-</td>;
                           return (
                             <td key={role} className="px-4 py-3">
@@ -983,9 +1007,9 @@ const UserManagement: React.FC = () => {
                             }} 
                           /> 
                           <span className="flex-1">{p.name} <span className="text-[10px] text-muted-foreground ml-1">({p.sku || p.productCode || 'N/A'})</span></span>
-                          {allBrands.find(b => b.id === (p.brandId ?? p.brand_id)) && (
+                          {brandsById.has(p.brandId ?? p.brand_id) && (
                             <Badge variant="secondary" className="text-[9px] px-1 h-4">
-                              {allBrands.find(b => b.id === (p.brandId ?? p.brand_id))?.name}
+                              {brandsById.get(p.brandId ?? p.brand_id)?.name}
                             </Badge>
                           )}
                         </label>
@@ -1000,7 +1024,7 @@ const UserManagement: React.FC = () => {
                         <Label className="text-[10px] font-bold text-muted-foreground">Currently Assigned Products ({userAssignments.products.length})</Label>
                         <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-1.5 border border-border rounded-lg bg-muted/30 shadow-inner">
                           {userAssignments.products.map(pId => {
-                            const pObj = allProducts.find(p => p.id === pId);
+                            const pObj = productsById.get(pId);
                             if (!pObj) return null;
                             return (
                               <Badge key={pId} variant="outline" className="text-[10px] gap-1 py-0.5 pl-2 pr-1.5 bg-card hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors">

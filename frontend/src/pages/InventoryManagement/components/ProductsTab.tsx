@@ -179,17 +179,28 @@ export const ProductsTab: React.FC = () => {
         emptyMessage={search ? "No products match your search" : "No products found"}
       >
         <DataTable
-          columns={['SKU', 'Name', 'Category', 'Unit', 'Stock', 'Price']}
-          rows={filtered.map((p: any) => [
-            p.productCode || p.sku || '—', 
-            p.name || p.productName || '—', 
-            p.categoryRef?.name || p.categoryName || p.category?.name || '—',
-            p.unit?.name || p.unit || '—', 
-            <span className={`font-bold ${p.availableStock <= (p.minimumStock || 0) ? 'text-destructive' : 'text-success'}`}>
-              {p.availableStock || p.stockQty || 0}
-            </span>, 
-            Currency(p.rate || p.defaultPrice || 0)
-          ])}
+          columns={['SKU', 'Name', 'Category', 'Unit', user?.role === 'SUPERADMIN' ? 'Shortage' : 'Available Stock', 'Price']}
+          rows={filtered.map((p: any) => {
+            const avail = p.availableStock || p.stockQty || 0;
+            const min = p.minimumStock || 0;
+            const shortage = Math.max(0, min - avail);
+            return [
+              p.productCode || p.sku || '—', 
+              p.name || p.productName || '—', 
+              p.categoryRef?.name || p.categoryName || p.category?.name || '—',
+              p.unit?.name || p.unit || '—', 
+              user?.role === 'SUPERADMIN' ? (
+                <span className={`font-bold ${shortage > 0 ? 'text-destructive' : 'text-success'}`}>
+                  {shortage}
+                </span>
+              ) : (
+                <span className={`font-bold ${avail <= min ? 'text-destructive' : 'text-success'}`}>
+                  {avail}
+                </span>
+              ), 
+              Currency(p.rate || p.defaultPrice || 0)
+            ];
+          })}
           onEdit={canManage ? (i: number) => { setForm(filtered[i]); setModal(true); } : undefined}
           onDelete={canManage ? (i: number) => { setDeleteTarget(filtered[i].id!); setDeleteDialogOpen(true); } : undefined} 
           onRowClick={(i: number) => setViewProduct(filtered[i])}

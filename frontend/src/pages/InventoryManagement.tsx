@@ -23,6 +23,7 @@ import { AttendanceTab } from './InventoryManagement/components/AttendanceTab';
 import { ApprovalsTab } from './InventoryManagement/components/ApprovalsTab';
 import { ReturnsTab } from './InventoryManagement/components/ReturnsTab';
 import { RecipesTab } from './InventoryManagement/components/RecipesTab';
+import { ProductionApprovalsTab } from './InventoryManagement/components/ProductionApprovalsTab';
 import { useInventoryManagement, Tab } from '@/hooks/inventory/useInventoryManagement';
 
 const InventoryManagement: React.FC = () => {
@@ -49,6 +50,7 @@ const InventoryManagement: React.FC = () => {
     { id: 'purchases', label: 'Purchases', icon: ShoppingCart, group: 'Transactions' },
     { id: 'sales', label: 'Sales', icon: DollarSign, group: 'Transactions' },
     { id: 'productions', label: 'Production', icon: Factory, group: 'Transactions' },
+    { id: 'production_approvals', label: 'Production Approvals', icon: UserCheck, group: 'Transactions' },
     { id: 'adjustments', label: 'Adjustments', icon: ClipboardList, group: 'Transactions' },
     { id: 'attendance', label: 'Attendance', icon: UserCheck, group: 'Transactions' },
     { id: 'approvals', label: 'Approvals', icon: ClipboardList, group: 'Transactions' },
@@ -78,7 +80,14 @@ const InventoryManagement: React.FC = () => {
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-2 mb-1">{group}</p>
             {navItems
               .filter(n => n.group === group)
-              .filter(n => n.id !== 'bom' || ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || ''))
+              .filter(n => {
+                if (user?.role === 'PRODUCTION') {
+                  return ['dashboard', 'total_stock', 'stock_ledger', 'products', 'bom', 'productions'].includes(n.id);
+                }
+                if (n.id === 'bom') return ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '');
+                if (n.id === 'production_approvals') return ['SUPERADMIN', 'ADMIN', 'INVENTORY'].includes(user?.role || '');
+                return true;
+              })
               .map(n => (
               <button key={n.id} onClick={() => setTab(n.id)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${tab === n.id ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground hover:text-foreground'}`}>
@@ -95,7 +104,14 @@ const InventoryManagement: React.FC = () => {
         <div className="block md:hidden mb-4 overflow-x-auto pb-2 scrollbar-none">
           <div className="flex gap-2 whitespace-nowrap">
             {navItems
-              .filter(n => n.id !== 'bom' || ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || ''))
+              .filter(n => {
+                if (user?.role === 'PRODUCTION') {
+                  return ['dashboard', 'total_stock', 'stock_ledger', 'products', 'bom', 'productions'].includes(n.id);
+                }
+                if (n.id === 'bom') return ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '');
+                if (n.id === 'production_approvals') return ['SUPERADMIN', 'ADMIN', 'INVENTORY'].includes(user?.role || '');
+                return true;
+              })
               .map(n => (
               <button key={n.id} onClick={() => setTab(n.id)}
                 className={`flex-none flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${tab === n.id ? 'bg-primary text-primary-foreground shadow' : 'bg-muted text-muted-foreground'}`}>
@@ -120,6 +136,7 @@ const InventoryManagement: React.FC = () => {
         {tab === 'purchases' && <PurchasesTab />}
         {tab === 'sales' && <SalesTab />}
         {tab === 'productions' && <ProductionsTab onTabChange={setTab} />}
+        {tab === 'production_approvals' && <ProductionApprovalsTab />}
         {tab === 'adjustments' && <AdjustmentsTab />}
         {tab === 'attendance' && <AttendanceTab />}
         {tab === 'approvals' && <ApprovalsTab />}

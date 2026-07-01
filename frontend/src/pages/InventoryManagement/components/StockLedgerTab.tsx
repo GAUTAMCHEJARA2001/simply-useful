@@ -10,6 +10,7 @@ import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { SafeDataView } from '@/components/SafeDataView';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDecimal } from '@/utils/format';
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
 
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
@@ -27,7 +28,7 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
 
 export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId: string) => void }> = ({ onViewTransaction }) => {
   const { user } = useAuth();
-  const isInventoryOnly = user?.role === 'INVENTORY';
+  const isInventoryOnly = user?.role === 'INVENTORY' || user?.role === 'PRODUCTION';
 
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -47,10 +48,21 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
   const [loadLedger, setLoadLedger] = useState(false);
 
   // Filters for Ledger Popup
-  const [popDateFrom, setPopDateFrom] = useState('');
-  const [popDateTo, setPopDateTo] = useState('');
+  const { fyBounds } = useFinancialYear();
+  const [popDateFrom, setPopDateFrom] = useState(fyBounds?.start || '');
+  const [popDateTo, setPopDateTo] = useState(fyBounds?.end || '');
   const [popWh, setPopWh] = useState('');
   const [summary, setSummary] = useState({ opening: 0, current: 0 });
+
+  useEffect(() => {
+    if (fyBounds) {
+      setPopDateFrom(fyBounds.start);
+      setPopDateTo(fyBounds.end);
+    } else {
+      setPopDateFrom('');
+      setPopDateTo('');
+    }
+  }, [fyBounds]);
 
   const loadData = useCallback(async () => {
     setLoading(true);

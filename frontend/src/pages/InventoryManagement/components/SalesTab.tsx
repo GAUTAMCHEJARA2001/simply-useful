@@ -9,6 +9,7 @@ import { Modal } from '@/components/Modal';
 import { orderService } from '@/api/services/order.service';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
+import { useFinancialYear } from '@/contexts/FinancialYearContext';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
@@ -32,6 +33,10 @@ export const SalesTab: React.FC = () => {
   const [returnSale, setReturnSale] = useState<any>(null);
   const [returnItems, setReturnItems] = useState<Record<string, number>>({});
   const [returnRemarks, setReturnRemarks] = useState('');
+  const [returnDate, setReturnDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [returnVehicle, setReturnVehicle] = useState('');
+  const [purchaseReturnNo, setPurchaseReturnNo] = useState('');
+  const [salesReturnBill, setSalesReturnBill] = useState('');
   const [isReturning, setIsReturning] = useState(false);
 
   const handleEdit = (sale: any) => {
@@ -64,6 +69,10 @@ export const SalesTab: React.FC = () => {
   const openReturn = (sale: any) => {
     setReturnSale(sale);
     setReturnRemarks('');
+    setReturnDate(new Date().toISOString().split('T')[0]);
+    setReturnVehicle('');
+    setPurchaseReturnNo('');
+    setSalesReturnBill('');
     
     // Initialize return quantities per item
     const initialQtys: Record<string, number> = {};
@@ -95,13 +104,18 @@ export const SalesTab: React.FC = () => {
       }
 
       let finalRemarks = returnRemarks;
+      if (salesReturnBill) finalRemarks = `[SR BILL: ${salesReturnBill}] ` + finalRemarks;
+      if (purchaseReturnNo) finalRemarks = `[PR NO: ${purchaseReturnNo}] ` + finalRemarks;
+      if (returnVehicle) finalRemarks = `[VEHICLE: ${returnVehicle}] ` + finalRemarks;
       if (returnSale.invoiceNumber || returnSale.challanNumber) {
-        finalRemarks = `[INVOICE: ${returnSale.invoiceNumber || returnSale.challanNumber}] ${returnRemarks}`.trim();
+        finalRemarks = `[INVOICE: ${returnSale.invoiceNumber || returnSale.challanNumber}] ` + finalRemarks;
       }
+      finalRemarks = finalRemarks.trim();
 
       await orderService.partialReturn(returnSale.originalOrderId || returnSale.id, {
         items: itemsPayload,
         remarks: finalRemarks,
+        returnDate: returnDate
       });
 
       toast({ title: 'Returned', description: 'Partial return processed and inventory updated.' });
@@ -120,7 +134,9 @@ export const SalesTab: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
-  const filteredSales = sales.filter((s: any) => {
+  const { filterBySelectedFY } = useFinancialYear();
+
+  const filteredSales = filterBySelectedFY(sales, (s: any) => s.date || s.createdAt || s.dispatchDate).filter((s: any) => {
     const customer = (s.customerName || s.partyName || '').toLowerCase();
     const challan = (s.challanNumber || s.invoiceNumber || extractChallanNumber(s.narration) || '').toLowerCase();
     const status = s.status || 'Pending';
@@ -198,7 +214,9 @@ export const SalesTab: React.FC = () => {
             return [
               s.customerName || s.partyName || '—', 
               s.challanNumber || s.invoiceNumber || extractChallanNumber(s.narration) || '—', 
-              Currency(s.netAmount || s.grandTotal || s.totalAmount || 0),
+              Currency((s.items || []).reduce((acc: number, it: any) => 
+                acc + ((it.qty || 0) - (it.returnedqty || it.returnedQty || 0)) * (it.price || it.rate || 0) * (1 + (it.tax_percent || 0) / 100)
+              , 0) || s.netAmount || s.grandTotal || s.totalAmount || 0),
               <span key={s.id + '-st'} className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${statusColor}`}>{status}</span>,
               s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN') : '—',
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap min-w-[140px]">
@@ -227,6 +245,10 @@ export const SalesTab: React.FC = () => {
 
       <Modal isOpen={!!returnSale} title="Partial Sales Return" onClose={() => setReturnSale(null)}>
         <div className="space-y-4">
+          <div className="p-3 bg-muted/20 border border-border rounded-xl text-sm">
+            <span className="text-muted-foreground text-xs block mb-1">Customer / Party Name</span>
+            <span className="font-bold">{returnSale?.customerName || returnSale?.partyName || '—'}</span>
+          </div>
           {/* Per-item return quantities */}
           <div className="border border-border rounded-xl overflow-x-auto overflow-y-auto max-h-[40vh] w-full">
             <table className="w-full text-xs">
@@ -286,10 +308,33 @@ export const SalesTab: React.FC = () => {
             </table>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold block mb-1">Return Date</label>
+              <input type="date" value={returnDate} onChange={e => setReturnDate(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-sm focus:ring-1 focus:ring-primary/50" />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold block mb-1">Vehicle Details</label>
+              <input type="text" value={returnVehicle} onChange={e => setReturnVehicle(e.target.value)} placeholder="e.g. MH12AB1234"
+                className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-sm focus:ring-1 focus:ring-primary/50" />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold block mb-1">Purchase Return Number</label>
+              <input type="text" value={purchaseReturnNo} onChange={e => setPurchaseReturnNo(e.target.value)} placeholder="e.g. PR-001"
+                className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-sm focus:ring-1 focus:ring-primary/50" />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold block mb-1">Company Sales Return Bill</label>
+              <input type="text" value={salesReturnBill} onChange={e => setSalesReturnBill(e.target.value)} placeholder="e.g. SR-001"
+                className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-sm focus:ring-1 focus:ring-primary/50" />
+            </div>
+          </div>
+
           <div>
             <label className="text-[11px] font-semibold block mb-1">Return Reason / Remarks</label>
             <textarea value={returnRemarks} onChange={e => setReturnRemarks(e.target.value)}
-              placeholder="Reason for return..."
+              placeholder="Any additional remarks..."
               className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm min-h-20 resize-none" />
           </div>
 
