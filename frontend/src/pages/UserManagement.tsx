@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import apiService from '@/api/apiService';
 
-const roles: UserRole[] = ['SALES', 'ADMIN', 'HR', 'INVENTORY', 'SUPERADMIN'];
+const roles: UserRole[] = ['SALES', 'ADMIN', 'HR', 'INVENTORY', 'PRODUCTION', 'SUPERADMIN'];
 
 interface UserForm {
   email: string;
