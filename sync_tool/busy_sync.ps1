@@ -1,10 +1,53 @@
-$dbPath = "C:\BusyWin\DATA\COMP0010\db12026.bds"
-$password = "ILoveMyINDIA"
+$configFile = "$PSScriptRoot\busy_config.ini"
 $apiUrl = "https://simply-useful.vercel.app/api/busy/sync"
-$tenantDb = "wh_navsari"
 
-Write-Host "Starting Busy Accounting Sync (PowerShell Version)..."
-Write-Host "Connecting to Database: $dbPath"
+# Function to prompt user and create config
+function Create-Config {
+    Write-Host "========================================="
+    Write-Host "      INITIAL SETUP - BUSY SYNC          "
+    Write-Host "========================================="
+    Write-Host "It looks like this is your first time running the sync tool."
+    Write-Host "Please provide your database details below.`n"
+
+    $dbPath = Read-Host "Enter full path to your .bds database (e.g. C:\BusyWin\DATA\COMP0010\db12026.bds)"
+    $password = Read-Host "Enter your database password (e.g. ILoveMyINDIA)"
+    $tenantDb = Read-Host "Enter your company/tenant ID (e.g. wh_navsari)"
+
+    $configContent = @"
+DatabasePath=$dbPath
+DatabasePassword=$password
+TenantName=$tenantDb
+"@
+    
+    Set-Content -Path $configFile -Value $configContent
+    Write-Host "`nConfiguration saved to $configFile!"
+    Write-Host "=========================================`n"
+}
+
+# Check if config exists, if not, create it
+if (-not (Test-Path $configFile)) {
+    Create-Config
+}
+
+# Read config file
+$config = @{}
+Get-Content $configFile | ForEach-Object {
+    if ($_ -match "^(.*?)=(.*)$") {
+        $config[$matches[1].Trim()] = $matches[2].Trim()
+    }
+}
+
+$dbPath = $config["DatabasePath"]
+$password = $config["DatabasePassword"]
+$tenantDb = $config["TenantName"]
+
+if ([string]::IsNullOrWhiteSpace($dbPath) -or [string]::IsNullOrWhiteSpace($tenantDb)) {
+    Write-Host "Error: Configuration is missing or corrupted. Please delete busy_config.ini and run again."
+    exit
+}
+
+Write-Host "Starting Busy Accounting Sync..."
+Write-Host "Connecting to Database: $dbPath for Tenant: $tenantDb"
 
 $connString = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=$dbPath;Jet OLEDB:Database Password=$password;"
 $conn = $null
@@ -12,16 +55,16 @@ $conn = $null
 try {
     $conn = New-Object System.Data.OleDb.OleDbConnection($connString)
     $conn.Open()
-    Write-Host "Connected using ACE provider."
+    Write-Host "Connected successfully."
 } catch {
     Write-Host "ACE provider failed, trying JET provider..."
     $connString = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=$dbPath;Jet OLEDB:Database Password=$password;"
     try {
         $conn = New-Object System.Data.OleDb.OleDbConnection($connString)
         $conn.Open()
-        Write-Host "Connected using JET provider."
+        Write-Host "Connected successfully."
     } catch {
-        Write-Host "Failed to connect to database."
+        Write-Host "Failed to connect to database. Please check your path and password in busy_config.ini."
         Write-Host $_.Exception.Message
         exit
     }
@@ -90,9 +133,7 @@ try {
 
     Write-Host "Pushing data to Cloud API ($apiUrl)..."
     
-    # Using TLS 1.2 for secure connection
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
     $response = Invoke-RestMethod -Uri $apiUrl -Method Post -Body $jsonPayload -ContentType "application/json"
     
     Write-Host "Sync successful!"
