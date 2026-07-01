@@ -35,6 +35,7 @@ from api.views import (
     get_analytics_predictions, get_analytics_alerts, action_analytics_alert, get_analytics_cfo_liquidity,
     get_analytics_bottlenecks, get_analytics_data_quality
 )
+from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties
 
 router = DefaultRouter(trailing_slash=False)
 router.register('users', UserViewSet, basename='users')
@@ -127,6 +128,11 @@ urlpatterns = [
     # System Health
     path('health', system_health, name='system-health'),
     path('metrics', system_metrics, name='system-metrics'),
+    
+    # Busy Integration
+    path('busy/sync', sync_busy_data, name='busy-sync'),
+    path('busy/ledger/<str:party_code>', get_party_ledger, name='busy-ledger'),
+    path('busy/search-parties', search_busy_parties, name='busy-search-parties'),
     
     # Router endpoints
     path('', include(router.urls)),

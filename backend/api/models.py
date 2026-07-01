@@ -554,3 +554,19 @@ class PushSubscription(models.Model):
 
     class Meta:
         db_table = 'PushSubscription'
+
+
+class BusyParty(models.Model):
+    code = models.IntegerField(primary_key=True)
+    name = models.CharField(max_length=255)
+    alias = models.CharField(max_length=255, null=True, blank=True)
+    last_sync = models.DateTimeField(auto_now=True)
+
+class BusyLedgerEntry(models.Model):
+    party = models.ForeignKey(BusyParty, on_delete=models.CASCADE)
+    date = models.DateField()
+    vch_type = models.IntegerField()
+    vch_no = models.CharField(max_length=50)
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    short_nar = models.CharField(max_length=500, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)

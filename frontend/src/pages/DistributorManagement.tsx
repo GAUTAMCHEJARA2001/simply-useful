@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Search, Plus, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, BookOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
 
 const emptyDist: Distributor = { distributorName: '', area: '', assignedSoEmail: '', creditLimit: 0, outstanding: 0, active: true, territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '' };
 
@@ -21,6 +22,8 @@ const DistributorManagement: React.FC = () => {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledgerTarget, setLedgerTarget] = useState('');
   const [editing, setEditing] = useState<Distributor | null>(null);
   const [form, setForm] = useState<Distributor>(emptyDist);
   const [deleteTarget, setDeleteTarget] = useState('');
@@ -98,6 +101,7 @@ const DistributorManagement: React.FC = () => {
               </div>
               {can('manage_customers') && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                  <Button size="sm" variant="outline" onClick={() => { setLedgerTarget(d.distributorName); setLedgerOpen(true); }} className="flex-1 border-blue-200 text-blue-600 hover:bg-blue-50"><BookOpen className="w-3.5 h-3.5 mr-1" /> Ledger</Button>
                   <Button size="sm" variant="outline" onClick={() => openEdit(d)} className="flex-1"><Edit className="w-3.5 h-3.5 mr-1" /> Edit</Button>
                   <Button size="sm" variant="destructive" onClick={() => { setDeleteTarget(d.distributorName); setDeleteDialogOpen(true); }} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
                 </div>
@@ -130,6 +134,7 @@ const DistributorManagement: React.FC = () => {
                   {can('manage_customers') && (
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
+                        <button onClick={() => { setLedgerTarget(d.distributorName); setLedgerOpen(true); }} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="View Ledger"><BookOpen className="w-3.5 h-3.5" /></button>
                         <button onClick={() => openEdit(d)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><Edit className="w-3.5 h-3.5" /></button>
                         <button onClick={() => { setDeleteTarget(d.distributorName); setDeleteDialogOpen(true); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
@@ -220,6 +225,13 @@ const DistributorManagement: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Busy Ledger Modal */}
+      <LedgerModal 
+        isOpen={ledgerOpen} 
+        onClose={() => setLedgerOpen(false)} 
+        defaultSearch={ledgerTarget}
+      />
     </div>
   );
 };
