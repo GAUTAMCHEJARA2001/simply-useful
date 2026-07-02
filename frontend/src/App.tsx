@@ -81,10 +81,9 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      refetchOnWindowFocus: true, // Fetch fresh data when user returns to the tab
-      refetchInterval: 1000 * 10, // Automatically poll backend every 10 seconds for safe real-time sync without triggering 429 rate limits
-      staleTime: 1000 * 5, // Consider data stale after 5 seconds to force fresh fetches
-      gcTime: 1000 * 60 * 5, // 5 minutes
+      refetchOnWindowFocus: false, // Don't aggressive refetch on tab switch
+      staleTime: 1000 * 60 * 5, // Consider data fresh for 5 minutes
+      gcTime: 1000 * 60 * 15, // Keep unused data in cache for 15 minutes
     },
   },
 });
