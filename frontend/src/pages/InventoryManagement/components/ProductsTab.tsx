@@ -22,6 +22,7 @@ export const ProductsTab: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [search, setSearch] = useState<string>('');
+  const [filterCategoryId, setFilterCategoryId] = useState<string>('');
   
   // Data Queries
   const { data: products = [], isLoading: loadingProducts, error: errorProducts, refetch } = useProducts();
@@ -43,11 +44,16 @@ export const ProductsTab: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string>('');
 
-  const filtered = products.filter(p => 
-    !search || 
-    (p.name || p.productName || '').toLowerCase().includes(search.toLowerCase()) || 
-    (p.sku || p.productCode || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = products.filter(p => {
+    const matchesSearch = !search || 
+      (p.name || p.productName || '').toLowerCase().includes(search.toLowerCase()) || 
+      (p.sku || p.productCode || '').toLowerCase().includes(search.toLowerCase());
+      
+    const catId = String(p.categoryId || p.categoryRef?.id || p.category?.id || '');
+    const matchesCategory = !filterCategoryId || filterCategoryId === 'all' || catId === String(filterCategoryId);
+    
+    return matchesSearch && matchesCategory;
+  });
 
   useEffect(() => {
     if (modal && form.categoryId) {
@@ -161,14 +167,26 @@ export const ProductsTab: React.FC = () => {
         )}
       </div>
 
-      <div className="relative">
-        <input 
-          type="text" 
-          placeholder="Search products by name or SKU..." 
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full border border-border rounded-xl px-4 py-2 text-sm bg-muted/20 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-        />
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <input 
+            type="text" 
+            placeholder="Search products by name or SKU..." 
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full border border-border rounded-xl px-4 py-2 text-sm bg-muted/20 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+          />
+        </div>
+        <select
+          className="border border-border rounded-xl px-4 py-2 text-sm bg-muted/20 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all sm:w-64"
+          value={filterCategoryId}
+          onChange={(e) => setFilterCategoryId(e.target.value)}
+        >
+          <option value="all">All Categories</option>
+          {categories.map((c: any) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
       </div>
 
       <SafeDataView
