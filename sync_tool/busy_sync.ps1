@@ -1,55 +1,14 @@
-$configFile = "$PSScriptRoot\busy_config.ini"
-$apiUrl = "https://simply-useful.vercel.app/api/busy/sync"
+$dbPath = $args[0]
+$tenantDb = $args[1]
 
-# Function to prompt user and create config
-function Create-Config {
-    Write-Host "========================================="
-    Write-Host "      INITIAL SETUP - BUSY SYNC          "
-    Write-Host "========================================="
-    Write-Host "It looks like this is your first time running the sync tool."
-    Write-Host "Please provide your database details below.`n"
+# Hardcoded password that is the same for all customers
+$password = "ILoveMyINDIA"
+$apiUrl = "http://127.0.0.1:4000/api/v1/busy/sync"
 
-    $dbPath = Read-Host "Enter full path to your .bds database (e.g. C:\BusyWin\DATA\COMP0010\db12026.bds)"
-    $password = Read-Host "Enter your database password (e.g. ILoveMyINDIA)"
-    $tenantDb = Read-Host "Enter your company/tenant ID (e.g. wh_navsari)"
-
-    $configContent = @"
-DatabasePath=$dbPath
-DatabasePassword=$password
-TenantName=$tenantDb
-"@
-    
-    Set-Content -Path $configFile -Value $configContent
-    Write-Host "`nConfiguration saved to $configFile!"
-    Write-Host "=========================================`n"
-}
-
-# Check if config exists, if not, create it
-if (-not (Test-Path $configFile)) {
-    Create-Config
-}
-
-# Read config file
-$config = @{}
-Get-Content $configFile | ForEach-Object {
-    if ($_ -match "^(.*?)=(.*)$") {
-        $config[$matches[1].Trim()] = $matches[2].Trim()
-    }
-}
-
-$dbPath = $config["DatabasePath"]
-$password = $config["DatabasePassword"]
-$tenantDb = $config["TenantName"]
-
-if ([string]::IsNullOrWhiteSpace($dbPath) -or [string]::IsNullOrWhiteSpace($tenantDb)) {
-    Write-Host "Error: Configuration is missing or corrupted. Please delete busy_config.ini and run again."
-    exit
-}
-
-Write-Host "Starting Busy Accounting Sync..."
 Write-Host "Connecting to Database: $dbPath for Tenant: $tenantDb"
 
-$connString = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=$dbPath;Jet OLEDB:Database Password=$password;"
+# Try Jet OLEDB 4.0 first since it's pre-installed on all Windows PCs (32-bit mode)
+$connString = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=$dbPath;Jet OLEDB:Database Password=$password;"
 $conn = $null
 
 try {
@@ -57,14 +16,14 @@ try {
     $conn.Open()
     Write-Host "Connected successfully."
 } catch {
-    Write-Host "ACE provider failed, trying JET provider..."
-    $connString = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=$dbPath;Jet OLEDB:Database Password=$password;"
+    Write-Host "JET provider failed, trying ACE provider..."
+    $connString = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=$dbPath;Jet OLEDB:Database Password=$password;"
     try {
         $conn = New-Object System.Data.OleDb.OleDbConnection($connString)
         $conn.Open()
         Write-Host "Connected successfully."
     } catch {
-        Write-Host "Failed to connect to database. Please check your path and password in busy_config.ini."
+        Write-Host "Failed to connect to database. Please check your path."
         Write-Host $_.Exception.Message
         exit
     }
@@ -74,7 +33,7 @@ try {
     # 1. Fetch Parties
     Write-Host "Fetching Parties..."
     $cmd = $conn.CreateCommand()
-    $cmd.CommandText = "SELECT Code, Name, Alias FROM Master1 WHERE MasterType = 2"
+    $cmd.CommandText = "SELECT Code, Name, Alias FROM Master1 WHERE MasterType = 2 AND ParentGrp = 116"
     $reader = $cmd.ExecuteReader()
     
     $parties = @()
@@ -94,7 +53,7 @@ try {
         SELECT t.MasterCode1, t.Date, t.VchType, t.VchNo, t.Value1, t.ShortNar 
         FROM Tran2 t
         INNER JOIN Master1 m ON t.MasterCode1 = m.Code
-        WHERE t.RecType = 1 AND m.MasterType = 2
+        WHERE t.RecType = 1 AND m.MasterType = 2 AND m.ParentGrp = 116
     "
     $reader = $cmd.ExecuteReader()
     

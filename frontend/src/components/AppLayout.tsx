@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, ShoppingCart, Users, MapPin, Receipt,
   Package, BarChart3, Settings, LogOut, Menu, X, Building2,
-  ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store
+  ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store, BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -24,6 +24,7 @@ const navItems: NavItem[] = [
   { label: 'Main Overview', path: '/sales', icon: LayoutDashboard, feature: 'view_sales_dashboard' },
   { label: 'New Order', path: '/sales/order', icon: ShoppingCart, feature: 'create_order' },
   { label: 'My Order List', path: '/sales/orders', icon: ClipboardList, feature: 'view_own_orders' },
+  { label: 'Party Ledger', path: '/sales/party-ledger', icon: BookOpen, feature: 'view_sales_dashboard' },
   { label: 'Customer Visits', path: '/sales/visits', icon: MapPin, feature: 'track_visits' },
   { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses' },
   { label: 'CRM Leads', path: '/sales/crm', icon: Users, feature: 'track_visits' },
@@ -47,6 +48,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
   const { can } = usePermissions();
+
   const navigate = useNavigate();
 
   if (!user) return null;
@@ -184,3 +186,4 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 export default AppLayout;
+

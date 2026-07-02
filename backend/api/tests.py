@@ -136,7 +136,12 @@ class OptimizationTests(TenantAwareTestCase):
             id="test-opt-user", email="opt@example.com", name="Opt User",
             role="SUPERADMIN", active=True, companyid=self.company
         )
-        self.product = Product.objects.create(id="test-prod", name="Test Product", rate=10.0, gst=18.0, active=True, openingstock=0, minimumstock=0, companyid=self.company)
+        self.category = Category.objects.create(name="Test Category", active=True, companyid=self.company)
+        self.product = Product.objects.create(
+            id="test-prod", productcode="TEST-PROD", name="Test Product", bagsize="50 KG",
+            categoryid=self.category, rate=10.0, gst=18.0, active=True,
+            openingstock=0, minimumstock=0, companyid=self.company
+        )
 
     def test_check_negative_raw_materials(self):
         from api.views import check_negative_raw_materials

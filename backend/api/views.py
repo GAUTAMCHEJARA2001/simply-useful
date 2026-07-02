@@ -1331,7 +1331,7 @@ def _fy_date_filter(request, queryset, date_field='date'):
 
 @api_view(['GET'])
 def bulk_template(request, entity):
-    templates = {'products': ('products_template.csv', ['productCode', 'name', 'bagSize', 'category', 'subcategory', 'brand', 'unit', 'rate', 'gst', 'openingStock', 'minimumStock', 'warehouse'], [['FG-001', 'Sample Product', '50 KG', 'FINISHED GOOD', 'Tile Adhesive', 'Default Brand', 'BAG', '100', '18', '0', '10', 'SURAT']], ['INSTRUCTION: Fill in the product details.', 'productCode is optional (auto-generated if left blank).', 'category and subcategory will be automatically created if they do not exist.', 'gst should be a percentage number (e.g. 18).', 'warehouse should be the name of the warehouse where this product belongs (e.g. SURAT).']), 'dealers': ('dealers_template.csv', ['dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'distributorName', 'creditLimit', 'outstanding', 'active', 'territory'], [['D-001', 'Sample Dealer', 'Jaipur', 'sales@example.com', 'Sample Distributor', '100000', '0', 'true', 'T-WEST']], ['INSTRUCTION: Fill in dealer details.', 'dealerCode and dealerName are required.', 'active must be true or false (lowercase or uppercase).']), 'distributors': ('distributors_template.csv', ['distributorName', 'area', 'assignedSoEmail', 'creditLimit', 'outstanding', 'active', 'territory'], [['Sample Distributor', 'North Zone', 'sales@example.com', '500000', '0', 'true', 'T-WEST']], ['INSTRUCTION: Fill in distributor details.', 'distributorName is required.', 'active must be true or false.']), 'recipes': ('recipes_template.csv', ['productCode', 'recipeName', 'outputQuantity', 'materialName', 'quantity', 'unit'], [['FG-001', 'Sample Product Recipe', '1', 'Cement', '10', 'KG'], ['FG-001', 'Sample Product Recipe', '1', 'Sand', '20', 'KG']], ['INSTRUCTION: Fill in production recipe details.', 'productCode (Finished Product Code) and materialName (Ingredient/Raw Material Name) are required.', 'outputQuantity is the output yield quantity of the recipe.', 'Specify one row per material item belonging to the recipe.']), 'leads': ('leads_template.csv', ['name', 'companyName', 'email', 'phone', 'status', 'priority', 'source', 'city', 'state', 'pincode', 'value', 'notes', 'assignedTo'], [['Ramesh Kumar', 'RK Traders', 'ramesh@example.com', '9876543210', 'NEW', 'MEDIUM', 'Trade Show', 'Mumbai', 'Maharashtra', '400001', '50000', 'Interested in bulk cement order', 'sales@example.com']], ['INSTRUCTION: Fill in CRM lead details.', 'name is required.', 'status can be NEW, CONTACTED, QUALIFIED, LOST, or WON.', 'priority can be LOW, MEDIUM, or HIGH.'])}
+    templates = {'products': ('products_template.csv', ['productCode', 'name', 'bagSize', 'category', 'subcategory', 'brand', 'unit', 'rate', 'gst', 'openingStock', 'minimumStock', 'warehouse'], [['FG-001', 'Sample Product', '50 KG', 'FINISHED GOOD', 'Tile Adhesive', 'Default Brand', 'BAG', '100', '18', '0', '10', 'SURAT']], ['INSTRUCTION: Fill in the product details.', 'productCode is optional (auto-generated if left blank).', 'category and subcategory will be automatically created if they do not exist.', 'gst should be a percentage number (e.g. 18).', 'warehouse should be the name of the warehouse where this product belongs (e.g. SURAT).']), 'dealers': ('dealers_template.csv', ['dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'distributorName', 'creditLimit', 'outstanding', 'active', 'territory'], [['D-001', 'Sample Dealer', 'Jaipur', 'sales@example.com', 'Sample Distributor', '100000', '0', 'true', 'T-WEST']], ['INSTRUCTION: Fill in dealer details.', 'dealerCode and dealerName are required.', 'active must be true or false (lowercase or uppercase).']), 'distributors': ('distributors_template.csv', ['distributorName', 'area', 'assignedSoEmail', 'creditLimit', 'outstanding', 'active', 'territory'], [['Sample Distributor', 'North Zone', 'sales@example.com', '500000', '0', 'true', 'T-WEST']], ['INSTRUCTION: Fill in distributor details.', 'distributorName is required.', 'active must be true or false.']), 'recipes': ('recipes_template.csv', ['finishedProductCode', 'finishedProductName', 'outputQuantity', 'rawMaterialCode', 'rawMaterialName', 'quantity', 'unit'], [['FG-001', 'Sample Finished Good', '1', 'RM-001', 'Cement', '10', 'KG'], ['FG-001', 'Sample Finished Good', '1', 'RM-002', 'Sand', '20', 'KG']], ['INSTRUCTION: Fill in production recipe details.', 'finishedProductCode (Finished Good Code / Finished Product Code) and either rawMaterialName (Ingredient / Raw Material Name) or rawMaterialCode (Ingredient / Raw Material Code) are required.', 'outputQuantity is the output yield quantity of the recipe.', 'Specify one row per raw material item belonging to the recipe.']), 'leads': ('leads_template.csv', ['name', 'companyName', 'email', 'phone', 'status', 'priority', 'source', 'city', 'state', 'pincode', 'value', 'notes', 'assignedTo'], [['Ramesh Kumar', 'RK Traders', 'ramesh@example.com', '9876543210', 'NEW', 'MEDIUM', 'Trade Show', 'Mumbai', 'Maharashtra', '400001', '50000', 'Interested in bulk cement order', 'sales@example.com']], ['INSTRUCTION: Fill in CRM lead details.', 'name is required.', 'status can be NEW, CONTACTED, QUALIFIED, LOST, or WON.', 'priority can be LOW, MEDIUM, or HIGH.'])}
     if entity not in templates:
         return send_error('Unknown template type', 404)
     filename, headers, rows, instructions = templates[entity]
@@ -1489,15 +1489,33 @@ def bulk_import(request, entity):
         elif entity == 'recipes':
             grouped = {}
             for index, row in enumerate(rows, start=2):
-                code = (row.get('productCode') or row.get('recipeCode') or row.get('product_code') or row.get('finishedProductCode') or row.get('finishedProduct') or '').strip()
-                material = (row.get('materialName') or row.get('rawMaterial') or row.get('material') or row.get('ingredient') or row.get('ingredientName') or row.get('productName') or row.get('material_name') or row.get('product_name') or '').strip()
+                nrow = {k.strip().lower().replace(' ', '').replace('_', '').replace('-', ''): v for k, v in row.items()}
+                code = (nrow.get('finishedproductcode') or nrow.get('productcode') or nrow.get('finishedgoodcode') or nrow.get('recipecode') or nrow.get('finishedproduct') or '').strip()
+                raw_code = (nrow.get('rawmaterialcode') or nrow.get('materialcode') or nrow.get('ingredientcode') or nrow.get('rawcode') or '').strip()
+                material = (nrow.get('rawmaterialname') or nrow.get('materialname') or nrow.get('rawmaterial') or nrow.get('material') or nrow.get('ingredient') or nrow.get('ingredientname') or nrow.get('productname') or '').strip()
+                
+                # Resolve/Verify material name using raw material code lookup
+                if raw_code:
+                    prod = Product.objects.filter(productcode=raw_code, companyid_id=company_id).first()
+                    if prod:
+                        material = prod.name
+
                 if not code or not material:
-                    skipped.append({'row': index, 'reason': 'productCode and materialName are required'})
+                    skipped.append({'row': index, 'reason': 'finishedProductCode and rawMaterialName (or rawMaterialCode) are required'})
                     continue
-                recipe_name = (row.get('recipeName') or row.get('name') or row.get('recipe_name') or code).strip()
-                output_qty = _num(row.get('outputQuantity') or row.get('yieldQuantity') or row.get('yield') or row.get('output_quantity'), 1.0)
-                item_qty = _num(row.get('quantity') or row.get('qty') or row.get('amount') or row.get('item_qty'))
-                item_unit = (row.get('unit') or row.get('item_unit') or '').strip()
+                
+                recipe_name = (nrow.get('finishedproductname') or nrow.get('recipename') or nrow.get('name') or '').strip()
+                if not recipe_name:
+                    prod = Product.objects.filter(productcode=code, companyid_id=company_id).first()
+                    if prod:
+                        recipe_name = prod.name
+                    else:
+                        recipe_name = code
+                
+                output_qty = _num(nrow.get('outputquantity') or nrow.get('yieldquantity') or nrow.get('yield') or nrow.get('output_quantity'), 1.0)
+                item_qty = _num(nrow.get('quantity') or nrow.get('qty') or nrow.get('amount') or nrow.get('item_qty'))
+                item_unit = (nrow.get('unit') or nrow.get('item_unit') or '').strip()
+                
                 grouped.setdefault(code, {'name': recipe_name, 'outputQuantity': output_qty, 'items': []})
                 grouped[code]['items'].append({'materialname': material, 'qty': item_qty, 'unit': item_unit})
             for code, recipe in grouped.items():

@@ -55,6 +55,7 @@ export interface Dealer {
 
 export interface Distributor {
   id?: string;
+  distributorCode?: string;
   distributorName: string;
   area: string;
   assignedSoEmail: string;

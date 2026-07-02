@@ -18,44 +18,64 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 import { Suspense, lazy } from "react";
 
-// Safe wrapper for React.lazy to handle chunk load errors gracefully by reloading the page
-const safeLazy = (importFn: () => Promise<{ default: React.ComponentType<any> }>) => {
+// Safe wrapper for React.lazy to handle chunk load errors gracefully by reloading the page ONCE
+const safeLazy = (importFn: () => Promise<{ default: React.ComponentType<any> }>, name: string) => {
   return lazy(async () => {
     try {
-      return await importFn();
+      const result = await importFn();
+      sessionStorage.removeItem(`reloaded_${name}`);
+      return result;
     } catch (error) {
-      console.warn("Dynamic import failed, reloading page to fetch latest version:", error);
-      window.location.reload();
-      return { default: () => null };
+      const hasReloaded = sessionStorage.getItem(`reloaded_${name}`);
+      if (!hasReloaded) {
+        console.warn(`Dynamic import failed for ${name}, reloading page:`, error);
+        sessionStorage.setItem(`reloaded_${name}`, 'true');
+        window.location.reload();
+        return { default: () => null };
+      } else {
+        console.error(`Dynamic import failed again for ${name} after reload. Giving up.`, error);
+        return { 
+          default: () => (
+            <div className="p-8 text-center bg-red-50 border border-red-200 rounded-lg m-4">
+              <h3 className="text-lg font-semibold text-red-700 mb-2">Failed to load page component</h3>
+              <p className="text-red-600 mb-4">Please clear your browser cache and refresh the page.</p>
+              <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Force Refresh</button>
+            </div>
+          ) 
+        };
+      }
     }
   });
 };
 
-const SalesDashboard = safeLazy(() => import("./pages/SalesDashboard"));
-const OrderPage = safeLazy(() => import("./pages/OrderPage"));
-const MyOrders = safeLazy(() => import("./pages/MyOrders"));
-const AdminDashboard = safeLazy(() => import("./pages/AdminDashboard"));
-const DealerManagement = safeLazy(() => import("./pages/DealerManagement"));
-const DistributorManagement = safeLazy(() => import("./pages/DistributorManagement"));
-const UserManagement = safeLazy(() => import("./pages/UserManagement"));
-const HRDashboard = safeLazy(() => import("./pages/HRDashboard"));
-const InventoryDashboard = safeLazy(() => import("./pages/InventoryDashboard"));
-const InventoryManagement = safeLazy(() => import('@/pages/InventoryManagement'));
-const DispatchOrderPage = safeLazy(() => import('@/pages/DispatchOrderPage'));
-const WarehouseManagement = safeLazy(() => import("./pages/WarehouseManagement"));
-const VisitTracking = safeLazy(() => import("./pages/VisitTracking"));
-const ExpenseEntry = safeLazy(() => import("./pages/ExpenseEntry"));
-const Reports = safeLazy(() => import("./pages/Reports"));
-const SettingsPage = safeLazy(() => import("./pages/SettingsPage"));
-const NotFound = safeLazy(() => import("./pages/NotFound"));
-const BOMManagement = safeLazy(() => import("./pages/BOMManagement"));
-const ReturnedOrders = safeLazy(() => import("./pages/ReturnedOrders"));
-const RejectedOrders = safeLazy(() => import("./pages/RejectedOrders"));
-const CreatePurchaseOrder = safeLazy(() => import("./pages/CreatePurchaseOrder"));
-const GlobalInventory = safeLazy(() => import("./pages/GlobalInventory"));
-const LeadsPage = safeLazy(() => import("./pages/CRM/LeadsPage"));
-const SOMapping = safeLazy(() => import("./pages/SOMapping"));
-const MyTerritory = safeLazy(() => import("./pages/MyTerritory"));
+const SalesDashboard = safeLazy(() => import("./pages/SalesDashboard"), "SalesDashboard");
+const OrderPage = safeLazy(() => import("./pages/OrderPage"), "OrderPage");
+const MyOrders = safeLazy(() => import("./pages/MyOrders"), "MyOrders");
+const AdminDashboard = safeLazy(() => import("./pages/AdminDashboard"), "AdminDashboard");
+const DealerManagement = safeLazy(() => import("./pages/DealerManagement"), "DealerManagement");
+const DistributorManagement = safeLazy(() => import("./pages/DistributorManagement"), "DistributorManagement");
+const UserManagement = safeLazy(() => import("./pages/UserManagement"), "UserManagement");
+const HRDashboard = safeLazy(() => import("./pages/HRDashboard"), "HRDashboard");
+const InventoryDashboard = safeLazy(() => import("./pages/InventoryDashboard"), "InventoryDashboard");
+const InventoryManagement = safeLazy(() => import('@/pages/InventoryManagement'), "InventoryManagement");
+const DispatchOrderPage = safeLazy(() => import('@/pages/DispatchOrderPage'), "DispatchOrderPage");
+const WarehouseManagement = safeLazy(() => import("./pages/WarehouseManagement"), "WarehouseManagement");
+const VisitTracking = safeLazy(() => import("./pages/VisitTracking"), "VisitTracking");
+const ExpenseEntry = safeLazy(() => import("./pages/ExpenseEntry"), "ExpenseEntry");
+const Reports = safeLazy(() => import("./pages/Reports"), "Reports");
+const SettingsPage = safeLazy(() => import("./pages/SettingsPage"), "SettingsPage");
+const NotFound = safeLazy(() => import("./pages/NotFound"), "NotFound");
+const BOMManagement = safeLazy(() => import("./pages/BOMManagement"), "BOMManagement");
+const ReturnedOrders = safeLazy(() => import("./pages/ReturnedOrders"), "ReturnedOrders");
+const RejectedOrders = safeLazy(() => import("./pages/RejectedOrders"), "RejectedOrders");
+const CreatePurchaseOrder = safeLazy(() => import("./pages/CreatePurchaseOrder"), "CreatePurchaseOrder");
+const GlobalInventory = safeLazy(() => import("./pages/GlobalInventory"), "GlobalInventory");
+const LeadsPage = safeLazy(() => import("./pages/CRM/LeadsPage"), "LeadsPage");
+const SOMapping = safeLazy(() => import("./pages/SOMapping"), "SOMapping");
+const MyTerritory = safeLazy(() => import("./pages/MyTerritory"), "MyTerritory");
+const PartyLedger = safeLazy(() => import("./pages/PartyLedger"), "PartyLedger");
+
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -183,6 +203,7 @@ const App = () => {
                       <Route path="/sales/expenses" element={<ProtectedRoute><ExpenseEntry /></ProtectedRoute>} />
                       <Route path="/sales/crm" element={<ProtectedRoute><LeadsPage /></ProtectedRoute>} />
                       <Route path="/sales/territory" element={<ProtectedRoute><MyTerritory /></ProtectedRoute>} />
+                      <Route path="/sales/party-ledger" element={<ProtectedRoute><PartyLedger /></ProtectedRoute>} />
 
                       {/* Admin */}
                       <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />

@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
 
-const emptyDist: Distributor = { distributorName: '', area: '', assignedSoEmail: '', creditLimit: 0, outstanding: 0, active: true, territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '' };
+const emptyDist: Distributor = { distributorCode: '', distributorName: '', area: '', assignedSoEmail: '', creditLimit: 0, outstanding: 0, active: true, territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '' };
 
 const DistributorManagement: React.FC = () => {
   const { distributors, users, addDistributor, updateDistributor, deleteDistributor } = useData();
@@ -32,10 +32,15 @@ const DistributorManagement: React.FC = () => {
   const filtered = distributors.filter(d =>
     d.distributorName.toLowerCase().includes(search.toLowerCase()) ||
     d.area.toLowerCase().includes(search.toLowerCase()) ||
+    (d.distributorCode || '').toLowerCase().includes(search.toLowerCase()) ||
     (d.territory || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const openAdd = () => { setEditing(null); setForm(emptyDist); setDialogOpen(true); };
+  const openAdd = () => { 
+    setEditing(null); 
+    setForm({ ...emptyDist, distributorCode: `DST-${Date.now().toString().slice(-5)}` }); 
+    setDialogOpen(true); 
+  };
   const openEdit = (d: Distributor) => { setEditing(d); setForm({ ...d }); setDialogOpen(true); };
 
   const handleSave = async () => {
@@ -90,7 +95,7 @@ const DistributorManagement: React.FC = () => {
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <p className="font-semibold text-sm">{d.distributorName}</p>
-                  <p className="text-xs text-muted-foreground">{d.area} {d.territory ? `(${d.territory})` : ''}</p>
+                  <p className="text-xs text-muted-foreground">{d.distributorCode} · {d.area} {d.territory ? `(${d.territory})` : ''}</p>
                 </div>
                 <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">{d.active ? 'Active' : 'Blocked'}</Badge>
               </div>
@@ -101,7 +106,7 @@ const DistributorManagement: React.FC = () => {
               </div>
               {can('manage_customers') && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                  <Button size="sm" variant="outline" onClick={() => { setLedgerTarget(d.distributorName); setLedgerOpen(true); }} className="flex-1 border-blue-200 text-blue-600 hover:bg-blue-50"><BookOpen className="w-3.5 h-3.5 mr-1" /> Ledger</Button>
+                  <Button size="sm" variant="outline" onClick={() => { setLedgerTarget(d.distributorCode || ''); setLedgerOpen(true); }} className="flex-1 border-blue-200 text-blue-600 hover:bg-blue-50"><BookOpen className="w-3.5 h-3.5 mr-1" /> Ledger</Button>
                   <Button size="sm" variant="outline" onClick={() => openEdit(d)} className="flex-1"><Edit className="w-3.5 h-3.5 mr-1" /> Edit</Button>
                   <Button size="sm" variant="destructive" onClick={() => { setDeleteTarget(d.distributorName); setDeleteDialogOpen(true); }} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
                 </div>
@@ -116,7 +121,7 @@ const DistributorManagement: React.FC = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                {['Name', 'Area', 'Territory', 'SO', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
+                {['Code', 'Name', 'Area', 'Territory', 'SO', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
                 ))}
               </tr>
@@ -124,6 +129,7 @@ const DistributorManagement: React.FC = () => {
             <tbody>
               {filtered.map((d, idx) => (
                 <tr key={d.id || `${d.distributorName}-${idx}`} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs">{d.distributorCode || '—'}</td>
                   <td className="px-4 py-3 font-medium">{d.distributorName}</td>
                   <td className="px-4 py-3">{d.area}</td>
                   <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
@@ -134,7 +140,7 @@ const DistributorManagement: React.FC = () => {
                   {can('manage_customers') && (
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
-                        <button onClick={() => { setLedgerTarget(d.distributorName); setLedgerOpen(true); }} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="View Ledger"><BookOpen className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => { setLedgerTarget(d.distributorCode || ''); setLedgerOpen(true); }} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="View Ledger"><BookOpen className="w-3.5 h-3.5" /></button>
                         <button onClick={() => openEdit(d)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><Edit className="w-3.5 h-3.5" /></button>
                         <button onClick={() => { setDeleteTarget(d.distributorName); setDeleteDialogOpen(true); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
@@ -156,7 +162,10 @@ const DistributorManagement: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2"><Label>Name *</Label><Input value={form.distributorName} onChange={e => uf('distributorName', e.target.value)} disabled={!!editing} /></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Distributor Code</Label><Input value={form.distributorCode || ''} onChange={e => uf('distributorCode', e.target.value)} disabled={!!editing} /></div>
+              <div className="space-y-2"><Label>Name *</Label><Input value={form.distributorName} onChange={e => uf('distributorName', e.target.value)} /></div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Area *</Label><Input value={form.area} onChange={e => uf('area', e.target.value)} /></div>
               <div className="space-y-2"><Label>Assigned SO *</Label>
@@ -231,6 +240,7 @@ const DistributorManagement: React.FC = () => {
         isOpen={ledgerOpen} 
         onClose={() => setLedgerOpen(false)} 
         defaultSearch={ledgerTarget}
+        restricted={true}
       />
     </div>
   );

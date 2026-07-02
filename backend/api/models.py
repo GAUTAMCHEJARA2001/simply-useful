@@ -91,6 +91,7 @@ class Dealer(models.Model):
 
 class Distributor(models.Model):
     id = models.TextField(primary_key=True)
+    distributorcode = models.TextField(db_column='distributorCode', unique=True, null=True, blank=True)
     distributorname = models.TextField(db_column='distributorName')  # Field name made lowercase.
     area = models.TextField()
     assignedsoemail = models.TextField(db_column='assignedSoEmail')  # Field name made lowercase.

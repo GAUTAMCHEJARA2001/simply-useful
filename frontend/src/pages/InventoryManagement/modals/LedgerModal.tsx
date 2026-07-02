@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Loader2 } from 'lucide-react';
 import apiService from '@/api/apiService';
-import DataTable from '@/components/DataTable';
-import { toast } from 'react-hot-toast';
+import { DataTable } from '@/components/DataTable';
+import { useToast } from '@/hooks/use-toast';
 
 interface LedgerEntry {
   date: string;
@@ -26,20 +26,34 @@ interface LedgerModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultSearch?: string;
+  restricted?: boolean;
 }
 
-const LedgerModal: React.FC<LedgerModalProps> = ({ isOpen, onClose, defaultSearch = '' }) => {
+const LedgerModal: React.FC<LedgerModalProps> = ({ isOpen, onClose, defaultSearch = '', restricted = false }) => {
   const [search, setSearch] = useState(defaultSearch);
   const [parties, setParties] = useState<Party[]>([]);
   const [selectedParty, setSelectedParty] = useState<Party | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (isOpen && defaultSearch) {
-      handleSearch(defaultSearch);
+    if (isOpen) {
+      if (defaultSearch) {
+        if (restricted) {
+          fetchLedger({ code: defaultSearch as any, name: 'Loading Party...', alias: defaultSearch });
+        } else {
+          setSearch(defaultSearch);
+          handleSearch(defaultSearch);
+        }
+      } else {
+        setSearch('');
+        setSelectedParty(null);
+        setLedger([]);
+        setParties([]);
+      }
     }
-  }, [isOpen, defaultSearch]);
+  }, [isOpen, defaultSearch, restricted]);
 
   const handleSearch = async (query: string) => {
     if (!query.trim()) return;
@@ -53,7 +67,7 @@ const LedgerModal: React.FC<LedgerModalProps> = ({ isOpen, onClose, defaultSearc
         }
       }
     } catch (err: any) {
-      toast.error('Failed to search parties');
+      toast({ title: 'Error', description: 'Failed to search parties', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -68,7 +82,7 @@ const LedgerModal: React.FC<LedgerModalProps> = ({ isOpen, onClose, defaultSearc
         setLedger(res.ledger);
       }
     } catch (err: any) {
-      toast.error('Failed to fetch ledger');
+      toast({ title: 'Error', description: 'Failed to fetch ledger', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -105,17 +119,19 @@ const LedgerModal: React.FC<LedgerModalProps> = ({ isOpen, onClose, defaultSearc
           <DialogTitle>Party Ledger (Busy Accounting)</DialogTitle>
         </DialogHeader>
         
-        <div className="flex gap-2 mb-4">
-          <Input 
-            placeholder="Search party by name..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch(search)}
-          />
-          <Button onClick={() => handleSearch(search)} disabled={loading}>
-            <Search className="w-4 h-4 mr-2" /> Search
-          </Button>
-        </div>
+        {!restricted && (
+          <div className="flex gap-2 mb-4">
+            <Input 
+              placeholder="Search party by name..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch(search)}
+            />
+            <Button onClick={() => handleSearch(search)} disabled={loading}>
+              <Search className="w-4 h-4 mr-2" /> Search
+            </Button>
+          </div>
+        )}
 
         {parties.length > 1 && !selectedParty && (
           <div className="border rounded-md p-2 max-h-40 overflow-y-auto mb-4">

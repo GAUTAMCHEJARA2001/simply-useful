@@ -59,6 +59,30 @@ def sync_busy_data(request):
                 ))
             BusyLedgerEntry.objects.using(db_alias).bulk_create(bulk_entries)
             
+        # 3. Auto-link and Calculate Outstanding
+        from api.models import Dealer, Distributor
+        from django.db.models import Sum
+
+        all_parties = BusyParty.objects.using(db_alias).all()
+        for p in all_parties:
+            alias = p.alias or ""
+            if "," in alias:
+                code = alias.split(",")[-1].strip()
+                if code.startswith("DLR-"):
+                    # Update Dealer
+                    dealer = Dealer.objects.using(db_alias).filter(dealercode__iexact=code).first()
+                    if dealer:
+                        bal = BusyLedgerEntry.objects.using(db_alias).filter(party=p).aggregate(total=Sum('amount'))['total'] or 0
+                        dealer.outstanding = bal
+                        dealer.save(using=db_alias)
+                elif code.startswith("DST-"):
+                    # Update Distributor
+                    dist = Distributor.objects.using(db_alias).filter(distributorcode__iexact=code).first()
+                    if dist:
+                        bal = BusyLedgerEntry.objects.using(db_alias).filter(party=p).aggregate(total=Sum('amount'))['total'] or 0
+                        dist.outstanding = bal
+                        dist.save(using=db_alias)
+            
         return Response({'success': True, 'message': f'Synced {len(parties)} parties and {len(ledgers)} ledger entries'})
     except Exception as e:
         import traceback
@@ -69,7 +93,25 @@ def sync_busy_data(request):
 def get_party_ledger(request, party_code):
     try:
         db_alias = request.tenant.schema_name if hasattr(request, 'tenant') else 'default'
-        entries = BusyLedgerEntry.objects.using(db_alias).filter(party_id=party_code).order_by('date', 'id')
+        
+        # party_code might be DLR-xxx or DST-xxx or a direct BusyParty code
+        party = None
+        if party_code.startswith("DLR-") or party_code.startswith("DST-"):
+            # Find the BusyParty where alias contains this code after a comma
+            all_parties = BusyParty.objects.using(db_alias).all()
+            for p in all_parties:
+                if p.alias and "," in p.alias:
+                    code = p.alias.split(",")[-1].strip()
+                    if code.lower() == party_code.lower():
+                        party = p
+                        break
+        else:
+            party = BusyParty.objects.using(db_alias).filter(code=party_code).first()
+            
+        if not party:
+            return Response({'success': False, 'message': 'Ledger not found for this code.'}, status=404)
+            
+        entries = BusyLedgerEntry.objects.using(db_alias).filter(party=party).order_by('date', 'id')
         
         data = []
         running_balance = 0.0

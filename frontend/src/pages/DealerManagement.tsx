@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Search, Plus, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, BookOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
 
 const emptyDealer: Dealer = {
   dealerCode: '', dealerName: '', city: '', assignedSoEmail: '',
@@ -25,6 +26,8 @@ const DealerManagement: React.FC = () => {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledgerTarget, setLedgerTarget] = useState('');
   const [editing, setEditing] = useState<Dealer | null>(null);
   const [form, setForm] = useState<Dealer>(emptyDealer);
   const [deleteTarget, setDeleteTarget] = useState<string>('');
@@ -40,7 +43,7 @@ const DealerManagement: React.FC = () => {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ ...emptyDealer, dealerCode: `DL${Date.now().toString().slice(-5)}` });
+    setForm({ ...emptyDealer, dealerCode: `DLR-${Date.now().toString().slice(-5)}` });
     setDialogOpen(true);
   };
 
@@ -123,6 +126,7 @@ const DealerManagement: React.FC = () => {
               </div>
               {can('manage_customers') && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                  <Button size="sm" variant="outline" onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="flex-1 border-blue-200 text-blue-600 hover:bg-blue-50"><BookOpen className="w-3.5 h-3.5 mr-1" /> Ledger</Button>
                   <Button size="sm" variant="outline" onClick={() => openEdit(d)} className="flex-1"><Edit className="w-3.5 h-3.5 mr-1" /> Edit</Button>
                   <Button size="sm" variant="destructive" onClick={() => openDelete(d.dealerCode)} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
                 </div>
@@ -161,6 +165,7 @@ const DealerManagement: React.FC = () => {
                     {can('manage_customers') && (
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
+                          <button onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="View Ledger"><BookOpen className="w-3.5 h-3.5" /></button>
                           <button onClick={() => openEdit(d)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><Edit className="w-3.5 h-3.5" /></button>
                           <button onClick={() => openDelete(d.dealerCode)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
@@ -274,29 +279,34 @@ const DealerManagement: React.FC = () => {
               </div>
             </div>
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>{editing ? 'Update' : 'Add'} Dealer</Button>
+            <Button onClick={handleSave} className="action-button">Save Dealer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirm */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="max-w-sm" aria-describedby="delete-dealer-desc">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Dealer?</DialogTitle>
-            <DialogDescription id="delete-dealer-desc" className="sr-only">
-              Confirm permanent removal of this dealer from the records.
+            <DialogTitle>Confirm Deletion</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this dealer? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">This action cannot be undone. The dealer will be permanently removed.</p>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete Dealer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LedgerModal 
+        isOpen={ledgerOpen} 
+        onClose={() => setLedgerOpen(false)} 
+        defaultSearch={ledgerTarget}
+        restricted={true}
+      />
     </div>
   );
 };
