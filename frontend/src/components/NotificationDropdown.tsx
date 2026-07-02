@@ -103,8 +103,8 @@ export const NotificationDropdown: React.FC = () => {
 
   useEffect(() => {
     loadNotifications();
-    // Poll API for broadcast changes every 30 seconds
-    const interval = setInterval(loadNotifications, 30000);
+    // Poll for new broadcasts every 5 minutes (not 30s - backend is on free tier)
+    const interval = setInterval(loadNotifications, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [user?.role]);
 

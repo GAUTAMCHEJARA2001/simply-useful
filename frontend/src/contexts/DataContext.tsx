@@ -224,9 +224,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (user) {
       refreshAll();
-      // Auto-refresh every 30 seconds so new orders appear in approval queue
-      const interval = setInterval(() => refreshAll(true), 30_000);
-      return () => clearInterval(interval);
+      // Polling removed: use manual refresh or react-query for fresh data
     } else {
       setLoading(false);
     }
