@@ -1510,9 +1510,23 @@ def bulk_import(request, entity):
                     Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
                     created += 1
                 opening_stock = values.get('openingstock')
-                if opening_stock is not None:
-                    pass
-                    print(f"[BULK IMPORT] Product '{code}' -> warehouse '{target_warehouse.name}' (schema: {target_warehouse.schema_name}), stock={opening_stock}")
+                if opening_stock and int(opening_stock) > 0:
+                    product_obj = Product.objects.filter(productcode=code, companyid_id=company_id).first()
+                    if product_obj:
+                        from api.models import Stocktransaction
+                        existing_st = Stocktransaction.objects.using(target_warehouse.db_name).filter(
+                            productid=product_obj, reason='OPENING_STOCK_BULK_IMPORT'
+                        ).first()
+                        if not existing_st:
+                            Stocktransaction.objects.using(target_warehouse.db_name).create(
+                                id=_new_id(),
+                                productid=product_obj,
+                                warehouseid=target_warehouse,
+                                transactiontype='IN',
+                                quantity=float(opening_stock),
+                                reason='OPENING_STOCK_BULK_IMPORT',
+                                createdat=timezone.now()
+                            )
             if original_tenant:
                 connection.set_tenant(original_tenant)
             else:
@@ -1999,16 +2013,6 @@ class DealerViewSet(viewsets.ModelViewSet):
         if user_role == 'SALES' and user_email:
             qs = qs.filter(assignedsoemail=user_email)
         
-        # Filter by warehouse if header provided
-        if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
-            try:
-                from core.models import Warehouse
-                wh = Warehouse.objects.using('default').filter(id=wh_header).first()
-                if wh:
-                    qs = qs.filter(warehouseid_id=wh.id)
-            except Exception:
-                pass
-        
         serializer = self.get_serializer(qs, many=True)
         return send_success(serializer.data, 'Dealers fetched successfully')
 
@@ -2101,16 +2105,6 @@ class DistributorViewSet(viewsets.ModelViewSet):
             qs = qs.filter(companyid_id=company_id)
         if user_role == 'SALES' and user_email:
             qs = qs.filter(assignedsoemail=user_email)
-        
-        # Filter by warehouse if header provided
-        if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
-            try:
-                from core.models import Warehouse
-                wh = Warehouse.objects.using('default').filter(id=wh_header).first()
-                if wh:
-                    qs = qs.filter(warehouseid_id=wh.id)
-            except Exception:
-                pass
         
         serializer = self.get_serializer(qs, many=True)
         return send_success(serializer.data, 'Distributors fetched successfully')

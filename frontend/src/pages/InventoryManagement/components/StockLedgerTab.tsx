@@ -49,15 +49,16 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
 
   // Filters for Ledger Popup
   const { fyBounds } = useFinancialYear();
-  const [popDateFrom, setPopDateFrom] = useState(fyBounds?.start || '');
-  const [popDateTo, setPopDateTo] = useState(fyBounds?.end || '');
+  const toDateStr = (d: any) => d instanceof Date ? d.toISOString().split('T')[0] : (d || '');
+  const [popDateFrom, setPopDateFrom] = useState(toDateStr(fyBounds?.start));
+  const [popDateTo, setPopDateTo] = useState(toDateStr(fyBounds?.end || fyBounds?.endExclusive));
   const [popWh, setPopWh] = useState('');
   const [summary, setSummary] = useState({ opening: 0, current: 0 });
 
   useEffect(() => {
     if (fyBounds) {
-      setPopDateFrom(fyBounds.start);
-      setPopDateTo(fyBounds.end);
+      setPopDateFrom(toDateStr(fyBounds.start));
+      setPopDateTo(toDateStr(fyBounds.end || fyBounds.endExclusive));
     } else {
       setPopDateFrom('');
       setPopDateTo('');
