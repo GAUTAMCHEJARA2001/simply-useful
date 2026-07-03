@@ -1430,8 +1430,8 @@ def bulk_import(request, entity):
         if entity == 'products':
             from django.db import connection
             original_tenant = getattr(connection, 'tenant', None)
+            import random, string
             for index, row in enumerate(rows, start=2):
-                code = (row.get('productCode') or row.get('product_code') or '').strip()
                 name = (row.get('name') or row.get('productName') or '').strip()
                 category_name = (row.get('category') or '').strip()
                 subcategory_name = (row.get('subcategory') or row.get('subCategory') or row.get('sub_category') or '').strip()
@@ -1457,22 +1457,6 @@ def bulk_import(request, entity):
                     skipped.append({'row': index, 'reason': 'No active warehouse found to assign product'})
                     continue
                 connection.set_tenant(target_warehouse)
-                if not code:
-                    company = Company.objects.filter(id=company_id).first()
-                    prefix = getattr(company, 'skuprefix', 'PRD') or 'PRD'
-                    import random
-                    import string
-                    attempts = 0
-                    while attempts < 100:
-                        rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                        candidate_code = f'{prefix}-{rand_suffix}'
-                        if not Product.objects.filter(productcode=candidate_code).exists():
-                            code = candidate_code
-                            break
-                        attempts += 1
-                    if not code:
-                        skipped.append({'row': index, 'reason': 'Failed to auto-generate a unique product code'})
-                        continue
                 category_to_assign = None
                 if category_name:
                     category, created_cat = Category.objects.get_or_create(name=category_name, companyid_id=company_id, defaults={'parentid': None, 'active': True})
@@ -1500,19 +1484,34 @@ def bulk_import(request, entity):
                 unit_name = (row.get('unit') or '').strip()
                 if unit_name:
                     unit, _ = Unit.objects.get_or_create(name=unit_name, companyid_id=company_id, defaults={'active': True})
-                existing = Product.objects.filter(productcode=code, companyid_id=company_id).first()
+                existing = Product.objects.filter(name=name, categoryid=category_to_assign, companyid_id=company_id).first()
                 values = {'name': name, 'bagsize': row.get('bagSize') or row.get('bag_size') or '50 KG', 'brandid': brand, 'unitid': unit, 'rate': _num(row.get('rate') or row.get('price')), 'gst': _num(row.get('gst'), 18.0), 'active': _truthy(row.get('active'), True), 'companyid_id': company_id, 'categoryid': category_to_assign, 'openingstock': _int(row.get('openingStock') or row.get('opening_stock')), 'minimumstock': _int(row.get('minimumStock') or row.get('minimum_stock')), 'updatedat': timezone.now()}
                 if existing:
                     for key, value in values.items():
                         setattr(existing, key, value)
                     existing.save()
                     updated += 1
+                    code = existing.productcode
                 else:
-                    existing = Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
+                    company = Company.objects.filter(id=company_id).first()
+                    prefix = getattr(company, 'skuprefix', 'PRD') or 'PRD'
+                    code = None
+                    attempts = 0
+                    while attempts < 100:
+                        rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                        candidate_code = f'{prefix}-{rand_suffix}'
+                        if not Product.objects.filter(productcode=candidate_code, companyid_id=company_id).exists():
+                            code = candidate_code
+                            break
+                        attempts += 1
+                    if not code:
+                        skipped.append({'row': index, 'reason': 'Failed to generate unique product code'})
+                        continue
+                    Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
                     created += 1
                 opening_stock = values.get('openingstock')
                 if opening_stock is not None:
-                    pass # Legacy Inventory table removed
+                    pass
                     print(f"[BULK IMPORT] Product '{code}' -> warehouse '{target_warehouse.name}' (schema: {target_warehouse.schema_name}), stock={opening_stock}")
             if original_tenant:
                 connection.set_tenant(original_tenant)

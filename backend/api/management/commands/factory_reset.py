@@ -124,3 +124,7 @@ class Command(BaseCommand):
             }
         )
         self.stdout.write(f'  Warehouse: {warehouse.name} ({"created" if created else "exists"})')
+
+        # Migrate ALL tenant schemas so tables exist inside them
+        self.stdout.write('  Running migrate_schemas for tenant schemas...')
+        call_command('migrate_schemas', verbosity=1)
