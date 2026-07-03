@@ -1,10 +1,8 @@
 """
 Factory reset: wipe ALL data from ALL schemas, then reseed.
-WARNING: This destroys everything. Use with caution.
 """
 from django.core.management.base import BaseCommand
-from django.db import connection, connections
-from core.models import Warehouse
+from django.db import connection
 
 
 class Command(BaseCommand):
@@ -16,71 +14,70 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not options['confirm']:
             self.stdout.write(self.style.WARNING(
-                'This will DELETE ALL DATA from ALL schemas!\n'
+                'This will DELETE ALL DATA!\n'
                 'Run: python manage.py factory_reset --confirm'
             ))
             return
 
-        self.wipe_default_db()
-        self.wipe_warehouse_schemas()
+        self.wipe_everything()
         self.reseed()
         self.stdout.write(self.style.SUCCESS('\nFactory reset complete!'))
         self.stdout.write('Login: super@kamla.com / admin123')
 
-    def wipe_default_db(self):
-        self.stdout.write('\n=== Wiping default (public) schema ===')
+    def wipe_everything(self):
+        self.stdout.write('\n=== Wiping ALL schemas ===')
         with connection.cursor() as cur:
+            # Drop all tenant schemas first (before touching Warehouse table)
+            cur.execute(
+                "SELECT schema_name FROM information_schema.schemata "
+                "WHERE schema_name LIKE 'wh_%'"
+            )
+            schemas = [row[0] for row in cur.fetchall()]
+            for schema in schemas:
+                try:
+                    cur.execute(f'DROP SCHEMA IF EXISTS {schema} CASCADE')
+                    self.stdout.write(f'  Dropped schema: {schema}')
+                except Exception as e:
+                    self.stdout.write(f'  Skipped {schema}: {e}')
+
+            # Drop all tables in public schema
             cur.execute(
                 "SELECT table_name FROM information_schema.tables "
                 "WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
             )
             tables = [row[0] for row in cur.fetchall()]
-            if tables:
-                for t in tables:
-                    try:
-                        cur.execute(f'DROP TABLE IF EXISTS "{t}" CASCADE')
-                        self.stdout.write(f'  Dropped {t}')
-                    except Exception as e:
-                        self.stdout.write(f'  Skipped {t}: {e}')
-            else:
-                self.stdout.write('  No tables found')
+            for t in tables:
+                try:
+                    cur.execute(f'DROP TABLE IF EXISTS "{t}" CASCADE')
+                    self.stdout.write(f'  Dropped table: {t}')
+                except Exception as e:
+                    self.stdout.write(f'  Skipped {t}: {e}')
 
-    def wipe_warehouse_schemas(self):
-        self.stdout.write('\n=== Wiping warehouse schemas ===')
-        warehouses = Warehouse.objects.using('default').all()
-        for wh in warehouses:
-            schema = wh.schema_name
-            if not schema or schema == 'public':
-                continue
-            self.stdout.write(f'  Schema: {schema}')
-            try:
-                with connection.cursor() as cur:
-                    cur.execute(
-                        "SELECT table_name FROM information_schema.tables "
-                        "WHERE table_schema = %s AND table_type = 'BASE TABLE'",
-                        [schema]
-                    )
-                    tables = [row[0] for row in cur.fetchall()]
-                    if tables:
-                        cur.execute(f'DROP SCHEMA IF EXISTS {schema} CASCADE')
-                    self.stdout.write(f'    Dropped schema {schema}')
-            except Exception as e:
-                self.stdout.write(f'    Error: {e}')
-
-        # Delete warehouse records from public schema
-        try:
-            Warehouse.objects.using('default').all().delete()
-            self.stdout.write('  Deleted warehouse records')
-        except Exception as e:
-            self.stdout.write(f'  Error deleting warehouses: {e}')
+            # Drop all sequences
+            cur.execute(
+                "SELECT sequence_name FROM information_schema.sequences "
+                "WHERE sequence_schema = 'public'"
+            )
+            seqs = [row[0] for row in cur.fetchall()]
+            for s in seqs:
+                try:
+                    cur.execute(f'DROP SEQUENCE IF EXISTS "{s}" CASCADE')
+                except Exception:
+                    pass
 
     def reseed(self):
         self.stdout.write('\n=== Reseeding ===')
         import uuid, bcrypt
         from django.utils import timezone
-        from api.models import Company, User, Warehouse
+        from django.core.management import call_command
 
         now = timezone.now()
+
+        # Run migrate first to create all tables
+        self.stdout.write('  Running migrate...')
+        call_command('migrate', verbosity=1)
+
+        from api.models import Company, User, Warehouse
 
         company, _ = Company.objects.get_or_create(
             name='Kamla Enterprises',
@@ -96,7 +93,7 @@ class Command(BaseCommand):
         self.stdout.write(f'  Company: {company.name}')
 
         hashed = bcrypt.hashpw('admin123'.encode(), bcrypt.gensalt(10)).decode()
-        user, _ = User.objects.get_or_create(
+        user, created = User.objects.get_or_create(
             email='super@kamla.com',
             defaults={
                 'id': 'c' + uuid.uuid4().hex[:23],
@@ -109,7 +106,7 @@ class Command(BaseCommand):
                 'updatedat': now
             }
         )
-        if not _:
+        if not created:
             user.hashedpassword = hashed
             user.save(update_fields=['hashedpassword'])
         self.stdout.write(f'  User: {user.email}')
@@ -127,8 +124,3 @@ class Command(BaseCommand):
             }
         )
         self.stdout.write(f'  Warehouse: {warehouse.name} ({"created" if created else "exists"})')
-
-        # Run migrate to recreate all tables
-        from django.core.management import call_command
-        self.stdout.write('\n  Running migrations...')
-        call_command('migrate', verbosity=1)
