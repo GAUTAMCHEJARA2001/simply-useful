@@ -3342,7 +3342,7 @@ def report_current_stock(request):
             
             # Get all stock transaction data for this warehouse
             stock_tx_data = Stocktransaction.objects.using(wh.db_name).exclude(
-                reason__in=['PENDING_APPROVAL', 'REJECTED']
+                reason__in=['PENDING_APPROVAL', 'REJECTED', 'OPENING_STOCK_BULK_IMPORT']
             ).values('productid_id', 'transactiontype').annotate(total=Sum('quantity'))
             
             # Process purchases efficiently
@@ -3459,7 +3459,7 @@ def report_stock_ledger(request, pk):
             events.append({'id': f'sal_evt_{item.id}', 'date': o.date, 'transactionType': 'SALE', 'referenceId': o.orderid, 'warehouseName': wh.name, 'credit': 0.0, 'debit': float(item.qty), 'qty_change': -float(item.qty)})
             if getattr(item, 'returnedqty', 0) and float(item.returnedqty) > 0:
                 events.append({'id': f'sal_ret_evt_{item.id}', 'date': o.updatedat or o.date, 'transactionType': 'SALES_RETURN', 'referenceId': o.orderid, 'warehouseName': wh.name, 'credit': float(item.returnedqty), 'debit': 0.0, 'qty_change': float(item.returnedqty)})
-        st_qs = Stocktransaction.objects.using(wh.db_name).filter(productid_id=local_product.id).exclude(transactiontype='OPENING_STOCK')
+        st_qs = Stocktransaction.objects.using(wh.db_name).filter(productid_id=local_product.id).exclude(transactiontype='OPENING_STOCK').exclude(reason='OPENING_STOCK_BULK_IMPORT')
         if date_from:
             st_qs = st_qs.filter(createdat__gte=date_from)
         if date_to:
@@ -3552,7 +3552,7 @@ def report_global_inventory(request):
         if not wh.db_name:
             continue
         try:
-            st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid', 'productid__name', 'productid__productcode', 'productid__categoryid__name').annotate(total_qty=Sum('quantity'))
+            st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED', 'OPENING_STOCK_BULK_IMPORT']).values('productid', 'productid__name', 'productid__productcode', 'productid__categoryid__name').annotate(total_qty=Sum('quantity'))
             if company_id:
                 st_aggs = st_aggs.filter(productid__companyid_id=company_id)
             for st in st_aggs:
