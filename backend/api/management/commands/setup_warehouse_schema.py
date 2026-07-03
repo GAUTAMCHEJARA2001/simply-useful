@@ -5,21 +5,12 @@ Setup:
 3. Adds performance indexes in each warehouse schema
 """
 from django.core.management.base import BaseCommand
-from django.db import connection, connections
+from django.db import connection
 from core.models import Warehouse
 
 
 class Command(BaseCommand):
     help = 'Setup default tables + warehouse schema columns and indexes'
-
-    def _table_exists(self, table_name, schema='public'):
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
-                "WHERE table_schema = %s AND table_name = %s)",
-                [schema, table_name]
-            )
-            return cursor.fetchone()[0]
 
     def _column_exists(self, table_name, column_name, schema='public'):
         with connection.cursor() as cursor:
@@ -30,10 +21,16 @@ class Command(BaseCommand):
             )
             return cursor.fetchone()[0]
 
-    def handle(self, *args, **options):
-        from api.db_router import setup_dynamic_tenant_databases
-        setup_dynamic_tenant_databases()
+    def _table_exists(self, table_name, schema='public'):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema = %s AND table_name = %s)",
+                [schema, table_name]
+            )
+            return cursor.fetchone()[0]
 
+    def handle(self, *args, **options):
         self._create_default_tables()
         self._setup_warehouse_schemas()
         self.stdout.write(self.style.SUCCESS('Done!'))
@@ -89,18 +86,6 @@ class Command(BaseCommand):
                 """)
             self.stdout.write('  Distributor table created')
 
-        for col in ['warehouseId']:
-            if not self._column_exists('Dealer', col):
-                with connection.cursor() as cursor:
-                    cursor.execute(f'ALTER TABLE "Dealer" ADD COLUMN "{col}" integer REFERENCES "Warehouse"("id")')
-                self.stdout.write(f'  Added {col} to Dealer (default)')
-
-        for col in ['warehouseId']:
-            if not self._column_exists('Distributor', col):
-                with connection.cursor() as cursor:
-                    cursor.execute(f'ALTER TABLE "Distributor" ADD COLUMN "{col}" integer REFERENCES "Warehouse"("id")')
-                self.stdout.write(f'  Added {col} to Distributor (default)')
-
     def _setup_warehouse_schemas(self):
         self.stdout.write('Setting up warehouse schemas...')
 
@@ -141,7 +126,9 @@ class Command(BaseCommand):
             self.stdout.write(f'Processing {wh.name} (schema: {alias})...')
 
             try:
-                with connections[alias].cursor() as cur:
+                with connection.cursor() as cur:
+                    cur.execute(f'SET search_path TO {alias}, public')
+
                     for table, cols in columns_to_add.items():
                         for col in cols:
                             try:
@@ -154,6 +141,8 @@ class Command(BaseCommand):
                                 if not exists:
                                     cur.execute(f'ALTER TABLE "{table}" ADD COLUMN "{col}" integer')
                                     self.stdout.write(f'  Added {col} to {table}')
+                                else:
+                                    self.stdout.write(f'  {table}.{col} already exists')
                             except Exception as e:
                                 self.stdout.write(f'  {table}.{col}: {e}')
 
@@ -164,7 +153,9 @@ class Command(BaseCommand):
                             created += 1
                         except Exception:
                             pass
+
+                    cur.execute('RESET search_path')
                     self.stdout.write(f'  {created} indexes created')
 
             except Exception as e:
-                self.stdout.write(self.style.WARNING(f'  Error connecting to {alias}: {e}'))
+                self.stdout.write(self.style.WARNING(f'  Error on {alias}: {e}'))

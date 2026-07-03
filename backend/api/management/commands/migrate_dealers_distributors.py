@@ -1,9 +1,9 @@
 """
 Migration command to move dealers and distributors from warehouse schemas to default DB.
-Uses raw SQL to handle schemas that may not have warehouseId column yet.
+Uses SET search_path to access each warehouse schema via the default connection.
 """
 from django.core.management.base import BaseCommand
-from django.db import connection, connections
+from django.db import connection
 
 
 class Command(BaseCommand):
@@ -11,11 +11,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         from core.models import Warehouse
-        from api.db_router import setup_dynamic_tenant_databases
 
         self.stdout.write('Starting dealer/distributor migration to default DB...')
-        setup_dynamic_tenant_databases()
-
         warehouses = Warehouse.objects.using('default').filter(active=True)
 
         self.migrate_table(warehouses, 'Dealer', 'dealerCode')
@@ -24,7 +21,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('Migration completed!'))
 
     def _get_columns(self, schema, table):
-        with connections[schema].cursor() as cur:
+        with connection.cursor() as cur:
             cur.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_schema = %s AND table_name = %s",
@@ -32,21 +29,14 @@ class Command(BaseCommand):
             )
             return {row[0] for row in cur.fetchall()}
 
-    def _get_pk_columns(self, schema, table):
-        with connections[schema].cursor() as cur:
-            cur.execute(
-                "SELECT a.attname FROM pg_index i "
-                "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
-                "WHERE i.indrelid = %s::regclass AND i.indisprimary",
-                [f'{schema}.{table}']
-            )
-            return [row[0] for row in cur.fetchall()]
-
     def _table_row_count(self, schema, table):
         try:
-            with connections[schema].cursor() as cur:
+            with connection.cursor() as cur:
+                cur.execute(f'SET search_path TO {schema}, public')
                 cur.execute(f'SELECT COUNT(*) FROM "{table}"')
-                return cur.fetchone()[0]
+                count = cur.fetchone()[0]
+                cur.execute('RESET search_path')
+                return count
         except Exception:
             return 0
 
@@ -55,14 +45,17 @@ class Command(BaseCommand):
         migrated = 0
         skipped = 0
 
+        dst_cols = self._get_columns('public', table)
+        if not dst_cols:
+            self.stdout.write(self.style.WARNING(f'  {table} table does not exist in default DB. Run setup_warehouse_schema first.'))
+            return
+
         for wh in warehouses:
             alias = wh.db_name or wh.schema_name
             if not alias or alias == 'public':
                 continue
 
             src_cols = self._get_columns(alias, table)
-            dst_cols = self._get_columns('default', table)
-
             if not src_cols:
                 self.stdout.write(f'  {alias}: no {table} columns found, skipping')
                 continue
@@ -75,11 +68,12 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f'  {alias}: no common columns with default, skipping'))
                 continue
 
-            col_list = ', '.join(f'"{c}"' for c in common_cols)
-
-            with connections[alias].cursor() as src_cur:
-                src_cur.execute(f'SELECT {col_list} FROM "{table}"')
-                rows = src_cur.fetchall()
+            with connection.cursor() as cur:
+                cur.execute(f'SET search_path TO {alias}, public')
+                col_list = ', '.join(f'"{c}"' for c in common_cols)
+                cur.execute(f'SELECT {col_list} FROM "{table}"')
+                rows = cur.fetchall()
+                cur.execute('RESET search_path')
 
                 for row in rows:
                     row_data = dict(zip(common_cols, row))
@@ -89,20 +83,21 @@ class Command(BaseCommand):
                         skipped += 1
                         continue
 
-                    with connection.cursor() as dst_cur:
-                        dst_cur.execute(
+                    with connection.cursor() as check_cur:
+                        check_cur.execute(
                             f'SELECT 1 FROM "{table}" WHERE "{code_col}" = %s LIMIT 1',
                             [code_val]
                         )
-                        if dst_cur.fetchone():
+                        if check_cur.fetchone():
                             skipped += 1
                             continue
 
-                        placeholders = ', '.join(['%s'] * len(common_cols))
-                        col_names = ', '.join(f'"{c}"' for c in common_cols)
-                        values = list(row_data.values())
+                    placeholders = ', '.join(['%s'] * len(common_cols))
+                    col_names = ', '.join(f'"{c}"' for c in common_cols)
+                    values = list(row_data.values())
 
-                        dst_cur.execute(
+                    with connection.cursor() as ins_cur:
+                        ins_cur.execute(
                             f'INSERT INTO "{table}" ({col_names}) VALUES ({placeholders})',
                             values
                         )
