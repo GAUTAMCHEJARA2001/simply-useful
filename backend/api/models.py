@@ -81,6 +81,7 @@ class Dealer(models.Model):
         related_name='converted_dealer',
         db_constraint=False
     )
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'Dealer'
@@ -102,6 +103,7 @@ class Distributor(models.Model):
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'Distributor'
