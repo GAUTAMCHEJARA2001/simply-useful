@@ -78,19 +78,30 @@ class Command(BaseCommand):
                 for row in rows:
                     row_data = dict(zip(common_cols, row))
                     code_val = row_data.get(code_col.lower(), row_data.get(code_col))
+                    name_val = row_data.get('distributorname', row_data.get('distributorName', row_data.get('dealername', row_data.get('dealerName', ''))))
 
-                    if not code_val:
+                    if not code_val and not name_val:
                         skipped += 1
                         continue
 
                     with connection.cursor() as check_cur:
-                        check_cur.execute(
-                            f'SELECT 1 FROM "{table}" WHERE "{code_col}" = %s LIMIT 1',
-                            [code_val]
-                        )
-                        if check_cur.fetchone():
-                            skipped += 1
-                            continue
+                        if code_val:
+                            check_cur.execute(
+                                f'SELECT 1 FROM "{table}" WHERE "{code_col}" = %s LIMIT 1',
+                                [code_val]
+                            )
+                            if check_cur.fetchone():
+                                skipped += 1
+                                continue
+                        elif name_val:
+                            name_col = 'distributorName' if table == 'Distributor' else 'dealerName'
+                            check_cur.execute(
+                                f'SELECT 1 FROM "{table}" WHERE "{name_col}" = %s LIMIT 1',
+                                [name_val]
+                            )
+                            if check_cur.fetchone():
+                                skipped += 1
+                                continue
 
                     placeholders = ', '.join(['%s'] * len(common_cols))
                     col_names = ', '.join(f'"{c}"' for c in common_cols)
