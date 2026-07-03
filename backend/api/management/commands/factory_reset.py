@@ -38,8 +38,8 @@ class Command(BaseCommand):
             if tables:
                 for t in tables:
                     try:
-                        cur.execute(f'TRUNCATE TABLE "{t}" CASCADE')
-                        self.stdout.write(f'  Truncated {t}')
+                        cur.execute(f'DROP TABLE IF EXISTS "{t}" CASCADE')
+                        self.stdout.write(f'  Dropped {t}')
                     except Exception as e:
                         self.stdout.write(f'  Skipped {t}: {e}')
             else:
@@ -62,19 +62,7 @@ class Command(BaseCommand):
                     )
                     tables = [row[0] for row in cur.fetchall()]
                     if tables:
-                        cur.execute(f'SET search_path TO {schema}, public')
-                        for t in tables:
-                            try:
-                                cur.execute(f'TRUNCATE TABLE "{t}" CASCADE')
-                                self.stdout.write(f'    Truncated {t}')
-                            except Exception as e:
-                                self.stdout.write(f'    Skipped {t}: {e}')
-                        cur.execute('RESET search_path')
-                    else:
-                        self.stdout.write(f'    No tables found')
-
-                    # Drop the schema itself
-                    cur.execute(f'DROP SCHEMA IF EXISTS {schema} CASCADE')
+                        cur.execute(f'DROP SCHEMA IF EXISTS {schema} CASCADE')
                     self.stdout.write(f'    Dropped schema {schema}')
             except Exception as e:
                 self.stdout.write(f'    Error: {e}')
@@ -140,8 +128,7 @@ class Command(BaseCommand):
         )
         self.stdout.write(f'  Warehouse: {warehouse.name} ({"created" if created else "exists"})')
 
-        # Run migrate to recreate tables in the new schema
+        # Run migrate to recreate all tables
         from django.core.management import call_command
-        self.stdout.write('\n  Running migrations on new schema...')
-        call_command('migrate_schemas', '--shared', verbosity=0)
-        call_command('migrate_schemas', verbosity=0)
+        self.stdout.write('\n  Running migrations...')
+        call_command('migrate', verbosity=1)
