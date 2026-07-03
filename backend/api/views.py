@@ -543,7 +543,54 @@ class ProductViewSet(viewsets.ModelViewSet):
             return send_success(serializer.data, 'Products fetched successfully')
         else:
             queryset = self.get_queryset()
-            serializer = ProductSerializer(queryset, many=True)
+            from django.db.models import Sum
+            from api.models import Purchaseitem, Orderitem, Stocktransaction
+            from api.db_router import get_current_db
+            current_db = get_current_db()
+            
+            sku_qty_map = {}
+            id_to_sku = {}
+            name_to_sku = {}
+            
+            for p in queryset:
+                if p.productcode:
+                    sku_qty_map[p.productcode] = float(p.openingstock or 0)
+                    id_to_sku[p.id] = p.productcode
+                    name_to_sku[p.name] = p.productcode
+                    
+            try:
+                purchases = Purchaseitem.objects.using(current_db).filter(
+                    purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']
+                ).values('productname').annotate(total=Sum('qty'))
+                for row in purchases:
+                    sku = name_to_sku.get(row['productname'])
+                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+                    
+                purchase_ret = Purchaseitem.objects.using(current_db).filter(
+                    purchaseid__status='Returned'
+                ).values('productname').annotate(total=Sum('qty'))
+                for row in purchase_ret:
+                    sku = name_to_sku.get(row['productname'])
+                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+                    
+                sales = Orderitem.objects.using(current_db).filter(orderid__status='Completed').values('productid_id').annotate(total=Sum('qty'))
+                for row in sales:
+                    sku = id_to_sku.get(row['productid_id'])
+                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+                    
+                sales_ret = Orderitem.objects.using(current_db).filter(orderid__status='Returned').values('productid_id').annotate(total=Sum('qty'))
+                for row in sales_ret:
+                    sku = id_to_sku.get(row['productid_id'])
+                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+                    
+                st_aggs = Stocktransaction.objects.using(current_db).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid_id').annotate(total=Sum('quantity'))
+                for row in st_aggs:
+                    sku = id_to_sku.get(row['productid_id'])
+                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+            except Exception:
+                pass
+                
+            serializer = ProductSerializer(queryset, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
             return send_success(serializer.data, 'Products fetched successfully')
 
     def retrieve(self, request, *args, **kwargs):
