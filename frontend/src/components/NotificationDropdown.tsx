@@ -336,46 +336,48 @@ export const NotificationDropdown: React.FC = () => {
   const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').then(async (reg) => {
-        swRegistrationRef.current = reg;
-        
-        if ('Notification' in window) {
+    if (!('serviceWorker' in navigator)) return;
+    
+    navigator.serviceWorker.register('/sw.js').then(async (reg) => {
+      swRegistrationRef.current = reg;
+      
+      if ('Notification' in window && Notification.permission === 'default') {
+        try {
           const perm = await Notification.requestPermission();
-          if (perm === 'granted') {
-             try {
-                let sub = await reg.pushManager.getSubscription();
-                if (!sub) {
-                   const response = await api.get('webpush/vapid-public-key');
-                   const publicVapidKey = response.data.publicKey;
-                   if (publicVapidKey) {
-                     const padding = '='.repeat((4 - publicVapidKey.length % 4) % 4);
-                     const base64 = (publicVapidKey + padding).replace(/-/g, '+').replace(/_/g, '/');
-                     const rawData = window.atob(base64);
-                     const outputArray = new Uint8Array(rawData.length);
-                     for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
-                     
-                     sub = await reg.pushManager.subscribe({
-                       userVisibleOnly: true,
-                       applicationServerKey: outputArray
-                     });
-                   }
-                }
-                
-                if (sub) {
-                  await api.post('webpush/subscribe', {
-                     subscription: sub.toJSON()
-                  });
-                }
-             } catch (e) {
-                console.error("Web push subscription failed", e);
-             }
+          if (perm !== 'granted') return;
+        } catch { return; }
+      } else if (Notification.permission !== 'granted') {
+        return;
+      }
+
+      try {
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          const response = await api.get('webpush/vapid-public-key');
+          const publicVapidKey = response.data.publicKey;
+          if (publicVapidKey) {
+            const padding = '='.repeat((4 - publicVapidKey.length % 4) % 4);
+            const base64 = (publicVapidKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+            
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: outputArray
+            });
           }
         }
-      }).catch((err) => {
-        console.warn('SW registration failed:', err);
-      });
-    }
+        
+        if (sub) {
+          await api.post('webpush/subscribe', {
+            subscription: sub.toJSON()
+          });
+        }
+      } catch (e) {
+        // Push subscription not supported or failed silently
+      }
+    }).catch(() => {});
   }, []);
 
   // Helper to show a native notification via the service worker

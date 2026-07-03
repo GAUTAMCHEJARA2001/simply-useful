@@ -9,7 +9,7 @@ self.addEventListener('install', (event) => {
 
 // Activate event – claim all clients immediately
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(self.clients.claim().catch(() => {}));
 });
 
 // Listen for messages from the main app to show notifications
