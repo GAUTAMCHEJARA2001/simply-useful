@@ -228,6 +228,7 @@ const OrderPage: React.FC = () => {
     setIsSubmitting(true);
     
     const payloadItems = items.filter(i => i.product).map(i => ({
+      ...(i.id ? { id: i.id } : {}),
       productId: i.product,
       qty: Number(i.qty),
       price: Number(i.price),

@@ -348,6 +348,7 @@ class DealerSerializer(serializers.ModelSerializer):
     companyId = serializers.CharField(source='companyid_id')
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
+    warehouseId = serializers.PrimaryKeyRelatedField(source='warehouseid', queryset=Warehouse.objects.all(), required=False, allow_null=True)
 
     contactPerson = serializers.CharField(source='contact_person', required=False, allow_blank=True, allow_null=True)
     phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
@@ -360,7 +361,7 @@ class DealerSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'distributorName',
             'creditLimit', 'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
-            'phone', 'email', 'address', 'gst', 'contactPerson'
+            'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId'
         ]
 
     def create(self, validated_data):
@@ -381,6 +382,7 @@ class DistributorSerializer(serializers.ModelSerializer):
     companyId = serializers.CharField(source='companyid_id')
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
+    warehouseId = serializers.PrimaryKeyRelatedField(source='warehouseid', queryset=Warehouse.objects.all(), required=False, allow_null=True)
 
     contactPerson = serializers.CharField(source='contact_person', required=False, allow_blank=True, allow_null=True)
     phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
@@ -393,7 +395,7 @@ class DistributorSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'distributorName', 'area', 'assignedSoEmail', 'creditLimit',
             'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
-            'phone', 'email', 'address', 'gst', 'contactPerson'
+            'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId'
         ]
 
     def create(self, validated_data):
@@ -525,11 +527,16 @@ class OrderSerializer(serializers.ModelSerializer):
         # source='orderitem_set' means DRF stores nested items under 'orderitem_set' key
         items_data = validated_data.pop('orderitem_set', [])
         order = Order.objects.create(**validated_data)
+        db_alias = getattr(order._state, 'db', 'default')
         for item_data in items_data:
             import uuid
             if 'id' not in item_data or not item_data['id']:
                 item_data['id'] = 'c' + uuid.uuid4().hex[:23]
-            Orderitem.objects.create(orderid=order, **item_data)
+            # Remove non-model fields
+            item_data.pop('product', None)
+            item_data.pop('orderId', None)
+            item_data.pop('order_id', None)
+            Orderitem.objects.using(db_alias).create(orderid=order, **item_data)
         return order
 
     def update(self, instance, validated_data):
@@ -543,25 +550,55 @@ class OrderSerializer(serializers.ModelSerializer):
         instance.save()
         
         if items_data is not None:
-            # Map old sentqty by product ID to preserve it
-            old_items = instance.orderitem_set.all()
-            sentqty_map = {item.productid_id: item.sentqty for item in old_items if item.productid_id}
+            db_alias = getattr(instance._state, 'db', 'default')
             
-            # Delete old items
-            old_items.delete()
-            # Create new items
+            # Build a map of existing items by product ID for upsert
+            old_items = instance.orderitem_set.using(db_alias).all()
+            old_by_product = {}
+            for item in old_items:
+                pid = item.productid_id
+                if pid:
+                    old_by_product[pid] = item
+            
+            # Track which products are in the new items
+            seen_products = set()
+            
             for item_data in items_data:
                 import uuid
-                if 'id' not in item_data or not item_data['id']:
-                    item_data['id'] = 'c' + uuid.uuid4().hex[:23]
                 
-                # Preserve sentqty if product matches
+                # Resolve product ID
                 p_id = item_data.get('productid') or item_data.get('productid_id')
-                if hasattr(p_id, 'id'): p_id = p_id.id
-                if p_id in sentqty_map:
-                    item_data['sentqty'] = sentqty_map[p_id]
-                    
-                Orderitem.objects.create(orderid=instance, **item_data)
+                if hasattr(p_id, 'id'):
+                    p_id = p_id.id
+                
+                if not p_id:
+                    continue
+                
+                seen_products.add(p_id)
+                
+                # Remove non-model fields before create/update
+                item_data.pop('product', None)
+                item_data.pop('orderId', None)
+                item_data.pop('order_id', None)
+                
+                if p_id in old_by_product:
+                    # UPDATE existing item - preserve sentqty/returnedqty
+                    old_item = old_by_product[p_id]
+                    item_data.pop('sentqty', None)
+                    item_data.pop('returnedqty', None)
+                    for attr, val in item_data.items():
+                        setattr(old_item, attr, val)
+                    old_item.save(using=db_alias)
+                else:
+                    # CREATE new item
+                    if 'id' not in item_data or not item_data['id']:
+                        item_data['id'] = 'c' + uuid.uuid4().hex[:23]
+                    Orderitem.objects.using(db_alias).create(orderid=instance, **item_data)
+            
+            # Delete items that were removed from the order
+            for pid, old_item in old_by_product.items():
+                if pid not in seen_products:
+                    old_item.delete(using=db_alias)
                 
         return instance
 
