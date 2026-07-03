@@ -234,109 +234,96 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addDealer = useCallback(async (d: Dealer) => { 
     const res = await apiService.parties.createDealer(d);
     if (res.data.success) {
-      setDealers(prev => [...prev, d]); 
-      refreshAll();
+      setDealers(prev => [...prev, res.data.data || d]);
     }
-  }, [refreshAll]);
+  }, []);
 
   const updateDealer = useCallback(async (code: string, d: Partial<Dealer>) => {
     const res = await apiService.parties.updateDealer(code, d);
     if (res.data.success) {
       setDealers(prev => prev.map(x => x.dealerCode === code ? { ...x, ...d } : x));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const deleteDealer = useCallback(async (code: string) => {
     const res = await apiService.parties.deleteDealer(code);
     if (res.data.success) {
       setDealers(prev => prev.filter(x => x.dealerCode !== code));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const addDistributor = useCallback(async (d: Distributor) => {
     const res = await apiService.parties.createDistributor(d);
     if (res.data.success) {
-      setDistributors(prev => [...prev, d]);
-      refreshAll();
+      setDistributors(prev => [...prev, res.data.data || d]);
     }
-  }, [refreshAll]);
+  }, []);
 
   const updateDistributor = useCallback(async (name: string, d: Partial<Distributor>) => {
     const res = await apiService.parties.updateDistributor(name, d);
     if (res.data.success) {
       setDistributors(prev => prev.map(x => x.distributorName === name ? { ...x, ...d } : x));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const deleteDistributor = useCallback(async (name: string) => {
     const res = await apiService.parties.deleteDistributor(name);
     if (res.data.success) {
       setDistributors(prev => prev.filter(x => x.distributorName !== name));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const addProduct = useCallback(async (p: Product) => {
     const res = await apiService.inventory.create(p);
     if (res.data.success) {
-      setProducts(prev => [...prev, p]);
-      refreshAll();
+      setProducts(prev => [...prev, res.data.data || p]);
     }
-  }, [refreshAll]);
+  }, []);
 
   const updateProduct = useCallback(async (code: string, p: Partial<Product>) => {
     const res = await apiService.inventory.update(code, p);
     if (res.data.success) {
       setProducts(prev => prev.map(x => x.productCode === code ? { ...x, ...p } : x));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const deleteProduct = useCallback(async (code: string) => {
     const res = await apiService.inventory.remove(code);
     if (res.data.success) {
       setProducts(prev => prev.filter(x => x.productCode !== code));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const addOrder = useCallback(async (o: Order) => {
     const res = await apiService.orders.create(o);
     if (res.data.success) {
-      setOrders(prev => [...prev, o]);
+      setOrders(prev => [...prev, res.data.data || o]);
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
-      refreshAll();
     }
-  }, [refreshAll, queryClient]);
+  }, [queryClient]);
 
   const updateOrderStatus = useCallback(async (id: string, status: OrderStatus, reason?: string, actionDate?: string, extraFields?: any) => {
     const res = await apiService.orders.updateStatus(id, { status, reason, actionDate, ...extraFields });
     if (res.data.success) {
       setOrders(prev => prev.map(o => o.orderId === id ? { ...o, status, ...(reason ? { narration: reason } : {}), ...(actionDate ? { dispatchDate: actionDate } : {}), ...extraFields } : o));
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
-      refreshAll();
     }
-  }, [refreshAll, queryClient]);
+  }, [queryClient]);
 
   const updateOrderItems = useCallback(async (id: string, updatedOrder: any) => {
     const res = await apiService.orders.updateItems(id, updatedOrder);
     if (res.data.success) {
       setOrders(prev => prev.map(o => o.orderId === id ? { ...o, ...updatedOrder } : o));
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
-      refreshAll();
     }
-  }, [refreshAll, queryClient]);
+  }, [queryClient]);
 
   const addVisit = useCallback(async (v: Visit) => {
     const res = await apiService.visits.add(v);
     if (res.data.success) {
       setVisits(prev => [...prev, normalizeVisit(res.data.data || v)]);
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const updateVisitStatus = useCallback(async (id: string, visitStatus: string, hrRemark?: string) => {
     const res = await apiService.visits.updateStatus(id, visitStatus, hrRemark);
@@ -356,40 +343,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           : v
       ));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const addExpense = useCallback(async (e: Expense) => {
     const res = await apiService.expenses.add(e);
     if (res.data.success && res.data.data) {
       setExpenses(prev => [...prev, res.data.data!]);
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const updateExpenseStatus = useCallback(async (id: string, status: string, rejectReason?: string) => {
     const res = await apiService.expenses.updateStatus(id, status, rejectReason);
     if (res.data.success) {
       setExpenses(prev => prev.map(e => e.id === id ? { ...e, status, rejectReason } : e));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
 
   const updateExpense = useCallback(async (id: string, data: Partial<Expense>) => {
     const res = await apiService.expenses.update(id, data);
     if (res.data.success) {
       setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const addUser = async (u: Partial<AppUserRecord>) => {
     const res = await apiService.users.create(u);
     if (res.data.success) {
       setUsers(prev => [...prev, res.data.data]);
-      refreshAll();
       return res.data.data;
     }
   };
@@ -398,7 +380,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await apiService.users.update(id, u);
     if (res.data.success) {
       setUsers(prev => prev.map(user => user.id === id ? { ...user, ...res.data.data } : user));
-      refreshAll();
       return res.data.data;
     }
   };
@@ -407,38 +388,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await apiService.users.remove(id);
     if (res.data.success) {
       setUsers(prev => prev.filter(user => user.id !== id));
-      refreshAll();
     }
   };
 
   const updateUserPassword = async (id: string, password: string) => {
     await apiService.users.resetPassword(id, password);
-    refreshAll();
+    // No refresh needed — password change doesn't affect local state
   };
 
   const updateUserTarget = useCallback(async (id: string, target: number) => {
     const res = await apiService.users.updateTarget(id, target);
     if (res.data.success) {
       setUsers(prev => prev.map(x => x.id === id ? { ...x, monthlyTarget: target } : x));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const updateSetting = useCallback(async (key: string, value: any) => {
     const res = await apiService.settings.update(key, value);
     if (res.data.success) {
       setSettings(prev => ({ ...prev, [key]: value }));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   const updatePermission = useCallback(async (id: string, isEnabled: boolean) => {
     const res = await apiService.settings.updatePermission(id, isEnabled);
     if (res.data.success) {
       setPermissions(prev => prev.map(p => p.id === id ? { ...p, isEnabled } : p));
-      refreshAll();
     }
-  }, [refreshAll]);
+  }, []);
 
   return (
     <DataContext.Provider value={{

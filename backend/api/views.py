@@ -1440,52 +1440,107 @@ def bulk_import(request, entity):
             else:
                 connection.set_schema_to_public()
         elif entity == 'dealers':
+            from api.db_router import set_current_db, get_current_db
+            from django.db import connection as db_conn
+            import random, string
+            active_warehouses = list(Warehouse.objects.filter(active=True))
+            orig_db = get_current_db()
             for index, row in enumerate(rows, start=2):
                 code = (row.get('dealerCode') or row.get('dealer_code') or '').strip()
                 name = (row.get('dealerName') or row.get('dealer_name') or '').strip()
                 if not name:
                     skipped.append({'row': index, 'reason': 'dealerName is required'})
                     continue
+                # Auto-generate code if missing
                 if not code:
-                    import random
-                    import string
                     attempts = 0
                     while attempts < 100:
                         rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
                         candidate_code = f'DLR-{rand_suffix}'
-                        if not Dealer.objects.filter(dealercode=candidate_code, companyid_id=company_id).exists():
+                        first_wh = next((w for w in active_warehouses if w.db_name), None)
+                        if not first_wh or not Dealer.objects.using(first_wh.db_name).filter(dealercode=candidate_code, companyid_id=company_id).exists():
                             code = candidate_code
                             break
                         attempts += 1
                     if not code:
                         skipped.append({'row': index, 'reason': 'Failed to auto-generate a unique dealer code'})
                         continue
-                values = {'dealername': name, 'city': row.get('city') or '', 'assignedsoemail': row.get('assignedSoEmail') or row.get('assigned_so_email') or '', 'distributorname': row.get('distributorName') or row.get('distributor_name') or '', 'creditlimit': _num(row.get('creditLimit') or row.get('credit_limit')), 'outstanding': _num(row.get('outstanding')), 'active': _truthy(row.get('active'), True), 'territory': row.get('territory') or '', 'companyid_id': company_id, 'updatedat': timezone.now()}
-                existing = Dealer.objects.filter(dealercode=code, companyid_id=company_id).first()
-                if existing:
-                    for key, value in values.items():
-                        setattr(existing, key, value)
-                    existing.save()
+                values = {
+                    'dealername': name, 'city': row.get('city') or '',
+                    'assignedsoemail': row.get('assignedSoEmail') or row.get('assigned_so_email') or '',
+                    'distributorname': row.get('distributorName') or row.get('distributor_name') or '',
+                    'creditlimit': _num(row.get('creditLimit') or row.get('credit_limit')),
+                    'outstanding': _num(row.get('outstanding')),
+                    'active': _truthy(row.get('active'), True),
+                    'territory': row.get('territory') or '',
+                    'companyid_id': company_id, 'updatedat': timezone.now()
+                }
+                row_created = False
+                try:
+                    for wh in active_warehouses:
+                        if not wh.db_name:
+                            continue
+                        set_current_db(wh.db_name)
+                        db_conn.set_tenant(wh)
+                        existing = Dealer.objects.filter(dealercode=code, companyid_id=company_id).first()
+                        if existing:
+                            for key, value in values.items():
+                                setattr(existing, key, value)
+                            existing.save()
+                            row_created = True
+                        else:
+                            Dealer.objects.create(id=_new_id(), dealercode=code, createdat=timezone.now(), **values)
+                            row_created = True
+                except Exception as e:
+                    skipped.append({'row': index, 'reason': f'DB error: {str(e)}'})
+                finally:
+                    set_current_db(orig_db)
+                    db_conn.set_schema_to_public()
+                if row_created:
+                    # Count as updated if it existed in any warehouse, otherwise created
                     updated += 1
-                else:
-                    Dealer.objects.create(id=_new_id(), dealercode=code, createdat=timezone.now(), **values)
-                    created += 1
         elif entity == 'distributors':
+            from api.db_router import set_current_db, get_current_db
+            from django.db import connection as db_conn
+            active_warehouses = list(Warehouse.objects.filter(active=True))
+            orig_db = get_current_db()
             for index, row in enumerate(rows, start=2):
                 name = (row.get('distributorName') or row.get('distributor_name') or '').strip()
                 if not name:
                     skipped.append({'row': index, 'reason': 'distributorName is required'})
                     continue
-                values = {'area': row.get('area') or '', 'assignedsoemail': row.get('assignedSoEmail') or row.get('assigned_so_email') or '', 'creditlimit': _num(row.get('creditLimit') or row.get('credit_limit')), 'outstanding': _num(row.get('outstanding')), 'active': _truthy(row.get('active'), True), 'territory': row.get('territory') or '', 'companyid_id': company_id, 'updatedat': timezone.now()}
-                existing = Distributor.objects.filter(distributorname=name, companyid_id=company_id).first()
-                if existing:
-                    for key, value in values.items():
-                        setattr(existing, key, value)
-                    existing.save()
+                values = {
+                    'area': row.get('area') or '',
+                    'assignedsoemail': row.get('assignedSoEmail') or row.get('assigned_so_email') or '',
+                    'creditlimit': _num(row.get('creditLimit') or row.get('credit_limit')),
+                    'outstanding': _num(row.get('outstanding')),
+                    'active': _truthy(row.get('active'), True),
+                    'territory': row.get('territory') or '',
+                    'companyid_id': company_id, 'updatedat': timezone.now()
+                }
+                row_saved = False
+                try:
+                    for wh in active_warehouses:
+                        if not wh.db_name:
+                            continue
+                        set_current_db(wh.db_name)
+                        db_conn.set_tenant(wh)
+                        existing = Distributor.objects.filter(distributorname=name, companyid_id=company_id).first()
+                        if existing:
+                            for key, value in values.items():
+                                setattr(existing, key, value)
+                            existing.save()
+                            row_saved = True
+                        else:
+                            Distributor.objects.create(id=_new_id(), distributorname=name, createdat=timezone.now(), **values)
+                            row_saved = True
+                except Exception as e:
+                    skipped.append({'row': index, 'reason': f'DB error: {str(e)}'})
+                finally:
+                    set_current_db(orig_db)
+                    db_conn.set_schema_to_public()
+                if row_saved:
                     updated += 1
-                else:
-                    Distributor.objects.create(id=_new_id(), distributorname=name, createdat=timezone.now(), **values)
-                    created += 1
         elif entity == 'recipes':
             grouped = {}
             for index, row in enumerate(rows, start=2):

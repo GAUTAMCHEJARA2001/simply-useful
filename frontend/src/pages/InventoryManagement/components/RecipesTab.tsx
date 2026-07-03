@@ -258,8 +258,11 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                 <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
                     {products
                       .filter(p => {
-                        const cat = (p.categoryRef?.name || p.categoryName || p.category?.name || '').toUpperCase();
-                        return cat === 'FINISHED GOOD' || cat === 'SEMI FINISHED GOOD' || cat === 'TILES ADHESIVE' || cat === 'JOINT FILLER';
+                        // Check both parent category AND subcategory so "FINISHED GOOD > Tile Adhesive" products are included
+                        const parentCat = (p.categoryRef?.parent?.name || p.parentCategoryName || '').toUpperCase();
+                        const subCat = (p.categoryRef?.name || p.categoryName || p.category?.name || '').toUpperCase();
+                        const FINISHED_TYPES = ['FINISHED GOOD', 'SEMI FINISHED GOOD', 'TILES ADHESIVE', 'JOINT FILLER', 'FINISHED GOODS', 'SEMI-FINISHED GOOD'];
+                        return FINISHED_TYPES.includes(parentCat) || FINISHED_TYPES.includes(subCat);
                       })
                       .filter(p => !productSearch || (p.name && p.name.toLowerCase().includes(productSearch.toLowerCase())))
                       .map(p => {
@@ -273,6 +276,16 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                           </button>
                         );
                       })}
+                    {products.filter(p => {
+                        const parentCat = (p.categoryRef?.parent?.name || p.parentCategoryName || '').toUpperCase();
+                        const subCat = (p.categoryRef?.name || p.categoryName || p.category?.name || '').toUpperCase();
+                        const FINISHED_TYPES = ['FINISHED GOOD', 'SEMI FINISHED GOOD', 'TILES ADHESIVE', 'JOINT FILLER', 'FINISHED GOODS', 'SEMI-FINISHED GOOD'];
+                        return FINISHED_TYPES.includes(parentCat) || FINISHED_TYPES.includes(subCat);
+                      }).filter(p => !productSearch || (p.name && p.name.toLowerCase().includes(productSearch.toLowerCase()))).length === 0 && (
+                      <div className="px-4 py-3 text-xs text-muted-foreground">
+                        No finished products found. Try a different search or check that products have "Finished Good" category assigned.
+                      </div>
+                    )}
                 </div>
               )}
             </div>

@@ -13,7 +13,8 @@ export const useApiHealth = () => {
         return { online: false, latency: -1 };
       }
     },
-    refetchInterval: 10000, // Check every 10s
+    refetchInterval: 60000,           // Check every 60s (was 10s — too aggressive for free tier)
+    refetchIntervalInBackground: false, // Don't poll when tab is hidden
     retry: false,
   });
 };

@@ -238,6 +238,8 @@ const App = () => {
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
+      <Analytics />
+      <SpeedInsights />
     </ErrorBoundary>
   );
 };

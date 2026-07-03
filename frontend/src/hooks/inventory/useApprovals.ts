@@ -9,10 +9,11 @@ export const useApprovals = () => {
       const res = await api.get('/transactions/approvals');
       return (res.data?.data || res.data || []) as any[];
     },
-    refetchInterval: 15_000,        // Auto-refresh every 15 seconds
-    refetchOnWindowFocus: true,     // Always refresh when user switches back to tab
-    retry: 3,                       // Retry on failure (e.g. after a 500 error)
-    staleTime: 5_000,              // Consider data stale after 5 seconds
+    refetchInterval: 60_000,            // Check every 60s (was 15s — too aggressive)
+    refetchIntervalInBackground: false, // Don't poll when tab is hidden
+    refetchOnWindowFocus: false,        // Don't burst on tab switch
+    retry: 2,
+    staleTime: 30_000,                  // Consider data stale after 30 seconds
   });
 };
 

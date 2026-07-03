@@ -6,8 +6,15 @@ import json
 from datetime import datetime
 
 @api_view(['POST'])
-@permission_classes([AllowAny]) # In production this should be secured with a token
+@permission_classes([AllowAny])
 def sync_busy_data(request):
+    # DISABLED FOR PRODUCTION DEPLOYMENT — local Busy sync was causing worker
+    # timeouts on Render by holding the single worker open during long DB writes.
+    # Re-enable only when running locally against a local Postgres instance.
+    return Response({
+        'success': False,
+        'message': 'Busy sync is currently disabled on this deployment. Use the local sync tool instead.'
+    }, status=503)
     try:
         data = request.data
         parties = data.get('parties', [])
