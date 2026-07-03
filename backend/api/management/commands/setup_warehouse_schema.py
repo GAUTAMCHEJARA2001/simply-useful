@@ -44,21 +44,71 @@ INDEXES = [
 ]
 
 
+DEFAULT_TABLES_SQL = [
+    """DO $$ BEGIN
+        CREATE TABLE IF NOT EXISTS "Dealer" (
+            "id" text PRIMARY KEY,
+            "dealerCode" text NOT NULL,
+            "dealerName" text NOT NULL,
+            "city" text NOT NULL,
+            "assignedSoEmail" text NOT NULL,
+            "distributorName" text,
+            "creditLimit" numeric(14,2) DEFAULT 0.00,
+            "outstanding" numeric(14,2) DEFAULT 0.00,
+            "active" boolean NOT NULL DEFAULT true,
+            "territory" text,
+            "companyId" text REFERENCES "Company"("id"),
+            "createdAt" timestamptz DEFAULT now(),
+            "updatedAt" timestamptz DEFAULT now(),
+            "convertedLeadId" text,
+            "warehouseId" integer REFERENCES "Warehouse"("id")
+        );
+    EXCEPTION WHEN duplicate_table THEN NULL;
+    END $$;""",
+    """DO $$ BEGIN
+        CREATE TABLE IF NOT EXISTS "Distributor" (
+            "id" text PRIMARY KEY,
+            "distributorCode" text UNIQUE,
+            "distributorName" text NOT NULL,
+            "area" text NOT NULL,
+            "assignedSoEmail" text NOT NULL,
+            "creditLimit" numeric(14,2) DEFAULT 0.00,
+            "outstanding" numeric(14,2) DEFAULT 0.00,
+            "active" boolean NOT NULL DEFAULT true,
+            "territory" text,
+            "companyId" text REFERENCES "Company"("id"),
+            "createdAt" timestamptz DEFAULT now(),
+            "updatedAt" timestamptz DEFAULT now(),
+            "warehouseId" integer REFERENCES "Warehouse"("id")
+        );
+    EXCEPTION WHEN duplicate_table THEN NULL;
+    END $$;""",
+]
+
+
 class Command(BaseCommand):
-    help = 'Setup warehouse schema: add columns and indexes'
+    help = 'Setup warehouse schema: create tables in default DB and add columns/indexes'
 
     def handle(self, *args, **options):
+        self.stdout.write('Creating Dealer/Distributor tables in default DB if missing...')
+        for sql in DEFAULT_TABLES_SQL:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(sql)
+            except Exception as e:
+                self.stdout.write(f'  Table creation: {e}')
+
         self.stdout.write('Setting up warehouse schemas...')
         
         warehouses = Warehouse.objects.using('default').filter(active=True)
         
         for wh in warehouses:
-            if not wh.db_name:
+            alias = wh.db_name or wh.schema_name
+            if not alias or alias == 'public':
                 continue
             
             self.stdout.write(f'Processing {wh.name}...')
             
-            # Run schema changes (atomic=False needed for DO blocks)
             for sql in SCHEMA_CHANGES:
                 try:
                     with connection.cursor() as cursor:
@@ -66,7 +116,6 @@ class Command(BaseCommand):
                 except Exception as e:
                     self.stdout.write(f'  Schema change skipped: {e}')
             
-            # Add indexes
             created = 0
             for idx_name, table, column in INDEXES:
                 try:
