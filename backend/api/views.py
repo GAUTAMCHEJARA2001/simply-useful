@@ -3342,7 +3342,7 @@ def report_current_stock(request):
             
             # Get all stock transaction data for this warehouse
             stock_tx_data = Stocktransaction.objects.using(wh.db_name).exclude(
-                reason__in=['PENDING_APPROVAL', 'REJECTED', 'OPENING_STOCK_BULK_IMPORT']
+                reason__in=['PENDING_APPROVAL', 'REJECTED']
             ).values('productid_id', 'transactiontype').annotate(total=Sum('quantity'))
             
             # Process purchases efficiently
@@ -3552,7 +3552,7 @@ def report_global_inventory(request):
         if not wh.db_name:
             continue
         try:
-            st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED', 'OPENING_STOCK_BULK_IMPORT']).values('productid', 'productid__name', 'productid__productcode', 'productid__categoryid__name').annotate(total_qty=Sum('quantity'))
+            st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid', 'productid__name', 'productid__productcode', 'productid__categoryid__name').annotate(total_qty=Sum('quantity'))
             if company_id:
                 st_aggs = st_aggs.filter(productid__companyid_id=company_id)
             for st in st_aggs:
