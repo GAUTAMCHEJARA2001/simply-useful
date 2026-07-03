@@ -1419,7 +1419,7 @@ def bulk_import(request, entity):
                     while attempts < 100:
                         rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
                         candidate_code = f'{prefix}-{rand_suffix}'
-                        if not Product.objects.filter(productcode=candidate_code).exists():
+                        if not Product.objects.filter(productcode=candidate_code, companyid_id=company_id).exists():
                             code = candidate_code
                             break
                         attempts += 1
@@ -1454,15 +1454,24 @@ def bulk_import(request, entity):
                 if unit_name:
                     unit, _ = Unit.objects.get_or_create(name=unit_name, companyid_id=company_id, defaults={'active': True})
                 existing = Product.objects.filter(productcode=code, companyid_id=company_id).first()
-                values = {'name': name, 'bagsize': row.get('bagSize') or row.get('bag_size') or '50 KG', 'brandid': brand, 'unitid': unit, 'rate': _num(row.get('rate') or row.get('price')), 'gst': _num(row.get('gst'), 18.0), 'active': _truthy(row.get('active'), True), 'companyid_id': company_id, 'categoryid': category_to_assign, 'openingstock': _int(row.get('openingStock') or row.get('opening_stock')), 'minimumstock': _int(row.get('minimumStock') or row.get('minimum_stock')), 'updatedat': timezone.now()}
                 if existing:
-                    for key, value in values.items():
-                        setattr(existing, key, value)
-                    existing.save()
-                    updated += 1
-                else:
-                    existing = Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
-                    created += 1
+                    import random, string
+                    company = Company.objects.filter(id=company_id).first()
+                    prefix = getattr(company, 'skuprefix', 'PRD') or 'PRD'
+                    attempts = 0
+                    while attempts < 100:
+                        rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                        candidate_code = f'{prefix}-{rand_suffix}'
+                        if not Product.objects.filter(productcode=candidate_code, companyid_id=company_id).exists():
+                            code = candidate_code
+                            break
+                        attempts += 1
+                    if code == (row.get('productCode') or row.get('product_code') or '').strip():
+                        skipped.append({'row': index, 'reason': f'Product code {code} already exists and failed to generate unique code'})
+                        continue
+                values = {'name': name, 'bagsize': row.get('bagSize') or row.get('bag_size') or '50 KG', 'brandid': brand, 'unitid': unit, 'rate': _num(row.get('rate') or row.get('price')), 'gst': _num(row.get('gst'), 18.0), 'active': _truthy(row.get('active'), True), 'companyid_id': company_id, 'categoryid': category_to_assign, 'openingstock': _int(row.get('openingStock') or row.get('opening_stock')), 'minimumstock': _int(row.get('minimumStock') or row.get('minimum_stock')), 'updatedat': timezone.now()}
+                Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
+                created += 1
                 opening_stock = values.get('openingstock')
                 if opening_stock is not None:
                     pass # Legacy Inventory table removed
