@@ -3535,21 +3535,50 @@ def report_global_inventory(request):
         if not wh.db_name:
             continue
         try:
-            st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid', 'productid__name', 'productid__productcode', 'productid__categoryid__name').annotate(total_qty=Sum('quantity'))
+            products = Product.objects.using(wh.db_name).select_related('categoryid').all()
+            if company_id:
+                products = products.filter(companyid_id=company_id)
+
+            stock_map = {}
+            for p in products:
+                opening = float(p.openingstock or 0)
+                if opening > 0:
+                    stock_map[p.id] = {
+                        'warehouseName': wh.name,
+                        'productId': p.id,
+                        'productName': p.name,
+                        'sku': p.productcode or '',
+                        'categoryName': p.categoryid.name if p.categoryid else 'Uncategorized',
+                        'quantity': opening
+                    }
+
+            st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid').annotate(total_qty=Sum('quantity'))
             if company_id:
                 st_aggs = st_aggs.filter(productid__companyid_id=company_id)
             for st in st_aggs:
+                pid = st['productid']
                 qty = float(st['total_qty'] or 0)
-                if qty == 0:
-                    continue
-                inventory_data.append({
-                    'warehouseName': wh.name,
-                    'productId': st['productid'],
-                    'productName': st['productid__name'],
-                    'sku': st['productid__productcode'] or '',
-                    'categoryName': st['productid__categoryid__name'] or 'Uncategorized',
-                    'quantity': qty
-                })
+                if pid in stock_map:
+                    stock_map[pid]['quantity'] += qty
+                else:
+                    if qty == 0:
+                        continue
+                    try:
+                        p = Product.objects.using(wh.db_name).select_related('categoryid').get(id=pid)
+                        stock_map[pid] = {
+                            'warehouseName': wh.name,
+                            'productId': p.id,
+                            'productName': p.name,
+                            'sku': p.productcode or '',
+                            'categoryName': p.categoryid.name if p.categoryid else 'Uncategorized',
+                            'quantity': qty
+                        }
+                    except Product.DoesNotExist:
+                        pass
+
+            for data in stock_map.values():
+                if data['quantity'] != 0:
+                    inventory_data.append(data)
         except Exception as e:
             print(f"Error fetching global inventory for wh {wh.db_name}: {e}")
             
