@@ -7,6 +7,8 @@ import { API_ENDPOINTS } from '../endpoints';
  */
 export const inventoryService = {
   getAll: () => api.get(API_ENDPOINTS.PRODUCTS),
+  getPaginated: (page: number, limit: number, search?: string) =>
+    api.get(API_ENDPOINTS.PRODUCTS, { params: { page, limit, ...(search ? { search } : {}) } }),
   getById: (id: string | number) => api.get(`${API_ENDPOINTS.PRODUCTS}/${id}`),
   create: (data: any) => api.post(API_ENDPOINTS.PRODUCTS, data),
   suggestSKU: (data: any) => api.post(`${API_ENDPOINTS.PRODUCTS}/suggest-sku`, data),

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Product, Category, Brand, Unit } from '@/types';
@@ -13,9 +13,9 @@ import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { apiService } from '@/api/apiService';
 
-// ── Category storage (localStorage, per-session) ──────────────────
 const STORAGE_KEY = 'erp_product_categories';
 const DEFAULT_CATEGORIES = ['Tile Adhesive', 'Water Proofing', 'Grout', 'Wall Putty', 'Epoxy', 'Primer', 'Sealant', 'Other'];
+const PAGE_SIZE = 20;
 
 const getCategories = (): string[] => {
   try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : DEFAULT_CATEGORIES; } catch { return DEFAULT_CATEGORIES; }
@@ -58,7 +58,7 @@ const emptyProduct: Product = {
 
 const ProductManagement: React.FC = () => {
   const { user } = useAuth();
-  const { products, addProduct, updateProduct, deleteProduct, warehouses } = useData();
+  const { addProduct, updateProduct, deleteProduct, warehouses } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
 
@@ -70,6 +70,7 @@ const ProductManagement: React.FC = () => {
   const [selectedSubCatId, setSelectedSubCatId] = useState<string>('');
 
   const [categories, setCategories] = useState<string[]>(getCategories);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -79,6 +80,14 @@ const ProductManagement: React.FC = () => {
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState<Product>(emptyProduct);
   const [deleteTarget, setDeleteTarget] = useState('');
+
+  const [items, setItems] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   const isAdmin = can('manage_products');
 
@@ -105,61 +114,84 @@ const ProductManagement: React.FC = () => {
         console.error("Error fetching master lists:", err);
       }
     };
-    if (user) {
-      fetchMasters();
-    }
+    if (user) fetchMasters();
   }, [user]);
 
-  const filtered = products.filter(p => {
-    const productName = p.productName || p.name || '';
-    const matchSearch = productName.toLowerCase().includes(search.toLowerCase()) || p.productCode.toLowerCase().includes(search.toLowerCase());
-    const matchCat = categoryFilter === 'All' || getCategoryName(p.category) === categoryFilter;
-    return matchSearch && matchCat;
-  });
+  const fetchPage = useCallback(async (p: number, searchTerm: string, append: boolean) => {
+    setLoading(true);
+    try {
+      const res = await apiService.inventory.getPaginated(p, PAGE_SIZE, searchTerm || undefined);
+      const data = res.data?.data;
+      if (data?.items) {
+        setItems(prev => append ? [...prev, ...data.items] : data.items);
+        setTotal(data.total);
+        setHasMore(data.hasMore);
+      }
+    } catch (err) {
+      console.error('Error fetching products:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setPage(1);
+    fetchPage(1, search, false);
+  }, [search, fetchPage]);
+
+  useEffect(() => {
+    if (page > 1) fetchPage(page, search, true);
+  }, [page, search, fetchPage]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore && !loading) {
+        setPage(p => p + 1);
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loading]);
+
+  const handleSearchChange = (val: string) => {
+    setSearchInput(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearch(val), 300);
+  };
+
+  const filtered = categoryFilter === 'All'
+    ? items
+    : items.filter(p => getCategoryName(p.category) === categoryFilter);
 
   const openAdd = () => {
     setEditing(null);
-    setForm({
-      ...emptyProduct,
-      productCode: '',
-      category: categories[0] || 'Other'
-    });
+    setForm({ ...emptyProduct, productCode: '', category: categories[0] || 'Other' });
     setSelectedParentCatId('');
     setSelectedSubCatId('');
     setDialogOpen(true);
   };
+
   const openEdit = (p: Product) => {
     setEditing(p);
-    
     let resolvedParentId = '';
     let resolvedSubId = '';
     if (p.categoryId) {
       const cat = dbCategories.find(c => String(c.id) === String(p.categoryId));
       if (cat) {
-        if (cat.parentId) {
-          resolvedParentId = String(cat.parentId);
-          resolvedSubId = String(cat.id);
-        } else {
-          resolvedParentId = String(cat.id);
-          resolvedSubId = '';
-        }
+        if (cat.parentId) { resolvedParentId = String(cat.parentId); resolvedSubId = String(cat.id); }
+        else { resolvedParentId = String(cat.id); resolvedSubId = ''; }
       }
     } else if (p.categoryRef) {
       const cat = dbCategories.find(c => String(c.id) === String(p.categoryRef?.id));
       if (cat) {
-        if (cat.parentId) {
-          resolvedParentId = String(cat.parentId);
-          resolvedSubId = String(cat.id);
-        } else {
-          resolvedParentId = String(cat.id);
-          resolvedSubId = '';
-        }
+        if (cat.parentId) { resolvedParentId = String(cat.parentId); resolvedSubId = String(cat.id); }
+        else { resolvedParentId = String(cat.id); resolvedSubId = ''; }
       }
     }
-
     setSelectedParentCatId(resolvedParentId);
     setSelectedSubCatId(resolvedSubId);
-
     setForm({
       ...p,
       rate: isNaN(Number(p.rate)) ? 0 : Number(p.rate),
@@ -179,9 +211,7 @@ const ProductManagement: React.FC = () => {
       toast({ title: 'Missing Fields', variant: 'destructive', description: 'Product Name, Bag Size, Price, and Category are required.' });
       return;
     }
-
     const finalCategoryId = selectedSubCatId || selectedParentCatId;
-
     const { brand, unit, categoryRef, ...cleanForm } = form as any;
     const payload = {
       ...cleanForm,
@@ -196,21 +226,30 @@ const ProductManagement: React.FC = () => {
       unitId: form.unitId ? Number(form.unitId) : null,
       defaultWarehouseId: form.defaultWarehouseId ? Number(form.defaultWarehouseId) : null,
     };
-    if (editing) { updateProduct(editing.productCode, payload); toast({ title: 'Product Updated', description: form.productName }); }
-    else { addProduct(payload); toast({ title: 'Product Added', description: form.productName }); }
+    if (editing) {
+      updateProduct(editing.productCode, payload);
+      toast({ title: 'Product Updated', description: form.productName });
+      setItems(prev => prev.map(p => p.productCode === editing.productCode ? { ...p, ...payload } : p));
+    } else {
+      addProduct(payload);
+      toast({ title: 'Product Added', description: form.productName });
+    }
     setDialogOpen(false);
   };
 
-  const handleDelete = () => { deleteProduct(deleteTarget); toast({ title: 'Deleted' }); setDeleteDialogOpen(false); };
+  const handleDelete = () => {
+    deleteProduct(deleteTarget);
+    toast({ title: 'Deleted' });
+    setItems(prev => prev.filter(p => p.productCode !== deleteTarget));
+    setDeleteDialogOpen(false);
+  };
+
   const uf = (field: keyof Product, value: any) => setForm(prev => {
     const updated = { ...prev, [field]: value };
-    if (field === 'productName') {
-      updated.name = value;
-    }
+    if (field === 'productName') updated.name = value;
     return updated;
   });
 
-  // Category management
   const handleAddCategory = () => {
     const name = newCatName.trim();
     if (!name) return;
@@ -220,6 +259,7 @@ const ProductManagement: React.FC = () => {
     setNewCatName('');
     toast({ title: 'Category Added', description: name });
   };
+
   const handleDeleteCategory = (cat: string) => {
     if (DEFAULT_CATEGORIES.includes(cat)) { toast({ title: 'Cannot delete default category', variant: 'destructive' }); return; }
     const updated = categories.filter(c => c !== cat);
@@ -232,7 +272,7 @@ const ProductManagement: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="page-header">Product Management</h1>
-          <p className="page-subheader">{products.length} products · {categories.length} categories</p>
+          <p className="page-subheader">{total} products · {categories.length} categories</p>
         </div>
         <div className="flex gap-2">
           {isAdmin && (
@@ -244,14 +284,13 @@ const ProductManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Category Filter Tabs */}
       <div className="flex flex-wrap gap-2">
         <button onClick={() => setCategoryFilter('All')}
           className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${categoryFilter === 'All' ? 'bg-primary text-white border-primary' : 'bg-secondary border-border hover:bg-muted'}`}>
-          All ({products.length})
+          All ({total})
         </button>
         {categories.map(cat => {
-          const count = products.filter(p => getCategoryName(p.category) === cat).length;
+          const count = items.filter(p => getCategoryName(p.category) === cat).length;
           if (count === 0) return null;
           return (
             <button key={cat} onClick={() => setCategoryFilter(cat)}
@@ -264,10 +303,9 @@ const ProductManagement: React.FC = () => {
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Search products..." className="pl-10 h-12" value={search} onChange={e => setSearch(e.target.value)} />
+        <Input placeholder="Search products..." className="pl-10 h-12" value={searchInput} onChange={e => handleSearchChange(e.target.value)} />
       </div>
 
-      {/* Mobile Cards */}
       <div className="lg:hidden space-y-3">
         {filtered.map(p => (
           <Card key={p.productCode}>
@@ -294,7 +332,6 @@ const ProductManagement: React.FC = () => {
         ))}
       </div>
 
-      {/* Desktop Table */}
       <Card className="hidden lg:block">
         <CardContent className="p-0">
           <table className="w-full text-sm">
@@ -327,13 +364,16 @@ const ProductManagement: React.FC = () => {
                   )}
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">No products found</td></tr>}
+              {filtered.length === 0 && !loading && <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">No products found</td></tr>}
             </tbody>
           </table>
         </CardContent>
       </Card>
 
-      {/* ── Manage Categories Dialog ────────────────────────── */}
+      <div ref={sentinelRef} className="h-4" />
+      {loading && <p className="text-center text-sm text-muted-foreground py-2">Loading products...</p>}
+      {!hasMore && items.length > 0 && <p className="text-center text-xs text-muted-foreground">All {total} products loaded</p>}
+
       <Dialog open={catDialogOpen} onOpenChange={setCatDialogOpen}>
         <DialogContent className="max-w-md" aria-describedby="cat-dialog-desc">
           <DialogHeader>
@@ -365,7 +405,6 @@ const ProductManagement: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Add/Edit Product Dialog ─────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-xl" aria-describedby="product-form-desc">
           <DialogHeader>
@@ -385,17 +424,10 @@ const ProductManagement: React.FC = () => {
                 <Input id="product-name" name="productName" value={form.productName} onChange={e => uf('productName', e.target.value)} placeholder="Product Name" />
               </div>
             </div>
-            
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="product-category">Category *</Label>
-                <Select 
-                  value={selectedParentCatId} 
-                  onValueChange={v => {
-                    setSelectedParentCatId(v);
-                    setSelectedSubCatId('');
-                  }}
-                >
+                <Select value={selectedParentCatId} onValueChange={v => { setSelectedParentCatId(v); setSelectedSubCatId(''); }}>
                   <SelectTrigger id="product-category" name="category"><SelectValue placeholder="Select Category" /></SelectTrigger>
                   <SelectContent>
                     {dbCategories.filter(c => !c.parentId).map(cat => (
@@ -406,11 +438,7 @@ const ProductManagement: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="product-subcategory">Subcategory</Label>
-                <Select 
-                  value={selectedSubCatId || 'none_selected'} 
-                  onValueChange={v => setSelectedSubCatId(v === 'none_selected' ? '' : v)}
-                  disabled={!selectedParentCatId}
-                >
+                <Select value={selectedSubCatId || 'none_selected'} onValueChange={v => setSelectedSubCatId(v === 'none_selected' ? '' : v)} disabled={!selectedParentCatId}>
                   <SelectTrigger id="product-subcategory" name="subcategory"><SelectValue placeholder={selectedParentCatId ? "Select Subcategory" : "Choose Category first"} /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none_selected">-- None --</SelectItem>
@@ -421,40 +449,28 @@ const ProductManagement: React.FC = () => {
                 </Select>
               </div>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="product-brand">Brand</Label>
-                <Select 
-                  value={form.brandId ? String(form.brandId) : 'none_selected'} 
-                  onValueChange={v => uf('brandId', v === 'none_selected' ? null : Number(v))}
-                >
+                <Select value={form.brandId ? String(form.brandId) : 'none_selected'} onValueChange={v => uf('brandId', v === 'none_selected' ? null : Number(v))}>
                   <SelectTrigger id="product-brand" name="brandId"><SelectValue placeholder="Select Brand" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none_selected">-- None --</SelectItem>
-                    {brands.map(b => (
-                      <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
-                    ))}
+                    {brands.map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="product-unit">Unit</Label>
-                <Select 
-                  value={form.unitId ? String(form.unitId) : 'none_selected'} 
-                  onValueChange={v => uf('unitId', v === 'none_selected' ? null : Number(v))}
-                >
+                <Select value={form.unitId ? String(form.unitId) : 'none_selected'} onValueChange={v => uf('unitId', v === 'none_selected' ? null : Number(v))}>
                   <SelectTrigger id="product-unit" name="unitId"><SelectValue placeholder="Select Unit" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none_selected">-- None --</SelectItem>
-                    {units.map(u => (
-                      <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
-                    ))}
+                    {units.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="product-bag-size">Bag Size *</Label>
@@ -469,7 +485,6 @@ const ProductManagement: React.FC = () => {
                 <Input id="product-gst" name="gst" type="number" value={(form.gst ?? 18).toString()} onChange={e => uf('gst', Number(e.target.value) || 0)} />
               </div>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="product-opening-stock">Opening Stock</Label>
@@ -481,16 +496,11 @@ const ProductManagement: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="product-warehouse">Default Warehouse</Label>
-                <Select 
-                  value={form.defaultWarehouseId ? String(form.defaultWarehouseId) : 'none_selected'} 
-                  onValueChange={v => uf('defaultWarehouseId', v === 'none_selected' ? null : Number(v))}
-                >
+                <Select value={form.defaultWarehouseId ? String(form.defaultWarehouseId) : 'none_selected'} onValueChange={v => uf('defaultWarehouseId', v === 'none_selected' ? null : Number(v))}>
                   <SelectTrigger id="product-warehouse" name="defaultWarehouseId"><SelectValue placeholder="Select Warehouse" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none_selected">-- None --</SelectItem>
-                    {warehouses.map(w => (
-                      <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>
-                    ))}
+                    {warehouses.map(w => <SelectItem key={w.id} value={String(w.id)}>{w.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -503,7 +513,6 @@ const ProductManagement: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete Confirm Dialog ───────────────────────────── */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="max-w-sm" aria-describedby="delete-prod-desc">
           <DialogHeader>

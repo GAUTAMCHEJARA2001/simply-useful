@@ -418,12 +418,15 @@ class ProductViewSet(viewsets.ModelViewSet):
         user_role = getattr(self.request.user, 'role', '') or ''
         is_admin = user_role.upper() in admin_roles
         current_db = get_current_db()
-        # Non-admin users (Sales, Dealer, etc.) always see products from ALL warehouses
-        # so they can see their assigned products regardless of selected warehouse
+        search = request.query_params.get('search', '').strip()
+        page_param = request.query_params.get('page')
+        limit_param = request.query_params.get('limit')
+        is_paginated = page_param is not None and limit_param is not None
+
         if current_db == 'default' or not is_admin:
             from api.models import Product, Userproductaccess
             from api.models import Purchaseitem, Orderitem, Stocktransaction
-            from django.db.models import Sum
+            from django.db.models import Sum, Q
             skip_assignment_filter = is_admin
             allowed_product_ids = None
             if not skip_assignment_filter:
@@ -443,20 +446,18 @@ class ProductViewSet(viewsets.ModelViewSet):
                     except Exception:
                         pass
                 if not has_any_assignments:
+                    if is_paginated:
+                        return send_success({'items': [], 'total': 0, 'page': 1, 'limit': 20, 'hasMore': False}, 'Products fetched successfully')
                     return send_success([], 'Products fetched successfully')
-            
-            # ── BULK STOCK CALCULATION: One pass per stock source across ALL warehouses ──
-            # Build name→sku and id→sku maps from ALL warehouse products
+
             all_products = []
             seen_skus = set()
             seen_ids = set()
-            sku_qty_map = {}  # sku → net stock
-            name_to_sku = {}  # product name → sku (per warehouse)
-            id_to_sku = {}    # product id → sku (per warehouse)
-            
+            name_to_sku = {}
+            id_to_sku = {}
+
             active_whs = [wh for wh in Warehouse.objects.filter(active=True) if wh.db_name]
-            
-            # Phase 1: Collect all products and build lookup maps
+
             for wh in active_whs:
                 try:
                     products_qs = Product.objects.using(wh.db_name).select_related('categoryid', 'categoryid__parentid', 'brandid', 'unitid')
@@ -465,104 +466,227 @@ class ProductViewSet(viewsets.ModelViewSet):
                         products_qs = products_qs.filter(companyid_id=company_id)
                     if allowed_product_ids is not None:
                         products_qs = products_qs.filter(id__in=allowed_product_ids)
-                    
+                    if search:
+                        products_qs = products_qs.filter(
+                            Q(name__icontains=search) | Q(productcode__icontains=search)
+                        )
+
                     wh_name_to_sku = {}
                     wh_id_to_sku = {}
                     for p in products_qs:
                         if p.productcode:
                             wh_name_to_sku[p.name] = p.productcode
                             wh_id_to_sku[p.id] = p.productcode
-                            sku_qty_map.setdefault(p.productcode, 0)
-                            sku_qty_map[p.productcode] += float(p.openingstock or 0)
                             if p.productcode not in seen_skus:
                                 all_products.append(p)
                                 seen_skus.add(p.productcode)
                         elif p.id not in seen_ids:
                             all_products.append(p)
                             seen_ids.add(p.id)
-                    
-                    # Store per-warehouse maps for stock queries
+
                     name_to_sku[wh.db_name] = wh_name_to_sku
                     id_to_sku[wh.db_name] = wh_id_to_sku
                 except Exception:
                     pass
-            
-            # Phase 2: Bulk stock queries across ALL warehouses in parallel-like fashion
+
+            total = len(all_products)
+
+            if is_paginated:
+                try:
+                    page = max(1, int(page_param))
+                    limit = min(200, max(1, int(limit_param)))
+                except (ValueError, TypeError):
+                    page, limit = 1, 20
+                offset = (page - 1) * limit
+                page_products = all_products[offset:offset + limit]
+                page_skus = {p.productcode for p in page_products if p.productcode}
+
+                sku_qty_map = {}
+                for p in page_products:
+                    if p.productcode:
+                        sku_qty_map[p.productcode] = float(p.openingstock or 0)
+
+                for wh in active_whs:
+                    wh_db = wh.db_name
+                    wh_name_map = name_to_sku.get(wh_db, {})
+                    wh_id_map = id_to_sku.get(wh_db, {})
+                    if not wh_name_map and not wh_id_map:
+                        continue
+                    try:
+                        purchases = Purchaseitem.objects.using(wh_db).filter(
+                            purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']
+                        ).values('productname').annotate(total=Sum('qty'))
+                        for row in purchases:
+                            sku = wh_name_map.get(row['productname'])
+                            if sku and sku in page_skus:
+                                sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+
+                        purchase_ret = Purchaseitem.objects.using(wh_db).filter(
+                            purchaseid__status='Returned'
+                        ).values('productname').annotate(total=Sum('qty'))
+                        for row in purchase_ret:
+                            sku = wh_name_map.get(row['productname'])
+                            if sku and sku in page_skus:
+                                sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+
+                        sales = Orderitem.objects.using(wh_db).filter(
+                            orderid__status='Completed'
+                        ).values('productid_id').annotate(total=Sum('qty'))
+                        for row in sales:
+                            sku = wh_id_map.get(row['productid_id'])
+                            if sku and sku in page_skus:
+                                sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+
+                        sales_ret = Orderitem.objects.using(wh_db).filter(
+                            orderid__status='Returned'
+                        ).values('productid_id').annotate(total=Sum('qty'))
+                        for row in sales_ret:
+                            sku = wh_id_map.get(row['productid_id'])
+                            if sku and sku in page_skus:
+                                sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+
+                        st_aggs = Stocktransaction.objects.using(wh_db).exclude(
+                            reason__in=['PENDING_APPROVAL', 'REJECTED']
+                        ).values('productid_id').annotate(total=Sum('quantity'))
+                        for row in st_aggs:
+                            sku = wh_id_map.get(row['productid_id'])
+                            if sku and sku in page_skus:
+                                sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+                    except Exception:
+                        pass
+
+                serializer = ProductSerializer(page_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
+                return send_success({
+                    'items': serializer.data,
+                    'total': total,
+                    'page': page,
+                    'limit': limit,
+                    'hasMore': offset + limit < total,
+                }, 'Products fetched successfully')
+
+            # Non-paginated path: calculate stock for ALL products (legacy)
+            sku_qty_map = {}
+            for p in all_products:
+                if p.productcode:
+                    sku_qty_map[p.productcode] = float(p.openingstock or 0)
+
             for wh in active_whs:
                 wh_db = wh.db_name
                 wh_name_map = name_to_sku.get(wh_db, {})
                 wh_id_map = id_to_sku.get(wh_db, {})
-                
                 if not wh_name_map and not wh_id_map:
                     continue
-                
                 try:
-                    # Purchases (inward) - bulk aggregation
                     purchases = Purchaseitem.objects.using(wh_db).filter(
                         purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']
                     ).values('productname').annotate(total=Sum('qty'))
                     for row in purchases:
                         sku = wh_name_map.get(row['productname'])
-                        if sku:
-                            sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-                    
-                    # Purchase returns (outward)
+                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+
                     purchase_ret = Purchaseitem.objects.using(wh_db).filter(
                         purchaseid__status='Returned'
                     ).values('productname').annotate(total=Sum('qty'))
                     for row in purchase_ret:
                         sku = wh_name_map.get(row['productname'])
-                        if sku:
-                            sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-                    
-                    # Sales (outward)
+                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+
                     sales = Orderitem.objects.using(wh_db).filter(
                         orderid__status='Completed'
                     ).values('productid_id').annotate(total=Sum('qty'))
                     for row in sales:
                         sku = wh_id_map.get(row['productid_id'])
-                        if sku:
-                            sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-                    
-                    # Sales returns (inward)
+                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+
                     sales_ret = Orderitem.objects.using(wh_db).filter(
                         orderid__status='Returned'
                     ).values('productid_id').annotate(total=Sum('qty'))
                     for row in sales_ret:
                         sku = wh_id_map.get(row['productid_id'])
-                        if sku:
-                            sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-                    
-                    # Stock transactions
+                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+
                     st_aggs = Stocktransaction.objects.using(wh_db).exclude(
                         reason__in=['PENDING_APPROVAL', 'REJECTED']
                     ).values('productid_id').annotate(total=Sum('quantity'))
                     for row in st_aggs:
                         sku = wh_id_map.get(row['productid_id'])
-                        if sku:
-                            sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
                 except Exception:
                     pass
-            
+
             serializer = ProductSerializer(all_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
             return send_success(serializer.data, 'Products fetched successfully')
         else:
             queryset = self.get_queryset()
-            from django.db.models import Sum
+            from django.db.models import Sum, Q
             from api.models import Purchaseitem, Orderitem, Stocktransaction
             from api.db_router import get_current_db
             current_db = get_current_db()
-            
+            if search:
+                queryset = queryset.filter(Q(name__icontains=search) | Q(productcode__icontains=search))
+
             sku_qty_map = {}
             id_to_sku = {}
             name_to_sku = {}
-            
+
             for p in queryset:
                 if p.productcode:
                     sku_qty_map[p.productcode] = float(p.openingstock or 0)
                     id_to_sku[p.id] = p.productcode
                     name_to_sku[p.name] = p.productcode
-                    
+
+            if is_paginated:
+                try:
+                    page = max(1, int(page_param))
+                    limit = min(200, max(1, int(limit_param)))
+                except (ValueError, TypeError):
+                    page, limit = 1, 20
+                total = queryset.count()
+                offset = (page - 1) * limit
+                page_products = list(queryset[offset:offset + limit])
+                page_skus = {p.productcode for p in page_products if p.productcode}
+
+                try:
+                    purchases = Purchaseitem.objects.using(current_db).filter(
+                        purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']
+                    ).values('productname').annotate(total=Sum('qty'))
+                    for row in purchases:
+                        sku = name_to_sku.get(row['productname'])
+                        if sku and sku in page_skus: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+
+                    purchase_ret = Purchaseitem.objects.using(current_db).filter(
+                        purchaseid__status='Returned'
+                    ).values('productname').annotate(total=Sum('qty'))
+                    for row in purchase_ret:
+                        sku = name_to_sku.get(row['productname'])
+                        if sku and sku in page_skus: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+
+                    sales = Orderitem.objects.using(current_db).filter(orderid__status='Completed').values('productid_id').annotate(total=Sum('qty'))
+                    for row in sales:
+                        sku = id_to_sku.get(row['productid_id'])
+                        if sku and sku in page_skus: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+
+                    sales_ret = Orderitem.objects.using(current_db).filter(orderid__status='Returned').values('productid_id').annotate(total=Sum('qty'))
+                    for row in sales_ret:
+                        sku = id_to_sku.get(row['productid_id'])
+                        if sku and sku in page_skus: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+
+                    st_aggs = Stocktransaction.objects.using(current_db).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid_id').annotate(total=Sum('quantity'))
+                    for row in st_aggs:
+                        sku = id_to_sku.get(row['productid_id'])
+                        if sku and sku in page_skus: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+                except Exception:
+                    pass
+
+                serializer = ProductSerializer(page_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
+                return send_success({
+                    'items': serializer.data,
+                    'total': total,
+                    'page': page,
+                    'limit': limit,
+                    'hasMore': offset + limit < total,
+                }, 'Products fetched successfully')
+
             try:
                 purchases = Purchaseitem.objects.using(current_db).filter(
                     purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']
@@ -570,31 +694,31 @@ class ProductViewSet(viewsets.ModelViewSet):
                 for row in purchases:
                     sku = name_to_sku.get(row['productname'])
                     if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-                    
+
                 purchase_ret = Purchaseitem.objects.using(current_db).filter(
                     purchaseid__status='Returned'
                 ).values('productname').annotate(total=Sum('qty'))
                 for row in purchase_ret:
                     sku = name_to_sku.get(row['productname'])
                     if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-                    
+
                 sales = Orderitem.objects.using(current_db).filter(orderid__status='Completed').values('productid_id').annotate(total=Sum('qty'))
                 for row in sales:
                     sku = id_to_sku.get(row['productid_id'])
                     if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-                    
+
                 sales_ret = Orderitem.objects.using(current_db).filter(orderid__status='Returned').values('productid_id').annotate(total=Sum('qty'))
                 for row in sales_ret:
                     sku = id_to_sku.get(row['productid_id'])
                     if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-                    
+
                 st_aggs = Stocktransaction.objects.using(current_db).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid_id').annotate(total=Sum('quantity'))
                 for row in st_aggs:
                     sku = id_to_sku.get(row['productid_id'])
                     if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
             except Exception:
                 pass
-                
+
             serializer = ProductSerializer(queryset, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
             return send_success(serializer.data, 'Products fetched successfully')
 
