@@ -7,6 +7,7 @@ interface DataTableProps {
   onDelete?: (idx: number) => void;
   onEdit?: (idx: number) => void;
   onRowClick?: (idx: number) => void;
+  columnWidths?: string[];
 }
 
 const getCellValue = (cell: any): string | number => {
@@ -25,7 +26,7 @@ const getCellValue = (cell: any): string | number => {
   return String(cell);
 };
 
-export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, onEdit, onRowClick }) => {
+export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, onEdit, onRowClick, columnWidths }) => {
   const storageKey = useMemo(() => {
     return `datatable_sort_${columns.join('_').replace(/[^a-zA-Z0-9]/g, '_')}`;
   }, [columns]);
@@ -116,7 +117,8 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
                   <th 
                     key={c} 
                     onClick={() => handleSort(colIndex)}
-                    className="px-4 py-3 text-left text-muted-foreground font-semibold hover:text-foreground whitespace-nowrap cursor-pointer select-none transition-colors group"
+                    style={columnWidths?.[colIndex] ? { width: columnWidths[colIndex] } : undefined}
+                    className="px-4 py-3 text-left text-muted-foreground font-semibold hover:text-foreground cursor-pointer select-none transition-colors group"
                   >
                     <div className="flex items-center gap-1.5">
                       {c}
@@ -152,7 +154,15 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
                     onRowClick?.(index);
                   }}
                 >
-                  {row.map((cell, j) => <td key={j} className="px-4 py-3 whitespace-nowrap">{cell ?? '—'}</td>)}
+                  {row.map((cell, j) => (
+                    <td 
+                      key={j} 
+                      style={columnWidths?.[j] ? { width: columnWidths[j] } : undefined}
+                      className={`px-4 py-3 ${columnWidths?.[j] ? 'max-w-0' : 'whitespace-nowrap'}`}
+                    >
+                      <div className={columnWidths?.[j] ? 'truncate' : ''}>{cell ?? '—'}</div>
+                    </td>
+                  ))}
                   {(onDelete || onEdit) && (
                     <td className="px-4 py-3 text-right flex justify-end gap-1">
                       {onEdit && (

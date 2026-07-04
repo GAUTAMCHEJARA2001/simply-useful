@@ -198,6 +198,7 @@ export const ProductsTab: React.FC = () => {
       >
         <DataTable
           columns={['SKU', 'Name', 'Category', 'Unit', user?.role === 'SUPERADMIN' ? 'Shortage' : 'Available Stock', 'Price']}
+          columnWidths={['120px', '40%', '150px', '100px', '100px', '100px']}
           rows={filtered.map((p: any) => {
             const avail = p.availableStock || p.stockQty || 0;
             const min = p.minimumStock || 0;
