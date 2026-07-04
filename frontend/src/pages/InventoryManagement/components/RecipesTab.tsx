@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, RefreshCw, X, Search, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, RefreshCw, X, Search, Trash2, AlertCircle, Copy } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
 import apiClient from '@/api/client';
 import { useToast } from '@/hooks/use-toast';
@@ -126,6 +126,22 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
       }
   };
 
+  const handleCopy = async (i: number) => {
+      const r = filteredRecipes[i];
+      try {
+          const config = isGlobal && r.assignedWarehouse ? { headers: { 'X-Warehouse-ID': r.assignedWarehouse } } : {};
+          const details = await apiClient<any>(`/inv/bom/${r.id}`, config);
+          const data = details && details.data ? details.data : details;
+          delete data.id;
+          data.name = `Copy of ${data.name || 'Recipe'}`;
+          data.assignedWarehouse = r.assignedWarehouse;
+          setForm(data);
+          setModal(true);
+      } catch (e: any) {
+          toast({ title: 'Failed to load recipe', description: e.message, variant: 'destructive' });
+      }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -200,6 +216,11 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                 variant="ghost"
                 size="sm"
               />
+            )}
+            {canManage && (
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleCopy(idx); }} title="Copy Recipe">
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
             )}
             {!canManage && (
               <Button variant="link" size="sm" onClick={(e) => { e.stopPropagation(); handleView(idx); }}>
