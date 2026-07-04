@@ -413,13 +413,18 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         from api.db_router import get_current_db
-        if get_current_db() == 'default':
-            from api.models import Warehouse, Product, Userproductaccess
+        from api.models import Warehouse
+        admin_roles = {'ADMIN', 'SUPERADMIN', 'HR'}
+        user_role = getattr(self.request.user, 'role', '') or ''
+        is_admin = user_role.upper() in admin_roles
+        current_db = get_current_db()
+        # Non-admin users (Sales, Dealer, etc.) always see products from ALL warehouses
+        # so they can see their assigned products regardless of selected warehouse
+        if current_db == 'default' or not is_admin:
+            from api.models import Product, Userproductaccess
             from api.models import Purchaseitem, Orderitem, Stocktransaction
             from django.db.models import Sum
-            admin_roles = {'ADMIN', 'SUPERADMIN', 'HR'}
-            user_role = getattr(self.request.user, 'role', '') or ''
-            skip_assignment_filter = user_role.upper() in admin_roles
+            skip_assignment_filter = is_admin
             allowed_product_ids = None
             if not skip_assignment_filter:
                 user_id = self.request.user.id
