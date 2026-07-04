@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { Package, Warehouse, Globe, Search, RefreshCw, Layers, AlertTriangle, Tags, TrendingUp } from 'lucide-react';
+import { Package, Warehouse, Globe, Search, RefreshCw, Layers, AlertTriangle, Tags, TrendingUp, IndianRupee } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
 import apiClient from '@/api/client';
 import { SafeDataView } from '@/components/SafeDataView';
@@ -89,6 +89,7 @@ const GlobalInventory: React.FC = () => {
   const lowStockCount = filteredData.filter(i => i.quantity <= 50).length;
   const totalCategories = Array.from(new Set(filteredData.map(i => i.categoryName))).length;
   const averageStock = totalSkus > 0 ? Math.round(totalStock / totalSkus) : 0;
+  const totalValuation = filteredData.reduce((sum, i) => sum + (i.quantity * (i.rate || 0)), 0);
 
   return (
     <div className="container mx-auto py-8 px-4 space-y-8 min-h-screen bg-background/50">
@@ -203,7 +204,7 @@ const GlobalInventory: React.FC = () => {
       </div>
 
       {/* Dynamic KPI Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
         <KpiCard 
           title="Active Locations" 
           value={activeWhCount} 
@@ -224,6 +225,13 @@ const GlobalInventory: React.FC = () => {
           icon={Package} 
           delay={0.2}
           colorClass="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" 
+        />
+        <KpiCard 
+          title="Stock Valuation" 
+          value={`₹${totalValuation.toLocaleString('en-IN')}`} 
+          icon={IndianRupee} 
+          delay={0.22}
+          colorClass="bg-gradient-to-br from-green-500/10 to-green-600/5 text-green-600 dark:text-green-400 border-green-500/20" 
         />
         <KpiCard 
           title="Low Stock Alerts" 
@@ -252,15 +260,17 @@ const GlobalInventory: React.FC = () => {
       <SafeDataView data={data} isLoading={loading} error={error} onRetry={loadGlobalInventory} emptyMessage="No inventory data found across system.">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="shadow-2xl rounded-2xl overflow-hidden border border-border/50 bg-card">
           <DataTable 
-            columns={['Product', 'SKU', 'Category', 'Stock Level', 'Warehouse', 'Status']}
+            columns={['Product', 'SKU', 'Category', 'Rate', 'Stock Level', 'Value', 'Warehouse', 'Status']}
             rows={filteredData.map((item, idx) => [
               <p key={`name-${idx}`} className="font-bold text-foreground/90">{item.productName}</p>,
               <code key={`sku-${idx}`} className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono font-bold text-muted-foreground">{item.sku}</code>,
               <span key={`cat-${idx}`} className="text-xs text-muted-foreground font-medium">{item.categoryName}</span>,
+              <span key={`rate-${idx}`} className="text-xs font-mono font-bold text-muted-foreground">₹{(item.rate || 0).toLocaleString('en-IN')}</span>,
               <div key={`stock-${idx}`} className="flex items-center gap-2">
                  <span className="font-black text-sm">{Math.round(item.quantity)}</span>
                  <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">{item.unit?.name || (typeof item.unit === 'string' ? item.unit : '') || '—'}</span>
               </div>,
+              <span key={`val-${idx}`} className="text-xs font-mono font-bold text-green-600 dark:text-green-400">₹{(item.quantity * (item.rate || 0)).toLocaleString('en-IN')}</span>,
               <div key={`wh-${idx}`} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                  <Warehouse className="w-3 h-3" /> {item.warehouseName}
               </div>,

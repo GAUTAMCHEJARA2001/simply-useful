@@ -3553,7 +3553,8 @@ def report_global_inventory(request):
                         'productName': p.name,
                         'sku': p.productcode or '',
                         'categoryName': p.categoryid.name if p.categoryid else 'Uncategorized',
-                        'quantity': opening
+                        'quantity': opening,
+                        'rate': float(p.rate or 0)
                     }
 
             st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid').annotate(total_qty=Sum('quantity'))
@@ -3575,7 +3576,8 @@ def report_global_inventory(request):
                             'productName': p.name,
                             'sku': p.productcode or '',
                             'categoryName': p.categoryid.name if p.categoryid else 'Uncategorized',
-                            'quantity': qty
+                            'quantity': qty,
+                            'rate': float(p.rate or 0)
                         }
                     except Product.DoesNotExist:
                         pass
