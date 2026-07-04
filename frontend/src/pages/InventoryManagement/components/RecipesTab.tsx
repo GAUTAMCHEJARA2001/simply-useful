@@ -107,8 +107,8 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
   const canManage = ['SUPERADMIN', 'ADMIN'].includes(user?.role || '');
 
   const tableColumns = isGlobal 
-    ? ['Recipe Name', 'Finished Product', 'Yield Qty', 'Warehouse', 'Actions']
-    : ['Recipe Name', 'Finished Product', 'Yield Qty', 'Actions'];
+    ? ['Recipe Name', 'Finished Product', 'Yield Qty', 'Ingredients', 'Warehouse', 'Actions']
+    : ['Recipe Name', 'Finished Product', 'Yield Qty', 'Ingredients', 'Actions'];
 
   const isInventory = user?.role === 'INVENTORY' || user?.role === 'PRODUCTION';
 
@@ -182,7 +182,8 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
           const rowData = [
             r.name,
             r.productName || '—',
-            formatDecimal(r.outputQuantity)
+            formatDecimal(r.outputQuantity),
+            <span key={`items-${idx}`} className="text-xs font-mono text-muted-foreground">{r.itemCount ?? r.items?.length ?? 0} items</span>
           ];
           if (isGlobal) {
             rowData.push(

@@ -2972,6 +2972,7 @@ class BOMViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         from api.db_router import get_current_db
+        from api.serializers import BomListSerializer
         if get_current_db() == 'default':
             from api.models import Warehouse, Bom, Product
             all_boms = []
@@ -2980,7 +2981,7 @@ class BOMViewSet(viewsets.ModelViewSet):
                 if not wh.db_name:
                     continue
                 try:
-                    qs = Bom.objects.using(wh.db_name).prefetch_related('bomitem_set')
+                    qs = Bom.objects.using(wh.db_name)
                     if company_id:
                         qs = qs.filter(companyid_id=company_id)
                     product_map = {}
@@ -2989,7 +2990,7 @@ class BOMViewSet(viewsets.ModelViewSet):
                             product_map[p.productcode] = p
                         if p.name:
                             product_map[p.name] = p
-                    serializer = BomSerializer(qs, many=True, context={'request': request, 'product_map': product_map})
+                    serializer = BomListSerializer(qs, many=True, context={'request': request, 'product_map': product_map})
                     data = serializer.data
                     for item in data:
                         item['assignedWarehouse'] = wh.id
@@ -2998,7 +2999,7 @@ class BOMViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
             return send_success(all_boms, 'BOMs fetched globally successfully')
-        queryset = self.get_queryset().prefetch_related('bomitem_set')
+        queryset = self.get_queryset()
         from api.models import Product
         product_map = {}
         for p in Product.objects.using(get_current_db()).all():
@@ -3006,7 +3007,7 @@ class BOMViewSet(viewsets.ModelViewSet):
                 product_map[p.productcode] = p
             if p.name:
                 product_map[p.name] = p
-        serializer = BomSerializer(queryset, many=True, context={'request': request, 'product_map': product_map})
+        serializer = BomListSerializer(queryset, many=True, context={'request': request, 'product_map': product_map})
         return send_success(serializer.data, 'BOMs fetched successfully')
 
     def create(self, request, *args, **kwargs):

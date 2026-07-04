@@ -696,6 +696,45 @@ class BomitemSerializer(serializers.ModelSerializer):
         return data
 
 
+class BomListSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(required=False)
+    productCode = serializers.CharField(source='productcode', required=False)
+    companyId = serializers.CharField(source='companyid_id')
+    createdAt = serializers.DateTimeField(source='createdat', read_only=True)
+    updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
+    outputQuantity = serializers.FloatField(source='outputquantity', required=False, default=1.0)
+    productId = serializers.SerializerMethodField(read_only=True)
+    productName = serializers.SerializerMethodField(read_only=True)
+    itemCount = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = Bom
+        fields = ['id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'outputQuantity', 'productId', 'productName', 'itemCount']
+
+    def get_itemCount(self, obj):
+        return obj.bomitem_set.count() if hasattr(obj, 'bomitem_set') else 0
+
+    def get_productId(self, obj):
+        product_map = self.context.get('product_map', {})
+        prod = product_map.get(obj.productcode)
+        if prod:
+            return prod.id
+        from api.models import Product
+        db = obj._state.db or 'default'
+        prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
+        return prod.id if prod else ""
+
+    def get_productName(self, obj):
+        product_map = self.context.get('product_map', {})
+        prod = product_map.get(obj.productcode)
+        if prod:
+            return prod.name
+        from api.models import Product
+        db = obj._state.db or 'default'
+        prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
+        return prod.name if prod else ""
+
+
 class BomSerializer(serializers.ModelSerializer):
     id = serializers.CharField(required=False)
     productCode = serializers.CharField(source='productcode', required=False)
