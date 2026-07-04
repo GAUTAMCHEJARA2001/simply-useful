@@ -2973,7 +2973,7 @@ class BOMViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         from api.db_router import get_current_db
         if get_current_db() == 'default':
-            from api.models import Warehouse, Bom
+            from api.models import Warehouse, Bom, Product
             all_boms = []
             company_id = _get_company_id(request)
             for wh in Warehouse.objects.filter(active=True):
@@ -2983,7 +2983,10 @@ class BOMViewSet(viewsets.ModelViewSet):
                     qs = Bom.objects.using(wh.db_name).prefetch_related('bomitem_set')
                     if company_id:
                         qs = qs.filter(companyid_id=company_id)
-                    serializer = BomSerializer(qs, many=True)
+                    product_map = {}
+                    for p in Product.objects.using(wh.db_name).filter(productcode__isnull=False).exclude(productcode=''):
+                        product_map[p.productcode] = p
+                    serializer = BomSerializer(qs, many=True, context={'request': request, 'product_map': product_map})
                     data = serializer.data
                     for item in data:
                         item['assignedWarehouse'] = wh.id
@@ -2993,7 +2996,11 @@ class BOMViewSet(viewsets.ModelViewSet):
                     pass
             return send_success(all_boms, 'BOMs fetched globally successfully')
         queryset = self.get_queryset().prefetch_related('bomitem_set')
-        serializer = BomSerializer(queryset, many=True)
+        from api.models import Product
+        product_map = {}
+        for p in Product.objects.using(get_current_db()).filter(productcode__isnull=False).exclude(productcode=''):
+            product_map[p.productcode] = p
+        serializer = BomSerializer(queryset, many=True, context={'request': request, 'product_map': product_map})
         return send_success(serializer.data, 'BOMs fetched successfully')
 
     def create(self, request, *args, **kwargs):

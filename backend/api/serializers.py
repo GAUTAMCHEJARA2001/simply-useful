@@ -708,12 +708,20 @@ class BomSerializer(serializers.ModelSerializer):
         fields = ['id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'items', 'outputQuantity', 'productId', 'productName']
 
     def get_productId(self, obj):
+        product_map = self.context.get('product_map', {})
+        prod = product_map.get(obj.productcode)
+        if prod:
+            return prod.id
         from api.models import Product
         db = obj._state.db or 'default'
         prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
         return prod.id if prod else ""
 
     def get_productName(self, obj):
+        product_map = self.context.get('product_map', {})
+        prod = product_map.get(obj.productcode)
+        if prod:
+            return prod.name
         from api.models import Product
         db = obj._state.db or 'default'
         prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
