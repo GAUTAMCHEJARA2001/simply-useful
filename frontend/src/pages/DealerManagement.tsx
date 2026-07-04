@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Dealer } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,10 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Search, Plus, Edit, Trash2, BookOpen } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, BookOpen, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { apiService } from '@/api/apiService';
 import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
+
+const PAGE_SIZE = 25;
 
 const emptyDealer: Dealer = {
   dealerCode: '', dealerName: '', city: '', assignedSoEmail: '',
@@ -20,7 +23,7 @@ const emptyDealer: Dealer = {
 };
 
 const DealerManagement: React.FC = () => {
-  const { dealers, distributors, users, addDealer, updateDealer, deleteDealer } = useData();
+  const { distributors, users, addDealer, updateDealer, deleteDealer } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
@@ -32,14 +35,75 @@ const DealerManagement: React.FC = () => {
   const [form, setForm] = useState<Dealer>(emptyDealer);
   const [deleteTarget, setDeleteTarget] = useState<string>('');
 
+  const [items, setItems] = useState<Dealer[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const searchTimerRef = useRef<NodeJS.Timeout>();
+  const currentSearchRef = useRef('');
+
   const salesUsers = users.filter(u => u.role === 'SALES' && u.active);
 
-  const filtered = dealers.filter(d =>
-    d.dealerName.toLowerCase().includes(search.toLowerCase()) ||
-    d.city.toLowerCase().includes(search.toLowerCase()) ||
-    (d.territory || '').toLowerCase().includes(search.toLowerCase()) ||
-    d.dealerCode.toLowerCase().includes(search.toLowerCase())
-  );
+  const fetchPage = useCallback(async (p: number, searchTerm: string, append: boolean) => {
+    setLoading(true);
+    try {
+      const res = await apiService.parties.getDealersPaginated(p, PAGE_SIZE, searchTerm || undefined);
+      const data = res.data?.data;
+      if (data?.items) {
+        setItems(prev => append ? [...prev, ...data.items] : data.items);
+        setTotal(data.total);
+        setHasMore(data.hasMore);
+      }
+    } catch (e) {
+      console.error('Failed to fetch dealers', e);
+    } finally {
+      setLoading(false);
+      setInitialLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setItems([]);
+    setPage(1);
+    setHasMore(true);
+    setInitialLoading(true);
+    currentSearchRef.current = '';
+    fetchPage(1, '', false);
+  }, [fetchPage]);
+
+  useEffect(() => {
+    if (!sentinelRef.current || !hasMore || loading) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasMore && !loading) {
+          setPage(prev => {
+            const next = prev + 1;
+            fetchPage(next, currentSearchRef.current, true);
+            return next;
+          });
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    obs.observe(sentinelRef.current);
+    return () => obs.disconnect();
+  }, [hasMore, loading, fetchPage]);
+
+  const handleSearch = (val: string) => {
+    setSearch(val);
+    clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      currentSearchRef.current = val;
+      setItems([]);
+      setPage(1);
+      setHasMore(true);
+      setInitialLoading(true);
+      fetchPage(1, val, false);
+    }, 300);
+  };
 
   const openAdd = () => {
     setEditing(null);
@@ -72,6 +136,9 @@ const DealerManagement: React.FC = () => {
         toast({ title: 'Dealer Added', description: `${form.dealerName} added successfully.` });
       }
       setDialogOpen(false);
+      fetchPage(1, currentSearchRef.current, false);
+      setPage(1);
+      setHasMore(true);
     } catch (e: any) {
       toast({ title: 'Error', description: e?.message || 'Failed to save dealer.', variant: 'destructive' });
     }
@@ -82,6 +149,9 @@ const DealerManagement: React.FC = () => {
       await deleteDealer(deleteTarget);
       toast({ title: 'Dealer Deleted', description: 'Dealer has been removed.' });
       setDeleteDialogOpen(false);
+      fetchPage(1, currentSearchRef.current, false);
+      setPage(1);
+      setHasMore(true);
     } catch (e: any) {
       toast({ title: 'Error', description: e?.message || 'Failed to delete dealer.', variant: 'destructive' });
     }
@@ -94,90 +164,108 @@ const DealerManagement: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="page-header">Dealer Management</h1>
-          <p className="page-subheader">{dealers.length} dealers registered</p>
+          <p className="page-subheader">{total} dealers registered</p>
         </div>
         {can('manage_customers') && <Button className="action-button" onClick={openAdd}><Plus className="w-5 h-5 mr-2" /> Add Dealer</Button>}
       </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Search dealers by name, city, territory, or code..." className="pl-10 h-12" value={search} onChange={e => setSearch(e.target.value)} />
+        <Input placeholder="Search dealers by name, city, territory, or code..." className="pl-10 h-12" value={search} onChange={e => handleSearch(e.target.value)} />
       </div>
 
-      {/* Mobile cards */}
-      <div className="lg:hidden space-y-3">
-        {filtered.map(d => (
-          <Card key={d.dealerCode}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="font-semibold text-sm">{d.dealerName}</p>
-                  <p className="text-xs text-muted-foreground">{d.dealerCode} · {d.city} {d.territory ? `(${d.territory})` : ''}</p>
-                </div>
-                <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">
-                  {d.active ? 'Active' : 'Blocked'}
-                </Badge>
+      {initialLoading ? (
+        <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : (
+        <>
+          {/* Mobile cards */}
+          <div className="lg:hidden space-y-3">
+            {items.map(d => (
+              <Card key={d.dealerCode}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="font-semibold text-sm">{d.dealerName}</p>
+                      <p className="text-xs text-muted-foreground">{d.dealerCode} · {d.city} {d.territory ? `(${d.territory})` : ''}</p>
+                    </div>
+                    <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">
+                      {d.active ? 'Active' : 'Blocked'}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs mt-3">
+                    <div><span className="text-muted-foreground">Credit Limit:</span> <span className="font-medium">₹{d.creditLimit.toLocaleString()}</span></div>
+                    <div><span className="text-muted-foreground">Outstanding:</span> <span className="font-medium">₹{d.outstanding.toLocaleString()}</span></div>
+                    <div><span className="text-muted-foreground">SO:</span> <span className="font-medium">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</span></div>
+                    <div><span className="text-muted-foreground">Distributor:</span> <span className="font-medium">{d.distributorName || 'Direct'}</span></div>
+                  </div>
+                  {can('manage_customers') && (
+                    <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                      <Button size="sm" variant="outline" onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="flex-1 border-blue-200 text-blue-600 hover:bg-blue-50"><BookOpen className="w-3.5 h-3.5 mr-1" /> Ledger</Button>
+                      <Button size="sm" variant="outline" onClick={() => openEdit(d)} className="flex-1"><Edit className="w-3.5 h-3.5 mr-1" /> Edit</Button>
+                      <Button size="sm" variant="destructive" onClick={() => openDelete(d.dealerCode)} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <Card className="hidden lg:block">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/30">
+                      {['Code', 'Name', 'City', 'Territory', 'SO', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
+                        <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map(d => (
+                      <tr key={d.dealerCode} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                        <td className="px-4 py-3 font-mono text-xs">{d.dealerCode}</td>
+                        <td className="px-4 py-3 font-medium">{d.dealerName}</td>
+                        <td className="px-4 py-3">{d.city}</td>
+                        <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
+                        <td className="px-4 py-3 text-xs">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</td>
+                        <td className="px-4 py-3 text-xs">{d.distributorName || '—'}</td>
+                        <td className="px-4 py-3">₹{d.creditLimit.toLocaleString()}</td>
+                        <td className="px-4 py-3">₹{d.outstanding.toLocaleString()}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">{d.active ? 'Active' : 'Blocked'}</Badge>
+                        </td>
+                        {can('manage_customers') && (
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1">
+                              <button onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="View Ledger"><BookOpen className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => openEdit(d)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><Edit className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => openDelete(d.dealerCode)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs mt-3">
-                <div><span className="text-muted-foreground">Credit Limit:</span> <span className="font-medium">₹{d.creditLimit.toLocaleString()}</span></div>
-                <div><span className="text-muted-foreground">Outstanding:</span> <span className="font-medium">₹{d.outstanding.toLocaleString()}</span></div>
-                <div><span className="text-muted-foreground">SO:</span> <span className="font-medium">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</span></div>
-                <div><span className="text-muted-foreground">Distributor:</span> <span className="font-medium">{d.distributorName || 'Direct'}</span></div>
-              </div>
-              {can('manage_customers') && (
-                <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                  <Button size="sm" variant="outline" onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="flex-1 border-blue-200 text-blue-600 hover:bg-blue-50"><BookOpen className="w-3.5 h-3.5 mr-1" /> Ledger</Button>
-                  <Button size="sm" variant="outline" onClick={() => openEdit(d)} className="flex-1"><Edit className="w-3.5 h-3.5 mr-1" /> Edit</Button>
-                  <Button size="sm" variant="destructive" onClick={() => openDelete(d.dealerCode)} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
-                </div>
-              )}
             </CardContent>
           </Card>
-        ))}
-      </div>
 
-      {/* Desktop table */}
-      <Card className="hidden lg:block">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  {['Code', 'Name', 'City', 'Territory', 'SO', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(d => (
-                  <tr key={d.dealerCode} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs">{d.dealerCode}</td>
-                    <td className="px-4 py-3 font-medium">{d.dealerName}</td>
-                    <td className="px-4 py-3">{d.city}</td>
-                    <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
-                    <td className="px-4 py-3 text-xs">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</td>
-                    <td className="px-4 py-3 text-xs">{d.distributorName || '—'}</td>
-                    <td className="px-4 py-3">₹{d.creditLimit.toLocaleString()}</td>
-                    <td className="px-4 py-3">₹{d.outstanding.toLocaleString()}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">{d.active ? 'Active' : 'Blocked'}</Badge>
-                    </td>
-                    {can('manage_customers') && (
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          <button onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="View Ledger"><BookOpen className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => openEdit(d)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><Edit className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => openDelete(d.dealerCode)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+          {/* Sentinel for infinite scroll */}
+          <div ref={sentinelRef} className="h-1" />
+          {loading && !initialLoading && (
+            <div className="flex items-center justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          )}
+          {!hasMore && items.length > 0 && (
+            <p className="text-center text-xs text-muted-foreground py-2">All {total} dealers loaded</p>
+          )}
+          {!loading && items.length === 0 && (
+            <p className="text-center text-sm text-muted-foreground py-8">No dealers found</p>
+          )}
+        </>
+      )}
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

@@ -2004,6 +2004,39 @@ class DealerViewSet(viewsets.ModelViewSet):
                       'distributorname', 'creditlimit', 'outstanding', 'active',
                       'companyid_id', 'createdat', 'updatedat', 'territory',
                       'contact_person', 'phone', 'email', 'address', 'gst', 'warehouseid')
+
+        search = request.query_params.get('search', '').strip()
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(dealername__icontains=search) |
+                Q(dealercode__icontains=search) |
+                Q(city__icontains=search) |
+                Q(territory__icontains=search) |
+                Q(assignedsoemail__icontains=search) |
+                Q(distributorname__icontains=search)
+            )
+
+        page = request.query_params.get('page')
+        limit = request.query_params.get('limit')
+        if page is not None and limit is not None:
+            try:
+                page = max(1, int(page))
+                limit = min(200, max(1, int(limit)))
+                offset = (page - 1) * limit
+                total = qs.count()
+                qs = qs[offset:offset + limit]
+                serializer = self.get_serializer(qs, many=True)
+                return send_success({
+                    'items': serializer.data,
+                    'total': total,
+                    'page': page,
+                    'limit': limit,
+                    'hasMore': offset + limit < total,
+                }, 'Dealers fetched successfully')
+            except (ValueError, TypeError):
+                pass
+
         serializer = self.get_serializer(qs, many=True)
         return send_success(serializer.data, 'Dealers fetched successfully')
 
@@ -2101,6 +2134,37 @@ class DistributorViewSet(viewsets.ModelViewSet):
         qs = qs.only('id', 'distributorname', 'area', 'assignedsoemail', 'creditlimit',
                       'outstanding', 'active', 'companyid_id', 'createdat', 'updatedat',
                       'territory', 'contact_person', 'phone', 'email', 'address', 'gst', 'warehouseid')
+
+        search = request.query_params.get('search', '').strip()
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(distributorname__icontains=search) |
+                Q(area__icontains=search) |
+                Q(territory__icontains=search) |
+                Q(assignedsoemail__icontains=search)
+            )
+
+        page = request.query_params.get('page')
+        limit = request.query_params.get('limit')
+        if page is not None and limit is not None:
+            try:
+                page = max(1, int(page))
+                limit = min(200, max(1, int(limit)))
+                offset = (page - 1) * limit
+                total = qs.count()
+                qs = qs[offset:offset + limit]
+                serializer = self.get_serializer(qs, many=True)
+                return send_success({
+                    'items': serializer.data,
+                    'total': total,
+                    'page': page,
+                    'limit': limit,
+                    'hasMore': offset + limit < total,
+                }, 'Distributors fetched successfully')
+            except (ValueError, TypeError):
+                pass
+
         serializer = self.get_serializer(qs, many=True)
         return send_success(serializer.data, 'Distributors fetched successfully')
 
