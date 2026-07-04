@@ -2040,8 +2040,10 @@ class DealerViewSet(viewsets.ModelViewSet):
                 attempts += 1
         serializer = DealerSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return send_success(serializer.data, 'Dealer created successfully', 201)
+        validated = serializer.validated_data
+        instance = Dealer(**validated)
+        instance.save(using='default')
+        return send_success(DealerSerializer(instance).data, 'Dealer created successfully', 201)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -2121,8 +2123,10 @@ class DistributorViewSet(viewsets.ModelViewSet):
             data['id'] = 'c' + uuid.uuid4().hex[:23]
         serializer = DistributorSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return send_success(serializer.data, 'Distributor created successfully', 201)
+        validated = serializer.validated_data
+        instance = Distributor(**validated)
+        instance.save(using='default')
+        return send_success(DistributorSerializer(instance).data, 'Distributor created successfully', 201)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
