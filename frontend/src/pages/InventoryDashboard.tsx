@@ -686,16 +686,18 @@ const InventoryDashboard: React.FC = () => {
                         )}
 
                         {/* Show specific shortages and required raw materials */}
-                        {checkResult.status !== 'Available' && checkResult.shortages && checkResult.shortages.length > 0 && (
-                          <div className="bg-destructive/5 rounded-lg p-2.5 border border-destructive/10 space-y-1.5 mt-1 text-[10px]">
-                            <p className="font-bold text-destructive flex items-center gap-1">⚠️ Deficit / Required Raw Materials:</p>
+                        {checkResult.status !== 'Available' && checkResult.shortages && checkResult.shortages.length > 0 && (() => {
+                          const hasAnyShortage = checkResult.shortages.some((s: any) => s.shortageQty > 0);
+                          return (
+                          <div className={`${hasAnyShortage ? 'bg-destructive/5 border-destructive/10' : 'bg-green-500/5 border-green-500/10'} rounded-lg p-2.5 border space-y-1.5 mt-1 text-[10px]`}>
+                            <p className={`font-bold flex items-center gap-1 ${hasAnyShortage ? 'text-destructive' : 'text-green-600'}`}>{hasAnyShortage ? '⚠️' : '✅'} Deficit / Required Raw Materials:</p>
                             <div className="divide-y divide-border/20">
                               {checkResult.shortages.map((s: any, idx: number) => (
-                                <div key={idx} className="flex flex-col py-1 gap-0.5 first:pt-0 last:pb-0">
+                                <div key={idx} className={`flex flex-col py-1 gap-0.5 first:pt-0 last:pb-0`}>
                                   <div className="flex justify-between items-center text-[10px]">
                                     <span className="text-foreground truncate max-w-[150px] font-bold" title={s.productName}>{s.productName}</span>
-                                    <span className="font-semibold text-destructive">
-                                      Shortage: {s.shortageQty.toFixed(1)}
+                                    <span className={`font-semibold ${s.shortageQty > 0 ? 'text-destructive' : 'text-green-600'}`}>
+                                      {s.shortageQty > 0 ? `Shortage: ${s.shortageQty.toFixed(1)}` : '✓ Available'}
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-center text-[9px] text-muted-foreground">
@@ -706,7 +708,8 @@ const InventoryDashboard: React.FC = () => {
                               ))}
                             </div>
                           </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     )}
 

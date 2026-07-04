@@ -31,7 +31,7 @@ const KpiCard = ({ title, value, icon: Icon, colorClass, delay }: any) => (
           <Icon className="w-4 h-4" />
         </div>
       </div>
-      <div className="text-3xl font-black tracking-tight">{typeof value === 'number' ? value.toLocaleString() : value}</div>
+      <div className={`font-black tracking-tight ${String(value).length > 10 ? 'text-xl' : String(value).length > 7 ? 'text-2xl' : 'text-3xl'}`}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
     </div>
     <div className="absolute -bottom-6 -right-6 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity duration-500 group-hover:scale-125 transform">
        <Icon className="w-32 h-32" />
