@@ -666,11 +666,6 @@ class BomitemSerializer(serializers.ModelSerializer):
     def get_productId(self, obj):
         product_map = self.context.get('product_map', {})
         prod = product_map.get(obj.materialname)
-        if prod:
-            return prod.id
-        from api.models import Product
-        db = obj._state.db or 'default'
-        prod = Product.objects.using(db).filter(name=obj.materialname).first()
         return prod.id if prod else ""
 
     def validate(self, data):
@@ -712,26 +707,16 @@ class BomListSerializer(serializers.ModelSerializer):
         fields = ['id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'outputQuantity', 'productId', 'productName', 'itemCount']
 
     def get_itemCount(self, obj):
-        return obj.bomitem_set.count() if hasattr(obj, 'bomitem_set') else 0
+        return getattr(obj, 'item_count', 0) or 0
 
     def get_productId(self, obj):
         product_map = self.context.get('product_map', {})
         prod = product_map.get(obj.productcode)
-        if prod:
-            return prod.id
-        from api.models import Product
-        db = obj._state.db or 'default'
-        prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
         return prod.id if prod else ""
 
     def get_productName(self, obj):
         product_map = self.context.get('product_map', {})
         prod = product_map.get(obj.productcode)
-        if prod:
-            return prod.name
-        from api.models import Product
-        db = obj._state.db or 'default'
-        prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
         return prod.name if prod else ""
 
 
@@ -753,21 +738,11 @@ class BomSerializer(serializers.ModelSerializer):
     def get_productId(self, obj):
         product_map = self.context.get('product_map', {})
         prod = product_map.get(obj.productcode)
-        if prod:
-            return prod.id
-        from api.models import Product
-        db = obj._state.db or 'default'
-        prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
         return prod.id if prod else ""
 
     def get_productName(self, obj):
         product_map = self.context.get('product_map', {})
         prod = product_map.get(obj.productcode)
-        if prod:
-            return prod.name
-        from api.models import Product
-        db = obj._state.db or 'default'
-        prod = Product.objects.using(db).filter(productcode=obj.productcode).first()
         return prod.name if prod else ""
 
     def validate(self, data):

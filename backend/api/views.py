@@ -1990,7 +1990,6 @@ class DealerViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        wh_header = request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
         company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
@@ -2001,6 +2000,10 @@ class DealerViewSet(viewsets.ModelViewSet):
         if user_role == 'SALES' and user_email:
             qs = qs.filter(assignedsoemail=user_email)
         
+        qs = qs.only('id', 'dealercode', 'dealername', 'city', 'assignedsoemail',
+                      'distributorname', 'creditlimit', 'outstanding', 'active',
+                      'companyid_id', 'createdat', 'updatedat', 'territory',
+                      'contact_person', 'phone', 'email', 'address', 'gst', 'warehouseid')
         serializer = self.get_serializer(qs, many=True)
         return send_success(serializer.data, 'Dealers fetched successfully')
 
@@ -2085,7 +2088,6 @@ class DistributorViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        wh_header = request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
         company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
@@ -2096,6 +2098,9 @@ class DistributorViewSet(viewsets.ModelViewSet):
         if user_role == 'SALES' and user_email:
             qs = qs.filter(assignedsoemail=user_email)
         
+        qs = qs.only('id', 'distributorname', 'area', 'assignedsoemail', 'creditlimit',
+                      'outstanding', 'active', 'companyid_id', 'createdat', 'updatedat',
+                      'territory', 'contact_person', 'phone', 'email', 'address', 'gst', 'warehouseid')
         serializer = self.get_serializer(qs, many=True)
         return send_success(serializer.data, 'Distributors fetched successfully')
 
@@ -2978,6 +2983,7 @@ class BOMViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         from api.db_router import get_current_db
         from api.serializers import BomListSerializer
+        from django.db.models import Count
         if get_current_db() == 'default':
             from api.models import Warehouse, Bom, Product
             all_boms = []
@@ -2986,11 +2992,11 @@ class BOMViewSet(viewsets.ModelViewSet):
                 if not wh.db_name:
                     continue
                 try:
-                    qs = Bom.objects.using(wh.db_name)
+                    qs = Bom.objects.using(wh.db_name).annotate(item_count=Count('bomitem'))
                     if company_id:
                         qs = qs.filter(companyid_id=company_id)
                     product_map = {}
-                    for p in Product.objects.using(wh.db_name).all():
+                    for p in Product.objects.using(wh.db_name).only('id', 'productcode', 'name'):
                         if p.productcode:
                             product_map[p.productcode] = p
                         if p.name:
@@ -3004,10 +3010,10 @@ class BOMViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
             return send_success(all_boms, 'BOMs fetched globally successfully')
-        queryset = self.get_queryset()
+        queryset = self.get_queryset().annotate(item_count=Count('bomitem'))
         from api.models import Product
         product_map = {}
-        for p in Product.objects.using(get_current_db()).all():
+        for p in Product.objects.using(get_current_db()).only('id', 'productcode', 'name'):
             if p.productcode:
                 product_map[p.productcode] = p
             if p.name:
@@ -3045,6 +3051,20 @@ class BOMViewSet(viewsets.ModelViewSet):
         bom = serializer.save()
         full_serializer = BomSerializer(bom)
         return send_success(full_serializer.data, 'BOM updated successfully')
+
+    def retrieve(self, request, *args, **kwargs):
+        from api.db_router import get_current_db
+        from api.models import Product
+        from api.serializers import BomSerializer
+        instance = self.get_object()
+        product_map = {}
+        for p in Product.objects.using(get_current_db()).only('id', 'productcode', 'name'):
+            if p.productcode:
+                product_map[p.productcode] = p
+            if p.name:
+                product_map[p.name] = p
+        serializer = BomSerializer(instance, context={'request': request, 'product_map': product_map})
+        return send_success(serializer.data, 'BOM fetched successfully')
 
     def destroy(self, request, *args, **kwargs):
         user_role = (getattr(request.user, 'role', '') or '').upper()
