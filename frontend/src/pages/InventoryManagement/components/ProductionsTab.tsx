@@ -495,15 +495,21 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       )}
 
       {deficitModal && (
-        <Modal title="⚠️ Raw Material Deficit Detected" onClose={() => setDeficitModal(false)}>
+        <Modal title={deficitItems.every((item: any) => (item.deficit || 0) <= 0) ? "✅ All Raw Materials Available" : "⚠️ Raw Material Deficit Detected"} onClose={() => setDeficitModal(false)}>
           <div className="space-y-4">
-            <div className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl">
+            <div className={`p-4 ${deficitItems.every((item: any) => (item.deficit || 0) <= 0) ? 'bg-green-500/10 border-green-500/20 text-green-600' : 'bg-destructive/10 border-destructive/20 text-destructive'} border rounded-xl`}>
               <p className="text-sm font-semibold flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
-                Raw Material Shortage Block
+                {deficitItems.every((item: any) => (item.deficit || 0) <= 0) ? (
+                  <span className="text-green-600 shrink-0">✅</span>
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
+                )}
+                {deficitItems.every((item: any) => (item.deficit || 0) <= 0) ? 'All Materials In Stock' : 'Raw Material Shortage Block'}
               </p>
               <p className="text-xs mt-1 text-muted-foreground leading-relaxed">
-                Recording this production run is blocked because the required quantities exceed your current stock levels. Please replenish raw materials first by placing a <strong>Purchase Entry</strong> or posting a <strong>Stock Adjustment</strong>.
+                {deficitItems.every((item: any) => (item.deficit || 0) <= 0)
+                  ? 'All required raw materials are available in sufficient quantity. You can proceed with production.'
+                  : 'Recording this production run is blocked because the required quantities exceed your current stock levels. Please replenish raw materials first by placing a <strong>Purchase Entry</strong> or posting a <strong>Stock Adjustment</strong>.'}
               </p>
             </div>
 
@@ -518,18 +524,24 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {deficitItems.map((item: any, idx: number) => (
-                    <tr key={idx} className="bg-card">
-                      <td className="px-3 py-2 font-medium text-foreground">{item.name}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-green-600">{formatDecimal(item.currentStock)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-primary">{formatDecimal(item.consuming)}</td>
-                      <td className="px-3 py-2 text-right font-extrabold text-destructive">-{formatDecimal(item.deficit)}</td>
-                    </tr>
-                  ))}
+                  {deficitItems.map((item: any, idx: number) => {
+                    const hasShortage = (item.deficit || 0) > 0;
+                    return (
+                      <tr key={idx} className={hasShortage ? 'bg-red-500/5' : 'bg-green-500/5'}>
+                        <td className="px-3 py-2 font-medium text-foreground">{item.name}</td>
+                        <td className={`px-3 py-2 text-right font-semibold ${hasShortage ? 'text-red-600' : 'text-green-600'}`}>{formatDecimal(item.currentStock)}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-primary">{formatDecimal(item.consuming)}</td>
+                        <td className={`px-3 py-2 text-right font-extrabold ${hasShortage ? 'text-destructive' : 'text-green-600'}`}>
+                          {hasShortage ? `-${formatDecimal(item.deficit)}` : '✓ Available'}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
+            {!deficitItems.every((item: any) => (item.deficit || 0) <= 0) && (
             <div className="bg-secondary/40 p-4 rounded-xl border border-border/20 text-xs space-y-2">
               <p className="font-semibold text-foreground">💡 Recommended Next Steps:</p>
               <p className="text-muted-foreground leading-relaxed">
@@ -559,14 +571,15 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 </Button>
               </div>
             </div>
+            )}
 
             <div className="flex justify-end pt-2 border-t border-border">
               <Button 
-                variant="outline" 
+                variant={deficitItems.every((item: any) => (item.deficit || 0) <= 0) ? "default" : "outline"}
                 onClick={() => setDeficitModal(false)}
                 className="h-9 px-4 text-xs font-bold"
               >
-                Close Warning
+                {deficitItems.every((item: any) => (item.deficit || 0) <= 0) ? 'Proceed with Production' : 'Close Warning'}
               </Button>
             </div>
           </div>
