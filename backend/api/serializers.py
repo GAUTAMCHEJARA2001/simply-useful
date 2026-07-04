@@ -664,6 +664,10 @@ class BomitemSerializer(serializers.ModelSerializer):
         fields = ['id', 'bomId', 'materialName', 'productName', 'qty', 'quantity', 'unit', 'productId']
 
     def get_productId(self, obj):
+        product_map = self.context.get('product_map', {})
+        prod = product_map.get(obj.materialname)
+        if prod:
+            return prod.id
         from api.models import Product
         db = obj._state.db or 'default'
         prod = Product.objects.using(db).filter(name=obj.materialname).first()

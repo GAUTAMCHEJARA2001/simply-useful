@@ -2984,8 +2984,11 @@ class BOMViewSet(viewsets.ModelViewSet):
                     if company_id:
                         qs = qs.filter(companyid_id=company_id)
                     product_map = {}
-                    for p in Product.objects.using(wh.db_name).filter(productcode__isnull=False).exclude(productcode=''):
-                        product_map[p.productcode] = p
+                    for p in Product.objects.using(wh.db_name).all():
+                        if p.productcode:
+                            product_map[p.productcode] = p
+                        if p.name:
+                            product_map[p.name] = p
                     serializer = BomSerializer(qs, many=True, context={'request': request, 'product_map': product_map})
                     data = serializer.data
                     for item in data:
@@ -2998,8 +3001,11 @@ class BOMViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset().prefetch_related('bomitem_set')
         from api.models import Product
         product_map = {}
-        for p in Product.objects.using(get_current_db()).filter(productcode__isnull=False).exclude(productcode=''):
-            product_map[p.productcode] = p
+        for p in Product.objects.using(get_current_db()).all():
+            if p.productcode:
+                product_map[p.productcode] = p
+            if p.name:
+                product_map[p.name] = p
         serializer = BomSerializer(queryset, many=True, context={'request': request, 'product_map': product_map})
         return send_success(serializer.data, 'BOMs fetched successfully')
 
