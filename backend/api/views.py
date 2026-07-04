@@ -1509,24 +1509,7 @@ def bulk_import(request, entity):
                         continue
                     Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
                     created += 1
-                opening_stock = values.get('openingstock')
-                if opening_stock and int(opening_stock) > 0:
-                    product_obj = Product.objects.filter(productcode=code, companyid_id=company_id).first()
-                    if product_obj:
-                        from api.models import Stocktransaction
-                        existing_st = Stocktransaction.objects.using(target_warehouse.db_name).filter(
-                            productid=product_obj, reason='OPENING_STOCK_BULK_IMPORT'
-                        ).first()
-                        if not existing_st:
-                            Stocktransaction.objects.using(target_warehouse.db_name).create(
-                                id=_new_id(),
-                                productid=product_obj,
-                                warehouseid=target_warehouse,
-                                transactiontype='IN',
-                                quantity=float(opening_stock),
-                                reason='OPENING_STOCK_BULK_IMPORT',
-                                createdat=timezone.now()
-                            )
+
             if original_tenant:
                 connection.set_tenant(original_tenant)
             else:
@@ -3459,7 +3442,7 @@ def report_stock_ledger(request, pk):
             events.append({'id': f'sal_evt_{item.id}', 'date': o.date, 'transactionType': 'SALE', 'referenceId': o.orderid, 'warehouseName': wh.name, 'credit': 0.0, 'debit': float(item.qty), 'qty_change': -float(item.qty)})
             if getattr(item, 'returnedqty', 0) and float(item.returnedqty) > 0:
                 events.append({'id': f'sal_ret_evt_{item.id}', 'date': o.updatedat or o.date, 'transactionType': 'SALES_RETURN', 'referenceId': o.orderid, 'warehouseName': wh.name, 'credit': float(item.returnedqty), 'debit': 0.0, 'qty_change': float(item.returnedqty)})
-        st_qs = Stocktransaction.objects.using(wh.db_name).filter(productid_id=local_product.id).exclude(transactiontype='OPENING_STOCK').exclude(reason='OPENING_STOCK_BULK_IMPORT')
+        st_qs = Stocktransaction.objects.using(wh.db_name).filter(productid_id=local_product.id).exclude(transactiontype='OPENING_STOCK')
         if date_from:
             st_qs = st_qs.filter(createdat__gte=date_from)
         if date_to:
