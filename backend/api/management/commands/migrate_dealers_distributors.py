@@ -85,33 +85,39 @@ class Command(BaseCommand):
                         continue
 
                     with connection.cursor() as check_cur:
+                        check_cur.execute('SET search_path TO public')
                         if code_val:
                             check_cur.execute(
                                 f'SELECT 1 FROM "{table}" WHERE "{code_col}" = %s LIMIT 1',
                                 [code_val]
                             )
                             if check_cur.fetchone():
+                                check_cur.execute('RESET search_path')
                                 skipped += 1
                                 continue
-                        elif name_val:
+                        if name_val:
                             name_col = 'distributorName' if table == 'Distributor' else 'dealerName'
                             check_cur.execute(
                                 f'SELECT 1 FROM "{table}" WHERE "{name_col}" = %s LIMIT 1',
                                 [name_val]
                             )
                             if check_cur.fetchone():
+                                check_cur.execute('RESET search_path')
                                 skipped += 1
                                 continue
+                        check_cur.execute('RESET search_path')
 
                     placeholders = ', '.join(['%s'] * len(common_cols))
                     col_names = ', '.join(f'"{c}"' for c in common_cols)
                     values = list(row_data.values())
 
                     with connection.cursor() as ins_cur:
+                        ins_cur.execute('SET search_path TO public')
                         ins_cur.execute(
                             f'INSERT INTO "{table}" ({col_names}) VALUES ({placeholders})',
                             values
                         )
+                        ins_cur.execute('RESET search_path')
                         migrated += 1
 
         self.stdout.write(f'{table}: {migrated} migrated, {skipped} skipped')

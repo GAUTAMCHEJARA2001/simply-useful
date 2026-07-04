@@ -1550,8 +1550,13 @@ def bulk_import(request, entity):
                     'companyid_id': company_id, 'updatedat': timezone.now()
                 }
                 try:
-                    existing = Dealer.objects.using('default').filter(dealercode=code, companyid_id=company_id).first()
+                    from django.db.models import Q
+                    existing = Dealer.objects.using('default').filter(
+                        Q(dealername=name) | Q(dealercode=code), companyid_id=company_id
+                    ).first()
                     if existing:
+                        if not existing.dealercode:
+                            existing.dealercode = code
                         for key, value in values.items():
                             setattr(existing, key, value)
                         existing.save()
