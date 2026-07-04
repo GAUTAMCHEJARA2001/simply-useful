@@ -1999,11 +1999,6 @@ class DealerViewSet(viewsets.ModelViewSet):
             qs = qs.filter(companyid_id=company_id)
         if user_role == 'SALES' and user_email:
             qs = qs.filter(assignedsoemail=user_email)
-        
-        qs = qs.only('id', 'dealercode', 'dealername', 'city', 'assignedsoemail',
-                      'distributorname', 'creditlimit', 'outstanding', 'active',
-                      'companyid_id', 'createdat', 'updatedat', 'territory',
-                      'contact_person', 'phone', 'email', 'address', 'gst', 'warehouseid')
 
         search = request.query_params.get('search', '').strip()
         if search:
@@ -2130,10 +2125,6 @@ class DistributorViewSet(viewsets.ModelViewSet):
             qs = qs.filter(companyid_id=company_id)
         if user_role == 'SALES' and user_email:
             qs = qs.filter(assignedsoemail=user_email)
-        
-        qs = qs.only('id', 'distributorname', 'area', 'assignedsoemail', 'creditlimit',
-                      'outstanding', 'active', 'companyid_id', 'createdat', 'updatedat',
-                      'territory', 'contact_person', 'phone', 'email', 'address', 'gst', 'warehouseid')
 
         search = request.query_params.get('search', '').strip()
         if search:
