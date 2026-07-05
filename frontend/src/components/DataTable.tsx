@@ -158,7 +158,7 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
                     <td 
                       key={j} 
                       style={columnWidths?.[j] ? { width: columnWidths[j] } : undefined}
-                      className={`px-4 py-3 ${columnWidths?.[j] ? 'max-w-0' : 'whitespace-nowrap'}`}
+                      className={`px-4 py-3 whitespace-nowrap ${columnWidths?.[j] ? 'max-w-0' : ''}`}
                     >
                       <div className={columnWidths?.[j] ? 'truncate' : ''}>{cell ?? '—'}</div>
                     </td>
