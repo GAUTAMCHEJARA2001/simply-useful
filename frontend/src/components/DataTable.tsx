@@ -107,7 +107,7 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
       {/* Desktop View */}
-      <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-[60vh]">
+      <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-[80vh]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted/95 backdrop-blur z-10 border-b border-border shadow-sm">
             <tr className="bg-muted/50 border-b border-border">
