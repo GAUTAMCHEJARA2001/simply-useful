@@ -9,7 +9,7 @@ services:
     name: simply-useful-backend
     env: python
     buildCommand: "cd backend && pip install -r requirements.txt && python manage.py collectstatic --noinput --skip-checks"
-    startCommand: "cd backend && python manage.py migrate --fake-initial && python manage.py setup_warehouse_schema && python manage.py migrate_dealers_distributors && python seed_kamla.py && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --preload --max-requests 500 --max-requests-jitter 50"
+    startCommand: "cd backend && python manage.py migrate && python manage.py setup_warehouse_schema && python manage.py migrate_dealers_distributors && python seed_kamla.py && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --preload --max-requests 500 --max-requests-jitter 50"
     envVars:
       - key: SECRET_KEY
         generateValue: true
