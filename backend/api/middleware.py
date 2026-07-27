@@ -9,7 +9,6 @@ class TenantQueryLoggingMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # Reset DB context to default for safety before processing request
         from api.db_router import set_current_db
         set_current_db('default')
         
@@ -23,8 +22,6 @@ class TenantQueryLoggingMiddleware:
             active_db = get_current_db()
             
             log_msg = f"[{timezone.now()}] user_id={user_id} warehouse_id={warehouse_id} active_db={active_db} endpoint={request.path} status={response.status_code}"
-            
-            # Print to console for now, but configured logger will capture it
             print(f"[TENANT AUDIT] {log_msg}")
             logger.info(log_msg)
 

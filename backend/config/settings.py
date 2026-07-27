@@ -30,9 +30,7 @@ ALLOWED_HOSTS = ['*']
 
 # Application definition
 
-SHARED_APPS = [
-    'django_tenants',  # Mandatory, must be at the very top!
-    'core',  # Contains shared Company, User, Warehouse, and Domain
+INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -41,22 +39,13 @@ SHARED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
+    'core',
+    'api',
 ]
-
-TENANT_APPS = [
-    'django.contrib.contenttypes',  # Required for django-tenants content type isolation
-    'api',  # Contains warehouse-specific Order, Product, Inventory, etc.
-]
-
-INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
-
-TENANT_MODEL = 'core.Warehouse'
-TENANT_DOMAIN_MODEL = 'core.Domain'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # Must be at the very top
     'django.middleware.security.SecurityMiddleware',
-    'core.middleware.HeaderTenantMiddleware',  # Routes schema based on X-Warehouse-ID header
     'whitenoise.middleware.WhiteNoiseMiddleware',  # High-performance static files serving
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -64,7 +53,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'api.middleware.TenantQueryLoggingMiddleware',  # Multi-tenant query audit log
+    'api.middleware.TenantQueryLoggingMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -101,7 +90,7 @@ if DATABASE_URL:
     url = urlparse(DATABASE_URL)
     DATABASES = {
         'default': {
-            'ENGINE': 'django_tenants.postgresql_backend',
+            'ENGINE': 'django.db.backends.postgresql',
             'NAME': url.path[1:],
             'USER': url.username,
             'PASSWORD': url.password,
@@ -119,7 +108,7 @@ else:
 
     DATABASES = {
         'default': {
-            'ENGINE': 'django_tenants.postgresql_backend',
+            'ENGINE': 'django.db.backends.postgresql',
             'NAME': 'db_master',
             'USER': db_user,
             'PASSWORD': db_password,
@@ -129,10 +118,6 @@ else:
         }
     }
 
-DATABASE_ROUTERS = (
-    'core.routers.CustomTenantSyncRouter',
-    'django_tenants.routers.TenantSyncRouter',
-)
 
 
 # Password validation

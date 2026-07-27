@@ -69,25 +69,8 @@ class WarehouseSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'active', 'companyId', 'gstNumber', 'location']
 
     def create(self, validated_data):
-        name = validated_data.get('name', '')
-        import re
-        slug = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower())
-        slug = re.sub(r'_+', '_', slug).strip('_')
-        if not slug:
-            import uuid
-            slug = uuid.uuid4().hex[:10]
-            
-        schema_name = f"wh_{slug}"
-        base_schema = schema_name
-        counter = 1
-        while Warehouse.objects.using('default').filter(schema_name=schema_name).exists():
-            schema_name = f"{base_schema}_{counter}"
-            counter += 1
-            
-        validated_data['schema_name'] = schema_name
-        validated_data['db_name'] = schema_name
-        
-        return super().create(validated_data)
+        warehouse = Warehouse.objects.create(**validated_data)
+        return warehouse
 
 
 class RegionSerializer(serializers.ModelSerializer):
@@ -276,47 +259,41 @@ class ProductSerializer(serializers.ModelSerializer):
                 warehouses = warehouses.filter(id__in=assigned_wh_ids)
 
             for wh in warehouses:
-                if not wh.db_name:
-                    continue
-
-                # Resolve the local product in this warehouse DB (by product code)
+                # Resolve the local product (by product code)
                 from api.models import Product as ProductModel
                 local_product = None
                 try:
-                    if obj._state.db == wh.db_name:
-                        local_product = obj
-                    else:
-                        local_product = ProductModel.objects.using(wh.db_name).filter(
-                            productcode=obj.productcode
-                        ).first()
+                    local_product = ProductModel.objects.filter(
+                        productcode=obj.productcode
+                    ).first()
                 except Exception:
                     pass
                 if not local_product:
                     continue
 
                 # 1. Purchases (inward)
-                pur_total = Purchaseitem.objects.using(wh.db_name).filter(
+                pur_total = Purchaseitem.objects.filter(
                     productname=local_product.name,
                     purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']
                 ).aggregate(s=Sum('qty'))['s'] or 0
                 total += float(pur_total)
 
                 # Purchase returns (outward)
-                pur_ret_total = Purchaseitem.objects.using(wh.db_name).filter(
+                pur_ret_total = Purchaseitem.objects.filter(
                     productname=local_product.name,
                     purchaseid__status='Returned'
                 ).aggregate(s=Sum('qty'))['s'] or 0
                 total -= float(pur_ret_total)
 
                 # 2. Sales / dispatches (outward) — only completed orders
-                sal_total = Orderitem.objects.using(wh.db_name).filter(
+                sal_total = Orderitem.objects.filter(
                     productid_id=local_product.id,
                     orderid__status='Completed'
                 ).aggregate(s=Sum('qty'))['s'] or 0
                 total -= float(sal_total)
 
                 # Sales returns (inward)
-                sal_ret_total = Orderitem.objects.using(wh.db_name).filter(
+                sal_ret_total = Orderitem.objects.filter(
                     productid_id=local_product.id,
                     orderid__status='Returned'
                 ).aggregate(s=Sum('qty'))['s'] or 0
@@ -324,7 +301,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
                 # 3. StockTransactions (production, consumed, adjustments, etc.)
                 #    Exclude pending/rejected entries — they haven't taken effect yet
-                st_total = Stocktransaction.objects.using(wh.db_name).filter(
+                st_total = Stocktransaction.objects.filter(
                     productid_id=local_product.id
                 ).exclude(
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
@@ -446,22 +423,19 @@ class OrderitemSerializer(serializers.ModelSerializer):
                 'product': None,
             }
 
-        # If product is still None, try to resolve from all warehouse DBs
+        # If product is still None, try to resolve it directly
         if ret.get('product') is None and instance.productid_id:
-            from django.conf import settings
-            for db_name in settings.DATABASES:
-                try:
-                    p = Product.objects.using(db_name).filter(id=instance.productid_id).first()
-                    if p:
-                        ret['product'] = {
-                            'id': p.id,
-                            'productCode': p.productcode,
-                            'name': p.name,
-                            'productName': p.name,
-                        }
-                        break
-                except Exception:
-                    continue
+            try:
+                p = Product.objects.filter(id=instance.productid_id).first()
+                if p:
+                    ret['product'] = {
+                        'id': p.id,
+                        'productCode': p.productcode,
+                        'name': p.name,
+                        'productName': p.name,
+                    }
+            except Exception:
+                pass
 
         return ret
 
@@ -498,23 +472,21 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_partyDetails(self, obj):
         from api.models import Dealer, Distributor
         p_type = str(obj.partytype).upper()
-        # Use the database alias the order came from
-        db_alias = getattr(obj._state, 'db', 'default')
         
         if not hasattr(self, '_party_cache'):
             self._party_cache = {}
             
-        cache_key = (db_alias, p_type, obj.partyname)
+        cache_key = (p_type, obj.partyname)
         if cache_key in self._party_cache:
             return self._party_cache[cache_key]
         
         result = None
         if p_type == 'DEALER':
-            dealer = Dealer.objects.using(db_alias).filter(dealername=obj.partyname).first()
+            dealer = Dealer.objects.filter(dealername=obj.partyname).first()
             if dealer:
                 result = DealerSerializer(dealer).data
         elif p_type == 'DISTRIBUTOR':
-            distributor = Distributor.objects.using(db_alias).filter(distributorname=obj.partyname).first()
+            distributor = Distributor.objects.filter(distributorname=obj.partyname).first()
             if distributor:
                 result = DistributorSerializer(distributor).data
                 
@@ -527,7 +499,6 @@ class OrderSerializer(serializers.ModelSerializer):
         # source='orderitem_set' means DRF stores nested items under 'orderitem_set' key
         items_data = validated_data.pop('orderitem_set', [])
         order = Order.objects.create(**validated_data)
-        db_alias = getattr(order._state, 'db', 'default')
         for item_data in items_data:
             import uuid
             if 'id' not in item_data or not item_data['id']:
@@ -536,7 +507,7 @@ class OrderSerializer(serializers.ModelSerializer):
             item_data.pop('product', None)
             item_data.pop('orderId', None)
             item_data.pop('order_id', None)
-            Orderitem.objects.using(db_alias).create(orderid=order, **item_data)
+            Orderitem.objects.create(orderid=order, **item_data)
         return order
 
     def update(self, instance, validated_data):
@@ -550,10 +521,8 @@ class OrderSerializer(serializers.ModelSerializer):
         instance.save()
         
         if items_data is not None:
-            db_alias = getattr(instance._state, 'db', 'default')
-            
             # Build a map of existing items by product ID for upsert
-            old_items = instance.orderitem_set.using(db_alias).all()
+            old_items = instance.orderitem_set.all()
             old_by_product = {}
             for item in old_items:
                 pid = item.productid_id
@@ -588,17 +557,17 @@ class OrderSerializer(serializers.ModelSerializer):
                     item_data.pop('returnedqty', None)
                     for attr, val in item_data.items():
                         setattr(old_item, attr, val)
-                    old_item.save(using=db_alias)
+                    old_item.save()
                 else:
                     # CREATE new item
                     if 'id' not in item_data or not item_data['id']:
                         item_data['id'] = 'c' + uuid.uuid4().hex[:23]
-                    Orderitem.objects.using(db_alias).create(orderid=instance, **item_data)
+                    Orderitem.objects.create(orderid=instance, **item_data)
             
             # Delete items that were removed from the order
             for pid, old_item in old_by_product.items():
                 if pid not in seen_products:
-                    old_item.delete(using=db_alias)
+                    old_item.delete()
                 
         return instance
 
@@ -746,22 +715,11 @@ class BomSerializer(serializers.ModelSerializer):
         return prod.name if prod else ""
 
     def validate(self, data):
-        from api.db_router import get_current_db, get_tenant_model_cross_db
-        db = get_current_db() or 'default'
-        
         product_id = self.initial_data.get('productId') or self.initial_data.get('product_id')
         if product_id:
             try:
                 from api.models import Product
-                if db == 'default':
-                    prod = get_tenant_model_cross_db(Product, product_id)
-                    db = get_current_db() or 'default'
-                else:
-                    try:
-                        prod = Product.objects.using(db).get(id=product_id)
-                    except Exception:
-                        prod = get_tenant_model_cross_db(Product, product_id)
-                        db = get_current_db() or 'default'
+                prod = Product.objects.get(id=product_id)
                 data['productcode'] = prod.productcode
             except Exception:
                 raise serializers.ValidationError({"productId": "Product not found"})
@@ -770,7 +728,7 @@ class BomSerializer(serializers.ModelSerializer):
             
         product_code = data.get('productcode')
         if product_code:
-            qs = Bom.objects.using(db).filter(productcode=product_code)
+            qs = Bom.objects.filter(productcode=product_code)
             if self.instance:
                 qs = qs.exclude(id=self.instance.id)
             if qs.exists():
@@ -779,15 +737,13 @@ class BomSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        from api.db_router import get_current_db
-        db = get_current_db() or 'default'
         from django.utils import timezone
         now = timezone.now()
         validated_data['createdat'] = now
         validated_data['updatedat'] = now
 
         items_data = validated_data.pop('bomitem_set', validated_data.pop('items', []))
-        bom = Bom.objects.using(db).create(**validated_data)
+        bom = Bom.objects.create(**validated_data)
         for item_data in items_data:
             item_data.pop('productName', None)
             item_data.pop('quantity', None)
@@ -796,11 +752,10 @@ class BomSerializer(serializers.ModelSerializer):
             item_data.pop('bomid', None)
             import uuid
             item_id = 'c' + uuid.uuid4().hex[:23]
-            Bomitem.objects.using(db).create(id=item_id, bomid=bom, **item_data)
+            Bomitem.objects.create(id=item_id, bomid=bom, **item_data)
         return bom
 
     def update(self, instance, validated_data):
-        db = instance._state.db or 'default'
         from django.utils import timezone
         now = timezone.now()
         validated_data['updatedat'] = now
@@ -808,10 +763,10 @@ class BomSerializer(serializers.ModelSerializer):
         items_data = validated_data.pop('bomitem_set', validated_data.pop('items', None))
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        instance.save(using=db)
+        instance.save()
 
         if items_data is not None:
-            Bomitem.objects.using(db).filter(bomid=instance).delete()
+            Bomitem.objects.filter(bomid=instance).delete()
             for item_data in items_data:
                 item_data.pop('productName', None)
                 item_data.pop('quantity', None)
@@ -820,7 +775,7 @@ class BomSerializer(serializers.ModelSerializer):
                 item_data.pop('bomid', None)
                 import uuid
                 item_id = 'c' + uuid.uuid4().hex[:23]
-                Bomitem.objects.using(db).create(id=item_id, bomid=instance, **item_data)
+                Bomitem.objects.create(id=item_id, bomid=instance, **item_data)
         return instance
 
 
@@ -857,15 +812,14 @@ class PurchaseorderitemSerializer(serializers.ModelSerializer):
         ]
 
     def _received_quantity(self, obj):
-        db = obj._state.db or 'default'
-        linked_purchase_ids = Purchase.objects.using(db).filter(purchaseorderid=obj.purchaseorderid).values_list('id', flat=True)
+        linked_purchase_ids = Purchase.objects.filter(purchaseorderid=obj.purchaseorderid).values_list('id', flat=True)
         if not linked_purchase_ids:
             return 0
 
         product_name = obj.productname or ''
         return sum(
             item.qty
-            for item in Purchaseitem.objects.using(db).filter(
+            for item in Purchaseitem.objects.filter(
                 purchaseid_id__in=linked_purchase_ids,
                 productname=product_name
             )

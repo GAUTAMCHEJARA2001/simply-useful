@@ -359,8 +359,8 @@ def compile_analytical_warehouse(company_id=None):
             if not wh.db_name:
                 continue
             
-            # Fetch orders and items from the tenant DB using Django ORM
-            orders = Order.objects.using(wh.db_name).all().prefetch_related('orderitem_set')
+            # Fetch orders and items using Django ORM
+            orders = Order.objects.all().prefetch_related('orderitem_set')
             
             for o in orders:
                 for oi in o.orderitem_set.all():

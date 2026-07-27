@@ -17,50 +17,16 @@ def send_success(data=None, message='Done', status_code=200):
 def send_error(message='Internal Server Error', status_code=500):
     return Response({'success': False, 'data': None, 'message': message}, status=status_code)
 
-def resolve_warehouse(wh_id_or_name, using='default'):
-    """Safely resolve a warehouse by ID or name. Returns Warehouse instance or None.
-    Handles the case where frontend sends a warehouse name (e.g. 'NASHIK') 
-    instead of a numeric ID (e.g. 7).
-    """
+def resolve_warehouse(wh_id_or_name):
     if not wh_id_or_name or str(wh_id_or_name).upper() == 'GLOBAL':
         return None
     try:
-        wh = Warehouse.objects.using(using).filter(id=wh_id_or_name).first()
+        wh = Warehouse.objects.filter(id=wh_id_or_name).first()
         if wh:
             return wh
     except (ValueError, TypeError):
         pass
-    return Warehouse.objects.using(using).filter(name__iexact=str(wh_id_or_name), active=True).first()
-
-def ensure_tenant_db_context(request, warehouse_id_field='warehouseId'):
-    """
-    If the current db is 'default', extracts the warehouse ID from headers or request payload,
-    resolves the warehouse, and switches the schema connection using connection.set_tenant().
-    Returns the resolved Warehouse or None.
-    """
-    from api.db_router import get_current_db, set_current_db
-    from django.db import connection
-    from api.models import Warehouse
-    curr_db = get_current_db()
-    if curr_db != 'default':
-        return Warehouse.objects.filter(db_name=curr_db).first()
-    wh_id = request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
-    if not wh_id or str(wh_id).upper() == 'GLOBAL' or str(wh_id) == 'none':
-        wh_id = (request.data or {}).get(warehouse_id_field) or (request.data or {}).get('warehouse_id') or (request.data or {}).get('assignedWarehouse') or (request.data or {}).get('warehouseId')
-    if wh_id:
-        wh = resolve_warehouse(wh_id)
-        if wh and wh.db_name:
-            connection.set_tenant(wh)
-            request.tenant = wh
-            set_current_db(wh.db_name)
-            return wh
-    wh = Warehouse.objects.filter(active=True).first()
-    if wh and wh.db_name:
-        connection.set_tenant(wh)
-        request.tenant = wh
-        set_current_db(wh.db_name)
-        return wh
-    return None
+    return Warehouse.objects.filter(name__iexact=str(wh_id_or_name), active=True).first()
 
 def _append_order_tags(narration, tags):
     import re
@@ -103,7 +69,7 @@ def auth_login(request):
     if email in ['admin@alpha.com', 'admin@simplyuseful.com']:
         first_company = Company.objects.first()
         company_id = first_company.id if first_company else 'cmo75yliq0000wesurjpett1n'
-        mock_user = {'id': 'superadmin-1', 'email': email, 'name': 'System Admin', 'role': 'SUPERADMIN', 'companyId': company_id, 'authorizedWarehouses': [{'id': str(w.id), 'name': w.name} for w in Warehouse.objects.using('default').filter(active=True).exclude(schema_name='public')]}
+        mock_user = {'id': 'superadmin-1', 'email': email, 'name': 'System Admin', 'role': 'SUPERADMIN', 'companyId': company_id, 'authorizedWarehouses': [{'id': str(w.id), 'name': w.name} for w in Warehouse.objects.filter(active=True)]}
         access_token, refresh_token = generate_tokens(mock_user['id'], mock_user['email'], mock_user['role'], mock_user['companyId'])
         return send_success({'user': mock_user, 'accessToken': access_token, 'refreshToken': refresh_token}, 'Success login. Session active.')
     try:
@@ -124,11 +90,11 @@ def auth_login(request):
         access_token, refresh_token = generate_tokens(user.id, user.email, user.role, company_id)
         user_data = UserSerializer(user).data
         if user.role == 'SUPERADMIN':
-            warehouses = Warehouse.objects.using('default').filter(active=True).exclude(schema_name='public')
+            warehouses = Warehouse.objects.filter(active=True)
         else:
             from api.models import Userwarehouseaccess
-            uwa = Userwarehouseaccess.objects.using('default').filter(userid_id=user.id)
-            warehouses = Warehouse.objects.using('default').filter(id__in=uwa.values_list('warehouseid', flat=True), active=True).exclude(schema_name='public')
+            uwa = Userwarehouseaccess.objects.filter(userid_id=user.id)
+            warehouses = Warehouse.objects.filter(id__in=uwa.values_list('warehouseid', flat=True), active=True)
         user_data['authorizedWarehouses'] = [{'id': str(w.id), 'name': w.name} for w in warehouses]
         return send_success({'user': user_data, 'accessToken': access_token, 'refreshToken': refresh_token}, 'Success login. Session active.')
     except User.DoesNotExist:
@@ -253,35 +219,16 @@ class UserViewSet(viewsets.ModelViewSet):
 def user_assignments(request, pk):
     from api.models import User, Userproductaccess, Userwarehouseaccess
     from django.db import transaction
-    from api.db_router import get_current_db
-    current_db = get_current_db()
     try:
         user = User.objects.get(id=pk)
     except User.DoesNotExist:
         return send_error('User not found', 404)
     if request.method == 'GET':
-        if current_db == 'default':
-            from api.models import Warehouse
-            brand_ids_set = set()
-            category_ids_set = set()
-            product_ids_set = set()
-            warehouse_ids = list(Userwarehouseaccess.objects.filter(userid=user).values_list('warehouseid_id', flat=True))
-            for wh in Warehouse.objects.filter(active=True):
-                if not wh.db_name:
-                    continue
-                try:
-                    brand_ids_set.update(Userproductaccess.objects.using(wh.db_name).filter(userid=user, brandid__isnull=False).values_list('brandid_id', flat=True))
-                    category_ids_set.update(Userproductaccess.objects.using(wh.db_name).filter(userid=user, categoryid__isnull=False).values_list('categoryid_id', flat=True))
-                    product_ids_set.update(Userproductaccess.objects.using(wh.db_name).filter(userid=user, productid__isnull=False).values_list('productid_id', flat=True))
-                except Exception:
-                    pass
-            data = {'brands': list(brand_ids_set), 'categories': list(category_ids_set), 'products': list(product_ids_set), 'warehouses': warehouse_ids}
-        else:
-            brand_ids = list(Userproductaccess.objects.filter(userid=user, brandid__isnull=False).values_list('brandid_id', flat=True))
-            category_ids = list(Userproductaccess.objects.filter(userid=user, categoryid__isnull=False).values_list('categoryid_id', flat=True))
-            product_ids = list(Userproductaccess.objects.filter(userid=user, productid__isnull=False).values_list('productid_id', flat=True))
-            warehouse_ids = list(Userwarehouseaccess.objects.filter(userid=user).values_list('warehouseid_id', flat=True))
-            data = {'brands': brand_ids, 'categories': category_ids, 'products': product_ids, 'warehouses': warehouse_ids}
+        brand_ids = list(Userproductaccess.objects.filter(userid=user, brandid__isnull=False).values_list('brandid_id', flat=True))
+        category_ids = list(Userproductaccess.objects.filter(userid=user, categoryid__isnull=False).values_list('categoryid_id', flat=True))
+        product_ids = list(Userproductaccess.objects.filter(userid=user, productid__isnull=False).values_list('productid_id', flat=True))
+        warehouse_ids = list(Userwarehouseaccess.objects.filter(userid=user).values_list('warehouseid_id', flat=True))
+        data = {'brands': brand_ids, 'categories': category_ids, 'products': product_ids, 'warehouses': warehouse_ids}
         return send_success(data, 'User assignments retrieved successfully')
     elif request.method == 'POST':
         data = request.data
@@ -293,60 +240,23 @@ def user_assignments(request, pk):
         for w_id in req_warehouse_ids:
             if w_id:
                 Userwarehouseaccess.objects.create(userid=user, warehouseid_id=w_id)
-        if current_db == 'default':
-            from api.models import Warehouse, Product, Category, Brand
-            brand_names = []
-            category_names = []
-            product_skus = []
-            for wh in Warehouse.objects.filter(active=True):
-                if not wh.db_name:
-                    continue
-                try:
-                    b_objs = Brand.objects.using(wh.db_name).filter(id__in=req_brand_ids)
-                    brand_names.extend([b.name for b in b_objs])
-                    c_objs = Category.objects.using(wh.db_name).filter(id__in=req_category_ids)
-                    category_names.extend([c.name for c in c_objs])
-                    p_objs = Product.objects.using(wh.db_name).filter(id__in=req_product_ids)
-                    product_skus.extend([p.productcode for p in p_objs if p.productcode])
-                except Exception:
-                    pass
-            brand_names = list(set(brand_names))
-            category_names = list(set(category_names))
-            product_skus = list(set(product_skus))
-            for wh in Warehouse.objects.filter(active=True):
-                if not wh.db_name:
-                    continue
-                try:
-                    Userproductaccess.objects.using(wh.db_name).filter(userid=user).delete()
-                    wh_brand_ids = Brand.objects.using(wh.db_name).filter(name__in=brand_names).values_list('id', flat=True)
-                    for b_id in wh_brand_ids:
-                        Userproductaccess.objects.using(wh.db_name).create(userid=user, brandid_id=b_id)
-                    wh_cat_ids = Category.objects.using(wh.db_name).filter(name__in=category_names).values_list('id', flat=True)
-                    for c_id in wh_cat_ids:
-                        Userproductaccess.objects.using(wh.db_name).create(userid=user, categoryid_id=c_id)
-                    wh_prod_ids = Product.objects.using(wh.db_name).filter(productcode__in=product_skus).values_list('id', flat=True)
-                    for p_id in wh_prod_ids:
-                        Userproductaccess.objects.using(wh.db_name).create(userid=user, productid_id=p_id)
-                except Exception:
-                    pass
-        else:
-            with transaction.atomic():
-                Userproductaccess.objects.filter(userid=user).delete()
-                for b_id in req_brand_ids:
-                    if b_id:
-                        Userproductaccess.objects.create(userid=user, brandid_id=b_id)
-                for c_id in req_category_ids:
-                    if c_id:
-                        Userproductaccess.objects.create(userid=user, categoryid_id=c_id)
-                for p_id in req_product_ids:
-                    if p_id:
-                        Userproductaccess.objects.create(userid=user, productid_id=p_id)
+        with transaction.atomic():
+            Userproductaccess.objects.filter(userid=user).delete()
+            for b_id in req_brand_ids:
+                if b_id:
+                    Userproductaccess.objects.create(userid=user, brandid_id=b_id)
+            for c_id in req_category_ids:
+                if c_id:
+                    Userproductaccess.objects.create(userid=user, categoryid_id=c_id)
+            for p_id in req_product_ids:
+                if p_id:
+                    Userproductaccess.objects.create(userid=user, productid_id=p_id)
         return send_success(data, 'User assignments updated successfully')
 
-def get_allowed_product_ids_for_user(db_name, user_id):
+def get_allowed_product_ids_for_user(user_id):
     from api.models import Userproductaccess, Product, Category
     from django.db.models import Q
-    assignments = Userproductaccess.objects.using(db_name).filter(userid_id=user_id)
+    assignments = Userproductaccess.objects.filter(userid_id=user_id)
     if not assignments.exists():
         return None
     b_ids = list(assignments.filter(brandid__isnull=False).values_list('brandid_id', flat=True))
@@ -354,7 +264,7 @@ def get_allowed_product_ids_for_user(db_name, user_id):
     p_ids = list(assignments.filter(productid__isnull=False).values_list('productid_id', flat=True))
     all_cat_ids = set()
     if c_ids:
-        all_cats = list(Category.objects.using(db_name).all())
+        all_cats = list(Category.objects.all())
         parent_map = {}
         for cat in all_cats:
             if cat.parentid_id:
@@ -383,7 +293,7 @@ def get_allowed_product_ids_for_user(db_name, user_id):
         has_filter = True
     if not has_filter:
         return []
-    return list(Product.objects.using(db_name).filter(q_expr).values_list('id', flat=True))
+    return list(Product.objects.filter(q_expr).values_list('id', flat=True))
 
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -393,7 +303,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user_id = self.request.user.id
         from api.models import User
-        real_user = User.objects.using('default').filter(id=user_id).first()
+        real_user = User.objects.filter(id=user_id).first()
         company_id = real_user.companyid_id if real_user else getattr(self.request.user, 'companyId', None)
         queryset = Product.objects.filter(companyid_id=company_id) if company_id else Product.objects.all()
         admin_roles = {'ADMIN', 'SUPERADMIN', 'HR'}
@@ -404,349 +314,113 @@ class ProductViewSet(viewsets.ModelViewSet):
             pass
         if self.request.user and (not skip_assignment_filter):
             user_id = self.request.user.id
-            from api.db_router import get_current_db
-            db_name = get_current_db()
-            allowed_ids = get_allowed_product_ids_for_user(db_name, user_id)
+            allowed_ids = get_allowed_product_ids_for_user(user_id)
             if allowed_ids is not None:
                 queryset = queryset.filter(id__in=allowed_ids)
         return queryset
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
-        from api.models import Warehouse
+        from api.models import Warehouse, Product, Userproductaccess
+        from api.models import Purchaseitem, Orderitem, Stocktransaction
+        from django.db.models import Sum, Q
         admin_roles = {'ADMIN', 'SUPERADMIN', 'HR'}
         user_role = getattr(self.request.user, 'role', '') or ''
         is_admin = user_role.upper() in admin_roles
-        current_db = get_current_db()
         search = request.query_params.get('search', '').strip()
         page_param = request.query_params.get('page')
         limit_param = request.query_params.get('limit')
         is_paginated = page_param is not None and limit_param is not None
 
-        if current_db == 'default' or not is_admin:
-            from api.models import Product, Userproductaccess
-            from api.models import Purchaseitem, Orderitem, Stocktransaction
-            from django.db.models import Sum, Q
-            skip_assignment_filter = is_admin
-            allowed_product_ids = None
-            if not skip_assignment_filter:
-                user_id = self.request.user.id
-                allowed_product_ids = set()
-                has_any_assignments = False
-                for wh_check in Warehouse.objects.filter(active=True):
-                    if not wh_check.db_name:
-                        continue
-                    try:
-                        wh_has_assignments = Userproductaccess.objects.using(wh_check.db_name).filter(userid_id=user_id).exists()
-                        if wh_has_assignments:
-                            has_any_assignments = True
-                            wh_allowed_ids = get_allowed_product_ids_for_user(wh_check.db_name, user_id)
-                            if wh_allowed_ids:
-                                allowed_product_ids.update(wh_allowed_ids)
-                    except Exception:
-                        pass
-                if not has_any_assignments:
-                    if is_paginated:
-                        return send_success({'items': [], 'total': 0, 'page': 1, 'limit': 20, 'hasMore': False}, 'Products fetched successfully')
-                    return send_success([], 'Products fetched successfully')
+        queryset = self.get_queryset()
+        skip_assignment_filter = is_admin
+        if not skip_assignment_filter:
+            allowed_product_ids = get_allowed_product_ids_for_user(self.request.user.id)
+            if allowed_product_ids is not None:
+                queryset = queryset.filter(id__in=allowed_product_ids)
 
-            all_products = []
-            seen_skus = set()
-            seen_ids = set()
-            name_to_sku = {}
-            id_to_sku = {}
+        if search:
+            queryset = queryset.filter(Q(name__icontains=search) | Q(productcode__icontains=search))
 
-            active_whs = [wh for wh in Warehouse.objects.filter(active=True) if wh.db_name]
+        all_products = list(queryset.select_related('categoryid', 'categoryid__parentid', 'brandid', 'unitid'))
 
-            for wh in active_whs:
-                try:
-                    products_qs = Product.objects.using(wh.db_name).select_related('categoryid', 'categoryid__parentid', 'brandid', 'unitid')
-                    company_id = _get_company_id(request)
-                    if company_id:
-                        products_qs = products_qs.filter(companyid_id=company_id)
-                    if allowed_product_ids is not None:
-                        products_qs = products_qs.filter(id__in=allowed_product_ids)
-                    if search:
-                        products_qs = products_qs.filter(
-                            Q(name__icontains=search) | Q(productcode__icontains=search)
-                        )
+        id_to_sku = {}
+        name_to_sku = {}
+        for p in all_products:
+            if p.productcode:
+                id_to_sku[p.id] = p.productcode
+                name_to_sku[p.name] = p.productcode
 
-                    wh_name_to_sku = {}
-                    wh_id_to_sku = {}
-                    for p in products_qs:
-                        if p.productcode:
-                            wh_name_to_sku[p.name] = p.productcode
-                            wh_id_to_sku[p.id] = p.productcode
-                            if p.productcode not in seen_skus:
-                                all_products.append(p)
-                                seen_skus.add(p.productcode)
-                        elif p.id not in seen_ids:
-                            all_products.append(p)
-                            seen_ids.add(p.id)
+        sku_qty_map = {}
+        for p in all_products:
+            if p.productcode:
+                sku_qty_map[p.productcode] = float(p.openingstock or 0)
 
-                    name_to_sku[wh.db_name] = wh_name_to_sku
-                    id_to_sku[wh.db_name] = wh_id_to_sku
-                except Exception:
-                    pass
+        page_product_ids = list(id_to_sku.keys())
+        page_product_names = list(name_to_sku.keys())
 
-            total = len(all_products)
+        try:
+            purchases = Purchaseitem.objects.filter(
+                purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED'],
+                productname__in=page_product_names
+            ).values('productname').annotate(total=Sum('qty'))
+            for row in purchases:
+                sku = name_to_sku.get(row['productname'])
+                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
 
-            if is_paginated:
-                try:
-                    page = max(1, int(page_param))
-                    limit = min(200, max(1, int(limit_param)))
-                except (ValueError, TypeError):
-                    page, limit = 1, 20
-                offset = (page - 1) * limit
-                page_products = all_products[offset:offset + limit]
-                page_skus = {p.productcode for p in page_products if p.productcode}
+            purchase_ret = Purchaseitem.objects.filter(
+                purchaseid__status='Returned',
+                productname__in=page_product_names
+            ).values('productname').annotate(total=Sum('qty'))
+            for row in purchase_ret:
+                sku = name_to_sku.get(row['productname'])
+                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
 
-                sku_qty_map = {}
-                for p in page_products:
-                    if p.productcode:
-                        sku_qty_map[p.productcode] = float(p.openingstock or 0)
+            sales = Orderitem.objects.filter(
+                orderid__status='Completed',
+                productid_id__in=page_product_ids
+            ).values('productid_id').annotate(total=Sum('qty'))
+            for row in sales:
+                sku = id_to_sku.get(row['productid_id'])
+                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
 
-                for wh in active_whs:
-                    wh_db = wh.db_name
-                    wh_name_map = name_to_sku.get(wh_db, {})
-                    wh_id_map = id_to_sku.get(wh_db, {})
-                    if not wh_name_map and not wh_id_map:
-                        continue
-                    page_wh_names = [n for n, s in wh_name_map.items() if s in page_skus]
-                    page_wh_ids = [i for i, s in wh_id_map.items() if s in page_skus]
-                    if not page_wh_names and not page_wh_ids:
-                        continue
-                    try:
-                        purchases = Purchaseitem.objects.using(wh_db).filter(
-                            purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED'],
-                            productname__in=page_wh_names
-                        ).values('productname').annotate(total=Sum('qty'))
-                        for row in purchases:
-                            sku = wh_name_map.get(row['productname'])
-                            if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+            sales_ret = Orderitem.objects.filter(
+                orderid__status='Returned',
+                productid_id__in=page_product_ids
+            ).values('productid_id').annotate(total=Sum('qty'))
+            for row in sales_ret:
+                sku = id_to_sku.get(row['productid_id'])
+                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
 
-                        purchase_ret = Purchaseitem.objects.using(wh_db).filter(
-                            purchaseid__status='Returned',
-                            productname__in=page_wh_names
-                        ).values('productname').annotate(total=Sum('qty'))
-                        for row in purchase_ret:
-                            sku = wh_name_map.get(row['productname'])
-                            if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+            st_aggs = Stocktransaction.objects.filter(
+                productid_id__in=page_product_ids
+            ).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid_id').annotate(total=Sum('quantity'))
+            for row in st_aggs:
+                sku = id_to_sku.get(row['productid_id'])
+                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+        except Exception:
+            pass
 
-                        sales = Orderitem.objects.using(wh_db).filter(
-                            orderid__status='Completed',
-                            productid_id__in=page_wh_ids
-                        ).values('productid_id').annotate(total=Sum('qty'))
-                        for row in sales:
-                            sku = wh_id_map.get(row['productid_id'])
-                            if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
+        total = len(all_products)
 
-                        sales_ret = Orderitem.objects.using(wh_db).filter(
-                            orderid__status='Returned',
-                            productid_id__in=page_wh_ids
-                        ).values('productid_id').annotate(total=Sum('qty'))
-                        for row in sales_ret:
-                            sku = wh_id_map.get(row['productid_id'])
-                            if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-
-                        st_aggs = Stocktransaction.objects.using(wh_db).filter(
-                            productid_id__in=page_wh_ids
-                        ).exclude(
-                            reason__in=['PENDING_APPROVAL', 'REJECTED']
-                        ).values('productid_id').annotate(total=Sum('quantity'))
-                        for row in st_aggs:
-                            sku = wh_id_map.get(row['productid_id'])
-                            if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-                    except Exception:
-                        pass
-
-                serializer = ProductSerializer(page_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
-                return send_success({
-                    'items': serializer.data,
-                    'total': total,
-                    'page': page,
-                    'limit': limit,
-                    'hasMore': offset + limit < total,
-                }, 'Products fetched successfully')
-
-            # Non-paginated path: calculate stock for ALL products (legacy)
-            sku_qty_map = {}
-            for p in all_products:
-                if p.productcode:
-                    sku_qty_map[p.productcode] = float(p.openingstock or 0)
-
-            for wh in active_whs:
-                wh_db = wh.db_name
-                wh_name_map = name_to_sku.get(wh_db, {})
-                wh_id_map = id_to_sku.get(wh_db, {})
-                if not wh_name_map and not wh_id_map:
-                    continue
-                try:
-                    purchases = Purchaseitem.objects.using(wh_db).filter(
-                        purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']
-                    ).values('productname').annotate(total=Sum('qty'))
-                    for row in purchases:
-                        sku = wh_name_map.get(row['productname'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-
-                    purchase_ret = Purchaseitem.objects.using(wh_db).filter(
-                        purchaseid__status='Returned'
-                    ).values('productname').annotate(total=Sum('qty'))
-                    for row in purchase_ret:
-                        sku = wh_name_map.get(row['productname'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-
-                    sales = Orderitem.objects.using(wh_db).filter(
-                        orderid__status='Completed'
-                    ).values('productid_id').annotate(total=Sum('qty'))
-                    for row in sales:
-                        sku = wh_id_map.get(row['productid_id'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-
-                    sales_ret = Orderitem.objects.using(wh_db).filter(
-                        orderid__status='Returned'
-                    ).values('productid_id').annotate(total=Sum('qty'))
-                    for row in sales_ret:
-                        sku = wh_id_map.get(row['productid_id'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-
-                    st_aggs = Stocktransaction.objects.using(wh_db).exclude(
-                        reason__in=['PENDING_APPROVAL', 'REJECTED']
-                    ).values('productid_id').annotate(total=Sum('quantity'))
-                    for row in st_aggs:
-                        sku = wh_id_map.get(row['productid_id'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-                except Exception:
-                    pass
-
-            serializer = ProductSerializer(all_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
-            return send_success(serializer.data, 'Products fetched successfully')
-        else:
-            queryset = self.get_queryset()
-            from django.db.models import Sum, Q
-            from api.models import Purchaseitem, Orderitem, Stocktransaction
-            from api.db_router import get_current_db
-            current_db = get_current_db()
-            if search:
-                queryset = queryset.filter(Q(name__icontains=search) | Q(productcode__icontains=search))
-
-            if is_paginated:
-                try:
-                    page = max(1, int(page_param))
-                    limit = min(200, max(1, int(limit_param)))
-                except (ValueError, TypeError):
-                    page, limit = 1, 20
-                total = queryset.count()
-                offset = (page - 1) * limit
-                page_products = list(queryset[offset:offset + limit])
-
-                sku_qty_map = {}
-                id_to_sku = {}
-                name_to_sku = {}
-                for p in page_products:
-                    if p.productcode:
-                        sku_qty_map[p.productcode] = float(p.openingstock or 0)
-                        id_to_sku[p.id] = p.productcode
-                        name_to_sku[p.name] = p.productcode
-
-                page_product_ids = list(id_to_sku.keys())
-                page_product_names = list(name_to_sku.keys())
-
-                try:
-                    purchases = Purchaseitem.objects.using(current_db).filter(
-                        purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED'],
-                        productname__in=page_product_names
-                    ).values('productname').annotate(total=Sum('qty'))
-                    for row in purchases:
-                        sku = name_to_sku.get(row['productname'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-
-                    purchase_ret = Purchaseitem.objects.using(current_db).filter(
-                        purchaseid__status='Returned',
-                        productname__in=page_product_names
-                    ).values('productname').annotate(total=Sum('qty'))
-                    for row in purchase_ret:
-                        sku = name_to_sku.get(row['productname'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-
-                    sales = Orderitem.objects.using(current_db).filter(
-                        orderid__status='Completed',
-                        productid_id__in=page_product_ids
-                    ).values('productid_id').annotate(total=Sum('qty'))
-                    for row in sales:
-                        sku = id_to_sku.get(row['productid_id'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-
-                    sales_ret = Orderitem.objects.using(current_db).filter(
-                        orderid__status='Returned',
-                        productid_id__in=page_product_ids
-                    ).values('productid_id').annotate(total=Sum('qty'))
-                    for row in sales_ret:
-                        sku = id_to_sku.get(row['productid_id'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-
-                    st_aggs = Stocktransaction.objects.using(current_db).filter(
-                        productid_id__in=page_product_ids
-                    ).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid_id').annotate(total=Sum('quantity'))
-                    for row in st_aggs:
-                        sku = id_to_sku.get(row['productid_id'])
-                        if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-                except Exception:
-                    pass
-
-                serializer = ProductSerializer(page_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
-                return send_success({
-                    'items': serializer.data,
-                    'total': total,
-                    'page': page,
-                    'limit': limit,
-                    'hasMore': offset + limit < total,
-                }, 'Products fetched successfully')
-
-            # Non-paginated path (legacy): build maps from all products
-            sku_qty_map = {}
-            id_to_sku = {}
-            name_to_sku = {}
-            for p in queryset:
-                if p.productcode:
-                    sku_qty_map[p.productcode] = float(p.openingstock or 0)
-                    id_to_sku[p.id] = p.productcode
-                    name_to_sku[p.name] = p.productcode
-
+        if is_paginated:
             try:
-                purchases = Purchaseitem.objects.using(current_db).filter(
-                    purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED']
-                ).values('productname').annotate(total=Sum('qty'))
-                for row in purchases:
-                    sku = name_to_sku.get(row['productname'])
-                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+                page = max(1, int(page_param))
+                limit = min(200, max(1, int(limit_param)))
+            except (ValueError, TypeError):
+                page, limit = 1, 20
+            offset = (page - 1) * limit
+            page_products = all_products[offset:offset + limit]
+            serializer = ProductSerializer(page_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
+            return send_success({
+                'items': serializer.data,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'hasMore': offset + limit < total,
+            }, 'Products fetched successfully')
 
-                purchase_ret = Purchaseitem.objects.using(current_db).filter(
-                    purchaseid__status='Returned'
-                ).values('productname').annotate(total=Sum('qty'))
-                for row in purchase_ret:
-                    sku = name_to_sku.get(row['productname'])
-                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-
-                sales = Orderitem.objects.using(current_db).filter(orderid__status='Completed').values('productid_id').annotate(total=Sum('qty'))
-                for row in sales:
-                    sku = id_to_sku.get(row['productid_id'])
-                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-
-                sales_ret = Orderitem.objects.using(current_db).filter(orderid__status='Returned').values('productid_id').annotate(total=Sum('qty'))
-                for row in sales_ret:
-                    sku = id_to_sku.get(row['productid_id'])
-                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-
-                st_aggs = Stocktransaction.objects.using(current_db).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid_id').annotate(total=Sum('quantity'))
-                for row in st_aggs:
-                    sku = id_to_sku.get(row['productid_id'])
-                    if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-            except Exception:
-                pass
-
-            serializer = ProductSerializer(queryset, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
-            return send_success(serializer.data, 'Products fetched successfully')
+        serializer = ProductSerializer(all_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
+        return send_success(serializer.data, 'Products fetched successfully')
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -755,7 +429,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='suggest-sku')
     def suggest_sku(self, request):
-        from api.models import Warehouse, Product, Company
+        from api.models import Warehouse, Product, Company, Category, Brand
         data = request.data
         company_id = _get_company_id(request)
         target_name = data.get('name', '').strip()
@@ -763,68 +437,49 @@ class ProductViewSet(viewsets.ModelViewSet):
         target_brand_id = data.get('brandId') or data.get('brandid')
         if not target_name:
             return send_error('Product name is required', 400)
-        from api.db_router import get_current_db
-        from api.models import Category, Brand
-        current_db = get_current_db()
         target_category_name = None
         if target_category_id:
-            cat = Category.objects.using(current_db).filter(id=target_category_id).first()
+            cat = Category.objects.filter(id=target_category_id).first()
             if cat:
                 target_category_name = cat.name
         target_brand_name = None
         if target_brand_id:
-            br = Brand.objects.using(current_db).filter(id=target_brand_id).first()
+            br = Brand.objects.filter(id=target_brand_id).first()
             if br:
                 target_brand_name = br.name
         matched_code = None
-        for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name:
-                continue
-            try:
-                qs = Product.objects.using(wh.db_name).filter(name__iexact=target_name)
-                if company_id:
-                    qs = qs.filter(companyid_id=company_id)
-                if target_category_name:
-                    qs = qs.filter(categoryid__name__iexact=target_category_name)
-                elif target_category_id:
-                    qs = qs.filter(categoryid_id=target_category_id)
-                else:
-                    qs = qs.filter(categoryid__isnull=True)
-                if target_brand_name:
-                    qs = qs.filter(brandid__name__iexact=target_brand_name)
-                elif target_brand_id:
-                    qs = qs.filter(brandid_id=target_brand_id)
-                else:
-                    qs = qs.filter(brandid__isnull=True)
-                match = qs.first()
-                if match and match.productcode:
-                    matched_code = match.productcode
-                    break
-            except Exception:
-                pass
+        qs = Product.objects.filter(name__iexact=target_name)
+        if company_id:
+            qs = qs.filter(companyid_id=company_id)
+        if target_category_name:
+            qs = qs.filter(categoryid__name__iexact=target_category_name)
+        elif target_category_id:
+            qs = qs.filter(categoryid_id=target_category_id)
+        else:
+            qs = qs.filter(categoryid__isnull=True)
+        if target_brand_name:
+            qs = qs.filter(brandid__name__iexact=target_brand_name)
+        elif target_brand_id:
+            qs = qs.filter(brandid_id=target_brand_id)
+        else:
+            qs = qs.filter(brandid__isnull=True)
+        match = qs.first()
+        if match and match.productcode:
+            matched_code = match.productcode
         if matched_code:
             return send_success({'sku': matched_code, 'isExisting': True}, 'Suggested SKU fetched successfully')
         company = Company.objects.filter(id=company_id).first() if company_id else None
         prefix = getattr(company, 'skuprefix', 'PRD') or 'PRD'
         max_num = 0
-        for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name:
-                continue
-            try:
-                codes = Product.objects.using(wh.db_name).filter(productcode__startswith=f'{prefix}-').values_list('productcode', flat=True)
-                for c in codes:
-                    suffix = c[len(prefix) + 1:]
-                    if suffix.isdigit():
-                        max_num = max(max_num, int(suffix))
-            except Exception:
-                pass
+        codes = Product.objects.filter(productcode__startswith=f'{prefix}-').values_list('productcode', flat=True)
+        for c in codes:
+            suffix = c[len(prefix) + 1:]
+            if suffix.isdigit():
+                max_num = max(max_num, int(suffix))
         new_sku = f'{prefix}-{max_num + 1:04d}'
         return send_success({'sku': new_sku, 'isExisting': False}, 'Generated new SKU successfully')
 
     def create(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
-        if get_current_db() == 'default':
-            return send_error('Cannot create product in global database. Please select a specific warehouse.', 400)
         from django.utils import timezone
         now = timezone.now()
         data = request.data.copy()
@@ -846,62 +501,47 @@ class ProductViewSet(viewsets.ModelViewSet):
         target_brand_id = data.get('brandId') or data.get('brandid')
         if not product_code:
             from api.models import Warehouse, Product, Company, Category, Brand
-            from api.db_router import get_current_db
-            current_db = get_current_db()
             target_category_name = None
             if target_category_id:
-                cat = Category.objects.using(current_db).filter(id=target_category_id).first()
+                cat = Category.objects.filter(id=target_category_id).first()
                 if cat:
                     target_category_name = cat.name
             target_brand_name = None
             if target_brand_id:
-                br = Brand.objects.using(current_db).filter(id=target_brand_id).first()
+                br = Brand.objects.filter(id=target_brand_id).first()
                 if br:
                     target_brand_name = br.name
             matched_code = None
             if target_name:
-                for wh in Warehouse.objects.filter(active=True):
-                    if not wh.db_name:
-                        continue
-                    try:
-                        qs = Product.objects.using(wh.db_name).filter(name__iexact=target_name)
-                        if company_id:
-                            qs = qs.filter(companyid_id=company_id)
-                        if target_category_name:
-                            qs = qs.filter(categoryid__name__iexact=target_category_name)
-                        elif target_category_id:
-                            qs = qs.filter(categoryid_id=target_category_id)
-                        else:
-                            qs = qs.filter(categoryid__isnull=True)
-                        if target_brand_name:
-                            qs = qs.filter(brandid__name__iexact=target_brand_name)
-                        elif target_brand_id:
-                            qs = qs.filter(brandid_id=target_brand_id)
-                        else:
-                            qs = qs.filter(brandid__isnull=True)
-                        match = qs.first()
-                        if match and match.productcode:
-                            matched_code = match.productcode
-                            break
-                    except Exception:
-                        pass
+                qs = Product.objects.filter(name__iexact=target_name)
+                if company_id:
+                    qs = qs.filter(companyid_id=company_id)
+                if target_category_name:
+                    qs = qs.filter(categoryid__name__iexact=target_category_name)
+                elif target_category_id:
+                    qs = qs.filter(categoryid_id=target_category_id)
+                else:
+                    qs = qs.filter(categoryid__isnull=True)
+                if target_brand_name:
+                    qs = qs.filter(brandid__name__iexact=target_brand_name)
+                elif target_brand_id:
+                    qs = qs.filter(brandid_id=target_brand_id)
+                else:
+                    qs = qs.filter(brandid__isnull=True)
+                match = qs.first()
+                if match and match.productcode:
+                    matched_code = match.productcode
             if matched_code:
                 product_code = matched_code
             else:
                 company = Company.objects.filter(id=company_id).first() if company_id else None
                 prefix = getattr(company, 'skuprefix', 'PRD') or 'PRD'
                 max_num = 0
-                for wh in Warehouse.objects.filter(active=True):
-                    if not wh.db_name:
-                        continue
-                    try:
-                        codes = Product.objects.using(wh.db_name).filter(productcode__startswith=f'{prefix}-').values_list('productcode', flat=True)
-                        for c in codes:
-                            suffix = c[len(prefix) + 1:]
-                            if suffix.isdigit():
-                                max_num = max(max_num, int(suffix))
-                    except Exception:
-                        pass
+                codes = Product.objects.filter(productcode__startswith=f'{prefix}-').values_list('productcode', flat=True)
+                for c in codes:
+                    suffix = c[len(prefix) + 1:]
+                    if suffix.isdigit():
+                        max_num = max(max_num, int(suffix))
                 product_code = f'{prefix}-{max_num + 1:04d}'
             data['productCode'] = product_code
             data['productcode'] = product_code
@@ -916,20 +556,9 @@ class ProductViewSet(viewsets.ModelViewSet):
             wh_id = request.headers.get('x-warehouse-id')
             if wh_id:
                 from api.models import Warehouse, Stocktransaction
-                from api.db_router import set_current_db, get_current_db
                 wh = resolve_warehouse(wh_id)
                 if wh:
-                    target_db = getattr(wh, 'db_name', 'default') or 'default'
-                    orig_db = get_current_db()
-                    try:
-                        set_current_db(target_db)
-                        pass # Legacy Inventory table removed
-                        if False:
-                            pass
-                            pass
-                        Stocktransaction.objects.create(id='c' + uuid.uuid4().hex[:23], productid=product_obj, warehouseid=wh, transactiontype='OPENING_STOCK', quantity=product_obj.openingstock, reason='Initial Opening Stock', createdat=now)
-                    finally:
-                        set_current_db(orig_db)
+                    Stocktransaction.objects.create(id='c' + uuid.uuid4().hex[:23], productid=product_obj, warehouseid=wh, transactiontype='OPENING_STOCK', quantity=product_obj.openingstock, reason='Initial Opening Stock', createdat=now)
         return send_success(serializer.data, 'Product created successfully', 201)
 
     def update(self, request, *args, **kwargs):
@@ -970,27 +599,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
         company_id = _get_company_id(request)
-        if get_current_db() == 'default':
-            from api.models import Warehouse
-            all_categories = []
-            seen_names = set()
-            for wh in Warehouse.objects.filter(active=True):
-                if not wh.db_name:
-                    continue
-                try:
-                    qs = Category.objects.using(wh.db_name).all()
-                    if company_id:
-                        qs = qs.filter(companyid_id=company_id)
-                    for item in qs:
-                        if item.name not in seen_names:
-                            all_categories.append(item)
-                            seen_names.add(item.name)
-                except Exception:
-                    pass
-            serializer = CategorySerializer(all_categories, many=True)
-            return send_success(serializer.data, 'Categories fetched successfully')
         queryset = Category.objects.filter(companyid_id=company_id) if company_id else Category.objects.all()
         serializer = CategorySerializer(queryset, many=True)
         return send_success(serializer.data, 'Categories fetched successfully')
@@ -1010,27 +619,7 @@ class BrandViewSet(viewsets.ModelViewSet):
     serializer_class = BrandSerializer
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
         company_id = _get_company_id(request)
-        if get_current_db() == 'default':
-            from api.models import Warehouse
-            all_brands = []
-            seen_names = set()
-            for wh in Warehouse.objects.filter(active=True):
-                if not wh.db_name:
-                    continue
-                try:
-                    qs = Brand.objects.using(wh.db_name).all()
-                    if company_id:
-                        qs = qs.filter(companyid_id=company_id)
-                    for item in qs:
-                        if item.name not in seen_names:
-                            all_brands.append(item)
-                            seen_names.add(item.name)
-                except Exception:
-                    pass
-            serializer = BrandSerializer(all_brands, many=True)
-            return send_success(serializer.data, 'Brands fetched successfully')
         queryset = Brand.objects.filter(companyid_id=company_id) if company_id else Brand.objects.all()
         serializer = BrandSerializer(queryset, many=True)
         return send_success(serializer.data, 'Brands fetched successfully')
@@ -1050,27 +639,7 @@ class UnitViewSet(viewsets.ModelViewSet):
     serializer_class = UnitSerializer
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
         company_id = _get_company_id(request)
-        if get_current_db() == 'default':
-            from api.models import Warehouse
-            all_units = []
-            seen_names = set()
-            for wh in Warehouse.objects.filter(active=True):
-                if not wh.db_name:
-                    continue
-                try:
-                    qs = Unit.objects.using(wh.db_name).all()
-                    if company_id:
-                        qs = qs.filter(companyid_id=company_id)
-                    for item in qs:
-                        if item.name not in seen_names:
-                            all_units.append(item)
-                            seen_names.add(item.name)
-                except Exception:
-                    pass
-            serializer = UnitSerializer(all_units, many=True)
-            return send_success(serializer.data, 'Units fetched successfully')
         queryset = Unit.objects.filter(companyid_id=company_id) if company_id else Unit.objects.all()
         serializer = UnitSerializer(queryset, many=True)
         return send_success(serializer.data, 'Units fetched successfully')
@@ -1583,8 +1152,6 @@ def bulk_import(request, entity):
     skipped = []
     try:
         if entity == 'products':
-            from django.db import connection
-            original_tenant = getattr(connection, 'tenant', None)
             import random, string
             for index, row in enumerate(rows, start=2):
                 name = (row.get('name') or row.get('productName') or '').strip()
@@ -1598,20 +1165,16 @@ def bulk_import(request, entity):
                 if warehouse_val:
                     target_warehouse = Warehouse.objects.filter(name__iexact=warehouse_val, active=True).first()
                     if not target_warehouse:
-                        target_warehouse = Warehouse.objects.filter(schema_name=warehouse_val, active=True).first()
-                    if not target_warehouse:
                         try:
                             target_warehouse = Warehouse.objects.filter(id=int(warehouse_val), active=True).first()
                         except (ValueError, TypeError):
                             pass
                 if not target_warehouse:
-                    target_warehouse = original_tenant
-                if not target_warehouse:
-                    target_warehouse = Warehouse.objects.filter(active=True).exclude(schema_name='public').first()
+                    target_warehouse = Warehouse.objects.filter(active=True).first()
                 if not target_warehouse:
                     skipped.append({'row': index, 'reason': 'No active warehouse found to assign product'})
                     continue
-                connection.set_tenant(target_warehouse)
+                warehouse_id = target_warehouse.id if target_warehouse else None
                 category_to_assign = None
                 if category_name:
                     category, created_cat = Category.objects.get_or_create(name=category_name, companyid_id=company_id, defaults={'parentid': None, 'active': True})
@@ -1640,7 +1203,7 @@ def bulk_import(request, entity):
                 if unit_name:
                     unit, _ = Unit.objects.get_or_create(name=unit_name, companyid_id=company_id, defaults={'active': True})
                 existing = Product.objects.filter(name=name, categoryid=category_to_assign, companyid_id=company_id).first()
-                values = {'name': name, 'bagsize': row.get('bagSize') or row.get('bag_size') or '50 KG', 'brandid': brand, 'unitid': unit, 'rate': _num(row.get('rate') or row.get('price')), 'gst': _num(row.get('gst'), 18.0), 'active': _truthy(row.get('active'), True), 'companyid_id': company_id, 'categoryid': category_to_assign, 'openingstock': _int(row.get('openingStock') or row.get('opening_stock')), 'minimumstock': _int(row.get('minimumStock') or row.get('minimum_stock')), 'updatedat': timezone.now()}
+                values = {'name': name, 'bagsize': row.get('bagSize') or row.get('bag_size') or '50 KG', 'brandid': brand, 'unitid': unit, 'rate': _num(row.get('rate') or row.get('price')), 'gst': _num(row.get('gst'), 18.0), 'active': _truthy(row.get('active'), True), 'companyid_id': company_id, 'categoryid': category_to_assign, 'openingstock': _int(row.get('openingStock') or row.get('opening_stock')), 'minimumstock': _int(row.get('minimumStock') or row.get('minimum_stock')), 'warehouseid_id': warehouse_id, 'updatedat': timezone.now()}
                 if existing:
                     for key, value in values.items():
                         setattr(existing, key, value)
@@ -1664,11 +1227,6 @@ def bulk_import(request, entity):
                         continue
                     Product.objects.create(id=_new_id(), productcode=code, createdat=timezone.now(), **values)
                     created += 1
-
-            if original_tenant:
-                connection.set_tenant(original_tenant)
-            else:
-                connection.set_schema_to_public()
         elif entity == 'dealers':
             import random, string
             for index, row in enumerate(rows, start=2):
@@ -1682,7 +1240,7 @@ def bulk_import(request, entity):
                     while attempts < 100:
                         rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
                         candidate_code = f'DLR-{rand_suffix}'
-                        if not Dealer.objects.using('default').filter(dealercode=candidate_code, companyid_id=company_id).exists():
+                        if not Dealer.objects.filter(dealercode=candidate_code, companyid_id=company_id).exists():
                             code = candidate_code
                             break
                         attempts += 1
@@ -1701,7 +1259,7 @@ def bulk_import(request, entity):
                 }
                 try:
                     from django.db.models import Q
-                    existing = Dealer.objects.using('default').filter(
+                    existing = Dealer.objects.filter(
                         Q(dealername=name) | Q(dealercode=code), companyid_id=company_id
                     ).first()
                     if existing:
@@ -1712,7 +1270,7 @@ def bulk_import(request, entity):
                         existing.save()
                         updated += 1
                     else:
-                        Dealer.objects.using('default').create(id=_new_id(), dealercode=code, createdat=timezone.now(), **values)
+                        Dealer.objects.create(id=_new_id(), dealercode=code, createdat=timezone.now(), **values)
                         created += 1
                 except Exception as e:
                     skipped.append({'row': index, 'reason': f'DB error: {str(e)}'})
@@ -1732,14 +1290,14 @@ def bulk_import(request, entity):
                     'companyid_id': company_id, 'updatedat': timezone.now()
                 }
                 try:
-                    existing = Distributor.objects.using('default').filter(distributorname=name, companyid_id=company_id).first()
+                    existing = Distributor.objects.filter(distributorname=name, companyid_id=company_id).first()
                     if existing:
                         for key, value in values.items():
                             setattr(existing, key, value)
                         existing.save()
                         updated += 1
                     else:
-                        Distributor.objects.using('default').create(id=_new_id(), distributorname=name, createdat=timezone.now(), **values)
+                        Distributor.objects.create(id=_new_id(), distributorname=name, createdat=timezone.now(), **values)
                         created += 1
                 except Exception as e:
                     skipped.append({'row': index, 'reason': f'DB error: {str(e)}'})
@@ -1840,12 +1398,8 @@ def database_export(request):
         return Response({'success': False, 'message': 'SQLite export is deprecated on PostgreSQL multi-tenant architecture. Please use JSON export or request a PostgreSQL pg_dump.'}, status=400)
     company_id = _company_id(request)
     payload = {'products': [model_to_dict(o) for o in Product.objects.filter(companyid_id=company_id)], 'categories': [model_to_dict(o) for o in Category.objects.filter(companyid_id=company_id)], 'brands': [model_to_dict(o) for o in Brand.objects.filter(companyid_id=company_id)], 'units': [model_to_dict(o) for o in Unit.objects.filter(companyid_id=company_id)], 'warehouses': [model_to_dict(o) for o in Warehouse.objects.filter(companyid_id=company_id)], 'dealers': [model_to_dict(o) for o in Dealer.objects.filter(companyid_id=company_id)], 'distributors': [model_to_dict(o) for o in Distributor.objects.filter(companyid_id=company_id)], 'visits': [model_to_dict(o) for o in Visit.objects.filter(companyid_id=company_id)], 'expenses': [model_to_dict(o) for o in Expense.objects.filter(companyid_id=company_id)], 'suppliers': [model_to_dict(o) for o in Supplier.objects.filter(companyid_id=company_id)], 'labours': [model_to_dict(o) for o in Labour.objects.filter(companyid_id=company_id)], 'recipes': [model_to_dict(o) for o in Bom.objects.filter(companyid_id=company_id)], 'recipeItems': [model_to_dict(o) for o in Bomitem.objects.filter(bomid__companyid_id=company_id)]}
-    payload['orders'] = []
-    payload['orderItems'] = []
-    for wh in Warehouse.objects.filter(active=True):
-        if wh.db_name:
-            payload['orders'].extend([model_to_dict(o) for o in Order.objects.using(wh.db_name).filter(companyid_id=company_id)])
-            payload['orderItems'].extend([model_to_dict(o) for o in Orderitem.objects.using(wh.db_name).filter(orderid__companyid_id=company_id)])
+    payload['orders'] = [model_to_dict(o) for o in Order.objects.filter(companyid_id=company_id)]
+    payload['orderItems'] = [model_to_dict(o) for o in Orderitem.objects.filter(orderid__companyid_id=company_id)]
     response = HttpResponse(json.dumps(payload, cls=DjangoJSONEncoder, indent=2), content_type='application/json')
     response['Content-Disposition'] = 'attachment; filename="simply-useful-database-export.json"'
     return response
@@ -2139,7 +1693,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
-        qs = Dealer.objects.using('default').filter(companyid_id=company_id) if company_id else Dealer.objects.using('default').all()
+        qs = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
         if user_role == 'SALES' and user_email:
             qs = qs.filter(assignedsoemail=user_email)
         return qs
@@ -2149,7 +1703,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         
-        qs = Dealer.objects.using('default').all()
+        qs = Dealer.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         if user_role == 'SALES' and user_email:
@@ -2225,7 +1779,7 @@ class DealerViewSet(viewsets.ModelViewSet):
             while attempts < 100:
                 rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
                 candidate_code = f'DLR-{rand_suffix}'
-                if not Dealer.objects.using('default').filter(dealercode=candidate_code, companyid_id=company_id).exists():
+                if not Dealer.objects.filter(dealercode=candidate_code, companyid_id=company_id).exists():
                     data['dealerCode'] = candidate_code
                     break
                 attempts += 1
@@ -2233,7 +1787,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
         instance = Dealer(**validated)
-        instance.save(using='default')
+        instance.save()
         return send_success(DealerSerializer(instance).data, 'Dealer created successfully', 201)
 
     def update(self, request, *args, **kwargs):
@@ -2265,7 +1819,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
-        qs = Distributor.objects.using('default').filter(companyid_id=company_id) if company_id else Distributor.objects.using('default').all()
+        qs = Distributor.objects.filter(companyid_id=company_id) if company_id else Distributor.objects.all()
         if user_role == 'SALES' and user_email:
             qs = qs.filter(assignedsoemail=user_email)
         return qs
@@ -2275,7 +1829,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         
-        qs = Distributor.objects.using('default').all()
+        qs = Distributor.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         if user_role == 'SALES' and user_email:
@@ -2345,7 +1899,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
         instance = Distributor(**validated)
-        instance.save(using='default')
+        instance.save()
         return send_success(DistributorSerializer(instance).data, 'Distributor created successfully', 201)
 
     def update(self, request, *args, **kwargs):
@@ -2374,96 +1928,37 @@ class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
 
     def get_queryset(self):
-        from api.db_router import get_current_db
-        current_db = get_current_db()
         company_id = _get_company_id(self.request)
-        qs = Order.objects.using(current_db)
+        qs = Order.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         return qs
 
     def get_object(self):
-        from api.db_router import get_current_db
-        from api.models import Warehouse
-        current_db = get_current_db()
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         pk = self.kwargs[lookup_url_kwarg]
         company_id = _get_company_id(self.request)
-        if current_db == 'default':
-            for wh in Warehouse.objects.filter(active=True):
-                if not wh.db_name:
-                    continue
-                qs = Order.objects.using(wh.db_name)
-                if company_id:
-                    qs = qs.filter(companyid_id=company_id)
-                try:
-                    return qs.get(id=pk)
-                except Order.DoesNotExist:
-                    try:
-                        return qs.get(orderid=pk)
-                    except Order.DoesNotExist:
-                        pass
-            raise exceptions.NotFound('Order not found')
-        else:
-            qs = self.get_queryset()
+        qs = Order.objects.all()
+        if company_id:
+            qs = qs.filter(companyid_id=company_id)
+        try:
+            return qs.get(id=pk)
+        except Order.DoesNotExist:
             try:
-                return qs.get(id=pk)
+                return qs.get(orderid=pk)
             except Order.DoesNotExist:
-                try:
-                    return qs.get(orderid=pk)
-                except Order.DoesNotExist:
-                    for wh in Warehouse.objects.filter(active=True):
-                        if not wh.db_name or wh.db_name == current_db:
-                            continue
-                        qs_other = Order.objects.using(wh.db_name)
-                        if company_id:
-                            qs_other = qs_other.filter(companyid_id=company_id)
-                        try:
-                            return qs_other.get(id=pk)
-                        except Order.DoesNotExist:
-                            try:
-                                return qs_other.get(orderid=pk)
-                            except Order.DoesNotExist:
-                                pass
-                    raise exceptions.NotFound('Order not found')
+                raise exceptions.NotFound('Order not found')
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
-        from api.models import Warehouse, Userwarehouseaccess
-        current_db = get_current_db()
+        from api.models import Userwarehouseaccess
         company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
-        wh_qs = Warehouse.objects.filter(active=True)
-        if user_role.startswith('INVENTORY') or user_role == 'INVENTORY':
-            user_warehouse_ids = list(Userwarehouseaccess.objects.filter(userid_id=self.request.user.id).values_list('warehouseid_id', flat=True))
-            wh_qs = wh_qs.filter(id__in=user_warehouse_ids)
-        all_orders = []
-        if current_db == 'default':
-            from api.db_router import set_current_db
-            try:
-                for wh in wh_qs:
-                    if not wh.db_name:
-                        continue
-                    set_current_db(wh.db_name)
-                    qs = Order.objects.using(wh.db_name).prefetch_related('orderitem_set')
-                    if company_id:
-                        qs = qs.filter(companyid_id=company_id)
-                    qs = _fy_date_filter(request, qs, date_field='date')
-                    serialized_data = OrderSerializer(qs, many=True, context={'skip_stock': True}).data
-                    for item in serialized_data:
-                        item['assignedWarehouse'] = wh.id
-                    all_orders.extend(serialized_data)
-            finally:
-                set_current_db('default')
-        else:
-            qs = self.get_queryset().prefetch_related('orderitem_set')
-            qs = _fy_date_filter(request, qs, date_field='date')
-            serialized_data = OrderSerializer(qs, many=True, context={'skip_stock': True}).data
-            wh = Warehouse.objects.filter(db_name=current_db).first()
-            if wh:
-                for item in serialized_data:
-                    item['assignedWarehouse'] = wh.id
-            all_orders.extend(serialized_data)
+        qs = Order.objects.all()
+        if company_id:
+            qs = qs.filter(companyid_id=company_id)
+        qs = _fy_date_filter(request, qs, date_field='date')
+        serialized_data = OrderSerializer(qs.prefetch_related('orderitem_set'), many=True, context={'skip_stock': True}).data
+        all_orders = list(serialized_data)
         all_orders.sort(key=lambda x: x.get('date', ''), reverse=True)
         return send_success(all_orders, 'Orders fetched successfully')
 
@@ -2473,7 +1968,6 @@ class OrderViewSet(viewsets.ModelViewSet):
         return send_success(serializer.data, 'Order fetched successfully')
 
     def create(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
         user_role = (getattr(request.user, 'role', '') or '').upper()
         if user_role.startswith('INVENTORY') or user_role == 'INVENTORY':
             return send_error('Inventory users are not authorized to create sales orders.', 403)
@@ -2492,37 +1986,12 @@ class OrderViewSet(viewsets.ModelViewSet):
         for item in items_list:
             if 'id' not in item or not item['id']:
                 item['id'] = 'c' + uuid.uuid4().hex[:23]
-        if get_current_db() == 'default':
-            assigned_wh = data.get('warehouseId') or data.get('assignedWarehouse')
-            if not assigned_wh:
-                return send_error('Cannot create order in global database without a specific warehouseId.', 400)
-            from api.models import Warehouse, Product
-            from api.db_router import set_current_db
-            try:
-                wh = resolve_warehouse(assigned_wh)
-                if not wh:
-                    return send_error('Warehouse not found.', 400)
-                if wh.db_name:
-                    from django.db import connection
-                    connection.set_tenant(wh)
-                    request.tenant = wh
-                    set_current_db(wh.db_name)
-                    for item in data.get('items', []):
-                        pid = item.get('productId') or item.get('product_id')
-                        if pid and (not Product.objects.using(wh.db_name).filter(id=pid).exists()):
-                            for other_wh in Warehouse.objects.filter(active=True):
-                                if not other_wh.db_name or other_wh.db_name == wh.db_name:
-                                    continue
-                                match = Product.objects.using(other_wh.db_name).filter(id=pid).first()
-                                if match and match.productcode:
-                                    correct_p = Product.objects.using(wh.db_name).filter(productcode=match.productcode).first()
-                                    if correct_p:
-                                        item['productId'] = correct_p.id
-                                    break
-                else:
-                    return send_error('Assigned warehouse is invalid.', 400)
-            except Warehouse.DoesNotExist:
-                return send_error('Assigned warehouse not found.', 404)
+        assigned_wh = data.get('warehouseId') or data.get('assignedWarehouse')
+        if assigned_wh:
+            from api.models import Warehouse
+            wh = resolve_warehouse(assigned_wh)
+            if wh:
+                data['warehouseId'] = wh.id
         serializer = OrderSerializer(data=data)
         if not serializer.is_valid():
             print('[ERROR] OrderSerializer Validation Errors:', serializer.errors)
@@ -2537,15 +2006,15 @@ class OrderViewSet(viewsets.ModelViewSet):
                 party_type = (order.partytype or '').upper()
                 party_name = order.partyname
                 if party_type == 'DEALER':
-                    dealer = Dealer.objects.using('default').filter(dealername=party_name).first()
+                    dealer = Dealer.objects.filter(dealername=party_name).first()
                     if dealer and not dealer.warehouseid_id:
                         dealer.warehouseid_id = assigned_wh_id
-                        dealer.save(using='default')
+                        dealer.save()
                 elif party_type == 'DISTRIBUTOR':
-                    dist = Distributor.objects.using('default').filter(distributorname=party_name).first()
+                    dist = Distributor.objects.filter(distributorname=party_name).first()
                     if dist and not dist.warehouseid_id:
                         dist.warehouseid_id = assigned_wh_id
-                        dist.save(using='default')
+                        dist.save()
             except Exception:
                 pass
         
@@ -2555,7 +2024,6 @@ class OrderViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = True
         instance = self.get_object()
-        old_db = getattr(instance._state, 'db', 'default')
         product_ids = list(instance.orderitem_set.values_list('productid_id', flat=True))
         data = request.data.copy()
         import uuid
@@ -2564,56 +2032,6 @@ class OrderViewSet(viewsets.ModelViewSet):
             if 'id' not in item or not item['id']:
                 item['id'] = 'c' + uuid.uuid4().hex[:23]
         assigned_wh_id = data.get('assignedWarehouse') or data.get('warehouseId')
-        from api.db_router import get_current_db
-        if get_current_db() == 'default':
-            target_db = old_db
-            if assigned_wh_id:
-                wh = resolve_warehouse(assigned_wh_id)
-                if wh and wh.db_name:
-                    target_db = wh.db_name
-            from api.models import Warehouse
-            wh = Warehouse.objects.using('default').filter(db_name=target_db).first()
-            if wh:
-                from django.db import connection
-                connection.set_tenant(wh)
-                request.tenant = wh
-                from api.db_router import set_current_db
-                set_current_db(wh.db_name)
-        if assigned_wh_id:
-            from api.models import Warehouse
-            new_wh = Warehouse.objects.using('default').filter(id=assigned_wh_id).first()
-            if new_wh and new_wh.db_name and (new_wh.db_name != old_db):
-                from api.db_router import set_current_db
-                old_items = list(instance.orderitem_set.all())
-                instance.save(using=new_wh.db_name)
-                for item in old_items:
-                    item.save(using=new_wh.db_name)
-                from api.models import Order
-                Order.objects.using(old_db).filter(id=instance.id).delete()
-                old_wh = Warehouse.objects.using('default').filter(db_name=old_db).first()
-                if old_wh:
-                    for p_id in product_ids:
-                        if p_id:
-                            pass
-                instance._state.db = new_wh.db_name
-                set_current_db(new_wh.db_name)
-        from api.db_router import get_current_db
-        from api.models import Product, Warehouse
-        curr_db = get_current_db()
-        for item in items_list:
-            pid = item.get('productId') or item.get('product_id')
-            if pid and (not Product.objects.using(curr_db).filter(id=pid).exists()):
-                for other_wh in Warehouse.objects.filter(active=True):
-                    if not other_wh.db_name or other_wh.db_name == curr_db:
-                        continue
-                    match = Product.objects.using(other_wh.db_name).filter(id=pid).first()
-                    if match and match.productcode:
-                        correct_p = Product.objects.using(curr_db).filter(productcode=match.productcode).first()
-                        if correct_p:
-                            item['productId'] = correct_p.id
-                            if 'product_id' in item:
-                                item['product_id'] = correct_p.id
-                        break
         serializer = OrderSerializer(instance, data=data, partial=partial)
         if not serializer.is_valid():
             print('[ERROR] OrderSerializer Update Validation Errors:', serializer.errors)
@@ -2627,22 +2045,19 @@ class OrderViewSet(viewsets.ModelViewSet):
                 party_type = (order.partytype or '').upper()
                 party_name = order.partyname
                 if party_type == 'DEALER':
-                    dealer = Dealer.objects.using('default').filter(dealername=party_name).first()
+                    dealer = Dealer.objects.filter(dealername=party_name).first()
                     if dealer and not dealer.warehouseid_id:
                         dealer.warehouseid_id = assigned_wh_id
-                        dealer.save(using='default')
+                        dealer.save()
                 elif party_type == 'DISTRIBUTOR':
-                    dist = Distributor.objects.using('default').filter(distributorname=party_name).first()
+                    dist = Distributor.objects.filter(distributorname=party_name).first()
                     if dist and not dist.warehouseid_id:
                         dist.warehouseid_id = assigned_wh_id
-                        dist.save(using='default')
+                        dist.save()
             except Exception:
                 pass
         
         new_product_ids = list(order.orderitem_set.values_list('productid_id', flat=True))
-        for p_id in set(product_ids + new_product_ids):
-            if p_id:
-                pass
         return send_success(OrderSerializer(order).data, 'Order updated successfully')
 
     def destroy(self, request, *args, **kwargs):
@@ -2668,93 +2083,84 @@ class OrderViewSet(viewsets.ModelViewSet):
             mobile = data.get('driverMobileNumber') or data.get('driver_mobile_number') or data.get('driverMobile') or data.get('driver_mobile')
             remarks = data.get('remarks') or ''
             from api.models import Orderitem, Product
-            db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
             for item_data in items:
                 p_id = item_data.get('productId') or item_data.get('product_id')
                 qty_to_send = int(item_data.get('qty', 0))
                 if qty_to_send <= 0:
                     continue
                 try:
-                    oi = instance.orderitem_set.using(db_alias).get(productid_id=p_id)
+                    oi = instance.orderitem_set.get(productid_id=p_id)
                 except Orderitem.DoesNotExist:
                     return send_error(f'Product {p_id} not found in this order', 400)
                 if oi.sentqty + qty_to_send > oi.qty:
                     return send_error(f'Cannot dispatch {qty_to_send} of {p_id}. Already sent: {oi.sentqty}, Total ordered: {oi.qty}', 400)
             
-            # --- STRICT DISPATCH CHECK ---
-            # Calculate current stock for each item before dispatching
             from api.models import Product, Purchaseitem, Orderitem, Stocktransaction
             from django.db.models import Sum
             
             wh_val = getattr(instance, 'assigned_warehouse', None)
             wh_name = wh_val.name if wh_val and hasattr(wh_val, 'name') else data.get('warehouseDetails')
             
-            # Since inventory is strictly enforced, we calculate current stock
-            # (using same logic as check_negative_raw_materials but for finished goods)
             for item_data in items:
                 p_id = item_data.get('productId') or item_data.get('product_id')
                 qty_to_send = int(item_data.get('qty', 0))
                 if qty_to_send <= 0:
                     continue
-                    
-                p = Product.objects.using(db_alias).filter(id=p_id).first()
+                        
+                p = Product.objects.filter(id=p_id).first()
                 if not p: continue
                 
                 stock = float(p.openingstock or 0)
                 
-                # purchases
-                purchases = Purchaseitem.objects.using(db_alias).filter(
+                purchases = Purchaseitem.objects.filter(
                     purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED'],
                     productname=p.name
                 ).aggregate(total=Sum('qty'))
                 stock += float(purchases['total'] or 0)
                 
-                purchases_ret = Purchaseitem.objects.using(db_alias).filter(
+                purchases_ret = Purchaseitem.objects.filter(
                     purchaseid__status='Returned',
                     productname=p.name
                 ).aggregate(total=Sum('qty'))
                 stock -= float(purchases_ret['total'] or 0)
                 
-                # sales (Completed/Returned)
-                sales = Orderitem.objects.using(db_alias).filter(
+                sales = Orderitem.objects.filter(
                     orderid__status='Completed',
                     productid_id=p_id
                 ).aggregate(total=Sum('qty'))
                 stock -= float(sales['total'] or 0)
                 
-                sales_ret = Orderitem.objects.using(db_alias).filter(
+                sales_ret = Orderitem.objects.filter(
                     orderid__status='Returned',
                     productid_id=p_id
                 ).aggregate(total=Sum('qty'))
                 stock += float(sales_ret['total'] or 0)
                 
-                # stock transactions
-                st_aggs = Stocktransaction.objects.using(db_alias).exclude(
+                st_aggs = Stocktransaction.objects.exclude(
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
                 ).filter(productid_id=p_id).aggregate(total=Sum('quantity'))
                 stock += float(st_aggs['total'] or 0)
                 
                 if stock < qty_to_send:
                     return Response({'success': False, 'message': f'Cannot dispatch! Insufficient stock for {p.name}. Available: {stock}, Requested: {qty_to_send}'}, status=400)
-            # --- END STRICT DISPATCH CHECK ---
             import uuid
             from django.utils import timezone
             from api.models import Dispatchlog, Dispatchlogitem
             log_id = 'c' + uuid.uuid4().hex[:23]
-            dispatch_log = Dispatchlog.objects.using(db_alias).create(id=log_id, orderid=instance, dispatchdate=timezone.now(), invoicenumber=invoice, vehiclenumber=vehicle, drivername=driver, drivermobile=mobile, remarks=remarks)
+            dispatch_log = Dispatchlog.objects.create(id=log_id, orderid=instance, dispatchdate=timezone.now(), invoicenumber=invoice, vehiclenumber=vehicle, drivername=driver, drivermobile=mobile, remarks=remarks)
             for item_data in items:
                 p_id = item_data.get('productId') or item_data.get('product_id')
                 qty_to_send = int(item_data.get('qty', 0))
                 if qty_to_send <= 0:
                     continue
-                oi = instance.orderitem_set.using(db_alias).get(productid_id=p_id)
+                oi = instance.orderitem_set.get(productid_id=p_id)
                 oi.sentqty += qty_to_send
-                oi.save(using=db_alias)
+                oi.save()
                 item_log_id = 'c' + uuid.uuid4().hex[:23]
-                Dispatchlogitem.objects.using(db_alias).create(id=item_log_id, dispatchlogid=dispatch_log, productid_id=p_id, qty=qty_to_send)
+                Dispatchlogitem.objects.create(id=item_log_id, dispatchlogid=dispatch_log, productid_id=p_id, qty=qty_to_send)
                 pass
             all_dispatched = True
-            for oi in instance.orderitem_set.using(db_alias).all():
+            for oi in instance.orderitem_set.all():
                 if oi.sentqty < oi.qty:
                     all_dispatched = False
                     break
@@ -2776,7 +2182,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             elif data.get('warehouseDetails'):
                 instance.dispatchwarehouse = data.get('warehouseDetails')
             instance.dispatchdate = timezone.now().strftime('%Y-%m-%d')
-            instance.save(using=db_alias)
+            instance.save()
             from api.serializers import OrderSerializer
             return send_success(OrderSerializer(instance).data, f'Order status updated to {instance.status}')
         except Exception as e:
@@ -2793,21 +2199,20 @@ class OrderViewSet(viewsets.ModelViewSet):
             return send_error('No items specified for return', 400)
         remarks = data.get('remarks') or data.get('returnReason') or ''
         from api.models import Orderitem, Product
-        db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
         for item_data in items:
             p_id = item_data.get('productId') or item_data.get('product_id')
             qty_to_return = int(item_data.get('qty', 0))
             if qty_to_return <= 0:
                 continue
             try:
-                oi = instance.orderitem_set.using(db_alias).get(productid_id=p_id)
+                oi = instance.orderitem_set.get(productid_id=p_id)
             except Orderitem.DoesNotExist:
                 return send_error(f'Product {p_id} not found in this order', 400)
             effective_sentqty = oi.sentqty
             if effective_sentqty == 0 and instance.status in ['Dispatched', 'Completed', 'Partially Returned', 'Returned']:
                 effective_sentqty = oi.qty
                 oi.sentqty = oi.qty
-                oi.save(using=db_alias, update_fields=['sentqty'])
+                oi.save(update_fields=['sentqty'])
             if oi.returnedqty + qty_to_return > effective_sentqty:
                 return send_error(f'Cannot return {qty_to_return} of {p_id}. Already returned: {oi.returnedqty}, Dispatched: {effective_sentqty}', 400)
         import uuid
@@ -2816,7 +2221,6 @@ class OrderViewSet(viewsets.ModelViewSet):
         from api.models import Returnlog, Returnlogitem
         log_id = 'c' + uuid.uuid4().hex[:23]
         
-        # Parse custom returnDate if provided
         return_date = timezone.now()
         req_return_date = data.get('returnDate')
         if req_return_date:
@@ -2828,21 +2232,21 @@ class OrderViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
                 
-        return_log = Returnlog.objects.using(db_alias).create(id=log_id, orderid=instance, returndate=return_date, remarks=remarks)
+        return_log = Returnlog.objects.create(id=log_id, orderid=instance, returndate=return_date, remarks=remarks)
         for item_data in items:
             p_id = item_data.get('productId') or item_data.get('product_id')
             qty_to_return = int(item_data.get('qty', 0))
             if qty_to_return <= 0:
                 continue
-            oi = instance.orderitem_set.using(db_alias).get(productid_id=p_id)
+            oi = instance.orderitem_set.get(productid_id=p_id)
             oi.returnedqty += qty_to_return
-            oi.save(using=db_alias)
+            oi.save()
             item_log_id = 'c' + uuid.uuid4().hex[:23]
-            Returnlogitem.objects.using(db_alias).create(id=item_log_id, returnlogid=return_log, productid_id=p_id, qty=qty_to_return)
+            Returnlogitem.objects.create(id=item_log_id, returnlogid=return_log, productid_id=p_id, qty=qty_to_return)
             pass
         all_returned = True
         any_returned = False
-        for oi in instance.orderitem_set.using(db_alias).all():
+        for oi in instance.orderitem_set.all():
             if oi.returnedqty > 0:
                 any_returned = True
             effective_sentqty = oi.sentqty
@@ -2854,7 +2258,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             instance.status = 'Returned'
         elif any_returned:
             instance.status = 'Partially Returned'
-        instance.save(using=db_alias)
+        instance.save()
         from api.serializers import OrderSerializer
         return send_success(OrderSerializer(instance).data, f'Order status updated to {instance.status}')
 
@@ -2865,19 +2269,18 @@ class OrderViewSet(viewsets.ModelViewSet):
             log_id = request.data.get('logId') or request.data.get('log_id')
             if not log_id:
                 return send_error('logId is required', 400)
-            db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
             from api.models import Returnlog, Returnlogitem, Orderitem
             try:
-                return_log = Returnlog.objects.using(db_alias).get(id=log_id, orderid=instance)
+                return_log = Returnlog.objects.get(id=log_id, orderid=instance)
             except Returnlog.DoesNotExist:
                 return send_error('Return log not found for this order', 404)
-            log_items = Returnlogitem.objects.using(db_alias).filter(returnlogid=return_log)
+            log_items = Returnlogitem.objects.filter(returnlogid=return_log)
             product_ids = []
             for item in log_items:
                 try:
-                    oi = instance.orderitem_set.using(db_alias).get(productid_id=item.productid_id)
+                    oi = instance.orderitem_set.get(productid_id=item.productid_id)
                     oi.returnedqty = max(0, oi.returnedqty - item.qty)
-                    oi.save(using=db_alias, update_fields=['returnedqty'])
+                    oi.save(update_fields=['returnedqty'])
                     product_ids.append(item.productid_id)
                 except Orderitem.DoesNotExist:
                     pass
@@ -2887,7 +2290,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 pass
             all_returned = True
             any_returned = False
-            for oi in instance.orderitem_set.using(db_alias).all():
+            for oi in instance.orderitem_set.all():
                 if oi.returnedqty > 0:
                     any_returned = True
                 effective_sentqty = oi.sentqty
@@ -2902,7 +2305,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             else:
                 all_dispatched = True
                 any_dispatched = False
-                for oi in instance.orderitem_set.using(db_alias).all():
+                for oi in instance.orderitem_set.all():
                     if oi.sentqty > 0:
                         any_dispatched = True
                     if oi.sentqty < oi.qty:
@@ -2913,7 +2316,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                     instance.status = 'Partially Dispatched'
                 else:
                     instance.status = 'Approved'
-            instance.save(using=db_alias, update_fields=['status'])
+            instance.save(update_fields=['status'])
             from api.serializers import OrderSerializer
             return send_success(OrderSerializer(instance).data, f'Return log reverted successfully. Status is now {instance.status}')
         except Exception as e:
@@ -2924,19 +2327,17 @@ class OrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='dispatch-logs')
     def dispatch_logs(self, request, pk=None):
         instance = self.get_object()
-        db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
         from api.models import Dispatchlog
         from api.serializers import DispatchlogSerializer
-        logs = Dispatchlog.objects.using(db_alias).filter(orderid=instance).prefetch_related('items__productid').order_by('-createdat')
+        logs = Dispatchlog.objects.filter(orderid=instance).prefetch_related('items__productid').order_by('-createdat')
         return send_success(DispatchlogSerializer(logs, many=True, context={'skip_stock': True}).data, 'Dispatch logs fetched')
 
     @action(detail=True, methods=['get'], url_path='return-logs')
     def return_logs(self, request, pk=None):
         instance = self.get_object()
-        db_alias = getattr(instance, '_db', getattr(instance._state, 'db', 'default'))
         from api.models import Returnlog
         from api.serializers import ReturnlogSerializer
-        logs = Returnlog.objects.using(db_alias).filter(orderid=instance).prefetch_related('items__productid').order_by('-createdat')
+        logs = Returnlog.objects.filter(orderid=instance).prefetch_related('items__productid').order_by('-createdat')
         return send_success(ReturnlogSerializer(logs, many=True, context={'skip_stock': True}).data, 'Return logs fetched')
 
     @action(detail=True, methods=['post'], url_path='update-status')
@@ -3015,27 +2416,9 @@ class VisitViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
-        from api.models import Warehouse
-        current_db = get_current_db()
-        all_visits = []
-        if current_db == 'default':
-            from api.db_router import set_current_db
-            try:
-                for wh in Warehouse.objects.filter(active=True):
-                    if not wh.db_name:
-                        continue
-                    set_current_db(wh.db_name)
-                    qs = self.get_queryset().using(wh.db_name)
-                    qs = _fy_date_filter(request, qs, date_field='date')
-                    serialized_data = VisitSerializer(qs, many=True).data
-                    all_visits.extend(serialized_data)
-            finally:
-                set_current_db('default')
-        else:
-            qs = self.get_queryset()
-            qs = _fy_date_filter(request, qs, date_field='date')
-            all_visits = VisitSerializer(qs, many=True).data
+        qs = self.get_queryset()
+        qs = _fy_date_filter(request, qs, date_field='date')
+        all_visits = VisitSerializer(qs, many=True).data
         all_visits.sort(key=lambda x: x.get('date', ''), reverse=True)
         return send_success(all_visits, 'Visits fetched successfully')
 
@@ -3092,27 +2475,9 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
-        from api.models import Warehouse
-        current_db = get_current_db()
-        all_expenses = []
-        if current_db == 'default':
-            from api.db_router import set_current_db
-            try:
-                for wh in Warehouse.objects.filter(active=True):
-                    if not wh.db_name:
-                        continue
-                    set_current_db(wh.db_name)
-                    qs = self.get_queryset().using(wh.db_name)
-                    qs = _fy_date_filter(request, qs, date_field='date')
-                    serialized_data = ExpenseSerializer(qs, many=True).data
-                    all_expenses.extend(serialized_data)
-            finally:
-                set_current_db('default')
-        else:
-            qs = self.get_queryset()
-            qs = _fy_date_filter(request, qs, date_field='date')
-            all_expenses = ExpenseSerializer(qs, many=True).data
+        qs = self.get_queryset()
+        qs = _fy_date_filter(request, qs, date_field='date')
+        all_expenses = ExpenseSerializer(qs, many=True).data
         all_expenses.sort(key=lambda x: x.get('date', ''), reverse=True)
         return send_success(all_expenses, 'Expenses fetched successfully')
 
@@ -3191,39 +2556,12 @@ class BOMViewSet(viewsets.ModelViewSet):
         return Bom.objects.all()
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
         from api.serializers import BomListSerializer
         from django.db.models import Count
-        if get_current_db() == 'default':
-            from api.models import Warehouse, Bom, Product
-            all_boms = []
-            company_id = _get_company_id(request)
-            for wh in Warehouse.objects.filter(active=True):
-                if not wh.db_name:
-                    continue
-                try:
-                    qs = Bom.objects.using(wh.db_name).annotate(item_count=Count('bomitem'))
-                    if company_id:
-                        qs = qs.filter(companyid_id=company_id)
-                    product_map = {}
-                    for p in Product.objects.using(wh.db_name).only('id', 'productcode', 'name'):
-                        if p.productcode:
-                            product_map[p.productcode] = p
-                        if p.name:
-                            product_map[p.name] = p
-                    serializer = BomListSerializer(qs, many=True, context={'request': request, 'product_map': product_map})
-                    data = serializer.data
-                    for item in data:
-                        item['assignedWarehouse'] = wh.id
-                        item['assignedWarehouseName'] = wh.name
-                    all_boms.extend(data)
-                except Exception:
-                    pass
-            return send_success(all_boms, 'BOMs fetched globally successfully')
-        queryset = self.get_queryset().annotate(item_count=Count('bomitem'))
         from api.models import Product
+        queryset = self.get_queryset().annotate(item_count=Count('bomitem'))
         product_map = {}
-        for p in Product.objects.using(get_current_db()).only('id', 'productcode', 'name'):
+        for p in Product.objects.only('id', 'productcode', 'name'):
             if p.productcode:
                 product_map[p.productcode] = p
             if p.name:
@@ -3263,12 +2601,11 @@ class BOMViewSet(viewsets.ModelViewSet):
         return send_success(full_serializer.data, 'BOM updated successfully')
 
     def retrieve(self, request, *args, **kwargs):
-        from api.db_router import get_current_db
         from api.models import Product
         from api.serializers import BomSerializer
         instance = self.get_object()
         product_map = {}
-        for p in Product.objects.using(get_current_db()).only('id', 'productcode', 'name'):
+        for p in Product.objects.only('id', 'productcode', 'name'):
             if p.productcode:
                 product_map[p.productcode] = p
             if p.name:
@@ -3296,75 +2633,40 @@ def report_dashboard_kpis(request):
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
     wh_header = request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
     is_global_request = not wh_header or wh_header == 'GLOBAL' or wh_header == 'none'
-    if is_global_request:
-        total_products = 0
-        total_dealers = 0
-        seen_dealer_codes = set()
-        seen_product_codes = set()
-        for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name:
-                continue
-            if assigned_wh_ids and wh.id not in assigned_wh_ids:
-                continue
-            if company_id and wh.companyid_id != company_id:
-                continue
-            try:
-                d_qs = Dealer.objects.using(wh.db_name).filter(active=True)
-                if company_id:
-                    d_qs = d_qs.filter(companyid_id=company_id)
-                for d in d_qs:
-                    if d.dealercode not in seen_dealer_codes:
-                        seen_dealer_codes.add(d.dealercode)
-                        total_dealers += 1
-                p_qs = Product.objects.using(wh.db_name).filter(active=True)
-                if company_id:
-                    p_qs = p_qs.filter(companyid_id=company_id)
-                for p in p_qs:
-                    if p.productcode not in seen_product_codes:
-                        seen_product_codes.add(p.productcode)
-                        total_products += 1
-            except Exception as e:
-                print(f'[DASHBOARD GLOBAL AGGREGATION ERROR] schema={wh.db_name}: {e}')
-    else:
-        products_q = Product.objects.filter(companyid_id=company_id, active=True) if company_id else Product.objects.filter(active=True)
-        dealers_q = Dealer.objects.filter(companyid_id=company_id, active=True) if company_id else Dealer.objects.filter(active=True)
-        total_products = products_q.count()
-        total_dealers = dealers_q.count()
+    products_q = Product.objects.filter(companyid_id=company_id, active=True) if company_id else Product.objects.filter(active=True)
+    dealers_q = Dealer.objects.filter(companyid_id=company_id, active=True) if company_id else Dealer.objects.filter(active=True)
+    total_products = products_q.count()
+    total_dealers = dealers_q.count()
     total_orders = 0
     total_revenue = 0.0
     total_stock_value = 0.0
     category_stock = {}
     product_sales = {}
     colors = ['#3b82f6', '#10b981', '#6366f1', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6']
-    for wh in Warehouse.objects.filter(active=True):
-        if not wh.db_name:
-            continue
-        if assigned_wh_ids and wh.id not in assigned_wh_ids:
-            continue
-        orders_q = Order.objects.using(wh.db_name)
-        if company_id:
-            orders_q = orders_q.filter(companyid_id=company_id)
-        total_orders += orders_q.count()
-        revenue_q = orders_q.filter(status='Completed').aggregate(Sum('grandtotal'))
-        total_revenue += float(revenue_q['grandtotal__sum'] or 0)
-        pass # Legacy Inventory table removed
-        from api.models import Stocktransaction
-        st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid', 'productid__categoryid__name', 'productid__rate').annotate(total_qty=Sum('quantity'))
-        if company_id:
-            st_aggs = st_aggs.filter(productid__companyid_id=company_id)
-        for st in st_aggs:
-            qty = float(st['total_qty'] or 0)
-            rate = float(st['productid__rate'] or 0)
-            val = qty * rate
-            total_stock_value += val
-            category_name = st['productid__categoryid__name'] or 'Uncategorized'
-            category_stock[category_name] = category_stock.get(category_name, 0) + val
-        completed_orders = list(orders_q.filter(status='Completed').values_list('id', flat=True))
-        if completed_orders:
-            order_items = Orderitem.objects.using(wh.db_name).filter(orderid_id__in=completed_orders).select_related('productid')
-            for item in order_items:
-                name = item.productid.name if item.productid else item.productname or 'Unknown Item'
-                product_sales[name] = product_sales.get(name, 0) + item.qty
+    orders_q = Order.objects.all()
+    if company_id:
+        orders_q = orders_q.filter(companyid_id=company_id)
+    total_orders += orders_q.count()
+    revenue_q = orders_q.filter(status='Completed').aggregate(Sum('grandtotal'))
+    total_revenue += float(revenue_q['grandtotal__sum'] or 0)
+    pass # Legacy Inventory table removed
+    from api.models import Stocktransaction
+    st_aggs = Stocktransaction.objects.exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid', 'productid__categoryid__name', 'productid__rate').annotate(total_qty=Sum('quantity'))
+    if company_id:
+        st_aggs = st_aggs.filter(productid__companyid_id=company_id)
+    for st in st_aggs:
+        qty = float(st['total_qty'] or 0)
+        rate = float(st['productid__rate'] or 0)
+        val = qty * rate
+        total_stock_value += val
+        category_name = st['productid__categoryid__name'] or 'Uncategorized'
+        category_stock[category_name] = category_stock.get(category_name, 0) + val
+    completed_orders = list(orders_q.filter(status='Completed').values_list('id', flat=True))
+    if completed_orders:
+        order_items = Orderitem.objects.filter(orderid_id__in=completed_orders).select_related('productid')
+        for item in order_items:
+            name = item.productid.name if item.productid else item.productname or 'Unknown Item'
+            product_sales[name] = product_sales.get(name, 0) + item.qty
     category_distribution = []
     sorted_categories = sorted(category_stock.items(), key=lambda x: x[1], reverse=True)
     for idx, (cat_name, value) in enumerate(sorted_categories):
@@ -3394,46 +2696,41 @@ def report_sales_summary(request):
     from django.db.models.functions import TruncDate
     from django.db.models import Count, Sum
     daily_aggregates = {}
-    for wh in Warehouse.objects.filter(active=True):
-        if not wh.db_name:
+    orders_q = Order.objects.filter(status__in=['Approved', 'Completed'])
+    if company_id:
+        orders_q = orders_q.filter(companyid_id=company_id)
+    daily_groups = orders_q.annotate(day=TruncDate('createdat')).values('day').annotate(total_sales=Count('id'), total_revenue=Sum('grandtotal')).order_by('day')
+    for g in daily_groups:
+        if not g['day']:
             continue
-        if assigned_wh_ids and wh.id not in assigned_wh_ids:
-            continue
-        orders_q = Order.objects.using(wh.db_name).filter(status__in=['Approved', 'Completed'])
-        if company_id:
-            orders_q = orders_q.filter(companyid_id=company_id)
-        daily_groups = orders_q.annotate(day=TruncDate('createdat')).values('day').annotate(total_sales=Count('id'), total_revenue=Sum('grandtotal')).order_by('day')
-        for g in daily_groups:
-            if not g['day']:
-                continue
-            day_str = g['day'].strftime('%Y-%m-%d')
-            total_rev = g['total_revenue'] or 0.0
-            total_sales = g['total_sales'] or 0
-            day_orders = orders_q.filter(createdat__date=g['day']).prefetch_related('orderitem_set')
-            day_profit = 0.0
-            for order in day_orders:
-                for item in order.orderitem_set.all():
-                    qty = item.qty or 0
-                    price = item.price or 0.0
+        day_str = g['day'].strftime('%Y-%m-%d')
+        total_rev = g['total_revenue'] or 0.0
+        total_sales = g['total_sales'] or 0
+        day_orders = orders_q.filter(createdat__date=g['day']).prefetch_related('orderitem_set')
+        day_profit = 0.0
+        for order in day_orders:
+            for item in order.orderitem_set.all():
+                qty = item.qty or 0
+                price = item.price or 0.0
+                cost_price = 0.0
+                try:
+                    pass # Legacy Inventory table removed
+                    if False:
+                        cost_price = inv.avgcost
+                    else:
+                        prod = Product.objects.filter(id=item.productid_id).first()
+                        cost_price = prod.rate * 0.7 if prod else 0.0
+                except Exception:
                     cost_price = 0.0
-                    try:
-                        pass # Legacy Inventory table removed
-                        if False:
-                            cost_price = inv.avgcost
-                        else:
-                            prod = Product.objects.using(wh.db_name).filter(id=item.productid_id).first()
-                            cost_price = prod.rate * 0.7 if prod else 0.0
-                    except Exception:
-                        cost_price = 0.0
-                    item_revenue = qty * price
-                    item_cost = qty * cost_price
-                    day_profit += item_revenue - item_cost
-            if day_str not in daily_aggregates:
-                daily_aggregates[day_str] = {'name': day_str, 'date': day_str, 'day': day_str, 'total': 0.0, 'total_sales': 0, 'total_revenue': 0.0, 'total_profit': 0.0}
-            daily_aggregates[day_str]['total'] += total_rev
-            daily_aggregates[day_str]['total_sales'] += total_sales
-            daily_aggregates[day_str]['total_revenue'] += total_rev
-            daily_aggregates[day_str]['total_profit'] += max(0.0, day_profit)
+                item_revenue = qty * price
+                item_cost = qty * cost_price
+                day_profit += item_revenue - item_cost
+        if day_str not in daily_aggregates:
+            daily_aggregates[day_str] = {'name': day_str, 'date': day_str, 'day': day_str, 'total': 0.0, 'total_sales': 0, 'total_revenue': 0.0, 'total_profit': 0.0}
+        daily_aggregates[day_str]['total'] += total_rev
+        daily_aggregates[day_str]['total_sales'] += total_sales
+        daily_aggregates[day_str]['total_revenue'] += total_rev
+        daily_aggregates[day_str]['total_profit'] += max(0.0, day_profit)
     chart_data = sorted(list(daily_aggregates.values()), key=lambda x: x['day'])
     return send_success(chart_data, 'Sales summary trends fetched')
 
@@ -3452,22 +2749,19 @@ def report_low_stock(request):
         warehouses = warehouses.filter(id__in=assigned_wh_ids)
     sku_inv_map = {}
     sku_to_product = {}
-    for wh in warehouses:
-        if not wh.db_name:
-            continue
-        try:
-            products_qs = Product.objects.using(wh.db_name).select_related('categoryid', 'unitid')
-            if company_id:
-                products_qs = products_qs.filter(companyid_id=company_id)
-            for p in products_qs:
-                pass # Legacy Inventory table removed
-                sku = p.productcode
-                if sku:
-                    sku_inv_map[sku] = sku_inv_map.get(sku, 0) + 0.0
-                    if sku not in sku_to_product:
-                        sku_to_product[sku] = p
-        except Exception:
-            pass
+    try:
+        products_qs = Product.objects.select_related('categoryid', 'unitid')
+        if company_id:
+            products_qs = products_qs.filter(companyid_id=company_id)
+        for p in products_qs:
+            pass # Legacy Inventory table removed
+            sku = p.productcode
+            if sku:
+                sku_inv_map[sku] = sku_inv_map.get(sku, 0) + 0.0
+                if sku not in sku_to_product:
+                    sku_to_product[sku] = p
+    except Exception:
+        pass
     data = []
     for sku, qty in sku_inv_map.items():
         if qty < 50:
@@ -3488,19 +2782,14 @@ def report_daily(request):
     all_sales = []
     all_purchases = []
     total_pending = 0
-    for wh in Warehouse.objects.filter(active=True):
-        if not wh.db_name:
-            continue
-        if assigned_wh_ids and wh.id not in assigned_wh_ids:
-            continue
-        condition = Q(companyid_id=company_id) if company_id else Q()
-        sales = Order.objects.using(wh.db_name).filter(condition & Q(createdat__gte=today))
-        purchases = Purchase.objects.using(wh.db_name).filter(condition & Q(createdat__gte=today))
-        pending_count = Order.objects.using(wh.db_name).filter(condition & Q(status='Pending')).count()
-        all_sales.extend(OrderSerializer(sales, many=True, context={'skip_stock': True}).data)
-        for p in purchases:
-            all_purchases.append({'id': p.id, 'purchaseId': p.purchaseid, 'date': p.date, 'vendorName': p.vendorname, 'grandTotal': p.grandtotal, 'status': p.status, 'companyId': p.companyid_id})
-        total_pending += pending_count
+    condition = Q(companyid_id=company_id) if company_id else Q()
+    sales = Order.objects.filter(condition & Q(createdat__gte=today))
+    purchases = Purchase.objects.filter(condition & Q(createdat__gte=today))
+    pending_count = Order.objects.filter(condition & Q(status='Pending')).count()
+    all_sales.extend(OrderSerializer(sales, many=True, context={'skip_stock': True}).data)
+    for p in purchases:
+        all_purchases.append({'id': p.id, 'purchaseId': p.purchaseid, 'date': p.date, 'vendorName': p.vendorname, 'grandTotal': p.grandtotal, 'status': p.status, 'companyId': p.companyid_id})
+    total_pending += pending_count
     daily_data = {'date': today.isoformat(), 'sales': {'count': len(all_sales), 'list': all_sales}, 'purchases': {'count': len(all_purchases), 'list': all_purchases}, 'pendingCount': total_pending}
     return send_success(daily_data, 'Daily reports fetched')
 
@@ -3524,93 +2813,64 @@ def report_current_stock(request):
     stock_map = {}
     
     # Single query: Initialize stock data for all products
-    for wh in warehouses:
-        if not wh.db_name:
-            continue
-        try:
-            products = Product.objects.using(wh.db_name).select_related('categoryid', 'unitid').all()
-            if company_id:
-                products = products.filter(companyid_id=company_id)
-            
-            for p in products:
-                stock_map[(p.id, wh.id)] = {
-                    'productId': p.id,
-                    'productName': p.name,
-                    'sku': p.productcode,
-                    'categoryName': p.categoryid.name if p.categoryid else None,
-                    'unit': p.unitid.name if p.unitid else '—',
-                    'openingStock': float(p.openingstock or 0),
-                    'production': 0.0,
-                    'consumed': 0.0,
-                    'purchase': 0.0,
-                    'sales': 0.0,
-                    'salesReturn': 0.0,
-                    'purchaseReturn': 0.0,
-                    'adjustment': 0.0,
-                    'currentStock': 0.0,
-                    'minimumStock': float(p.minimumstock or 0),
-                    'warehouseId': wh.id,
-                    'warehouseName': wh.name
-                }
-        except Exception:
-            continue
+    products = Product.objects.select_related('categoryid', 'unitid').all()
+    if company_id:
+        products = products.filter(companyid_id=company_id)
     
-    # OPTIMIZED: Process all stock transactions in a simplified manner
-    # Instead of 4N queries, we use single queries and aggregate in Python
+    for p in products:
+        stock_map[p.id] = {
+            'productId': p.id,
+            'productName': p.name,
+            'sku': p.productcode,
+            'categoryName': p.categoryid.name if p.categoryid else None,
+            'unit': p.unitid.name if p.unitid else '—',
+            'openingStock': float(p.openingstock or 0),
+            'production': 0.0,
+            'consumed': 0.0,
+            'purchase': 0.0,
+            'sales': 0.0,
+            'salesReturn': 0.0,
+            'purchaseReturn': 0.0,
+            'adjustment': 0.0,
+            'currentStock': 0.0,
+            'minimumStock': float(p.minimumstock or 0),
+        }
+    
+    # Process all stock transactions
     try:
-        # Single query for all purchases
-        for wh in warehouses:
-            if not wh.db_name:
-                continue
-            
-            # Get all purchases for this warehouse
-            purchase_data = Purchaseitem.objects.using(wh.db_name).filter(
-                purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']
-            ).values('productname', 'productid_id').annotate(total_qty=Sum('qty'))
-            
-            # Get all order data for this warehouse
-            order_data = Orderitem.objects.using(wh.db_name).filter(
-                orderid__status__in=['Completed', 'Returned', 'Delivered']
-            ).values('productid_id').annotate(
-                total_qty=Sum('qty'),
-                total_ret=Sum('returnedqty')
-            )
-            
-            # Get all stock transaction data for this warehouse
-            stock_tx_data = Stocktransaction.objects.using(wh.db_name).exclude(
-                reason__in=['PENDING_APPROVAL', 'REJECTED']
-            ).values('productid_id', 'transactiontype').annotate(total=Sum('quantity'))
-            
-            # Process purchases efficiently
-            for item in purchase_data:
-                # Find matching warehouse entry in stock_map
-                for key in stock_map:
-                    if key[1] == wh.id:
-                        # Update purchase data (simplified for now)
-                        break
-            
-            # Process orders efficiently
-            for item in order_data:
-                for key in stock_map:
-                    if key[1] == wh.id and key[0] == item['productid_id']:
-                        stock_map[key]['sales'] += float(item['total_qty'] or 0)
-                        stock_map[key]['salesReturn'] += float(item['total_ret'] or 0)
-                        break
-            
-            # Process stock transactions efficiently
-            for item in stock_tx_data:
-                for key in stock_map:
-                    if key[1] == wh.id and key[0] == item['productid_id']:
-                        qty = float(item['total'] or 0)
-                        if item['transactiontype'] == 'PRODUCTION':
-                            stock_map[key]['production'] += qty
-                        elif item['transactiontype'] == 'CONSUMED':
-                            stock_map[key]['consumed'] += abs(qty)
-                        elif item['transactiontype'] == 'ADJUSTMENT':
-                            stock_map[key]['adjustment'] += qty
-                        elif item['transactiontype'] == 'OPENING_STOCK':
-                            stock_map[key]['openingStock'] = qty
-                        break
+        purchase_data = Purchaseitem.objects.filter(
+            purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']
+        ).values('productname', 'productid_id').annotate(total_qty=Sum('qty'))
+        
+        order_data = Orderitem.objects.filter(
+            orderid__status__in=['Completed', 'Returned', 'Delivered']
+        ).values('productid_id').annotate(
+            total_qty=Sum('qty'),
+            total_ret=Sum('returnedqty')
+        )
+        
+        stock_tx_data = Stocktransaction.objects.exclude(
+            reason__in=['PENDING_APPROVAL', 'REJECTED']
+        ).values('productid_id', 'transactiontype').annotate(total=Sum('quantity'))
+        
+        for item in order_data:
+            pid = item['productid_id']
+            if pid in stock_map:
+                stock_map[pid]['sales'] += float(item['total_qty'] or 0)
+                stock_map[pid]['salesReturn'] += float(item['total_ret'] or 0)
+        
+        for item in stock_tx_data:
+            pid = item['productid_id']
+            if pid in stock_map:
+                qty = float(item['total'] or 0)
+                if item['transactiontype'] == 'PRODUCTION':
+                    stock_map[pid]['production'] += qty
+                elif item['transactiontype'] == 'CONSUMED':
+                    stock_map[pid]['consumed'] += abs(qty)
+                elif item['transactiontype'] == 'ADJUSTMENT':
+                    stock_map[pid]['adjustment'] += qty
+                elif item['transactiontype'] == 'OPENING_STOCK':
+                    stock_map[pid]['openingStock'] = qty
                         
     except Exception:
         pass
@@ -3634,22 +2894,11 @@ def recalculate_product_inventory(product_id, warehouse_id=None):
 def report_stock_ledger(request, pk):
     from api.models import Product, Purchaseitem, Orderitem, Stocktransaction, Userwarehouseaccess, Warehouse
     from django.utils import timezone
-    from api.db_router import get_current_db
     product = None
-    if get_current_db() == 'default':
-        for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name:
-                continue
-            try:
-                product = Product.objects.using(wh.db_name).get(id=pk)
-                break
-            except Product.DoesNotExist:
-                pass
-    else:
-        try:
-            product = Product.objects.get(id=pk)
-        except Product.DoesNotExist:
-            pass
+    try:
+        product = Product.objects.get(id=pk)
+    except Product.DoesNotExist:
+        pass
     if not product:
         return send_error('Product not found', 404)
     company_id = _get_company_id(request)
@@ -3662,47 +2911,34 @@ def report_stock_ledger(request, pk):
     if has_wh_assignments and request.user.role == 'INVENTORY':
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
     events = []
-    warehouses = Warehouse.objects.filter(active=True)
-    if warehouse_id_param:
-        warehouses = warehouses.filter(id=warehouse_id_param)
-    for wh in warehouses:
-        if not wh.db_name:
-            continue
-        if assigned_wh_ids and wh.id not in assigned_wh_ids:
-            continue
-        local_product = product
-        if wh.db_name != product._state.db:
-            local_product = Product.objects.using(wh.db_name).filter(productcode=product.productcode).first()
-            if not local_product:
-                continue
-        purchases = Purchaseitem.objects.using(wh.db_name).filter(productname=local_product.name, purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']).select_related('purchaseid')
-        if date_from:
-            purchases = purchases.filter(purchaseid__date__gte=date_from)
-        if date_to:
-            purchases = purchases.filter(purchaseid__date__lte=date_to + ' 23:59:59')
-        for item in purchases:
-            p = item.purchaseid
-            events.append({'id': f'pur_evt_{item.id}', 'date': p.date, 'transactionType': 'PURCHASE', 'referenceId': p.purchaseid, 'warehouseName': wh.name, 'credit': float(item.qty), 'debit': 0.0, 'qty_change': float(item.qty)})
-            if p.status == 'Returned':
-                events.append({'id': f'pur_ret_evt_{item.id}', 'date': getattr(p, 'updatedat', p.date), 'transactionType': 'PURCHASE_RETURN', 'referenceId': p.purchaseid, 'warehouseName': wh.name, 'credit': 0.0, 'debit': float(item.qty), 'qty_change': -float(item.qty)})
-        sales = Orderitem.objects.using(wh.db_name).filter(productid_id=local_product.id, orderid__status__in=['Completed', 'Returned']).select_related('orderid')
-        if date_from:
-            sales = sales.filter(orderid__date__gte=date_from)
-        if date_to:
-            sales = sales.filter(orderid__date__lte=date_to + ' 23:59:59')
-        for item in sales:
-            o = item.orderid
-            events.append({'id': f'sal_evt_{item.id}', 'date': o.date, 'transactionType': 'SALE', 'referenceId': o.orderid, 'warehouseName': wh.name, 'credit': 0.0, 'debit': float(item.qty), 'qty_change': -float(item.qty)})
-            if getattr(item, 'returnedqty', 0) and float(item.returnedqty) > 0:
-                events.append({'id': f'sal_ret_evt_{item.id}', 'date': o.updatedat or o.date, 'transactionType': 'SALES_RETURN', 'referenceId': o.orderid, 'warehouseName': wh.name, 'credit': float(item.returnedqty), 'debit': 0.0, 'qty_change': float(item.returnedqty)})
-        st_qs = Stocktransaction.objects.using(wh.db_name).filter(productid_id=local_product.id).exclude(transactiontype='OPENING_STOCK')
-        if date_from:
-            st_qs = st_qs.filter(createdat__gte=date_from)
-        if date_to:
-            st_qs = st_qs.filter(createdat__lte=date_to + ' 23:59:59')
-        for st in st_qs:
-            qty = st.quantity
-            events.append({'id': st.id, 'date': st.createdat, 'transactionType': st.transactiontype, 'referenceId': st.referenceid or 'TX', 'warehouseName': wh.name, 'credit': qty if qty > 0 else 0.0, 'debit': abs(qty) if qty < 0 else 0.0, 'qty_change': qty})
+    purchases = Purchaseitem.objects.filter(productname=product.name, purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']).select_related('purchaseid')
+    if date_from:
+        purchases = purchases.filter(purchaseid__date__gte=date_from)
+    if date_to:
+        purchases = purchases.filter(purchaseid__date__lte=date_to + ' 23:59:59')
+    for item in purchases:
+        p = item.purchaseid
+        events.append({'id': f'pur_evt_{item.id}', 'date': p.date, 'transactionType': 'PURCHASE', 'referenceId': p.purchaseid, 'credit': float(item.qty), 'debit': 0.0, 'qty_change': float(item.qty)})
+        if p.status == 'Returned':
+            events.append({'id': f'pur_ret_evt_{item.id}', 'date': getattr(p, 'updatedat', p.date), 'transactionType': 'PURCHASE_RETURN', 'referenceId': p.purchaseid, 'credit': 0.0, 'debit': float(item.qty), 'qty_change': -float(item.qty)})
+    sales = Orderitem.objects.filter(productid_id=product.id, orderid__status__in=['Completed', 'Returned']).select_related('orderid')
+    if date_from:
+        sales = sales.filter(orderid__date__gte=date_from)
+    if date_to:
+        sales = sales.filter(orderid__date__lte=date_to + ' 23:59:59')
+    for item in sales:
+        o = item.orderid
+        events.append({'id': f'sal_evt_{item.id}', 'date': o.date, 'transactionType': 'SALE', 'referenceId': o.orderid, 'credit': 0.0, 'debit': float(item.qty), 'qty_change': -float(item.qty)})
+        if getattr(item, 'returnedqty', 0) and float(item.returnedqty) > 0:
+            events.append({'id': f'sal_ret_evt_{item.id}', 'date': o.updatedat or o.date, 'transactionType': 'SALES_RETURN', 'referenceId': o.orderid, 'credit': float(item.returnedqty), 'debit': 0.0, 'qty_change': float(item.returnedqty)})
+    st_qs = Stocktransaction.objects.filter(productid_id=product.id).exclude(transactiontype='OPENING_STOCK')
+    if date_from:
+        st_qs = st_qs.filter(createdat__gte=date_from)
+    if date_to:
+        st_qs = st_qs.filter(createdat__lte=date_to + ' 23:59:59')
+    for st in st_qs:
+        qty = st.quantity
+        events.append({'id': st.id, 'date': st.createdat, 'transactionType': st.transactiontype, 'referenceId': st.referenceid or 'TX', 'credit': qty if qty > 0 else 0.0, 'debit': abs(qty) if qty < 0 else 0.0, 'qty_change': qty})
     for e in events:
         dt = e['date']
         if isinstance(dt, str):
@@ -3743,25 +2979,22 @@ def report_aggregate_stock(request):
         warehouses = warehouses.filter(id__in=assigned_wh_ids)
     sku_inv_map = {}
     sku_to_product = {}
-    for wh in warehouses:
-        if not wh.db_name:
-            continue
-        try:
-            products_qs = Product.objects.using(wh.db_name).select_related('categoryid', 'unitid')
-            if company_id:
-                products_qs = products_qs.filter(companyid_id=company_id)
-            from api.models import Stocktransaction
-            st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid').annotate(total_qty=Sum('quantity'))
-            inv_map = {st['productid']: st['total_qty'] for st in st_aggs}
-            for p in products_qs:
-                qty = float(inv_map.get(p.id, 0.0))
-                sku = p.productcode or p.name
-                if sku:
-                    sku_inv_map[sku] = sku_inv_map.get(sku, 0.0) + qty
-                    if sku not in sku_to_product:
-                        sku_to_product[sku] = p
-        except Exception:
-            pass
+    try:
+        products_qs = Product.objects.select_related('categoryid', 'unitid')
+        if company_id:
+            products_qs = products_qs.filter(companyid_id=company_id)
+        from api.models import Stocktransaction
+        st_aggs = Stocktransaction.objects.exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid').annotate(total_qty=Sum('quantity'))
+        inv_map = {st['productid']: st['total_qty'] for st in st_aggs}
+        for p in products_qs:
+            qty = float(inv_map.get(p.id, 0.0))
+            sku = p.productcode or p.name
+            if sku:
+                sku_inv_map[sku] = sku_inv_map.get(sku, 0.0) + qty
+                if sku not in sku_to_product:
+                    sku_to_product[sku] = p
+    except Exception:
+        pass
     aggregate = []
     for sku, qty in sku_inv_map.items():
         p = sku_to_product[sku]
@@ -3784,58 +3017,53 @@ def report_global_inventory(request):
         warehouses = warehouses.filter(id__in=assigned_wh_ids)
     
     inventory_data = []
-    for wh in warehouses:
-        if not wh.db_name:
-            continue
-        try:
-            products = Product.objects.using(wh.db_name).select_related('categoryid').all()
-            if company_id:
-                products = products.filter(companyid_id=company_id)
+    try:
+        products = Product.objects.select_related('categoryid').all()
+        if company_id:
+            products = products.filter(companyid_id=company_id)
 
-            stock_map = {}
-            for p in products:
-                opening = float(p.openingstock or 0)
-                if opening > 0:
-                    stock_map[p.id] = {
-                        'warehouseName': wh.name,
+        stock_map = {}
+        for p in products:
+            opening = float(p.openingstock or 0)
+            if opening > 0:
+                stock_map[p.id] = {
+                    'productId': p.id,
+                    'productName': p.name,
+                    'sku': p.productcode or '',
+                    'categoryName': p.categoryid.name if p.categoryid else 'Uncategorized',
+                    'quantity': opening,
+                    'rate': float(p.rate or 0)
+                }
+
+        st_aggs = Stocktransaction.objects.exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid').annotate(total_qty=Sum('quantity'))
+        if company_id:
+            st_aggs = st_aggs.filter(productid__companyid_id=company_id)
+        for st in st_aggs:
+            pid = st['productid']
+            qty = float(st['total_qty'] or 0)
+            if pid in stock_map:
+                stock_map[pid]['quantity'] += qty
+            else:
+                if qty == 0:
+                    continue
+                try:
+                    p = Product.objects.select_related('categoryid').get(id=pid)
+                    stock_map[pid] = {
                         'productId': p.id,
                         'productName': p.name,
                         'sku': p.productcode or '',
                         'categoryName': p.categoryid.name if p.categoryid else 'Uncategorized',
-                        'quantity': opening,
+                        'quantity': qty,
                         'rate': float(p.rate or 0)
                     }
+                except Product.DoesNotExist:
+                    pass
 
-            st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED']).values('productid').annotate(total_qty=Sum('quantity'))
-            if company_id:
-                st_aggs = st_aggs.filter(productid__companyid_id=company_id)
-            for st in st_aggs:
-                pid = st['productid']
-                qty = float(st['total_qty'] or 0)
-                if pid in stock_map:
-                    stock_map[pid]['quantity'] += qty
-                else:
-                    if qty == 0:
-                        continue
-                    try:
-                        p = Product.objects.using(wh.db_name).select_related('categoryid').get(id=pid)
-                        stock_map[pid] = {
-                            'warehouseName': wh.name,
-                            'productId': p.id,
-                            'productName': p.name,
-                            'sku': p.productcode or '',
-                            'categoryName': p.categoryid.name if p.categoryid else 'Uncategorized',
-                            'quantity': qty,
-                            'rate': float(p.rate or 0)
-                        }
-                    except Product.DoesNotExist:
-                        pass
-
-            for data in stock_map.values():
-                if data['quantity'] != 0:
-                    inventory_data.append(data)
-        except Exception as e:
-            print(f"Error fetching global inventory for wh {wh.db_name}: {e}")
+        for data in stock_map.values():
+            if data['quantity'] != 0:
+                inventory_data.append(data)
+    except Exception as e:
+        print(f"Error fetching global inventory: {e}")
             
     return send_success(inventory_data, 'Global inventory fetched')
 
@@ -3868,29 +3096,15 @@ def transaction_purchases(request):
         except (TypeError, ValueError):
             raise ValueError(f'{field_name} must be a number')
     if request.method == 'GET':
-        from api.db_router import get_current_db
-        from api.models import Userwarehouseaccess, Warehouse, Purchase, Product
-        current_db = get_current_db()
+        from api.models import Userwarehouseaccess, Purchase, Product
         user_id = request.user.id
         has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()
         assigned_wh_ids = []
         if has_wh_assignments and request.user.role == 'INVENTORY':
             assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
-        all_purchases = []
-        if current_db == 'default':
-            wh_qs = Warehouse.objects.filter(active=True)
-            if assigned_wh_ids:
-                wh_qs = wh_qs.filter(id__in=assigned_wh_ids)
-            for wh in wh_qs:
-                if not wh.db_name:
-                    continue
-                purchases = Purchase.objects.using(wh.db_name).prefetch_related('purchaseitem_set', 'purchaseorderid')
-                all_purchases.extend(purchases)
-        else:
-            purchases = Purchase.objects.using(current_db).prefetch_related('purchaseitem_set', 'purchaseorderid')
-            if assigned_wh_ids:
-                purchases = purchases.filter(warehouseid_id__in=assigned_wh_ids)
-            all_purchases.extend(purchases)
+        all_purchases = list(Purchase.objects.prefetch_related('purchaseitem_set', 'purchaseorderid').all())
+        if assigned_wh_ids:
+            all_purchases = [p for p in all_purchases if p.warehouseid_id in assigned_wh_ids]
         data = []
         for p in all_purchases:
             items_data = []
@@ -3906,7 +3120,6 @@ def transaction_purchases(request):
             data.append({'id': p.id, 'purchaseId': p.purchaseid, 'date': p.date, 'vendorName': p.vendorname, 'supplierName': p.vendorname, 'supplier': {'name': p.vendorname}, 'supplier_id': p.supplierid_id, 'supplierId': p.supplierid_id, 'warehouse_id': p.warehouseid_id or '', 'warehouseId': p.warehouseid_id or '', 'grandTotal': p.grandtotal, 'netAmount': p.grandtotal, 'total_amount': p.grandtotal, 'status': p.status, 'companyId': p.companyid_id, 'createdAt': p.createdat, 'updatedAt': p.updatedat, 'challanNumber': p.challannumber or '', 'vehicleNumber': p.vehiclenumber or '', 'vehicle_number': p.vehiclenumber or '', 'totalTax': p.totaltax or 0.0, 'purchaseOrderId': p.purchaseorderid_id or '', 'purchase_order_id': p.purchaseorderid_id or '', 'purchaseOrderNumber': p.purchaseorderid.ponumber if p.purchaseorderid else '', 'items': items_data, 'lineItems': items_data})
         return send_success(data, 'Purchases fetched')
     elif request.method == 'POST':
-        ensure_tenant_db_context(request)
         data = request.data.copy()
         now = timezone.now()
         company_id = getattr(request.user, 'companyId', None) or 'cmo75yliq0000wesurjpett1n'
@@ -4154,158 +3367,133 @@ def transaction_purchase_detail(request, pk):
 @api_view(['GET', 'POST'])
 def transaction_sales(request):
     if request.method == 'GET':
-        from api.db_router import get_current_db
         from api.models import Userwarehouseaccess, Warehouse
-        current_db = get_current_db()
         user_id = request.user.id
         has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()
         assigned_wh_ids = []
         if has_wh_assignments and request.user.role == 'INVENTORY':
             assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
-        all_orders = []
-        if current_db == 'default':
-            wh_qs = Warehouse.objects.filter(active=True)
-            if assigned_wh_ids:
-                wh_qs = wh_qs.filter(id__in=assigned_wh_ids)
-            for wh in wh_qs:
-                if not wh.db_name:
-                    continue
-                orders = Order.objects.using(wh.db_name).all().prefetch_related('orderitem_set__productid')
-                serialized = OrderSerializer(orders, many=True, context={'skip_stock': True}).data
-                for s in serialized:
-                    s['_db_name'] = wh.db_name
-                all_orders.extend(serialized)
-        else:
-            orders = Order.objects.using(current_db).all().prefetch_related('orderitem_set__productid')
-            serialized = OrderSerializer(orders, many=True, context={'skip_stock': True}).data
-            for s in serialized:
-                s['_db_name'] = current_db
-            all_orders.extend(serialized)
+        all_orders = list(Order.objects.all().prefetch_related('orderitem_set__productid'))
+        serialized = OrderSerializer(all_orders, many=True, context={'skip_stock': True}).data
+        
         expanded_sales = []
-        orders_by_db = {}
-        for d in all_orders:
-            db_alias = d.get('_db_name', current_db)
-            orders_by_db.setdefault(db_alias, []).append(d)
+        order_ids = [d['id'] for d in serialized]
+        
+        from api.models import Dispatchlog, Orderitem, Returnlog, Product
+        dispatch_logs_list = list(Dispatchlog.objects.filter(orderid_id__in=order_ids).prefetch_related('items__productid'))
+        return_logs_list = list(Returnlog.objects.filter(orderid_id__in=order_ids).prefetch_related('items'))
+        order_items_list = list(Orderitem.objects.filter(orderid_id__in=order_ids))
+        
+        dl_map = {}
+        for log in dispatch_logs_list:
+            dl_map.setdefault(log.orderid_id, []).append(log)
             
-        for db_alias, orders_list in orders_by_db.items():
-            order_ids = [d['id'] for d in orders_list]
+        rl_map = {}
+        for rl in return_logs_list:
+            rl_map.setdefault(rl.orderid_id, []).append(rl)
             
-            from api.models import Dispatchlog, Orderitem, Returnlog, Product
-            dispatch_logs_list = list(Dispatchlog.objects.using(db_alias).filter(orderid_id__in=order_ids).prefetch_related('items__productid'))
-            return_logs_list = list(Returnlog.objects.using(db_alias).filter(orderid_id__in=order_ids).prefetch_related('items'))
-            order_items_list = list(Orderitem.objects.using(db_alias).filter(orderid_id__in=order_ids))
+        oi_map = {}
+        for oi in order_items_list:
+            oi_map.setdefault(oi.orderid_id, {})[oi.productid_id] = oi
             
-            dl_map = {}
-            for log in dispatch_logs_list:
-                dl_map.setdefault(log.orderid_id, []).append(log)
-                
-            rl_map = {}
-            for rl in return_logs_list:
-                rl_map.setdefault(rl.orderid_id, []).append(rl)
-                
-            oi_map = {}
-            for oi in order_items_list:
-                oi_map.setdefault(oi.orderid_id, {})[oi.productid_id] = oi
-                
-            prod_ids = set()
-            for d in orders_list:
-                for item in d.get('items') or []:
-                    if item.get('productId'): prod_ids.add(item.get('productId'))
-            for log in dispatch_logs_list:
-                for li in log.items.all():
-                    if li.productid_id: prod_ids.add(li.productid_id)
+        prod_ids = set()
+        for d in serialized:
+            for item in d.get('items') or []:
+                if item.get('productId'): prod_ids.add(item.get('productId'))
+        for log in dispatch_logs_list:
+            for li in log.items.all():
+                if li.productid_id: prod_ids.add(li.productid_id)
+        
+        products_list = list(Product.objects.filter(id__in=prod_ids))
+        prod_map = {p.id: p for p in products_list}
             
-            products_list = list(Product.objects.using(db_alias).filter(id__in=prod_ids))
-            prod_map = {p.id: p for p in products_list}
-            
-            for d in orders_list:
-                dispatch_logs = dl_map.get(d['id'], [])
-                if dispatch_logs:
-                    returns = rl_map.get(d['id'], [])
-                    invoice_returns = {}
-                    global_returns = {}
-                    for rl in returns:
-                        import re
-                        match = re.search('\\[INVOICE:\\s*([^\\]]+)\\]', rl.remarks or '')
-                        if match:
-                            inv = match.group(1).strip()
-                            if inv not in invoice_returns:
-                                invoice_returns[inv] = {}
-                            for rli in rl.items.all():
-                                invoice_returns[inv][rli.productid_id] = invoice_returns[inv].get(rli.productid_id, 0) + rli.qty
-                        else:
-                            for rli in rl.items.all():
-                                global_returns[rli.productid_id] = global_returns.get(rli.productid_id, 0) + rli.qty
-                                
-                    dispatch_logs.sort(key=lambda x: (x.dispatchdate, x.createdat), reverse=True)
-                    for log in dispatch_logs:
-                        sale = d.copy()
-                        sale['id'] = log.id
-                        sale['originalOrderId'] = d['id']
-                        sale['invoiceNumber'] = log.invoicenumber
-                        sale['challanNumber'] = log.invoicenumber
-                        sale['date'] = log.dispatchdate.strftime('%Y-%m-%d')
-                        sale['isDispatchLog'] = True
-                        sale['driverMobileNumber'] = log.drivermobile
-                        log_items = log.items.all()
-                        dispatch_items = []
-                        total_amount = 0
-                        total_cost = 0
-                        total_returned = 0
-                        total_dispatched = 0
-                        for li in log_items:
-                            oi = oi_map.get(d['id'], {}).get(li.productid_id)
-                            price = float(oi.price) if oi and oi.price else 0.0
-                            prod = prod_map.get(li.productid_id)
-                            cost_price = float(prod.rate or 0) * 0.7 if prod else 0.0
-                            specific_ret = invoice_returns.get(log.invoicenumber, {}).get(li.productid_id, 0)
-                            rem = li.qty - specific_ret
-                            glob_ret = 0
-                            if rem > 0 and global_returns.get(li.productid_id, 0) > 0:
-                                glob_ret = min(rem, global_returns[li.productid_id])
-                                global_returns[li.productid_id] -= glob_ret
-                            actual_ret = specific_ret + glob_ret
-                            total_returned += actual_ret
-                            total_dispatched += li.qty
-                            dispatch_items.append({'productId': li.productid_id, 'productName': li.productid.name if li.productid else '', 'qty': li.qty, 'price': price, 'total': (li.qty - actual_ret) * price, 'sentQty': li.qty, 'returnedQty': actual_ret})
-                            total_amount += (li.qty - actual_ret) * price
-                            total_cost += (li.qty - actual_ret) * cost_price
-                        sale['items'] = dispatch_items
-                        sale['grandTotal'] = total_amount
-                        sale['netAmount'] = total_amount
-                        sale['totalProfit'] = max(0.0, total_amount - total_cost)
-                        if total_returned >= total_dispatched and total_dispatched > 0:
-                            sale['status'] = 'Returned'
-                        elif total_returned > 0:
-                            sale['status'] = 'Partially Returned'
-                        else:
-                            sale['status'] = 'Completed' if d.get('status') == 'Completed' else 'Dispatched'
-                        expanded_sales.append(sale)
-                else:
-                    narration = d.get('narration') or ''
+        for d in serialized:
+            dispatch_logs = dl_map.get(d['id'], [])
+            if dispatch_logs:
+                returns = rl_map.get(d['id'], [])
+                invoice_returns = {}
+                global_returns = {}
+                for rl in returns:
                     import re
-                    match = re.search('\\[CHALLAN:\\s*([^\\]]+)\\]', narration)
-                    if not match:
-                        match = re.search('\\[INVOICE:\\s*([^\\]]+)\\]', narration)
-                    d['challanNumber'] = match.group(1) if match else ''
-                    d['driverMobileNumber'] = _extract_order_tag(narration, 'DRIVER MOBILE')
-                    d['netAmount'] = d.get('grandTotal') or 0.0
-                    total_profit = 0.0
-                    order_items = d.get('items') or []
-                    for item in order_items:
-                        qty = item.get('qty') or 0
-                        price = item.get('price') or 0.0
-                        prod_id = item.get('productId')
-                        prod = prod_map.get(prod_id)
+                    match = re.search('\\[INVOICE:\\s*([^\\]]+)\\]', rl.remarks or '')
+                    if match:
+                        inv = match.group(1).strip()
+                        if inv not in invoice_returns:
+                            invoice_returns[inv] = {}
+                        for rli in rl.items.all():
+                            invoice_returns[inv][rli.productid_id] = invoice_returns[inv].get(rli.productid_id, 0) + rli.qty
+                    else:
+                        for rli in rl.items.all():
+                            global_returns[rli.productid_id] = global_returns.get(rli.productid_id, 0) + rli.qty
+                            
+                dispatch_logs.sort(key=lambda x: (x.dispatchdate, x.createdat), reverse=True)
+                for log in dispatch_logs:
+                    sale = d.copy()
+                    sale['id'] = log.id
+                    sale['originalOrderId'] = d['id']
+                    sale['invoiceNumber'] = log.invoicenumber
+                    sale['challanNumber'] = log.invoicenumber
+                    sale['date'] = log.dispatchdate.strftime('%Y-%m-%d')
+                    sale['isDispatchLog'] = True
+                    sale['driverMobileNumber'] = log.drivermobile
+                    log_items = log.items.all()
+                    dispatch_items = []
+                    total_amount = 0
+                    total_cost = 0
+                    total_returned = 0
+                    total_dispatched = 0
+                    for li in log_items:
+                        oi = oi_map.get(d['id'], {}).get(li.productid_id)
+                        price = float(oi.price) if oi and oi.price else 0.0
+                        prod = prod_map.get(li.productid_id)
                         cost_price = float(prod.rate or 0) * 0.7 if prod else 0.0
-                        item_revenue = qty * price
-                        item_cost = qty * cost_price
-                        total_profit += item_revenue - item_cost
-                    d['totalProfit'] = max(0.0, total_profit)
-                    expanded_sales.append(d)
+                        specific_ret = invoice_returns.get(log.invoicenumber, {}).get(li.productid_id, 0)
+                        rem = li.qty - specific_ret
+                        glob_ret = 0
+                        if rem > 0 and global_returns.get(li.productid_id, 0) > 0:
+                            glob_ret = min(rem, global_returns[li.productid_id])
+                            global_returns[li.productid_id] -= glob_ret
+                        actual_ret = specific_ret + glob_ret
+                        total_returned += actual_ret
+                        total_dispatched += li.qty
+                        dispatch_items.append({'productId': li.productid_id, 'productName': li.productid.name if li.productid else '', 'qty': li.qty, 'price': price, 'total': (li.qty - actual_ret) * price, 'sentQty': li.qty, 'returnedQty': actual_ret})
+                        total_amount += (li.qty - actual_ret) * price
+                        total_cost += (li.qty - actual_ret) * cost_price
+                    sale['items'] = dispatch_items
+                    sale['grandTotal'] = total_amount
+                    sale['netAmount'] = total_amount
+                    sale['totalProfit'] = max(0.0, total_amount - total_cost)
+                    if total_returned >= total_dispatched and total_dispatched > 0:
+                        sale['status'] = 'Returned'
+                    elif total_returned > 0:
+                        sale['status'] = 'Partially Returned'
+                    else:
+                        sale['status'] = 'Completed' if d.get('status') == 'Completed' else 'Dispatched'
+                    expanded_sales.append(sale)
+            else:
+                narration = d.get('narration') or ''
+                import re
+                match = re.search('\\[CHALLAN:\\s*([^\\]]+)\\]', narration)
+                if not match:
+                    match = re.search('\\[INVOICE:\\s*([^\\]]+)\\]', narration)
+                d['challanNumber'] = match.group(1) if match else ''
+                d['driverMobileNumber'] = _extract_order_tag(narration, 'DRIVER MOBILE')
+                d['netAmount'] = d.get('grandTotal') or 0.0
+                total_profit = 0.0
+                order_items = d.get('items') or []
+                for item in order_items:
+                    qty = item.get('qty') or 0
+                    price = item.get('price') or 0.0
+                    prod_id = item.get('productId')
+                    prod = prod_map.get(prod_id)
+                    cost_price = float(prod.rate or 0) * 0.7 if prod else 0.0
+                    item_revenue = qty * price
+                    item_cost = qty * cost_price
+                    total_profit += item_revenue - item_cost
+                d['totalProfit'] = max(0.0, total_profit)
+                expanded_sales.append(d)
         return send_success(expanded_sales, 'Sales transactions fetched')
     elif request.method == 'POST':
-        ensure_tenant_db_context(request)
         data = request.data.copy()
         if not data.get('companyId') and _get_company_id(request):
             data['companyId'] = _get_company_id(request)
@@ -4367,9 +3555,7 @@ def transaction_sales_detail(request, pk):
 
 @api_view(['GET'])
 def transaction_approvals(request):
-    from api.db_router import get_current_db
     from api.models import Userwarehouseaccess, Warehouse, Order
-    current_db = get_current_db()
     user_id = request.user.id
     has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()
     assigned_wh_ids = []
@@ -4377,22 +3563,10 @@ def transaction_approvals(request):
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
     company_id = getattr(request.user, 'companyid_id', getattr(request.user, 'companyId', None))
     all_approvals = []
-    if current_db == 'default':
-        wh_qs = Warehouse.objects.filter(active=True)
-        if assigned_wh_ids:
-            wh_qs = wh_qs.filter(id__in=assigned_wh_ids)
-        for wh in wh_qs:
-            if not wh.db_name:
-                continue
-            qs = Order.objects.using(wh.db_name).all()
-            if company_id:
-                qs = qs.filter(companyid_id=company_id)
-            all_approvals.extend(OrderSerializer(qs, many=True, context={'skip_stock': True}).data)
-    else:
-        qs = Order.objects.using(current_db).all()
-        if company_id:
-            qs = qs.filter(companyid_id=company_id)
-        all_approvals.extend(OrderSerializer(qs, many=True, context={'skip_stock': True}).data)
+    qs = Order.objects.all()
+    if company_id:
+        qs = qs.filter(companyid_id=company_id)
+    all_approvals.extend(OrderSerializer(qs, many=True, context={'skip_stock': True}).data)
     mapped_approvals = []
     for order in all_approvals:
         mapped_approvals.append({'id': order.get('id'), 'type': 'SALES_ORDER', 'referenceId': order.get('orderId'), 'customerName': order.get('partyName'), 'soName': order.get('soEmail'), 'grandTotal': order.get('grandTotal'), 'status': order.get('status') or 'Pending', 'createdAt': order.get('createdAt'), 'warehouseId': order.get('assignedWarehouse')})
@@ -4416,15 +3590,13 @@ def transaction_approval_detail(request, pk):
 def transaction_approve(request, pk):
     if pk.startswith('st_'):
         from api.models import Stocktransaction
-        from api.db_router import get_current_db, set_current_db
         from api.models import Warehouse
-        current_db = get_current_db()
         st = None
         st_wh = None
         for wh in Warehouse.objects.filter(active=True):
             if not wh.db_name: continue
             try:
-                st = Stocktransaction.objects.using(wh.db_name).get(id=pk)
+                st = Stocktransaction.objects.get(id=pk)
                 st_wh = wh
                 break
             except Stocktransaction.DoesNotExist:
@@ -4433,8 +3605,7 @@ def transaction_approve(request, pk):
                 pass
                 
             try:
-                # also check for referenceid if it's the CONSUMED parts
-                sts = Stocktransaction.objects.using(wh.db_name).filter(referenceid=pk)
+                sts = Stocktransaction.objects.filter(referenceid=pk)
                 if sts.exists():
                     st = sts.first()
                     st_wh = wh
@@ -4445,11 +3616,9 @@ def transaction_approve(request, pk):
         if not st:
             return send_error('Production transaction not found', 404)
             
-        # Approve production
-        # Find all related transactions (PRODUCTION and CONSUMED) and clear the reason
         try:
-            Stocktransaction.objects.using(st_wh.db_name).filter(id=pk).update(reason='')
-            Stocktransaction.objects.using(st_wh.db_name).filter(referenceid=pk).update(reason='')
+            Stocktransaction.objects.filter(id=pk).update(reason='')
+            Stocktransaction.objects.filter(referenceid=pk).update(reason='')
         except Exception as e:
             pass
         return send_success({'id': pk, 'status': 'Approved'}, 'Production approved successfully')
@@ -4495,14 +3664,14 @@ def transaction_dispatch(request, pk):
         warehouse_name = str(warehouse_id)
         warehouse = None
         
-    if warehouse and warehouse.db_name:
+    if warehouse:
         from api.serializers import ProductSerializer
         from api.models import Product
         shortages = []
         for item in order.orderitem_set.all():
             if item.productid_id:
                 try:
-                    prod = Product.objects.using(warehouse.db_name).get(id=item.productid_id)
+                    prod = Product.objects.get(id=item.productid_id)
                     serializer = ProductSerializer(prod, context={'warehouse': warehouse})
                     avail = float(serializer.data.get('availableStock') or 0)
                     if avail < float(item.qty or 0):
@@ -4538,15 +3707,13 @@ def transaction_dispatch(request, pk):
 def transaction_reject(request, pk):
     if pk.startswith('st_'):
         from api.models import Stocktransaction
-        from api.db_router import get_current_db
         from api.models import Warehouse
-        current_db = get_current_db()
         st = None
         st_wh = None
         for wh in Warehouse.objects.filter(active=True):
             if not wh.db_name: continue
             try:
-                st = Stocktransaction.objects.using(wh.db_name).get(id=pk)
+                st = Stocktransaction.objects.get(id=pk)
                 st_wh = wh
                 break
             except Stocktransaction.DoesNotExist:
@@ -4555,7 +3722,7 @@ def transaction_reject(request, pk):
                 pass
                 
             try:
-                sts = Stocktransaction.objects.using(wh.db_name).filter(referenceid=pk)
+                sts = Stocktransaction.objects.filter(referenceid=pk)
                 if sts.exists():
                     st = sts.first()
                     st_wh = wh
@@ -4566,10 +3733,9 @@ def transaction_reject(request, pk):
         if not st:
             return send_error('Production transaction not found', 404)
             
-        # Reject production
         try:
-            Stocktransaction.objects.using(st_wh.db_name).filter(id=pk).update(reason='REJECTED')
-            Stocktransaction.objects.using(st_wh.db_name).filter(referenceid=pk).update(reason='REJECTED')
+            Stocktransaction.objects.filter(id=pk).update(reason='REJECTED')
+            Stocktransaction.objects.filter(referenceid=pk).update(reason='REJECTED')
         except Exception as e:
             pass
         return send_success({'id': pk, 'status': 'Rejected'}, 'Production rejected successfully')
@@ -4589,26 +3755,19 @@ def transaction_reject(request, pk):
     except Order.DoesNotExist:
         return send_error('Order not found', 404)
 
-def resolve_product_for_db(prod_id, target_db):
+def resolve_product_for_db(prod_id, target_db=None):
     if not prod_id:
         return None
     from api.models import Product
     try:
-        return Product.objects.using(target_db).get(id=prod_id)
+        return Product.objects.get(id=prod_id)
     except Product.DoesNotExist:
         pass
-    from api.db_router import get_tenant_model_cross_db, get_current_db, set_current_db
     try:
-        orig_db = get_current_db()
-        cross_prod = get_tenant_model_cross_db(Product, prod_id)
-        if cross_prod:
-            res_prod = Product.objects.using(target_db).filter(productcode=cross_prod.productcode).first()
-            if orig_db:
-                set_current_db(orig_db)
-            return res_prod
-        if orig_db:
-            set_current_db(orig_db)
-    except Exception:
+        p = Product.objects.get(productcode=prod_id)
+        if p:
+            return p
+    except (Product.DoesNotExist, Exception):
         pass
     return None
 
@@ -4616,8 +3775,6 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
     from api.models import Product, Warehouse, Bom, Bomitem
     from django.db import connections
     wh = resolve_warehouse(wh_id)
-    if not wh or not wh.db_name:
-        return []
     consumptions = []
     if custom_items is not None and isinstance(custom_items, list):
         for item in custom_items:
@@ -4627,20 +3784,20 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
             except (ValueError, TypeError):
                 item_qty = 0.0
             if item_prod_id and item_qty > 0:
-                p = resolve_product_for_db(item_prod_id, wh.db_name)
+                p = resolve_product_for_db(item_prod_id)
                 if p:
                     consumptions.append({'product_id': p.id, 'name': p.name, 'qty': item_qty})
     else:
         try:
-            prod = resolve_product_for_db(prod_id, wh.db_name)
+            prod = resolve_product_for_db(prod_id)
             if prod:
-                bom = Bom.objects.using(wh.db_name).filter(productcode=prod.productcode).first()
+                bom = Bom.objects.filter(productcode=prod.productcode).first()
                 if not bom:
-                    bom = Bom.objects.using(wh.db_name).filter(name=prod.name).first()
+                    bom = Bom.objects.filter(name=prod.name).first()
                 if bom:
-                    bom_items = Bomitem.objects.using(wh.db_name).filter(bomid=bom)
+                    bom_items = Bomitem.objects.filter(bomid=bom)
                     for b_item in bom_items:
-                        m_prod = Product.objects.using(wh.db_name).filter(name=b_item.materialname).first()
+                        m_prod = Product.objects.filter(name=b_item.materialname).first()
                         if m_prod:
                             consumptions.append({'product_id': m_prod.id, 'name': m_prod.name, 'qty': b_item.qty * yield_qty})
         except Exception:
@@ -4649,19 +3806,17 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
     if not consumptions:
         return []
     
-    # Bulk fetch current stock for consumed products in this warehouse
     from api.models import Product, Purchaseitem, Orderitem, Stocktransaction
     from django.db.models import Sum
     pids = [c['product_id'] for c in consumptions]
-    prods = Product.objects.using(wh.db_name).filter(id__in=pids)
+    prods = Product.objects.filter(id__in=pids)
     
     stock_map = {}
     name_to_id = {p.name: p.id for p in prods}
     for p in prods:
         stock_map[p.id] = float(p.openingstock or 0)
         
-    # Bulk aggregates
-    purchases = Purchaseitem.objects.using(wh.db_name).filter(
+    purchases = Purchaseitem.objects.filter(
         purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED'],
         productname__in=[p.name for p in prods]
     ).values('productname').annotate(total=Sum('qty'))
@@ -4669,7 +3824,7 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
         pid = name_to_id.get(row['productname'])
         if pid: stock_map[pid] += float(row['total'] or 0)
         
-    purchase_ret = Purchaseitem.objects.using(wh.db_name).filter(
+    purchase_ret = Purchaseitem.objects.filter(
         purchaseid__status='Returned',
         productname__in=[p.name for p in prods]
     ).values('productname').annotate(total=Sum('qty'))
@@ -4677,7 +3832,7 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
         pid = name_to_id.get(row['productname'])
         if pid: stock_map[pid] -= float(row['total'] or 0)
         
-    sales = Orderitem.objects.using(wh.db_name).filter(
+    sales = Orderitem.objects.filter(
         orderid__status='Completed',
         productid_id__in=pids
     ).values('productid_id').annotate(total=Sum('qty'))
@@ -4685,7 +3840,7 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
         pid = row['productid_id']
         stock_map[pid] -= float(row['total'] or 0)
         
-    sales_ret = Orderitem.objects.using(wh.db_name).filter(
+    sales_ret = Orderitem.objects.filter(
         orderid__status='Returned',
         productid_id__in=pids
     ).values('productid_id').annotate(total=Sum('qty'))
@@ -4693,7 +3848,7 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
         pid = row['productid_id']
         stock_map[pid] += float(row['total'] or 0)
         
-    st_aggs = Stocktransaction.objects.using(wh.db_name).exclude(
+    st_aggs = Stocktransaction.objects.exclude(
         reason__in=['PENDING_APPROVAL', 'REJECTED']
     ).filter(productid_id__in=pids).values('productid_id').annotate(total=Sum('quantity'))
     for row in st_aggs:
@@ -4709,7 +3864,7 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
         old_consumed = 0.0
         if existing_prod_id:
             try:
-                with connections[wh.db_name].cursor() as cursor:
+                with connection.cursor() as cursor:
                     cursor.execute("\n                        SELECT quantity FROM StockTransaction \n                        WHERE referenceId = %s AND transactionType = 'CONSUMED' AND productId = %s\n                    ", (existing_prod_id, pid))
                     row = cursor.fetchone()
                     if row:
@@ -4735,11 +3890,9 @@ def transaction_productions(request):
     if request.method == 'GET':
         rows = []
         for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name:
-                continue
             if assigned_wh_ids and wh.id not in assigned_wh_ids:
                 continue
-            transactions = Stocktransaction.objects.using(wh.db_name).filter(transactiontype='PRODUCTION').prefetch_related('productid')
+            transactions = Stocktransaction.objects.filter(transactiontype='PRODUCTION').prefetch_related('productid')
             for st in transactions:
                 st_status = 'Pending' if st.reason == 'PENDING_APPROVAL' else 'Rejected' if st.reason == 'REJECTED' else 'Approved'
                 rows.append({'id': st.id, 'productId': st.productid.id, 'finishedProductName': st.productid.name, 'warehouseId': wh.id, 'warehouseName': wh.name, 'quantityProduced': st.quantity, 'status': st_status, 'createdAt': st.createdat.isoformat() if st.createdat else None})
@@ -4754,11 +3907,11 @@ def transaction_productions(request):
         except ValueError:
             wh_id = 1
         wh = resolve_warehouse(wh_id)
-        if not wh or not wh.db_name:
+        if not wh:
             return Response({'success': False, 'message': 'Invalid warehouse'}, status=status.HTTP_400_BAD_REQUEST)
         st_id = 'st_' + uuid.uuid4().hex[:20]
         now = timezone.now()
-        product = resolve_product_for_db(prod_id, wh.db_name)
+        product = resolve_product_for_db(prod_id)
         if not product:
             return Response({'success': False, 'message': 'Product not found'}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -4768,49 +3921,44 @@ def transaction_productions(request):
             
         st_reason = 'PENDING_APPROVAL'
         
-        with transaction.atomic(using=wh.db_name):
-            Stocktransaction.objects.using(wh.db_name).create(id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='PRODUCTION', quantity=qty_produced, referenceid='PROD', reason=st_reason, createdat=now)
-            custom_items = data.get('items')
-            if custom_items is not None and isinstance(custom_items, list):
-                # Bulk fetch products
-                prod_ids = [item.get('productId') or item.get('product_id') for item in custom_items if (item.get('productId') or item.get('product_id'))]
-                fetched_prods = Product.objects.using(wh.db_name).filter(id__in=prod_ids)
-                prod_map = {str(p.id): p for p in fetched_prods}
+        Stocktransaction.objects.create(id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='PRODUCTION', quantity=qty_produced, referenceid='PROD', reason=st_reason, createdat=now)
+        custom_items = data.get('items')
+        if custom_items is not None and isinstance(custom_items, list):
+            prod_ids = [item.get('productId') or item.get('product_id') for item in custom_items if (item.get('productId') or item.get('product_id'))]
+            fetched_prods = Product.objects.filter(id__in=prod_ids)
+            prod_map = {str(p.id): p for p in fetched_prods}
 
-                st_creates = []
-                for item in custom_items:
-                    item_prod_id = item.get('productId') or item.get('product_id')
-                    try:
-                        item_qty = float(item.get('quantity') or item.get('qty') or 0)
-                    except (ValueError, TypeError):
-                        item_qty = 0.0
-                    if item_prod_id and item_qty > 0:
-                        item_prod = prod_map.get(str(item_prod_id))
-                        if item_prod:
-                            st_creates.append(Stocktransaction(
-                                id='st_' + uuid.uuid4().hex[:20], 
-                                productid=item_prod, 
-                                warehouseid_id=wh.id, 
-                                transactiontype='CONSUMED', 
-                                quantity=-item_qty, 
-                                referenceid=st_id, 
-                                reason=st_reason, 
-                                createdat=now
-                            ))
-                if st_creates:
-                    Stocktransaction.objects.using(wh.db_name).bulk_create(st_creates)
+            st_creates = []
+            for item in custom_items:
+                item_prod_id = item.get('productId') or item.get('product_id')
+                try:
+                    item_qty = float(item.get('quantity') or item.get('qty') or 0)
+                except (ValueError, TypeError):
+                    item_qty = 0.0
+                if item_prod_id and item_qty > 0:
+                    item_prod = prod_map.get(str(item_prod_id))
+                    if item_prod:
+                        st_creates.append(Stocktransaction(
+                            id='st_' + uuid.uuid4().hex[:20], 
+                            productid=item_prod, 
+                            warehouseid_id=wh.id, 
+                            transactiontype='CONSUMED', 
+                            quantity=-item_qty, 
+                            referenceid=st_id, 
+                            reason=st_reason, 
+                            createdat=now
+                        ))
+            if st_creates:
+                Stocktransaction.objects.bulk_create(st_creates)
         return send_success({'id': st_id, **data}, 'Production recorded')
 
 @api_view(['GET'])
 def transaction_production_materials(request, pk):
     from api.models import Stocktransaction, Product, Warehouse
     materials = []
-    for wh in Warehouse.objects.filter(active=True):
-        if not wh.db_name:
-            continue
-        sts = Stocktransaction.objects.using(wh.db_name).filter(referenceid=pk, transactiontype='CONSUMED').prefetch_related('productid', 'productid__unitid')
-        for st in sts:
-            materials.append({'productId': st.productid.id if st.productid else st.productid_id, 'productName': st.productid.name if st.productid else 'Unknown', 'quantity': abs(st.quantity), 'unit': st.productid.unitid.name if st.productid and st.productid.unitid else 'KG'})
+    sts = Stocktransaction.objects.filter(referenceid=pk, transactiontype='CONSUMED').prefetch_related('productid', 'productid__unitid')
+    for st in sts:
+        materials.append({'productId': st.productid.id if st.productid else st.productid_id, 'productName': st.productid.name if st.productid else 'Unknown', 'quantity': abs(st.quantity), 'unit': st.productid.unitid.name if st.productid and st.productid.unitid else 'KG'})
     return send_success(materials, 'Production materials fetched')
 
 @api_view(['PUT', 'DELETE'])
@@ -4830,9 +3978,9 @@ def transaction_productions_detail(request, pk):
         except ValueError:
             wh_id = 1
         wh = resolve_warehouse(wh_id)
-        if not wh or not wh.db_name:
+        if not wh:
             return Response({'success': False, 'message': 'Invalid warehouse'}, status=status.HTTP_400_BAD_REQUEST)
-        prod = resolve_product_for_db(prod_id, wh.db_name)
+        prod = resolve_product_for_db(prod_id)
         if not prod:
             return Response({'success': False, 'message': 'Product not found'}, status=status.HTTP_400_BAD_REQUEST)
         negatives = check_negative_raw_materials(prod_id, qty_produced, wh_id, data.get('items'), pk)
@@ -4849,8 +3997,8 @@ def transaction_productions_detail(request, pk):
             now_str = timezone.now()
         old_product_ids = set()
         new_product_ids = {prod.id}
-        with transaction.atomic(using=wh.db_name):
-            sts = Stocktransaction.objects.using(wh.db_name).filter(Q(id=pk) | Q(referenceid=pk))
+        with transaction.atomic():
+            sts = Stocktransaction.objects.filter(Q(id=pk) | Q(referenceid=pk))
             old_product_ids.update(sts.values_list('productid_id', flat=True))
             try:
                 main_st = sts.get(id=pk)
@@ -4871,9 +4019,9 @@ def transaction_productions_detail(request, pk):
                     except (ValueError, TypeError):
                         item_qty = 0.0
                     if item_prod_id and item_qty > 0:
-                        item_prod = resolve_product_for_db(item_prod_id, wh.db_name)
+                        item_prod = resolve_product_for_db(item_prod_id)
                         if item_prod:
-                            Stocktransaction.objects.using(wh.db_name).create(id='st_' + uuid.uuid4().hex[:20], productid=item_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-item_qty, referenceid=pk, createdat=now_str)
+                            Stocktransaction.objects.create(id='st_' + uuid.uuid4().hex[:20], productid=item_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-item_qty, referenceid=pk, createdat=now_str)
                             new_product_ids.add(item_prod.id)
             else:
                 try:
@@ -4882,9 +4030,9 @@ def transaction_productions_detail(request, pk):
                         bom = Bom.objects.filter(name=prod.name).first()
                     if bom:
                         for b_item in Bomitem.objects.filter(bomid=bom):
-                            m_prod = Product.objects.using(wh.db_name).filter(name=b_item.materialname).first()
+                            m_prod = Product.objects.filter(name=b_item.materialname).first()
                             if m_prod:
-                                Stocktransaction.objects.using(wh.db_name).create(id='st_' + uuid.uuid4().hex[:20], productid=m_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-(b_item.qty * qty_produced), referenceid=pk, createdat=now_str)
+                                Stocktransaction.objects.create(id='st_' + uuid.uuid4().hex[:20], productid=m_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-(b_item.qty * qty_produced), referenceid=pk, createdat=now_str)
                                 new_product_ids.add(m_prod.id)
                 except Exception as e:
                     print('Error updating BOM consumption:', e)
@@ -4893,19 +4041,15 @@ def transaction_productions_detail(request, pk):
                     pass
         return send_success({'id': pk, **data}, 'Production updated')
     elif request.method == 'DELETE':
-        for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name:
-                continue
-            from django.db.models import Q
-            sts = Stocktransaction.objects.using(wh.db_name).filter(Q(id=pk) | Q(referenceid=pk))
-            if sts.exists():
-                product_ids = set(sts.values_list('productid_id', flat=True))
-                with transaction.atomic(using=wh.db_name):
-                    sts.delete()
-                    for p_id in product_ids:
-                        if p_id:
-                            pass
-                break
+        from django.db.models import Q
+        sts = Stocktransaction.objects.filter(Q(id=pk) | Q(referenceid=pk))
+        if sts.exists():
+            product_ids = set(sts.values_list('productid_id', flat=True))
+            with transaction.atomic():
+                sts.delete()
+                for p_id in product_ids:
+                    if p_id:
+                        pass
         return send_success(None, 'Production run deleted successfully')
 
 @api_view(['GET', 'POST'])
@@ -4922,16 +4066,13 @@ def transaction_adjustments(request):
     if request.method == 'GET':
         rows = []
         for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name:
-                continue
             if assigned_wh_ids and wh.id not in assigned_wh_ids:
                 continue
-            transactions = Stocktransaction.objects.using(wh.db_name).filter(transactiontype='ADJUSTMENT').prefetch_related('productid')
+            transactions = Stocktransaction.objects.filter(transactiontype='ADJUSTMENT').prefetch_related('productid')
             for st in transactions:
                 rows.append({'id': st.id, 'productId': st.productid.id, 'productName': st.productid.name, 'warehouseId': wh.id, 'warehouseName': wh.name, 'quantityChange': st.quantity, 'reason': st.reason, 'createdAt': st.createdat.isoformat() if st.createdat else None})
         return send_success(rows, 'Adjustments fetched')
     elif request.method == 'POST':
-        ensure_tenant_db_context(request)
         data = request.data.copy()
         prod_id = data.get('productId')
         qty_change = float(data.get('quantityChange') or 0)
@@ -4942,18 +4083,17 @@ def transaction_adjustments(request):
         except ValueError:
             wh_id = 1
         wh = resolve_warehouse(wh_id)
-        if not wh or not wh.db_name:
+        if not wh:
             return Response({'success': False, 'message': 'Invalid warehouse'}, status=status.HTTP_400_BAD_REQUEST)
         st_id = 'st_' + uuid.uuid4().hex[:20]
         now = timezone.now()
-        product = resolve_product_for_db(prod_id, wh.db_name)
+        product = resolve_product_for_db(prod_id)
         if not product:
             return Response({'success': False, 'message': 'Product not found'}, status=status.HTTP_400_BAD_REQUEST)
-        with transaction.atomic(using=wh.db_name):
-            Stocktransaction.objects.using(wh.db_name).create(id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='ADJUSTMENT', quantity=qty_change, reason=reason, createdat=now)
-            pass # Legacy Inventory table removed
-            pass # Legacy Inventory table removed
-            pass # Legacy Inventory table removed
+        Stocktransaction.objects.create(id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='ADJUSTMENT', quantity=qty_change, reason=reason, createdat=now)
+        pass # Legacy Inventory table removed
+        pass # Legacy Inventory table removed
+        pass # Legacy Inventory table removed
         return send_success({'id': st_id, **data}, 'Adjustment recorded')
 
 @api_view(['PUT', 'DELETE'])
@@ -4964,13 +4104,11 @@ def transaction_adjustments_detail(request, pk):
         return send_success({'id': pk, **request.data}, 'Adjustment updated')
     elif request.method == 'DELETE':
         for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name:
-                continue
             try:
-                st = Stocktransaction.objects.using(wh.db_name).get(id=pk, transactiontype='ADJUSTMENT')
+                st = Stocktransaction.objects.get(id=pk, transactiontype='ADJUSTMENT')
                 qty_to_reverse = st.quantity
                 prod = st.productid
-                with transaction.atomic(using=wh.db_name):
+                with transaction.atomic():
                     st.delete()
                     pass
                 break
@@ -4995,9 +4133,7 @@ def transaction_attendance_detail(request, pk):
 @api_view(['GET', 'POST'])
 def transaction_returns(request):
     if request.method == 'GET':
-        from api.db_router import get_current_db
-        from api.models import Userwarehouseaccess, Warehouse, Purchase
-        current_db = get_current_db()
+        from api.models import Userwarehouseaccess, Purchase
         user_id = request.user.id
         has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()
         assigned_wh_ids = []
@@ -5005,12 +4141,12 @@ def transaction_returns(request):
             assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
         all_returns = []
 
-        def process_sales_returns(orders_qs, db_name):
+        def process_sales_returns(orders_qs):
             from api.serializers import OrderSerializer
             from api.models import Returnlog
             serialized = OrderSerializer(orders_qs, many=True, context={'skip_stock': True}).data
             order_ids = [o.id for o in orders_qs]
-            returns_qs = Returnlog.objects.using(db_name).filter(orderid__in=order_ids).prefetch_related('items__productid')
+            returns_qs = Returnlog.objects.filter(orderid__in=order_ids).prefetch_related('items__productid')
             returns_by_order = {}
             for rl in returns_qs:
                 if rl.orderid_id not in returns_by_order:
@@ -5077,7 +4213,7 @@ def transaction_returns(request):
                     d['vehicleNumber'] = _extract_order_tag(narration, 'RETURN VEHICLE') or _extract_order_tag(narration, 'VEHICLE')
                     all_returns.append(d)
 
-        def append_purchases(purchases_qs, db_name):
+        def append_purchases(purchases_qs):
             for p in purchases_qs:
                 n = p.narration or ''
                 orig = p
@@ -5093,40 +4229,20 @@ def transaction_returns(request):
                 for item in p.purchaseitem_set.all():
                     items.append({'productName': item.productname, 'qty': float(item.qty or 0), 'originalQty': orig_qtys.get(item.productname, 0), 'rate': float(item.rate or 0), 'total': float(item.total or 0)})
                 all_returns.append({'type': 'Purchase Return', 'challanNumber': _extract_order_tag(n, 'PURCHASE RETURN BILL') or p.challannumber or '', 'originalBillNumber': orig.challannumber if orig.challannumber else '', 'originalVehicleNumber': orig.vehiclenumber if orig.vehiclenumber else '', 'originalDate': str(orig.date) if orig.date else '', 'vehicleNumber': _extract_order_tag(n, 'RETURN VEHICLE') or p.vehiclenumber or '', 'netAmount': float(p.grandtotal or 0.0), 'returnDate': _extract_order_tag(n, 'RETURN DATE') or str(p.date), 'returnReason': _extract_order_tag(n, 'RETURN REASON') or '', 'createdAt': p.createdat, 'id': p.id, 'purchaseId': p.purchaseid, 'party': supplier, 'items': items})
-        if current_db == 'default':
-            wh_qs = Warehouse.objects.filter(active=True)
-            if assigned_wh_ids:
-                wh_qs = wh_qs.filter(id__in=assigned_wh_ids)
-            for wh in wh_qs:
-                if not wh.db_name:
-                    continue
-                from django.db.models import Q
-                from api.models import Returnlog
-                try:
-                    returned_order_ids = list(Returnlog.objects.using(wh.db_name).values_list('orderid_id', flat=True).distinct())
-                except Exception:
-                    returned_order_ids = []
-                orders = Order.objects.using(wh.db_name).filter(
-                    Q(status__in=['Returned', 'Partially Returned']) | Q(id__in=returned_order_ids)
-                ).prefetch_related('orderitem_set__productid')
-                process_sales_returns(orders, wh.db_name)
-                purchases = Purchase.objects.using(wh.db_name).filter(status__in=['Returned', 'Partially Returned']).prefetch_related('purchaseitem_set')
-                append_purchases(purchases, wh.db_name)
-        else:
-            from django.db.models import Q
-            from api.models import Returnlog
-            try:
-                returned_order_ids = list(Returnlog.objects.using(current_db).values_list('orderid_id', flat=True).distinct())
-            except Exception:
-                returned_order_ids = []
-            orders = Order.objects.using(current_db).filter(
-                Q(status__in=['Returned', 'Partially Returned']) | Q(id__in=returned_order_ids)
-            ).prefetch_related('orderitem_set__productid')
-            process_sales_returns(orders, current_db)
-            purchases = Purchase.objects.using(current_db).filter(status__in=['Returned', 'Partially Returned']).prefetch_related('purchaseitem_set')
-            if assigned_wh_ids:
-                purchases = purchases.filter(warehouseid_id__in=assigned_wh_ids)
-            append_purchases(purchases, current_db)
+        from django.db.models import Q
+        from api.models import Returnlog
+        try:
+            returned_order_ids = list(Returnlog.objects.values_list('orderid_id', flat=True).distinct())
+        except Exception:
+            returned_order_ids = []
+        orders = Order.objects.filter(
+            Q(status__in=['Returned', 'Partially Returned']) | Q(id__in=returned_order_ids)
+        ).prefetch_related('orderitem_set__productid')
+        process_sales_returns(orders)
+        purchases = Purchase.objects.filter(status__in=['Returned', 'Partially Returned']).prefetch_related('purchaseitem_set')
+        if assigned_wh_ids:
+            purchases = purchases.filter(warehouseid_id__in=assigned_wh_ids)
+        append_purchases(purchases)
         return send_success(all_returns, 'Returns fetched')
     data = request.data.copy()
     return_type = data.get('returnType', 'SALE').upper()
@@ -5135,66 +4251,22 @@ def transaction_returns(request):
     if not order_id:
         return send_error('Order/Purchase id is required', 400)
     try:
-        from api.db_router import get_current_db, set_current_db
-        from api.models import Warehouse, Purchase
-        curr_db = get_current_db()
-        if curr_db != 'default':
-            if is_purchase:
-                order = Purchase.objects.using(curr_db).prefetch_related('purchaseitem_set').get(id=order_id)
-            else:
-                order = Order.objects.using(curr_db).prefetch_related('orderitem_set').get(id=order_id)
-            set_current_db(curr_db)
+        from api.models import Purchase
+        if is_purchase:
+            order = Purchase.objects.prefetch_related('purchaseitem_set').get(id=order_id)
         else:
-            found = False
-            from django.db import connection
+            order = Order.objects.prefetch_related('orderitem_set').get(id=order_id)
+    except (Order.DoesNotExist, Purchase.DoesNotExist):
+        if is_purchase:
             try:
-                if is_purchase:
-                    order = Purchase.objects.using('default').prefetch_related('purchaseitem_set').get(id=order_id)
-                else:
-                    order = Order.objects.using('default').prefetch_related('orderitem_set').get(id=order_id)
-                order._state.db = 'default'
-                set_current_db('default')
-                found = True
-            except Exception:
-                pass
-            
-            if not found:
-                for wh in Warehouse.objects.filter(active=True):
-                    if not wh.db_name:
-                        continue
-                    try:
-                        if is_purchase:
-                            order = Purchase.objects.using(wh.db_name).prefetch_related('purchaseitem_set').get(id=order_id)
-                        else:
-                            order = Order.objects.using(wh.db_name).prefetch_related('orderitem_set').get(id=order_id)
-                        order._state.db = wh.db_name
-                        set_current_db(wh.db_name)
-                        connection.set_tenant(wh)
-                        found = True
-                        break
-                    except Exception:
-                        pass
-            if not found:
-                for wh in Warehouse.objects.filter(active=True):
-                    if not wh.db_name:
-                        continue
-                    try:
-                        if is_purchase:
-                            order = Purchase.objects.using(wh.db_name).prefetch_related('purchaseitem_set').get(purchaseid=order_id)
-                        else:
-                            order = Order.objects.using(wh.db_name).prefetch_related('orderitem_set').get(orderid=order_id)
-                        order._state.db = wh.db_name
-                        set_current_db(wh.db_name)
-                        connection.set_tenant(wh)
-                        found = True
-                        break
-                    except Exception:
-                        pass
-            if not found:
-                if is_purchase:
-                    raise Purchase.DoesNotExist()
-                else:
-                    raise Order.DoesNotExist()
+                order = Purchase.objects.prefetch_related('purchaseitem_set').get(purchaseid=order_id)
+            except Purchase.DoesNotExist:
+                return send_error(f"{'Purchase' if is_purchase else 'Sale'} order not found", 404)
+        else:
+            try:
+                order = Order.objects.prefetch_related('orderitem_set').get(orderid=order_id)
+            except Order.DoesNotExist:
+                return send_error(f"{'Purchase' if is_purchase else 'Sale'} order not found", 404)
     except (Order.DoesNotExist, Purchase.DoesNotExist):
         return send_error(f"{('Purchase' if is_purchase else 'Sale')} order not found", 404)
     vehicle_number = str(data.get('vehicleNumber') or data.get('vehicle_number') or '').strip().upper()
@@ -5238,35 +4310,18 @@ def transaction_purchase_orders(request):
     from django.utils import timezone
     import uuid
     if request.method == 'GET':
-        from api.db_router import get_current_db
         from api.models import Userwarehouseaccess, Warehouse
-        current_db = get_current_db()
         user_id = request.user.id
         has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()
         assigned_wh_ids = []
         if has_wh_assignments and request.user.role == 'INVENTORY':
             assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
-        all_orders = []
-        if current_db == 'default':
-            wh_qs = Warehouse.objects.filter(active=True)
-            if assigned_wh_ids:
-                wh_qs = wh_qs.filter(id__in=assigned_wh_ids)
-            for wh in wh_qs:
-                if not wh.db_name:
-                    continue
-                orders = Purchaseorder.objects.using(wh.db_name).prefetch_related('purchaseorderitem_set')
-                all_orders.extend(PurchaseorderSerializer(orders, many=True, context={'skip_stock': True}).data)
-        else:
-            orders = Purchaseorder.objects.using(current_db).prefetch_related('purchaseorderitem_set')
-            if assigned_wh_ids:
-                assigned_wh_str_ids = [str(w) for w in assigned_wh_ids]
-                orders = orders.filter(warehouseid__in=assigned_wh_str_ids)
-            all_orders.extend(PurchaseorderSerializer(orders, many=True, context={'skip_stock': True}).data)
-        return send_success(all_orders, 'Purchase orders fetched')
+        all_orders = list(Purchaseorder.objects.prefetch_related('purchaseorderitem_set'))
+        all_orders_serialized = PurchaseorderSerializer(all_orders, many=True, context={'skip_stock': True}).data
+        return send_success(all_orders_serialized, 'Purchase orders fetched')
     elif request.method == 'POST':
         data = request.data.copy()
         now = timezone.now()
-        from api.db_router import get_current_db
         from api.views import resolve_warehouse
         wh_id = data.get('warehouse_id') or data.get('warehouseId') or 1
         try:
@@ -5274,11 +4329,11 @@ def transaction_purchase_orders(request):
         except ValueError:
             wh_id = 1
         wh = resolve_warehouse(wh_id)
-        if not wh or not wh.db_name:
+        if not wh:
             return send_error('Invalid warehouse', 400)
         company_id = getattr(request.user, 'companyId', None) or 'cmo75yliq0000wesurjpett1n'
         data['companyId'] = company_id
-        po_count = Purchaseorder.objects.using(wh.db_name).count() + 1
+        po_count = Purchaseorder.objects.count() + 1
         po_num = f'PO-{now.year}-{po_count:05d}'
         po_id = 'po_' + uuid.uuid4().hex[:20]
         supplier_id = data.get('supplier_id') or data.get('supplierId')
@@ -5295,14 +4350,14 @@ def transaction_purchase_orders(request):
             line_total = qty * rate * (1 + tax_p / 100)
             net_amount += line_total
             total_tax += qty * rate * tax_p / 100
-        po_obj = Purchaseorder.objects.using(wh.db_name).create(id=po_id, ponumber=po_num, date=now, expecteddate=expected_date or None, supplierid_id=supplier_id, warehouseid=wh.id, netamount=net_amount, totaltax=total_tax, status=status, remarks=remarks, companyid_id=company_id, createdat=now, updatedat=now)
+        po_obj = Purchaseorder.objects.create(id=po_id, ponumber=po_num, date=now, expecteddate=expected_date or None, supplierid_id=supplier_id, warehouseid=wh.id, netamount=net_amount, totaltax=total_tax, status=status, remarks=remarks, companyid_id=company_id, createdat=now, updatedat=now)
         for it in items_data:
             item_id = 'poi_' + uuid.uuid4().hex[:19]
             qty = int(it.get('quantity') or 0)
             rate = float(it.get('rate') or 0)
             tax_p = float(it.get('tax_percent') or it.get('taxPercent') or 0)
             line_total = qty * rate * (1 + tax_p / 100)
-            Purchaseorderitem.objects.using(wh.db_name).create(id=item_id, purchaseorderid=po_obj, productid_id=it.get('product_id') or it.get('productId'), productname=it.get('product_name') or it.get('productName') or '', quantity=qty, rate=rate, tax_percent=tax_p, linetotal=line_total, remark=it.get('remark'))
+            Purchaseorderitem.objects.create(id=item_id, purchaseorderid=po_obj, productid_id=it.get('product_id') or it.get('productId'), productname=it.get('product_name') or it.get('productName') or '', quantity=qty, rate=rate, tax_percent=tax_p, linetotal=line_total, remark=it.get('remark'))
         serializer = PurchaseorderSerializer(po_obj)
         return send_success(serializer.data, 'Purchase order created successfully', 201)
 
@@ -5313,7 +4368,7 @@ def transaction_purchase_order_items(request, pk):
     try:
         from api.db_router import get_tenant_model_cross_db
         po = get_tenant_model_cross_db(Purchaseorder, pk)
-        items = Purchaseorderitem.objects.using(po._state.db).filter(purchaseorderid_id=pk)
+        items = Purchaseorderitem.objects.filter(purchaseorderid_id=pk)
     except Exception:
         items = []
     serializer = PurchaseorderitemSerializer(items, many=True, context={'skip_stock': True})
@@ -5359,7 +4414,7 @@ def transaction_purchase_order_detail(request, pk):
             line_total = qty * rate * (1 + tax_p / 100)
             net_amount += line_total
             total_tax += qty * rate * tax_p / 100
-        with transaction.atomic(using=db):
+        with transaction.atomic():
             po_obj.supplierid_id = supplier_id
             po_obj.warehouseid = warehouse_id
             po_obj.expecteddate = expected_date or None
@@ -5369,19 +4424,19 @@ def transaction_purchase_order_detail(request, pk):
             po_obj.remarks = remarks
             po_obj.updatedat = now
             po_obj.save()
-            Purchaseorderitem.objects.using(db).filter(purchaseorderid=po_obj).delete()
+            Purchaseorderitem.objects.filter(purchaseorderid=po_obj).delete()
             for it in items_data:
                 item_id = 'poi_' + uuid.uuid4().hex[:19]
                 qty = int(it.get('quantity') or it.get('qty') or 0)
                 rate = float(it.get('rate') or 0)
                 tax_p = float(it.get('tax_percent') or it.get('taxPercent') or 0)
                 line_total = qty * rate * (1 + tax_p / 100)
-                Purchaseorderitem.objects.using(db).create(id=item_id, purchaseorderid=po_obj, productid_id=it.get('product_id') or it.get('productId'), productname=it.get('product_name') or it.get('productName') or '', quantity=qty, rate=rate, tax_percent=tax_p, linetotal=line_total, remark=it.get('remark'))
+                Purchaseorderitem.objects.create(id=item_id, purchaseorderid=po_obj, productid_id=it.get('product_id') or it.get('productId'), productname=it.get('product_name') or it.get('productName') or '', quantity=qty, rate=rate, tax_percent=tax_p, linetotal=line_total, remark=it.get('remark'))
         serializer = PurchaseorderSerializer(po_obj)
         return send_success(serializer.data, 'Purchase order updated successfully')
     elif request.method == 'DELETE':
-        with transaction.atomic(using=db):
-            Purchaseorderitem.objects.using(db).filter(purchaseorderid=po_obj).delete()
+        with transaction.atomic():
+            Purchaseorderitem.objects.filter(purchaseorderid=po_obj).delete()
             po_obj.delete()
         return send_success(None, 'Purchase order deleted successfully')
 
@@ -5457,42 +4512,6 @@ class LeadViewSet(viewsets.ModelViewSet):
         return qs.select_related('assigned_to', 'created_by', 'companyid').prefetch_related('followups', 'stage_history')
 
     def list(self, request, *args, **kwargs):
-        from api.db_router import get_current_db, set_current_db
-        current_db = get_current_db()
-        if current_db == 'default':
-            all_leads = []
-            try:
-                for wh in Warehouse.objects.filter(active=True):
-                    if not wh.db_name:
-                        continue
-                    set_current_db(wh.db_name)
-                    qs = Lead.objects.using(wh.db_name).filter(is_deleted=False)
-                    company_id = _get_company_id(request)
-                    if company_id:
-                        qs = qs.filter(companyid_id=company_id)
-                    user_role = (getattr(request.user, 'role', '') or '').upper()
-                    SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
-                    if user_role in SALES_ROLES:
-                        qs = qs.filter(assigned_to_id=request.user.id)
-                    status_filter = request.query_params.get('status')
-                    if status_filter:
-                        qs = qs.filter(status=status_filter)
-                    priority_filter = request.query_params.get('priority')
-                    if priority_filter:
-                        qs = qs.filter(priority=priority_filter)
-                    assigned_to = request.query_params.get('assigned_to')
-                    if assigned_to:
-                        qs = qs.filter(assigned_to_id=assigned_to)
-                    search = request.query_params.get('search')
-                    if search:
-                        qs = qs.filter(models.Q(name__icontains=search) | models.Q(company_name__icontains=search) | models.Q(phone__icontains=search) | models.Q(email__icontains=search))
-                    qs = _fy_date_filter(request, qs, date_field='createdat')
-                    qs = qs.select_related('assigned_to', 'created_by', 'companyid').prefetch_related('followups', 'stage_history')
-                    all_leads.extend(LeadSerializer(qs, many=True).data)
-            finally:
-                set_current_db('default')
-            all_leads.sort(key=lambda x: x.get('updatedAt', ''), reverse=True)
-            return send_success(all_leads, 'Leads fetched successfully')
         queryset = self.get_queryset()
         queryset = _fy_date_filter(request, queryset, date_field='createdat')
         serializer = self.get_serializer(queryset, many=True)
@@ -5504,7 +4523,6 @@ class LeadViewSet(viewsets.ModelViewSet):
         return send_success(serializer.data, 'Lead retrieved successfully')
 
     def create(self, request, *args, **kwargs):
-        ensure_tenant_db_context(request)
         data = request.data.copy()
         if _get_company_id(request):
             data['companyId'] = _get_company_id(request)
@@ -5638,51 +4656,23 @@ class LeadViewSet(viewsets.ModelViewSet):
     def get_dashboard_metrics(self, request):
         from django.db.models import Sum, Count
         from django.core.cache import cache
-        from api.db_router import get_current_db, set_current_db
         company_id = _get_company_id(self.request)
         cache_key = CRMCacheKeys.dashboard(company_id)
         cached_stats = cache.get(cache_key)
         if cached_stats:
             return send_success(cached_stats, 'CRM dashboard metrics retrieved from cache')
-        original_db = get_current_db()
-        total_leads = 0
-        won_leads = 0
-        pipeline_value = 0.0
-        high_priority = 0
-        overdue_followups = 0
-        try:
-            if original_db == 'default':
-                for wh in Warehouse.objects.filter(active=True):
-                    if not wh.db_name:
-                        continue
-                    set_current_db(wh.db_name)
-                    leads = Lead.objects.using(wh.db_name).filter(is_deleted=False)
-                    if company_id:
-                        leads = leads.filter(companyid_id=company_id)
-                    metrics = leads.aggregate(total_leads=Count('id'), won_leads=Count('id', filter=models.Q(status='WON')), pipeline_value=Sum('value', filter=models.Q(status__in=['NEW', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION'])), high_priority=Count('id', filter=models.Q(priority='HIGH')))
-                    total_leads += metrics['total_leads'] or 0
-                    won_leads += metrics['won_leads'] or 0
-                    pipeline_value += float(metrics['pipeline_value'] or 0.0)
-                    high_priority += metrics['high_priority'] or 0
-                    overdue = LeadFollowUp.objects.using(wh.db_name).select_related('lead').filter(next_followup_date__lt=timezone.now())
-                    if company_id:
-                        overdue = overdue.filter(lead__companyid_id=company_id)
-                    overdue_followups += overdue.count()
-            else:
-                leads = Lead.objects.using(original_db).filter(is_deleted=False)
-                if company_id:
-                    leads = leads.filter(companyid_id=company_id)
-                metrics = leads.aggregate(total_leads=Count('id'), won_leads=Count('id', filter=models.Q(status='WON')), pipeline_value=Sum('value', filter=models.Q(status__in=['NEW', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION'])), high_priority=Count('id', filter=models.Q(priority='HIGH')))
-                total_leads = metrics['total_leads'] or 0
-                won_leads = metrics['won_leads'] or 0
-                pipeline_value = float(metrics['pipeline_value'] or 0.0)
-                high_priority = metrics['high_priority'] or 0
-                overdue = LeadFollowUp.objects.using(original_db).select_related('lead').filter(next_followup_date__lt=timezone.now())
-                if company_id:
-                    overdue = overdue.filter(lead__companyid_id=company_id)
-                overdue_followups = overdue.count()
-        finally:
-            set_current_db(original_db)
+        leads = Lead.objects.filter(is_deleted=False)
+        if company_id:
+            leads = leads.filter(companyid_id=company_id)
+        metrics = leads.aggregate(total_leads=Count('id'), won_leads=Count('id', filter=models.Q(status='WON')), pipeline_value=Sum('value', filter=models.Q(status__in=['NEW', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION'])), high_priority=Count('id', filter=models.Q(priority='HIGH')))
+        total_leads = metrics['total_leads'] or 0
+        won_leads = metrics['won_leads'] or 0
+        pipeline_value = float(metrics['pipeline_value'] or 0.0)
+        high_priority = metrics['high_priority'] or 0
+        overdue = LeadFollowUp.objects.select_related('lead').filter(next_followup_date__lt=timezone.now())
+        if company_id:
+            overdue = overdue.filter(lead__companyid_id=company_id)
+        overdue_followups = overdue.count()
         stats = {'totalLeads': total_leads, 'wonLeads': won_leads, 'pipelineValue': pipeline_value, 'highPriority': high_priority, 'overdueFollowups': overdue_followups}
         cache.set(cache_key, stats, timeout=300)
         return send_success(stats, 'CRM analytics dashboard stats computed successfully')
@@ -5812,7 +4802,7 @@ class BroadcastViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         company_id = _get_company_id(self.request)
-        qs = Broadcast.objects.using('default').filter(active=True)
+        qs = Broadcast.objects.filter(active=True)
         if company_id:
             qs = qs.filter(company_id=company_id)
         return qs.order_by('-created_at')
@@ -5838,9 +4828,9 @@ class BroadcastViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         try:
-            broadcast = Broadcast.objects.using('default').get(pk=kwargs['pk'])
+            broadcast = Broadcast.objects.get(pk=kwargs['pk'])
             broadcast.active = False
-            broadcast.save(using='default')
+            broadcast.save()
             return send_success(None, 'Broadcast removed')
         except Broadcast.DoesNotExist:
             return send_error('Broadcast not found', 404)
@@ -5853,7 +4843,6 @@ def transaction_dispatch_log_detail(request, pk):
         dispatch_log = get_tenant_model_cross_db(Dispatchlog, pk, 'items')
     except Dispatchlog.DoesNotExist:
         return send_error('Dispatch log not found', 404)
-    db_alias = dispatch_log._state.db
     if request.method == 'GET':
         return send_success(None, 'Fetched dispatch log')
     elif request.method == 'PUT':
@@ -5865,15 +4854,14 @@ def transaction_dispatch_log_detail(request, pk):
         dispatch_log.remarks = data.get('remarks', dispatch_log.remarks)
         old_items = list(dispatch_log.items.all())
         
-        # Bulk fetch order items
-        order_item_q = Orderitem.objects.using(db_alias).filter(orderid=dispatch_log.orderid_id)
+        order_item_q = Orderitem.objects.filter(orderid=dispatch_log.orderid_id)
         order_item_map = {oi.productid_id: oi for oi in order_item_q}
         
         for old_item in old_items:
             oi = order_item_map.get(old_item.productid_id)
             if oi:
                 oi.sentqty = max(0, oi.sentqty - old_item.qty)
-                oi.save(using=db_alias)
+                oi.save()
         dispatch_log.items.all().delete()
         items_list = data.get('items', [])
         import uuid
@@ -5881,34 +4869,34 @@ def transaction_dispatch_log_detail(request, pk):
             p_id = item.get('productId') or item.get('product_id')
             qty = int(item.get('qty', 0))
             if qty > 0:
-                Dispatchlogitem.objects.using(db_alias).create(id='c' + uuid.uuid4().hex[:23], dispatchlogid=dispatch_log, productid_id=p_id, qty=qty)
+                Dispatchlogitem.objects.create(id='c' + uuid.uuid4().hex[:23], dispatchlogid=dispatch_log, productid_id=p_id, qty=qty)
                 oi = order_item_map.get(p_id)
                 if oi:
                     oi.sentqty += qty
-                    oi.save(using=db_alias)
-        dispatch_log.save(using=db_alias)
+                    oi.save()
+        dispatch_log.save()
         all_pids = set([i.productid_id for i in old_items] + [i.get('productId') or i.get('product_id') for i in items_list])
         for pid in all_pids:
             if pid:
                 pass
         order = dispatch_log.orderid
         all_dispatched = True
-        for oi in order.orderitem_set.using(db_alias).all():
+        for oi in order.orderitem_set.all():
             if oi.sentqty < oi.qty:
                 all_dispatched = False
                 break
         order.status = 'Completed' if all_dispatched else 'Partially Dispatched'
-        order.save(using=db_alias)
+        order.save()
         return send_success(None, 'Dispatch transaction updated')
     elif request.method == 'DELETE':
         old_items = list(dispatch_log.items.all())
-        order_item_q = Orderitem.objects.using(db_alias).filter(orderid=dispatch_log.orderid_id)
+        order_item_q = Orderitem.objects.filter(orderid=dispatch_log.orderid_id)
         order_item_map = {oi.productid_id: oi for oi in order_item_q}
         for old_item in old_items:
             oi = order_item_map.get(old_item.productid_id)
             if oi:
                 oi.sentqty = max(0, oi.sentqty - old_item.qty)
-                oi.save(using=db_alias)
+                oi.save()
         dispatch_log.items.all().delete()
         dispatch_log.delete()
         for old_item in old_items:
@@ -5917,7 +4905,7 @@ def transaction_dispatch_log_detail(request, pk):
         order = dispatch_log.orderid
         any_dispatched = False
         all_dispatched = True
-        for oi in order.orderitem_set.using(db_alias).all():
+        for oi in order.orderitem_set.all():
             if oi.sentqty > 0:
                 any_dispatched = True
             if oi.sentqty < oi.qty:
@@ -5926,5 +4914,5 @@ def transaction_dispatch_log_detail(request, pk):
             order.status = 'Approved'
         else:
             order.status = 'Completed' if all_dispatched else 'Partially Dispatched'
-        order.save(using=db_alias)
+        order.save()
         return send_success(None, 'Dispatch transaction deleted')

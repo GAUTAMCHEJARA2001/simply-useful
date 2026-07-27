@@ -19,6 +19,7 @@ class Bom(models.Model):
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
     outputquantity = models.FloatField(db_column='outputQuantity', default=1.0, blank=True, null=True)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'BOM'
@@ -125,6 +126,7 @@ class Expense(models.Model):
     declaration = models.TextField(blank=True, null=True)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'Expense'
@@ -138,6 +140,7 @@ class Labour(models.Model):
     contactinfo = models.TextField(db_column='contactInfo', blank=True, null=True)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'Labour'
@@ -173,6 +176,7 @@ class Order(models.Model):
     drivermobile = models.TextField(db_column='driverMobile', blank=True, null=True)
     dispatchwarehouse = models.TextField(db_column='dispatchWarehouse', blank=True, null=True)
     dispatchdate = models.TextField(db_column='dispatchDate', blank=True, null=True)
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'Order'
@@ -203,6 +207,7 @@ class Dispatchlog(models.Model):
     drivermobile = models.TextField(db_column='driverMobile', blank=True, null=True)
     remarks = models.TextField(blank=True, null=True)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'DispatchLog'
@@ -224,6 +229,7 @@ class Returnlog(models.Model):
     returndate = models.DateTimeField(db_column='returnDate', default=timezone.now)
     remarks = models.TextField(blank=True, null=True)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'ReturnLog'
@@ -255,6 +261,7 @@ class Product(models.Model):
     categoryid = models.ForeignKey(Category, models.DO_NOTHING, db_column='categoryId', db_constraint=False)  # Field name made lowercase.
     openingstock = models.IntegerField(db_column='openingStock')  # Field name made lowercase.
     minimumstock = models.IntegerField(db_column='minimumStock')  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'Product'
@@ -303,7 +310,7 @@ class Purchaseorder(models.Model):
     date = models.DateTimeField()
     expecteddate = models.DateTimeField(db_column='expectedDate', blank=True, null=True)  # Field name made lowercase.
     supplierid = models.ForeignKey('Supplier', models.DO_NOTHING, db_column='supplierId', db_constraint=False)  # Field name made lowercase.
-    warehouseid = models.TextField(db_column='warehouseId', blank=True, null=True)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
     netamount = models.FloatField(db_column='netAmount')  # Field name made lowercase.
     totaltax = models.FloatField(db_column='totalTax')  # Field name made lowercase.
     status = models.TextField()
@@ -400,6 +407,7 @@ class Visit(models.Model):
     verified_by = models.CharField(db_column='verifiedBy', max_length=100, blank=True, null=True)
     verified_at = models.DateTimeField(db_column='verifiedAt', blank=True, null=True)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'Visit'
@@ -450,6 +458,7 @@ class Lead(models.Model):
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
     version = models.PositiveIntegerField(default=1, db_index=True)
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     # Active Manager handles non-archived leads, standard objects manager preserved for raw access
     objects = ActiveLeadManager()

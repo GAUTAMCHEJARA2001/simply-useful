@@ -1,10 +1,9 @@
 """
-Add performance indexes to all warehouse databases.
+Add performance indexes to the database.
 Run this after deployment: python manage.py add_indexes_to_warehouses
 """
 from django.core.management.base import BaseCommand
 from django.db import connection
-from core.models import Warehouse
 
 
 INDEXES = [
@@ -44,31 +43,21 @@ INDEXES = [
 
 
 class Command(BaseCommand):
-    help = 'Add performance indexes to all warehouse databases'
+    help = 'Add performance indexes to the database'
 
     def handle(self, *args, **options):
-        self.stdout.write('Adding indexes to warehouse databases...')
+        self.stdout.write('Adding indexes to database...')
         
-        warehouses = Warehouse.objects.using('default').filter(active=True)
-        total_created = 0
+        created = 0
+        for idx_name, table, column in INDEXES:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column});"
+                    )
+                    created += 1
+            except Exception as e:
+                # Table might not exist
+                pass
         
-        for wh in warehouses:
-            if not wh.db_name:
-                continue
-            
-            created = 0
-            for idx_name, table, column in INDEXES:
-                try:
-                    with connection.cursor() as cursor:
-                        cursor.execute(
-                            f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column});"
-                        )
-                        created += 1
-                except Exception as e:
-                    # Table might not exist in this warehouse
-                    pass
-            
-            total_created += created
-            self.stdout.write(f'  {wh.name}: {created} indexes')
-        
-        self.stdout.write(self.style.SUCCESS(f'Done! Created {total_created} indexes across {warehouses.count()} warehouses'))
+        self.stdout.write(self.style.SUCCESS(f'Done! Created {created} indexes'))

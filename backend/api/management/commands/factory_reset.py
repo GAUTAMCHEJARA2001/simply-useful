@@ -1,5 +1,5 @@
 """
-Factory reset: wipe ALL data from ALL schemas, then reseed.
+Factory reset: wipe ALL data from public schema, then reseed.
 """
 from django.core.management.base import BaseCommand
 from django.db import connection
@@ -25,22 +25,8 @@ class Command(BaseCommand):
         self.stdout.write('Login: super@kamla.com / admin123')
 
     def wipe_everything(self):
-        self.stdout.write('\n=== Wiping ALL schemas ===')
+        self.stdout.write('\n=== Wiping ALL tables in public schema ===')
         with connection.cursor() as cur:
-            # Drop all tenant schemas first (before touching Warehouse table)
-            cur.execute(
-                "SELECT schema_name FROM information_schema.schemata "
-                "WHERE schema_name LIKE 'wh_%'"
-            )
-            schemas = [row[0] for row in cur.fetchall()]
-            for schema in schemas:
-                try:
-                    cur.execute(f'DROP SCHEMA IF EXISTS {schema} CASCADE')
-                    self.stdout.write(f'  Dropped schema: {schema}')
-                except Exception as e:
-                    self.stdout.write(f'  Skipped {schema}: {e}')
-
-            # Drop all tables in public schema
             cur.execute(
                 "SELECT table_name FROM information_schema.tables "
                 "WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
@@ -53,7 +39,6 @@ class Command(BaseCommand):
                 except Exception as e:
                     self.stdout.write(f'  Skipped {t}: {e}')
 
-            # Drop all sequences
             cur.execute(
                 "SELECT sequence_name FROM information_schema.sequences "
                 "WHERE sequence_schema = 'public'"
@@ -73,11 +58,10 @@ class Command(BaseCommand):
 
         now = timezone.now()
 
-        # Run migrate first to create all tables
         self.stdout.write('  Running migrate...')
         call_command('migrate', verbosity=1)
 
-        from api.models import Company, User, Warehouse
+        from core.models import Company, User, Warehouse
 
         company, _ = Company.objects.get_or_create(
             name='Kamla Enterprises',
@@ -112,19 +96,11 @@ class Command(BaseCommand):
         self.stdout.write(f'  User: {user.email}')
 
         warehouse, created = Warehouse.objects.get_or_create(
-            schema_name='wh_main',
+            name='MAIN',
+            companyid=company,
             defaults={
-                'name': 'MAIN',
-                'companyid': company,
                 'active': True,
                 'location': 'Main Facility',
-                'db_name': 'wh_main',
-                'db_host': 'localhost',
-                'db_port': 5432
             }
         )
         self.stdout.write(f'  Warehouse: {warehouse.name} ({"created" if created else "exists"})')
-
-        # Migrate ALL tenant schemas so tables exist inside them
-        self.stdout.write('  Running migrate_schemas for tenant schemas...')
-        call_command('migrate_schemas', verbosity=1)

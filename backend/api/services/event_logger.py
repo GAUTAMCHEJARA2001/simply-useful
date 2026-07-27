@@ -45,10 +45,7 @@ def log_operational_event(entity_type, entity_id, old_state, new_state, user_ema
         else:
             # If no previous event log, calculate duration based on database creation timestamp
             if entity_type == 'Order':
-                from api.db_router import get_current_db
-                from django.db import connections
-                actual_db = db_name or get_current_db()
-                with connections[actual_db].cursor() as tenant_cursor:
+                with connection.cursor() as tenant_cursor:
                     tenant_cursor.execute('SELECT "createdAt" FROM "Order" WHERE id = %s', (entity_id,))
                     cre_row = tenant_cursor.fetchone()
                 if cre_row and cre_row[0]:
@@ -63,10 +60,7 @@ def log_operational_event(entity_type, entity_id, old_state, new_state, user_ema
                     except:
                         pass
             elif entity_type == 'Lead':
-                from api.db_router import get_current_db
-                from django.db import connections
-                actual_db = db_name or get_current_db()
-                with connections[actual_db].cursor() as tenant_cursor:
+                with connection.cursor() as tenant_cursor:
                     tenant_cursor.execute('SELECT "createdAt" FROM "Lead" WHERE id = %s', (entity_id,))
                     cre_row = tenant_cursor.fetchone()
                 if cre_row and cre_row[0]:

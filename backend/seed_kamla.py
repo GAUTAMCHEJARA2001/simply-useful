@@ -7,7 +7,7 @@ import bcrypt
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
-from api.models import Company, User, Warehouse
+from core.models import Company, User, Warehouse
 
 from django.utils import timezone
 
@@ -58,15 +58,11 @@ def seed():
         
     # 3. Create MAIN Warehouse
     warehouse, created = Warehouse.objects.get_or_create(
-        schema_name='wh_main',
+        name='MAIN',
+        companyid=company,
         defaults={
-            'name': 'MAIN',
-            'companyid': company,
             'active': True,
             'location': 'Main Facility',
-            'db_name': 'wh_main',
-            'db_host': 'localhost',
-            'db_port': 5432
         }
     )
     if created:
