@@ -7,6 +7,13 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
+    replaces = [
+        ('core', '0001_initial'),
+        ('core', '0002_userwarehouseaccess'),
+        ('core', '0003_add_settings_json_to_company'),
+        ('core', '0004_add_broadcast_model'),
+    ]
+
     initial = True
 
     dependencies = [
