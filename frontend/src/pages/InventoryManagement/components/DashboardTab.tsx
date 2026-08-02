@@ -232,6 +232,14 @@ export const DashboardTab: React.FC = () => {
     }).slice(0, 5);
   }, [products]);
 
+  // Pending production requests
+  const pendingProductions = useMemo(() => {
+    return productions.filter((p: any) => {
+      const st = (p.status || '').toUpperCase();
+      return st === 'PENDING';
+    });
+  }, [productions]);
+
   // QA Alerts or Stock Issues
   const qaPendingCount = useMemo(() => {
     // Quality check items can be simulated from items with low stock or pending inspection
@@ -736,11 +744,36 @@ export const DashboardTab: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Tab 3: Production suggestions */}
+                  {/* Tab 3: Production suggestions & Pending Requests */}
                   {activeWorkTab === 'production' && (
                     <div className="space-y-3">
+                      {pendingProductions.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-2 border-b border-border/40 pb-1">Pending Production Requests</h4>
+                          <div className="space-y-2">
+                            {pendingProductions.map((prod: any) => (
+                              <div key={prod.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border border-warning/30 bg-warning/5 hover:bg-warning/10 transition-colors gap-3">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-xs">{prod.finishedProductName || prod.finished_product?.name}</span>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase bg-warning/20 text-warning-foreground border border-warning/30">PENDING</span>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Warehouse: {prod.warehouseName || prod.warehouse?.name || '—'} · Qty Requested: {prod.quantityProduced || prod.quantity_produced || prod.quantity || 0}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 self-end sm:self-center">
+                                  <span className="text-xs font-medium text-muted-foreground">{prod.createdAt ? new Date(prod.createdAt).toLocaleDateString('en-IN') : ''}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-2 border-b border-border/40 pb-1">Production Suggestions</h4>
                       {productionSuggestions.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-10 italic">Inventory levels are healthy. No pending production suggestion.</p>
+                        <p className="text-xs text-muted-foreground text-center py-6 italic">Inventory levels are healthy. No pending production suggestion.</p>
                       )}
                       {productionSuggestions.map((prod) => (
                         <div key={prod.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border border-border/60 bg-card/80 hover:bg-muted/10 transition-colors gap-3">

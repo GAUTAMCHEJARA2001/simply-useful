@@ -245,13 +245,16 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
         await saveProduction(payload);
       }
 
+      localStorage.setItem('prod_modal_last_wh', form.warehouseId);
+      localStorage.setItem('prod_modal_last_date', form.date);
+      
       setModal(false);
       setForm({ 
         productId: '', 
         productName: '', 
         quantity: 1, 
-        warehouseId: warehouses[0]?.id || '',
-        date: new Date().toISOString().split('T')[0]
+        warehouseId: form.warehouseId || warehouses[0]?.id || '',
+        date: form.date || new Date().toISOString().split('T')[0]
       });
       setSelectedRecipe(null);
       setBatchItems([]);
@@ -300,7 +303,14 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
               className="pl-9 bg-background h-9"
             />
           </div>
-          <Button size="sm" onClick={() => setModal(true)} className="h-9">
+          <Button size="sm" onClick={() => {
+            setForm(prev => ({
+              ...prev,
+              warehouseId: localStorage.getItem('prod_modal_last_wh') || prev.warehouseId || warehouses[0]?.id || '',
+              date: localStorage.getItem('prod_modal_last_date') || prev.date || new Date().toISOString().split('T')[0]
+            }));
+            setModal(true);
+          }} className="h-9">
             <Plus className="w-4 h-4 mr-1.5" /> New Production Run
           </Button>
         </div>
@@ -371,7 +381,18 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       </SafeDataView>
 
       {modal && (
-        <Modal title={form.id ? "Edit Production Run" : "Record New Production Run"} onClose={() => { setModal(false); setForm({ productId: '', productName: '', quantity: 1, warehouseId: warehouses[0]?.id || '', date: new Date().toISOString().split('T')[0] }); setSelectedRecipe(null); setBatchItems([]); }}>
+        <Modal title={form.id ? "Edit Production Run" : "Record New Production Run"} onClose={() => { 
+          setModal(false); 
+          setForm({ 
+            productId: '', 
+            productName: '', 
+            quantity: 1, 
+            warehouseId: localStorage.getItem('prod_modal_last_wh') || warehouses[0]?.id || '', 
+            date: localStorage.getItem('prod_modal_last_date') || new Date().toISOString().split('T')[0] 
+          }); 
+          setSelectedRecipe(null); 
+          setBatchItems([]); 
+        }}>
           <div className="space-y-4">
             <div className="relative">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1.5">
