@@ -1,7 +1,7 @@
 import uuid
 import logging
 from decimal import Decimal
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, transaction, models
 from django.utils import timezone
 from django.core.cache import cache
 from rest_framework import viewsets, status
