@@ -165,7 +165,7 @@ const OrderPage: React.FC = () => {
 
   // Debug logging to help identify why the price input is enabled/disabled in real-time
   useEffect(() => {
-    console.log('[DEBUG] Price Input State Evaluation:', {
+    /* console.log('[DEBUG] Price Input State Evaluation:', {
       userEmail: user?.email,
       userRole,
       isAdmin,
@@ -173,7 +173,7 @@ const OrderPage: React.FC = () => {
       allowPriceEditSalesSetting: allowPriceEditSales,
       settingsState: settings,
       isPriceInputDisabled
-    });
+    }); */
   }, [user, userRole, isAdmin, settings, isPriceInputDisabled, can]);
 
   const getBagWeight = (bag_size: string): number => {

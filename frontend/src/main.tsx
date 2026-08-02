@@ -22,6 +22,15 @@ if (typeof window !== "undefined") {
       event.preventDefault();
     }
   }, true);
+
+  const originalConsoleError = console.error;
+  console.error = (...args) => {
+    for (const arg of args) {
+      if (typeof arg === 'string' && arg.includes('Could not establish connection. Receiving end does not exist.')) return;
+      if (arg instanceof Error && arg.message && arg.message.includes('Could not establish connection. Receiving end does not exist.')) return;
+    }
+    originalConsoleError(...args);
+  };
 }
 
 import { createRoot } from "react-dom/client";
