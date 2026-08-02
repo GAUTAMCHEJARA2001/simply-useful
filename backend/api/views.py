@@ -921,6 +921,10 @@ def bulk_import(request, entity):
             for index, row in enumerate(rows, start=2):
                 code = (row.get('dealerCode') or row.get('dealer_code') or '').strip()
                 name = (row.get('dealerName') or row.get('dealer_name') or '').strip()
+                warehouse_val = (row.get('warehouse') or row.get('warehouseName') or row.get('assignedWarehouse') or '').strip()
+                target_warehouse = _resolve_warehouse(warehouse_val, company_id)
+                warehouse_id = target_warehouse.id if target_warehouse else None
+
                 if not name:
                     skipped.append({'row': index, 'reason': 'dealerName is required'})
                     continue
@@ -944,7 +948,8 @@ def bulk_import(request, entity):
                     'outstanding': _num(row.get('outstanding')),
                     'active': _truthy(row.get('active'), True),
                     'territory': row.get('territory') or '',
-                    'companyid_id': company_id, 'updatedat': timezone.now()
+                    'companyid_id': company_id, 'updatedat': timezone.now(),
+                    'warehouseid_id': warehouse_id
                 }
                 try:
                     from django.db.models import Q
@@ -968,6 +973,10 @@ def bulk_import(request, entity):
             for index, row in enumerate(rows, start=2):
                 code = (row.get('distributorCode') or row.get('distributor_code') or '').strip()
                 name = (row.get('distributorName') or row.get('distributor_name') or '').strip()
+                warehouse_val = (row.get('warehouse') or row.get('warehouseName') or row.get('assignedWarehouse') or '').strip()
+                target_warehouse = _resolve_warehouse(warehouse_val, company_id)
+                warehouse_id = target_warehouse.id if target_warehouse else None
+
                 if not name:
                     skipped.append({'row': index, 'reason': 'distributorName is required'})
                     continue
@@ -991,7 +1000,8 @@ def bulk_import(request, entity):
                     'outstanding': _num(row.get('outstanding')),
                     'active': _truthy(row.get('active'), True),
                     'territory': row.get('territory') or '',
-                    'companyid_id': company_id, 'updatedat': timezone.now()
+                    'companyid_id': company_id, 'updatedat': timezone.now(),
+                    'warehouseid_id': warehouse_id
                 }
                 try:
                     from django.db.models import Q
@@ -1040,19 +1050,24 @@ def bulk_import(request, entity):
                 item_qty = _num(nrow.get('quantity') or nrow.get('qty') or nrow.get('amount') or nrow.get('item_qty'))
                 item_unit = (nrow.get('unit') or nrow.get('item_unit') or '').strip()
                 
-                grouped.setdefault(code, {'name': recipe_name, 'outputQuantity': output_qty, 'items': []})
+                warehouse_val = (nrow.get('warehouse') or nrow.get('warehousename') or nrow.get('assignedwarehouse') or '').strip()
+                target_warehouse = _resolve_warehouse(warehouse_val, company_id)
+                warehouse_id = target_warehouse.id if target_warehouse else None
+                
+                grouped.setdefault(code, {'name': recipe_name, 'outputQuantity': output_qty, 'warehouse_id': warehouse_id, 'items': []})
                 grouped[code]['items'].append({'materialname': material, 'qty': item_qty, 'unit': item_unit})
             for code, recipe in grouped.items():
                 bom = Bom.objects.filter(productcode=code, companyid_id=company_id).first()
                 if bom:
                     bom.name = recipe['name']
                     bom.outputquantity = recipe['outputQuantity']
+                    bom.warehouseid_id = recipe['warehouse_id']
                     bom.updatedat = timezone.now()
                     bom.save()
                     Bomitem.objects.filter(bomid=bom).delete()
                     updated += 1
                 else:
-                    bom = Bom.objects.create(id=_new_id(), productcode=code, name=recipe['name'], companyid_id=company_id, outputquantity=recipe['outputQuantity'], createdat=timezone.now(), updatedat=timezone.now())
+                    bom = Bom.objects.create(id=_new_id(), productcode=code, name=recipe['name'], companyid_id=company_id, outputquantity=recipe['outputQuantity'], warehouseid_id=recipe['warehouse_id'], createdat=timezone.now(), updatedat=timezone.now())
                     created += 1
                 for item in recipe['items']:
                     Bomitem.objects.create(id=_new_id(), bomid=bom, **item)
@@ -1064,6 +1079,11 @@ def bulk_import(request, entity):
                     continue
                 email = (row.get('email') or '').strip()
                 phone = (row.get('phone') or '').strip()
+                
+                warehouse_val = (row.get('warehouse') or row.get('warehouseName') or row.get('assignedWarehouse') or '').strip()
+                target_warehouse = _resolve_warehouse(warehouse_val, company_id)
+                warehouse_id = target_warehouse.id if target_warehouse else None
+                
                 assigned_email = (row.get('assignedTo') or row.get('assigned_to') or '').strip()
                 assigned_user = None
                 if assigned_email:
@@ -1074,7 +1094,7 @@ def bulk_import(request, entity):
                 priority_str = (row.get('priority') or 'MEDIUM').upper()
                 if priority_str not in dict(Lead.PRIORITY_CHOICES):
                     priority_str = 'MEDIUM'
-                values = {'name': name, 'company_name': (row.get('companyName') or row.get('company_name') or '').strip(), 'email': email, 'phone': phone, 'status': status_str, 'priority': priority_str, 'source': (row.get('source') or '').strip(), 'city': (row.get('city') or '').strip(), 'state': (row.get('state') or '').strip(), 'pincode': (row.get('pincode') or '').strip(), 'value': _num(row.get('value'), 0.0), 'notes': (row.get('notes') or '').strip(), 'assigned_to': assigned_user, 'companyid_id': company_id, 'updated_by_id': request.user.id, 'updatedat': timezone.now()}
+                values = {'name': name, 'company_name': (row.get('companyName') or row.get('company_name') or '').strip(), 'email': email, 'phone': phone, 'status': status_str, 'priority': priority_str, 'source': (row.get('source') or '').strip(), 'city': (row.get('city') or '').strip(), 'state': (row.get('state') or '').strip(), 'pincode': (row.get('pincode') or '').strip(), 'value': _num(row.get('value'), 0.0), 'notes': (row.get('notes') or '').strip(), 'assigned_to': assigned_user, 'companyid_id': company_id, 'updated_by_id': request.user.id, 'updatedat': timezone.now(), 'warehouseid_id': warehouse_id}
                 existing = None
                 if phone:
                     existing = Lead.objects.filter(phone=phone, companyid_id=company_id).first()
