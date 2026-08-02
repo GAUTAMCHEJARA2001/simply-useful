@@ -57,6 +57,6 @@ def broadcast_push_to_role(role, title, body, data=None):
     Send a push notification to all users with a specific role.
     """
     from core.models import User
-    users = User.objects.filter(role=role, is_active=True)
+    users = User.objects.filter(role=role, active=True)
     for u in users:
         send_web_push(u, title, body, data)

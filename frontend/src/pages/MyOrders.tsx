@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
+import { useDebounce } from '@/hooks/useDebounce';
 
 const extractDispatchDetails = (narration: string) => {
   if (!narration) return null;
@@ -63,6 +64,7 @@ const MyOrders: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [showAllTime, setShowAllTime] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const formatDate = (dateStr: any) => {
     if (!dateStr) return 'N/A';
@@ -141,8 +143,8 @@ const MyOrders: React.FC = () => {
     }
     
     let matchesSearch = true;
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
+    if (debouncedSearchTerm) {
+      const term = debouncedSearchTerm.toLowerCase();
       const s = [
         order.orderId,
         order.order_id,

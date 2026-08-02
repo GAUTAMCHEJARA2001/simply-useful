@@ -6,14 +6,16 @@ from api.views import (
     CategoryViewSet, BrandViewSet, UnitViewSet, WarehouseViewSet, RegionViewSet,
     MarketViewSet, master_settings, DealerViewSet, DistributorViewSet, OrderViewSet,
     VisitViewSet, ExpenseViewSet, BOMViewSet, SupplierViewSet, LabourViewSet,
-    BroadcastViewSet,
+    BroadcastViewSet, CompanyViewSet,
     user_assignments,
     bulk_template, bulk_import, database_export, local_backup_status_view, download_postgres_dump_view, schedule_local_backup_view,
     list_local_backups_view, restore_postgres_dump_view,
+    create_system_log, list_system_logs, clear_system_logs,
     
     # Reports
     report_dashboard_kpis, report_sales_summary, report_low_stock, report_daily,
     report_current_stock, report_aggregate_stock, report_stock_ledger, report_global_inventory,
+    report_stocks_by_warehouse,
     
     # Transactions
     transaction_purchases, transaction_purchase_detail, transaction_sales,
@@ -35,9 +37,10 @@ from api.views import (
     get_analytics_predictions, get_analytics_alerts, action_analytics_alert, get_analytics_cfo_liquidity,
     get_analytics_bottlenecks, get_analytics_data_quality
 )
-from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties
+from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties, import_busy_ledger, get_sync_status, ledger_requests_view, fulfill_ledger_request
 
 router = DefaultRouter(trailing_slash=False)
+router.register('companies', CompanyViewSet, basename='companies')
 router.register('users', UserViewSet, basename='users')
 router.register('products', ProductViewSet, basename='products')
 router.register('masters/categories', CategoryViewSet, basename='masters-categories')
@@ -80,6 +83,9 @@ urlpatterns = [
     path('system/auto-backup-schedule', schedule_local_backup_view, name='auto-backup-schedule'),
     path('system/local-backups', list_local_backups_view, name='local-backups'),
     path('system/restore-postgres-dump', restore_postgres_dump_view, name='restore-postgres-dump'),
+    path('system/logs', create_system_log, name='system-logs-create'),
+    path('system/logs/list', list_system_logs, name='system-logs-list'),
+    path('system/logs/clear', clear_system_logs, name='system-logs-clear'),
     
     # Reports
     path('reports/dashboard-kpis', report_dashboard_kpis, name='report-dashboard-kpis'),
@@ -90,6 +96,7 @@ urlpatterns = [
     path('reports/stock-ledger/<str:pk>', report_stock_ledger, name='report-stock-ledger'),
     path('reports/aggregate-stock', report_aggregate_stock, name='report-aggregate-stock'),
     path('reports/global-inventory', report_global_inventory, name='report-global-inventory'),
+    path('reports/stocks-by-warehouse', report_stocks_by_warehouse, name='report-stocks-by-warehouse'),
 
     
     # Analytics & Decision Intelligence
@@ -131,8 +138,12 @@ urlpatterns = [
     
     # Busy Integration
     path('busy/sync', sync_busy_data, name='busy-sync'),
+    path('busy/sync-status', get_sync_status, name='busy-sync-status'),
     path('busy/ledger/<str:party_code>', get_party_ledger, name='busy-ledger'),
     path('busy/search-parties', search_busy_parties, name='busy-search-parties'),
+    path('busy/import-ledger', import_busy_ledger, name='busy-import-ledger'),
+    path('busy/ledger-requests', ledger_requests_view, name='busy-ledger-requests'),
+    path('busy/ledger-requests/<int:req_id>/fulfill', fulfill_ledger_request, name='busy-fulfill-request'),
     
     # Router endpoints
     path('', include(router.urls)),

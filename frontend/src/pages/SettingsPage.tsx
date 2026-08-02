@@ -373,6 +373,7 @@ const SettingsPage: React.FC = () => {
             </div>
 
             <div className="grid gap-6">
+
                 {settingsItems.map((item, idx) => (
                     <motion.div
                         key={item.key}

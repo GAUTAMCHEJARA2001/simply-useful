@@ -8,6 +8,21 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
+    replaces = [
+        ('api', '0001_initial'),
+        ('api', '0002_delete_userwarehouseaccess'),
+        ('api', '0003_alter_dealer_distributorname'),
+        ('api', '0004_order_dispatchdate_order_dispatchwarehouse_and_more'),
+        ('api', '0005_orderitem_returnedqty_orderitem_sentqty_dispatchlog_and_more'),
+        ('api', '0006_alter_inventory_unique_together_and_more'),
+        ('api', '0007_pushsubscription'),
+        ('api', '0008_busyparty_busyledgerentry'),
+        ('api', '0009_distributor_distributorcode'),
+        ('api', '0010_add_warehouse_to_dealer_distributor'),
+        ('api', '0011_add_performance_indexes'),
+        ('api', '0012_dealer_warehouseid_distributor_warehouseid_and_more'),
+    ]
+
     initial = True
 
     dependencies = [
@@ -658,5 +673,53 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name='product',
             constraint=models.UniqueConstraint(fields=('productcode', 'companyid'), name='unique_product_per_company'),
+        ),
+        migrations.AddIndex(
+            model_name='dealer',
+            index=models.Index(fields=['warehouseid', 'active'], name='idx_dealer_wh_active'),
+        ),
+        migrations.AddIndex(
+            model_name='dealer',
+            index=models.Index(fields=['assignedsoemail', 'active'], name='idx_dealer_so_active'),
+        ),
+        migrations.AddIndex(
+            model_name='distributor',
+            index=models.Index(fields=['warehouseid', 'active'], name='idx_distributor_wh_active'),
+        ),
+        migrations.AddIndex(
+            model_name='distributor',
+            index=models.Index(fields=['assignedsoemail', 'active'], name='idx_distributor_so_active'),
+        ),
+        migrations.AddIndex(
+            model_name='order',
+            index=models.Index(fields=['warehouseid', 'status'], name='idx_order_wh_status'),
+        ),
+        migrations.AddIndex(
+            model_name='order',
+            index=models.Index(fields=['warehouseid', 'date'], name='idx_order_wh_date'),
+        ),
+        migrations.AddIndex(
+            model_name='order',
+            index=models.Index(fields=['companyid', 'soemail'], name='idx_order_company_so'),
+        ),
+        migrations.AddIndex(
+            model_name='orderitem',
+            index=models.Index(fields=['orderid', 'productid'], name='idx_orderitem_order_prod'),
+        ),
+        migrations.AddIndex(
+            model_name='product',
+            index=models.Index(fields=['companyid', 'active'], name='idx_product_company_active'),
+        ),
+        migrations.AddIndex(
+            model_name='product',
+            index=models.Index(fields=['warehouseid', 'active'], name='idx_product_wh_active'),
+        ),
+        migrations.AddIndex(
+            model_name='stocktransaction',
+            index=models.Index(fields=['warehouseid', 'productid'], name='idx_stocktxn_wh_prod'),
+        ),
+        migrations.AddIndex(
+            model_name='stocktransaction',
+            index=models.Index(fields=['warehouseid', 'reason'], name='idx_stocktxn_wh_reason'),
         ),
     ]

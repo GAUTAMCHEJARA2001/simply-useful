@@ -250,35 +250,40 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {ledger.map((l) => (
-                      <tr key={l.id} 
-                        className={`transition-colors group ${
-                          l.transactionType === 'OPENING STOCK'
-                            ? 'bg-blue-50 dark:bg-blue-950/30 font-semibold'
-                            : 'hover:bg-primary/5 cursor-pointer'
-                        } ${onViewTransaction && l.transactionType !== 'OPENING STOCK' ? 'cursor-pointer' : ''}`}
-                        onClick={() => {
-                          if (!onViewTransaction || !l.referenceId || l.transactionType === 'OPENING STOCK') return;
-                          let type = '';
-                          const t = l.transactionType.toUpperCase();
-                          if (t.includes('PURCHASE')) type = 'purchase';
-                          else if (t.includes('SALE')) type = 'sale';
-                          else if (t.includes('PRODUCTION')) type = 'production';
-                          else if (t.includes('RETURN')) type = 'return';
-                          
-                          if (type) onViewTransaction(type, l.referenceId);
-                        }}
-                      >
-                        <td className="p-2">{new Date(l.date).toLocaleDateString('en-IN')}</td>
-                        <td className="p-2">
-                          <span className="font-medium group-hover:text-primary transition-colors">{l.transactionType}</span>
-                        </td>
-                        <td className="p-2 text-muted-foreground font-mono">{l.referenceId || '—'}</td>
-                        <td className="p-2 text-right text-red-500">{l.debit > 0 ? formatDecimal(l.debit) : '—'}</td>
-                        <td className="p-2 text-right text-green-600">{l.credit > 0 ? `+${formatDecimal(l.credit)}` : '—'}</td>
-                        <td className="p-2 text-right font-semibold">{formatDecimal(l.balance)}</td>
-                      </tr>
-                    ))}
+                    {ledger.map((l) => {
+                      const isOpening = l.transactionType === 'OPENING_STOCK' || l.transactionType === 'OPENING STOCK' || l.type === 'OPENING_STOCK';
+                      return (
+                        <tr key={l.id} 
+                          className={`transition-colors group ${
+                            isOpening
+                              ? 'bg-blue-50/80 dark:bg-blue-950/40 font-semibold text-blue-950 dark:text-blue-200'
+                              : 'hover:bg-primary/5 cursor-pointer'
+                          } ${onViewTransaction && !isOpening ? 'cursor-pointer' : ''}`}
+                          onClick={() => {
+                            if (!onViewTransaction || !l.referenceId || isOpening) return;
+                            let type = '';
+                            const t = (l.transactionType || l.type || '').toUpperCase();
+                            if (t.includes('PURCHASE')) type = 'purchase';
+                            else if (t.includes('SALE')) type = 'sale';
+                            else if (t.includes('PRODUCTION')) type = 'production';
+                            else if (t.includes('RETURN')) type = 'return';
+                            
+                            if (type) onViewTransaction(type, l.referenceId);
+                          }}
+                        >
+                          <td className="p-2">{l.date ? (isNaN(new Date(l.date).getTime()) ? l.date : new Date(l.date).toLocaleDateString('en-IN')) : '—'}</td>
+                          <td className="p-2">
+                            <span className="font-medium group-hover:text-primary transition-colors">
+                              {isOpening ? 'Opening Balance' : (l.transactionType || l.type)}
+                            </span>
+                          </td>
+                          <td className="p-2 text-muted-foreground font-mono">{l.referenceId || l.docNo || '—'}</td>
+                          <td className="p-2 text-right text-red-500">{l.debit > 0 ? formatDecimal(l.debit) : '—'}</td>
+                          <td className="p-2 text-right text-green-600">{l.credit > 0 ? `+${formatDecimal(l.credit)}` : '—'}</td>
+                          <td className="p-2 text-right font-semibold">{formatDecimal(l.balance)}</td>
+                        </tr>
+                      );
+                    })}
                     {ledger.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">No transactions found</td></tr>}
                   </tbody>
                 </table>

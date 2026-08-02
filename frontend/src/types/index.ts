@@ -84,7 +84,15 @@ export interface Product {
   category?: string | { id: number | string; name: string } | null;
   categoryId?: string | number;
   categoryName?: string;
-  categoryRef?: { id: number | string; name: string } | null;
+  parentCategoryName?: string;
+  categoryRef?: { 
+    id: number | string; 
+    name: string; 
+    parent?: { id: number | string; name: string } | null; 
+    parentName?: string; 
+    parentId?: string | number | null; 
+    parent_id?: string | number | null; 
+  } | null;
   bagSize: string;
   bag_size?: string;
   rate: number;
@@ -94,9 +102,11 @@ export interface Product {
   minimumStock?: number;
   unit?: string | { id: number | string; name: string } | null;
   unitId?: string | number;
+  unitRef?: { id: number | string; name: string } | null;
   brand?: { id: number | string; name: string } | null;
   brandId?: number;
   brand_id?: number;
+  brandRef?: { id: number | string; name: string } | null;
   stockQty?: number;
   availableStock?: number;
   defaultWarehouseId?: string | number | null;

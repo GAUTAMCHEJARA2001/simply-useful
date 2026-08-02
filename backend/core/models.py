@@ -29,6 +29,14 @@ class User(models.Model):
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
 
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def is_anonymous(self):
+        return False
+
     class Meta:
         db_table = 'User'
 

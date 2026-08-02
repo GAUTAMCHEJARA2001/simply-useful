@@ -11,6 +11,8 @@ export const useWarehouses = () => {
       const res = await inventoryService.getWarehouses();
       return (res.data?.data || res.data || []) as any[];
     },
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    gcTime: 60 * 60 * 1000,
   });
 };
 
@@ -21,6 +23,8 @@ export const useUnits = () => {
       const res = await inventoryService.getUnits();
       return (res.data?.data || res.data || []) as any[];
     },
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    gcTime: 60 * 60 * 1000,
   });
 };
 

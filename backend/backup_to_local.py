@@ -86,13 +86,16 @@ def restore_pg_dump(backup_file_path, db_name=DB_NAME, db_user=DB_USER, db_passw
         '-d', db_name,
         '--clean',
         '--if-exists',
+        '--no-owner',
+        '--no-privileges',
         '-v',
         backup_file_path
     ]
     
     try:
         res = subprocess.run(cmd, env=env, capture_output=True, text=True)
-        if res.returncode == 0:
+        stderr_output = res.stderr or ""
+        if res.returncode == 0 or (res.returncode == 1 and "ERROR:" not in stderr_output):
             print("Database restored successfully.")
             return True, "Success"
         else:
@@ -125,6 +128,8 @@ def take_pg_dump(dest_dir):
         '-U', DB_USER,
         '-F', 'c', # Custom compressed format
         '-b',      # Include large objects
+        '-O',      # Do not output commands to set ownership
+        '-x',      # Do not dump access privileges
         '-v',      # Verbose output
         '-f', local_temp_path,
         DB_NAME

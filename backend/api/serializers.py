@@ -31,6 +31,17 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'email', 'name', 'role', 'active', 'monthlyTarget', 'companyId', 'createdAt', 'updatedAt', 'territory']
 
 
+def _auto_assign_int_id(model_cls, validated_data):
+    if 'id' not in validated_data or not validated_data.get('id'):
+        next_id = (model_cls.objects.order_by('-id').values_list('id', flat=True).first() or 0) + 1
+        validated_data['id'] = next_id
+    if hasattr(model_cls, 'companyid') and ('companyid_id' not in validated_data or not validated_data.get('companyid_id')):
+        from core.models import Company
+        first_comp = Company.objects.first()
+        validated_data['companyid_id'] = first_comp.id if first_comp else 'cmo75yliq0000wesurjpett1n'
+    return validated_data
+
+
 class CategorySerializer(serializers.ModelSerializer):
     companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
     parentId = serializers.IntegerField(source='parentid_id', required=False, allow_null=True)
@@ -39,6 +50,10 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name', 'active', 'companyId', 'parentId']
+
+    def create(self, validated_data):
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        return super().create(validated_data)
 
 
 class BrandSerializer(serializers.ModelSerializer):
@@ -49,6 +64,10 @@ class BrandSerializer(serializers.ModelSerializer):
         model = Brand
         fields = ['id', 'name', 'active', 'companyId']
 
+    def create(self, validated_data):
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        return super().create(validated_data)
+
 
 class UnitSerializer(serializers.ModelSerializer):
     companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
@@ -57,6 +76,10 @@ class UnitSerializer(serializers.ModelSerializer):
     class Meta:
         model = Unit
         fields = ['id', 'name', 'active', 'companyId']
+
+    def create(self, validated_data):
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        return super().create(validated_data)
 
 
 class WarehouseSerializer(serializers.ModelSerializer):
@@ -69,8 +92,8 @@ class WarehouseSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'active', 'companyId', 'gstNumber', 'location']
 
     def create(self, validated_data):
-        warehouse = Warehouse.objects.create(**validated_data)
-        return warehouse
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        return super().create(validated_data)
 
 
 class RegionSerializer(serializers.ModelSerializer):
@@ -81,6 +104,10 @@ class RegionSerializer(serializers.ModelSerializer):
         model = Region
         fields = ['id', 'name', 'active', 'companyId']
 
+    def create(self, validated_data):
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        return super().create(validated_data)
+
 
 class MarketSerializer(serializers.ModelSerializer):
     regionId = serializers.IntegerField(source='regionid_id')
@@ -89,6 +116,10 @@ class MarketSerializer(serializers.ModelSerializer):
     class Meta:
         model = Market
         fields = ['id', 'name', 'active', 'regionId']
+
+    def create(self, validated_data):
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        return super().create(validated_data)
 
 
 class SupplierSerializer(serializers.ModelSerializer):
@@ -101,6 +132,7 @@ class SupplierSerializer(serializers.ModelSerializer):
     
     gstNumber = serializers.CharField(source='gstnumber', required=False, allow_null=True, allow_blank=True)
     companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
+    warehouseId = serializers.CharField(source='warehouseid_id', required=False, allow_null=True)
     active = serializers.BooleanField(default=True, required=False)
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
@@ -109,7 +141,7 @@ class SupplierSerializer(serializers.ModelSerializer):
         model = Supplier
         fields = [
             'id', 'name', 'contactPerson', 'contactInfo', 'contact_person', 'contact_info',
-            'email', 'gstNumber', 'address', 'active', 'companyId', 'createdAt', 'updatedAt'
+            'email', 'gstNumber', 'address', 'active', 'companyId', 'warehouseId', 'createdAt', 'updatedAt'
         ]
 
 
@@ -125,6 +157,10 @@ class LabourSerializer(serializers.ModelSerializer):
     class Meta:
         model = Labour
         fields = ['id', 'name', 'dailyWage', 'contactInfo', 'contact_info', 'active', 'companyId', 'createdAt', 'updatedAt']
+
+    def create(self, validated_data):
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        return super().create(validated_data)
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -449,7 +485,7 @@ class OrderSerializer(serializers.ModelSerializer):
     companyId = serializers.CharField(source='companyid_id')
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
-    assignedWarehouse = serializers.PrimaryKeyRelatedField(source='assigned_warehouse', queryset=Warehouse.objects.all(), required=False, allow_null=True)
+    assignedWarehouse = serializers.PrimaryKeyRelatedField(source='warehouseid', queryset=Warehouse.objects.all(), required=False, allow_null=True)
     items = OrderitemSerializer(many=True, required=False, source='orderitem_set')
     partyDetails = serializers.SerializerMethodField(read_only=True)
     
@@ -460,14 +496,32 @@ class OrderSerializer(serializers.ModelSerializer):
     dispatchWarehouse = serializers.CharField(source='dispatchwarehouse', required=False, allow_null=True, allow_blank=True)
     dispatchDate = serializers.CharField(source='dispatchdate', required=False, allow_null=True, allow_blank=True)
 
+    createdBy = serializers.SerializerMethodField(read_only=True)
+    lastEditedBy = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Order
         fields = [
             'id', 'orderId', 'date', 'soEmail', 'partyType', 'partyName', 'distributor',
             'narration', 'status', 'grandTotal', 'companyId', 'createdAt', 'updatedAt', 'items',
             'assignedWarehouse', 'partyDetails',
-            'invoiceNumber', 'vehicleNumber', 'driverName', 'driverMobile', 'dispatchWarehouse', 'dispatchDate'
+            'invoiceNumber', 'vehicleNumber', 'driverName', 'driverMobile', 'dispatchWarehouse', 'dispatchDate',
+            'createdBy', 'lastEditedBy'
         ]
+
+    def get_createdBy(self, obj):
+        from api.views import _parse_user_audit_tags
+        tags = _parse_user_audit_tags(obj.narration)
+        if tags['createdBy']:
+            return tags['createdBy']
+        if obj.soemail_id:
+            return {'name': obj.soemail_id, 'email': obj.soemail_id, 'role': 'SALES', 'at': obj.createdat.isoformat() if obj.createdat else None}
+        return None
+
+    def get_lastEditedBy(self, obj):
+        from api.views import _parse_user_audit_tags
+        tags = _parse_user_audit_tags(obj.narration)
+        return tags['lastEditedBy']
 
     def get_partyDetails(self, obj):
         from api.models import Dealer, Distributor
@@ -667,13 +721,20 @@ class BomListSerializer(serializers.ModelSerializer):
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
     outputQuantity = serializers.FloatField(source='outputquantity', required=False, default=1.0)
+    items = BomitemSerializer(source='bomitem_set', many=True, required=False)
     productId = serializers.SerializerMethodField(read_only=True)
     productName = serializers.SerializerMethodField(read_only=True)
     itemCount = serializers.SerializerMethodField(read_only=True)
+    status = serializers.CharField(required=False)
+    assignedWarehouse = serializers.CharField(source='warehouseid_id', required=False, allow_null=True)
+    assignedWarehouseName = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Bom
-        fields = ['id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'outputQuantity', 'productId', 'productName', 'itemCount']
+        fields = ['id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'items', 'outputQuantity', 'productId', 'productName', 'itemCount', 'status', 'assignedWarehouse', 'assignedWarehouseName']
+
+    def get_assignedWarehouseName(self, obj):
+        return obj.warehouseid.name if obj.warehouseid else None
 
     def get_itemCount(self, obj):
         return getattr(obj, 'item_count', 0) or 0
@@ -699,10 +760,16 @@ class BomSerializer(serializers.ModelSerializer):
     outputQuantity = serializers.FloatField(source='outputquantity', required=False, default=1.0)
     productId = serializers.SerializerMethodField(read_only=True)
     productName = serializers.SerializerMethodField(read_only=True)
+    status = serializers.CharField(required=False)
+    assignedWarehouse = serializers.CharField(source='warehouseid_id', required=False, allow_null=True)
+    assignedWarehouseName = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Bom
-        fields = ['id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'items', 'outputQuantity', 'productId', 'productName']
+        fields = ['id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'items', 'outputQuantity', 'productId', 'productName', 'status', 'assignedWarehouse', 'assignedWarehouseName']
+
+    def get_assignedWarehouseName(self, obj):
+        return obj.warehouseid.name if obj.warehouseid else None
 
     def get_productId(self, obj):
         product_map = self.context.get('product_map', {})
@@ -812,7 +879,7 @@ class PurchaseorderitemSerializer(serializers.ModelSerializer):
         ]
 
     def _received_quantity(self, obj):
-        linked_purchase_ids = Purchase.objects.filter(purchaseorderid=obj.purchaseorderid).values_list('id', flat=True)
+        linked_purchase_ids = Purchase.objects.filter(purchaseorderid_id=obj.purchaseorderid_id).values_list('id', flat=True)
         if not linked_purchase_ids:
             return 0
 
@@ -868,8 +935,8 @@ class PurchaseorderSerializer(serializers.ModelSerializer):
     supplierId = serializers.CharField(source='supplierid_id', required=False)
     supplier_id = serializers.CharField(source='supplierid_id', required=False)
     
-    warehouseId = serializers.CharField(source='warehouseid', required=False, allow_null=True)
-    warehouse_id = serializers.CharField(source='warehouseid', required=False, allow_null=True)
+    warehouseId = serializers.CharField(source='warehouseid_id', required=False, allow_null=True)
+    warehouse_id = serializers.CharField(source='warehouseid_id', required=False, allow_null=True)
     
     netAmount = serializers.FloatField(source='netamount', required=False)
     net_amount = serializers.FloatField(source='netamount', required=False)
@@ -898,19 +965,25 @@ class PurchaseorderSerializer(serializers.ModelSerializer):
         ]
 
     def get_supplier(self, obj):
-        if obj.supplierid:
-            return {
-                'id': obj.supplierid.id,
-                'name': obj.supplierid.name,
-                'address': obj.supplierid.address,
-                'gst_number': obj.supplierid.gstnumber,
-                'contact_info': obj.supplierid.contactinfo or obj.supplierid.contactperson
-            }
+        try:
+            if obj.supplierid:
+                return {
+                    'id': obj.supplierid.id,
+                    'name': obj.supplierid.name,
+                    'address': obj.supplierid.address,
+                    'gst_number': obj.supplierid.gstnumber,
+                    'contact_info': obj.supplierid.contactinfo or obj.supplierid.contactperson
+                }
+        except Exception:
+            pass
         return None
 
     def get_supplier_name(self, obj):
-        if obj.supplierid:
-            return obj.supplierid.name
+        try:
+            if obj.supplierid:
+                return obj.supplierid.name
+        except Exception:
+            pass
         return None
 
 
@@ -960,8 +1033,11 @@ class LeadSerializer(serializers.ModelSerializer):
         ]
 
     def get_assignedTo(self, obj):
-        if obj.assigned_to:
-            return obj.assigned_to.email
+        try:
+            if obj.assigned_to:
+                return obj.assigned_to.email
+        except Exception:
+            pass
         return None
 
     def to_internal_value(self, data):

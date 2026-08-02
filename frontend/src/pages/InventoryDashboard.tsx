@@ -11,9 +11,12 @@ import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Navigate, Link, useNavigate } from 'react-router-dom';
+import { useWarehouse } from '@/contexts/WarehouseContext';
+import { useStocksByWarehouse } from '@/hooks/inventory/useStock';
 import { OrderStatus, Order } from '@/types';
 import { orderService } from '@/api/services/order.service';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
+import { UserAuditTag } from '@/components/UserAuditTag';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -29,6 +32,8 @@ const statusStyles: Record<string, string> = {
 const InventoryDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { activeWarehouseId } = useWarehouse();
+  const { data: stocksByWarehouse = {} } = useStocksByWarehouse();
   const { orders, products, warehouses, updateOrderStatus, updateOrderItems, dealers, loading: dataLoading, refreshAll } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
@@ -137,7 +142,34 @@ const InventoryDashboard: React.FC = () => {
     return { byProductId, byProductCode, byName };
   }, [boms]);
 
-  // Helper to check stock shortage for an order
+  // Helper to check stock shortage for an order (scoped to assigned warehouse if allocated)
+  const getWhAvailableStock = React.useCallback((prod: any, prodId: any, prodName: any, orderWh: any) => {
+    let targetWhId = null;
+    if (orderWh && orderWh !== 'GLOBAL') {
+      const whObj = warehouseMaps.byId.get(String(orderWh)) || warehouseMaps.byName.get(String(orderWh));
+      targetWhId = whObj ? String(whObj.id) : String(orderWh);
+    } else if (activeWarehouseId && activeWarehouseId !== 'GLOBAL') {
+      targetWhId = String(activeWarehouseId);
+    }
+
+    if (targetWhId && stocksByWarehouse && Object.keys(stocksByWarehouse).length > 0) {
+      const whMap = stocksByWarehouse[targetWhId] || (orderWh ? stocksByWarehouse[String(orderWh)] : null);
+      if (whMap) {
+        const pId = prod?.id || prodId;
+        const pName = prod?.name || prod?.productName || prodName;
+        const pSku = prod?.productCode || prod?.sku;
+        if (pId && whMap[pId] !== undefined) return whMap[pId];
+        if (pSku && whMap[pSku] !== undefined) return whMap[pSku];
+        if (pName && whMap[pName] !== undefined) return whMap[pName];
+        return 0;
+      }
+    }
+
+    return prod
+      ? (prod.availableStock !== undefined ? prod.availableStock : (prod.stockQty !== undefined ? prod.stockQty : 0))
+      : 0;
+  }, [warehouseMaps, activeWarehouseId, stocksByWarehouse]);
+
   const checkOrderShortage = React.useCallback((order: any) => {
     const shortages: {
       productId: string;
@@ -166,9 +198,7 @@ const InventoryDashboard: React.FC = () => {
         || productMaps.byCode.get(item.product) 
         || productMaps.byName.get(item.product);
       
-      const fgAvailable = finishedGood
-        ? (finishedGood.availableStock !== undefined ? finishedGood.availableStock : (finishedGood.stockQty !== undefined ? finishedGood.stockQty : 0))
-        : 0;
+      const fgAvailable = getWhAvailableStock(finishedGood, itemProductId, item.productName || item.product, order.assignedWarehouse);
 
       const fgRequired = item.qty || 0;
       const fgShortage = Math.max(0, fgRequired - fgAvailable);
@@ -207,9 +237,7 @@ const InventoryDashboard: React.FC = () => {
           const rawMaterial = productMaps.byId.get(bomItem.productId) 
             || productMaps.byName.get(rawMaterialName);
 
-          const rmAvailable = rawMaterial 
-            ? (rawMaterial.availableStock !== undefined ? rawMaterial.availableStock : (rawMaterial.stockQty !== undefined ? rawMaterial.stockQty : 0))
-            : 0;
+          const rmAvailable = getWhAvailableStock(rawMaterial, bomItem.productId, rawMaterialName, order.assignedWarehouse);
 
           const rmShortage = Math.max(0, rawRequired - rmAvailable);
 
@@ -271,7 +299,7 @@ const InventoryDashboard: React.FC = () => {
       shortages,
       finishedGoods,
     };
-  }, [productMaps, bomMaps, warehouses]);
+  }, [productMaps, bomMaps, warehouseMaps, getWhAvailableStock]);
 
   if (dataLoading || loadingBoms) {
     return (
@@ -287,8 +315,13 @@ const InventoryDashboard: React.FC = () => {
 
   const isInventory = user?.role === 'INVENTORY' || user?.role === 'SUPERADMIN' || user?.role === 'ADMIN' || user?.role === 'PRODUCTION';
 
-  // Only show orders that have a warehouse assigned
-  const assignedOrders = orders.filter(o => o.assignedWarehouse != null);
+  // Show orders assigned to the active warehouse, OR unassigned orders so inventory users can view and fulfill them
+  const assignedOrders = orders.filter(o => 
+    !activeWarehouseId || 
+    activeWarehouseId === 'GLOBAL' ||
+    o.assignedWarehouse == null || 
+    String(o.assignedWarehouse) === String(activeWarehouseId)
+  );
 
   const approvedOrders = assignedOrders.filter(o => o.status === 'Approved');
   const dispatchedOrders = assignedOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
@@ -889,6 +922,13 @@ const InventoryDashboard: React.FC = () => {
 
             return (
               <div className="space-y-4 mt-2">
+                {/* Audit Attribution Tag */}
+                <UserAuditTag 
+                  createdBy={(viewOrder as any).createdBy || viewOrder.soEmail} 
+                  createdAt={viewOrder.createdAt || viewOrder.date} 
+                  lastEditedBy={(viewOrder as any).lastEditedBy} 
+                />
+
                 {/* Header Info */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-secondary/20 p-3 rounded-xl border border-border text-xs">
                   <div>

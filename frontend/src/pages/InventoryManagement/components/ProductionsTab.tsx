@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useProductions, useProductionMutations } from '@/hooks/inventory/useProductions';
 import { useProducts } from '@/hooks/inventory/useProducts';
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,42 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
 
   const { data: products = [] } = useProducts({ warehouseId: form.warehouseId || undefined });
 
+  const availableCategories = useMemo(() => {
+    const cats = new Set<string>();
+    products.forEach(p => {
+      const mainCat = p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : ''));
+      if (mainCat) cats.add(String(mainCat));
+    });
+    return Array.from(cats).filter(Boolean).sort();
+  }, [products]);
+
+  const [finishedCatFilter, setFinishedCatFilter] = useState<string>(() => {
+    return localStorage.getItem('prod_modal_finished_cat_filter') || '';
+  });
+  const [rawCatFilter, setRawCatFilter] = useState<string>(() => {
+    return localStorage.getItem('prod_modal_raw_cat_filter') || '';
+  });
+  const [showFinishedDropdown, setShowFinishedDropdown] = useState<boolean>(false);
+  const [showRawDropdown, setShowRawDropdown] = useState<boolean>(false);
+
+  const handleFinishedCatFilterChange = (val: string) => {
+    setFinishedCatFilter(val);
+    if (val) {
+      localStorage.setItem('prod_modal_finished_cat_filter', val);
+    } else {
+      localStorage.removeItem('prod_modal_finished_cat_filter');
+    }
+  };
+
+  const handleRawCatFilterChange = (val: string) => {
+    setRawCatFilter(val);
+    if (val) {
+      localStorage.setItem('prod_modal_raw_cat_filter', val);
+    } else {
+      localStorage.removeItem('prod_modal_raw_cat_filter');
+    }
+  };
+
   useEffect(() => {
     const fetchMasters = async () => {
       try {
@@ -100,9 +136,21 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   const recipesByProduct = React.useMemo(() => {
     const map = new Map();
     for (const r of recipes) {
-      if (r.productCode) map.set(r.productCode, r);
-      if (r.productName) map.set(r.productName, r);
-      if (r.name) map.set(r.name, r);
+      if (r.productCode) {
+        map.set(r.productCode, r);
+        map.set(String(r.productCode).toLowerCase(), r);
+      }
+      if (r.productName) {
+        map.set(r.productName, r);
+        map.set(String(r.productName).toLowerCase(), r);
+      }
+      if (r.name) {
+        map.set(r.name, r);
+        map.set(String(r.name).toLowerCase(), r);
+      }
+      if (r.productId) {
+        map.set(String(r.productId), r);
+      }
     }
     return map;
   }, [recipes]);
@@ -115,11 +163,19 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
 
   const selectFinishedProduct = (p: any) => {
     // Locate the standard recipe/BOM mapping for this product
-    const recipe = recipesByProduct.get(p.productCode) || recipesByProduct.get(p.name);
+    const recipe =
+      recipesByProduct.get(p.productCode) ||
+      recipesByProduct.get(String(p.productCode || '').toLowerCase()) ||
+      recipesByProduct.get(p.name) ||
+      recipesByProduct.get(String(p.name || '').toLowerCase()) ||
+      recipesByProduct.get(p.sku) ||
+      recipesByProduct.get(String(p.sku || '').toLowerCase()) ||
+      recipesByProduct.get(String(p.id));
     
     setForm({ ...form, productId: p.id, productName: p.name });
     setSelectedRecipe(recipe || null);
     setProductSearch('');
+    setShowFinishedDropdown(false);
 
     if (recipe) {
       toast({
@@ -147,6 +203,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       unit: p.unit?.name || p.unit || 'KG'
     }]);
     setIngSearch('');
+    setShowRawDropdown(false);
   };
 
   const removeIngredient = (idx: number) => {
@@ -317,39 +374,108 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
         <Modal title={form.id ? "Edit Production Run" : "Record New Production Run"} onClose={() => { setModal(false); setForm({ productId: '', productName: '', quantity: 1, warehouseId: warehouses[0]?.id || '', date: new Date().toISOString().split('T')[0] }); setSelectedRecipe(null); setBatchItems([]); }}>
           <div className="space-y-4">
             <div className="relative">
-              <label className="text-sm font-medium block mb-1">Finished Product <span className="text-destructive">*</span></label>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1.5">
+                <label className="text-sm font-medium">Finished Product <span className="text-destructive">*</span></label>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground font-medium">Filter Category:</span>
+                  <select
+                    value={finishedCatFilter}
+                    onChange={e => {
+                      handleFinishedCatFilterChange(e.target.value);
+                      setShowFinishedDropdown(true);
+                    }}
+                    className="text-xs bg-muted/50 border border-border rounded-md px-2.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  >
+                    <option value="">All Categories</option>
+                    {availableCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <input 
                   type="text"
                   placeholder="Search finished product..."
                   value={form.productName || productSearch}
+                  onFocus={() => setShowFinishedDropdown(true)}
                   onChange={e => {
                     setProductSearch(e.target.value);
+                    setShowFinishedDropdown(true);
                     setForm({ ...form, productId: '', productName: '' });
                     setSelectedRecipe(null);
                   }}
                   className="w-full border border-border rounded-lg pl-9 pr-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
-              {productSearch && !form.productId && (
-                <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+              {(showFinishedDropdown || productSearch || finishedCatFilter) && !form.productId && (
+                <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                  <div className="px-3 py-1.5 bg-muted/50 border-b border-border flex items-center justify-between text-xs text-muted-foreground sticky top-0 z-10">
+                    <span>Select Finished Product</span>
+                    <button type="button" onClick={() => { setShowFinishedDropdown(false); setProductSearch(''); }} className="hover:text-foreground font-bold">✕</button>
+                  </div>
                   {products
                     .filter(p => {
-                      const catName = typeof p.category === 'string' ? p.category : p.category?.name;
-                      const cat = (p.categoryRef?.name || p.categoryName || catName || '').toUpperCase();
-                      return cat === 'FINISHED GOOD' || cat === 'SEMI FINISHED GOOD' || cat === 'TILES ADHESIVE' || cat === 'JOINT FILLER';
+                      if (finishedCatFilter) {
+                        const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
+                        const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
+                        const selUpper = finishedCatFilter.toUpperCase();
+                        if (parentCat !== selUpper && subCat !== selUpper) {
+                          return false;
+                        }
+                      }
+                      if (!productSearch) return true;
+                      const s = productSearch.toLowerCase().trim();
+                      return (
+                        (p.name && p.name.toLowerCase().includes(s)) ||
+                        (p.productCode && p.productCode.toLowerCase().includes(s)) ||
+                        (p.sku && p.sku.toLowerCase().includes(s))
+                      );
                     })
-                    .filter(p => !productSearch || (p.name && p.name.toLowerCase().includes(productSearch.toLowerCase())))
-                    .map(p => (
-                      <button 
-                        key={p.id} 
-                        onClick={() => selectFinishedProduct(p)}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0"
-                      >
-                        {p.name} <span className="text-[10px] text-muted-foreground ml-2">({p.productCode || p.sku})</span>
-                      </button>
-                    ))}
+                    .map(p => {
+                      const parentCat = p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName;
+                      const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : ''));
+                      const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
+                      return (
+                        <button 
+                          key={p.id} 
+                          onClick={() => selectFinishedProduct(p)}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2"
+                        >
+                          <div className="truncate flex items-center gap-1.5">
+                            <span className="font-medium text-foreground">{p.name}</span>
+                            <span className="text-[11px] text-muted-foreground">({p.productCode || p.sku})</span>
+                          </div>
+                          {catText ? (
+                            <span className="text-[11px] font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-md border border-primary/20 shrink-0">
+                              {catText}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  {products.filter(p => {
+                    if (finishedCatFilter) {
+                      const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
+                      const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
+                      const selUpper = finishedCatFilter.toUpperCase();
+                      if (parentCat !== selUpper && subCat !== selUpper) {
+                        return false;
+                      }
+                    }
+                    if (!productSearch) return true;
+                    const s = productSearch.toLowerCase().trim();
+                    return (
+                      (p.name && p.name.toLowerCase().includes(s)) ||
+                      (p.productCode && p.productCode.toLowerCase().includes(s)) ||
+                      (p.sku && p.sku.toLowerCase().includes(s))
+                    );
+                  }).length === 0 && (
+                    <div className="px-4 py-3 text-xs text-muted-foreground">
+                      No products found matching filters.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -400,25 +526,102 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 <span className="text-[10px] font-normal text-muted-foreground">{batchItems.length} items to consume</span>
               </h3>
               
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase">Add Custom Ingredients</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground font-medium">Filter Category:</span>
+                  <select
+                    value={rawCatFilter}
+                    onChange={e => {
+                      handleRawCatFilterChange(e.target.value);
+                      setShowRawDropdown(true);
+                    }}
+                    className="text-xs bg-muted/50 border border-border rounded-md px-2.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  >
+                    <option value="">All Categories</option>
+                    {availableCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <input 
                   type="text"
                   placeholder="Search and add raw materials to this batch run..."
                   value={ingSearch}
-                  onChange={e => setIngSearch(e.target.value)}
+                  onFocus={() => setShowRawDropdown(true)}
+                  onChange={e => {
+                    setIngSearch(e.target.value);
+                    setShowRawDropdown(true);
+                  }}
                   className="w-full border border-border rounded-lg pl-9 pr-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
-                {ingSearch && (
-                  <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                {(showRawDropdown || ingSearch || rawCatFilter) && (
+                  <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                    <div className="px-3 py-1.5 bg-muted/50 border-b border-border flex items-center justify-between text-xs text-muted-foreground sticky top-0 z-10">
+                      <span>Select Raw Material</span>
+                      <button type="button" onClick={() => { setShowRawDropdown(false); setIngSearch(''); }} className="hover:text-foreground font-bold">✕</button>
+                    </div>
                     {products
-                      .filter(p => !ingSearch || (p.name && p.name.toLowerCase().includes(ingSearch.toLowerCase())))
-                      .map(p => (
-                        <button key={p.id} onClick={() => addIngredient(p)}
-                            className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0">
-                            {p.name} <span className="text-[10px] text-muted-foreground ml-2">({p.sku || p.productCode})</span>
-                        </button>
-                    ))}
+                      .filter(p => {
+                        if (rawCatFilter) {
+                          const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
+                          const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
+                          const selUpper = rawCatFilter.toUpperCase();
+                          if (parentCat !== selUpper && subCat !== selUpper) {
+                            return false;
+                          }
+                        }
+                        if (!ingSearch) return true;
+                        const s = ingSearch.toLowerCase().trim();
+                        return (
+                          (p.name && p.name.toLowerCase().includes(s)) ||
+                          (p.productCode && p.productCode.toLowerCase().includes(s)) ||
+                          (p.sku && p.sku.toLowerCase().includes(s))
+                        );
+                      })
+                      .map(p => {
+                        const parentCat = p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName;
+                        const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : ''));
+                        const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
+                        return (
+                          <button key={p.id} onClick={() => addIngredient(p)}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2">
+                              <div className="truncate flex items-center gap-1.5">
+                                <span className="font-medium text-foreground">{p.name}</span>
+                                <span className="text-[11px] text-muted-foreground">({p.sku || p.productCode})</span>
+                              </div>
+                              {catText ? (
+                                <span className="text-[11px] font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-md border border-primary/20 shrink-0">
+                                  {catText}
+                                </span>
+                              ) : null}
+                          </button>
+                        );
+                      })}
+                    {products.filter(p => {
+                      if (rawCatFilter) {
+                        const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
+                        const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
+                        const selUpper = rawCatFilter.toUpperCase();
+                        if (parentCat !== selUpper && subCat !== selUpper) {
+                          return false;
+                        }
+                      }
+                      if (!ingSearch) return true;
+                      const s = ingSearch.toLowerCase().trim();
+                      return (
+                        (p.name && p.name.toLowerCase().includes(s)) ||
+                        (p.productCode && p.productCode.toLowerCase().includes(s)) ||
+                        (p.sku && p.sku.toLowerCase().includes(s))
+                      );
+                    }).length === 0 && (
+                      <div className="px-4 py-3 text-xs text-muted-foreground">
+                        No raw materials found matching filters.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

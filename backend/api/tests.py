@@ -123,7 +123,7 @@ class OptimizationTests(TenantAwareTestCase):
 
     def test_transaction_productions(self):
         from api.views import transaction_productions
-        from rest_framework.test import APIRequestFactory
+        from rest_framework.test import APIRequestFactory, force_authenticate
         from core.models import Warehouse
         
         wh = Warehouse.objects.create(name="Test Warehouse 2", active=True, companyid=self.company)
@@ -134,7 +134,7 @@ class OptimizationTests(TenantAwareTestCase):
             'warehouse_id': wh.id,
             'items': [{'productId': self.product.id, 'quantity': 2}]
         }, format='json')
-        req.user = self.user
+        force_authenticate(req, user=self.user)
         
         response = transaction_productions(req)
         self.assertEqual(response.status_code, 400)

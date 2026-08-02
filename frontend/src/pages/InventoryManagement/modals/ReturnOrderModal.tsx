@@ -44,14 +44,26 @@ export const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ isOpen, onCl
         price: it.price || it.rate || 0,
       }));
       
+      const rawReason = returnOrder.returnReason || returnOrder.return_reason || returnOrder.remarks || '';
+      const vehMatch = rawReason.match(/\[VEHICLE:\s*([^\]]+)\]/i);
+      const prMatch = rawReason.match(/\[PR NO:\s*([^\]]+)\]/i);
+      const srMatch = rawReason.match(/\[SR BILL:\s*([^\]]+)\]/i);
+
+      const cleanReason = rawReason
+        .replace(/\[VEHICLE:\s*[^\]]+\]/gi, '')
+        .replace(/\[PR NO:\s*[^\]]+\]/gi, '')
+        .replace(/\[SR BILL:\s*[^\]]+\]/gi, '')
+        .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
+        .trim();
+
       setForm({
         ...returnOrder,
         type: returnOrder.type || defaultType,
         partyName: returnOrder.party?.name || returnOrder.party?.dealerName || returnOrder.party?.distributorName || returnOrder.partyName || '',
-        challanNumber: returnOrder.challanNumber || returnOrder.challan_number || '',
-        originalBillNumber: returnOrder.originalBillNumber || returnOrder.original_bill_number || '',
-        vehicleNumber: returnOrder.vehicleNumber || returnOrder.vehicle_number || '',
-        returnReason: returnOrder.returnReason || returnOrder.return_reason || '',
+        challanNumber: (srMatch ? srMatch[1] : null) || returnOrder.challanNumber || returnOrder.challan_number || '',
+        originalBillNumber: (prMatch ? prMatch[1] : null) || returnOrder.originalBillNumber || returnOrder.original_bill_number || '',
+        vehicleNumber: (vehMatch ? vehMatch[1] : null) || returnOrder.vehicleNumber || returnOrder.vehicle_number || '',
+        returnReason: cleanReason || rawReason,
         returnDate: returnOrder.returnDate || returnOrder.return_date || new Date().toISOString().split('T')[0],
         lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', qty: 0, price: 0 }]
       });

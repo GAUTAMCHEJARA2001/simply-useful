@@ -22,3 +22,13 @@ export const useAggregateStock = () => {
     },
   });
 };
+
+export const useStocksByWarehouse = () => {
+  return useQuery({
+    queryKey: [...QUERY_KEYS.inventory, 'stocks-by-warehouse'],
+    queryFn: async () => {
+      const res = await api.get('/reports/stocks-by-warehouse');
+      return (res.data?.data || res.data || {}) as Record<string, Record<string, number>>;
+    },
+  });
+};

@@ -1,65 +1,61 @@
 import os
 import sys
-sys.path.insert(0, os.getcwd())
-
 import django
+from django.utils import timezone
+
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
-import uuid
+from api.models import User, Warehouse, Userwarehouseaccess, Expense, Visit, Company
 import bcrypt
-from django.utils import timezone
-from api.models import User, Expense, Visit, Company
-from core.models import Warehouse, Userwarehouseaccess
 
 def seed_pritika():
-    print("[SEED] Seeding Pritika Patel locally...")
     now = timezone.now()
     
-    # 1. Fetch company
-    company = Company.objects.using('default').filter(id='cmo75yliq0000wesurjpett1n').first()
+    # 1. Fetch Company
+    company = Company.objects.filter(id='cmo75yliq0000wesurjpett1n').first()
     if not company:
-        company = Company.objects.using('default').first()
+        company = Company.objects.first()
     if not company:
-        print("Error: No company found. Please run seed_kamla.py or migrations first.")
+        print("Error: No company found. Please run setup_local_tenant.py first.")
         return
 
-    # 2. Create User
-    password = bcrypt.hashpw(b'password123', bcrypt.gensalt()).decode('utf-8')
-    user, created = User.objects.using('default').get_or_create(
+    # 2. Get or create user
+    hashed = bcrypt.hashpw(b'admin123', bcrypt.gensalt()).decode('utf-8')
+    user, created = User.objects.get_or_create(
         email='pritika@kamla.com',
         defaults={
-            'id': 'user-pritika',
-            'name': 'Pritika Patel',
-            'role': 'SALES',
-            'hashedpassword': password,
+            'id': 'user-pritika-1',
+            'name': 'Pritika Sales',
+            'role': 'SALES_OFFICER',
+            'hashedpassword': hashed,
             'active': True,
-            'companyid': company,
-            'createdat': now,
-            'updatedat': now
+            'companyid': company
         }
     )
     if created:
-        print(f"Created User: {user.name} ({user.email})")
+        print(f"Created user: {user.name} ({user.email})")
     else:
         print(f"User already exists: {user.name} ({user.email})")
 
     # 3. Fetch NAVSARI warehouse
-    wh = Warehouse.objects.using('default').filter(db_name='wh_navsari').first()
+    wh = Warehouse.objects.filter(name__iexact='NAVSARI').first()
     if not wh:
-        print("Error: wh_navsari warehouse not found.")
+        wh = Warehouse.objects.first()
+    if not wh:
+        print("Error: NAVSARI warehouse not found.")
         return
 
-    # 4. Grant warehouse access in public DB
-    uwa, created = Userwarehouseaccess.objects.using('default').get_or_create(
+    # 4. Grant warehouse access
+    uwa, created = Userwarehouseaccess.objects.get_or_create(
         userid=user,
         warehouseid=wh
     )
     if created:
         print(f"Granted {user.name} access to warehouse {wh.name}")
 
-    # 5. Create Expense in wh_navsari
-    expense, created = Expense.objects.using('wh_navsari').get_or_create(
+    # 5. Create Expense in single DB
+    expense, created = Expense.objects.get_or_create(
         remarks='surat working',
         defaults={
             'id': 'exp-pritika-1',
@@ -73,29 +69,32 @@ def seed_pritika():
         }
     )
     if created:
-        print(f"Created local expense of INR 500 under wh_navsari for {user.name}")
+        print(f"Created local expense of INR 500 for {user.name}")
     else:
-        print(f"Local expense already exists under wh_navsari")
+        print(f"Local expense already exists")
 
-    # 6. Create Visit in wh_navsari
-    visit, created = Visit.objects.using('wh_navsari').get_or_create(
+    # 6. Create Visit in single DB
+    visit, created = Visit.objects.get_or_create(
         remarks='Test visit for Pritika',
         defaults={
             'id': 'visit-pritika-1',
             'companyid': company,
             'soemail': user,
-            'dealername': 'AMBICA CERAMICS',
-            'date': timezone.now().date(),
-            'visit_status': 'PENDING',
+            'customername': 'Kamla Store #1',
+            'visitdate': timezone.now().date(),
+            'purpose': 'Regular Followup',
             'createdat': now
         }
     )
     if created:
-        print(f"Created local visit under wh_navsari for {user.name}")
+        print(f"Created local visit for {user.name}")
     else:
-        print(f"Local visit already exists under wh_navsari")
+        print(f"Local visit already exists")
 
-    print("[SEED] Local Pritika seeding complete!")
+    print("\n--- SEED PRITIKA COMPLETE ---")
+    print("Login Email    : pritika@kamla.com")
+    print("Password       : admin123")
+    print("-----------------------------")
 
 if __name__ == '__main__':
     seed_pritika()

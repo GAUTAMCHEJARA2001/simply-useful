@@ -13,6 +13,8 @@ export const useBrands = () => {
       const data = res.data?.data || res.data || [];
       return data as Brand[];
     },
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    gcTime: 60 * 60 * 1000,
   });
 };
 

@@ -16,6 +16,7 @@ import { reportService } from '@/api/services/report.service';
 import { useQuery } from '@tanstack/react-query';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import LedgerRequestsPanel from '@/components/admin/LedgerRequestsPanel';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700',
@@ -207,6 +208,8 @@ const AdminDashboard: React.FC = () => {
           </motion.div>
         ))}
       </div>
+
+      <LedgerRequestsPanel />
 
       {/* ── Order Pipeline ─────────────────────────────────── */}
       <Card>

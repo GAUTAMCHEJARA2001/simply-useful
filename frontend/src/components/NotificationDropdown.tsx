@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import {
   Bell, BellRing, CheckCircle2, Volume2, AlertTriangle,
-  ShoppingCart, Package, Clock, ClipboardList, MapPin, Receipt, X
+  ShoppingCart, Package, Clock, ClipboardList, MapPin, Receipt, X,
+  ExternalLink, Sparkles, Filter, ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -44,77 +46,81 @@ export interface NotificationItem {
   date: string;
   icon: React.ElementType;
   color: string;
+  link?: string;
+  category?: 'orders' | 'alerts' | 'dispatches' | 'general';
 }
 
 export const NotificationDropdown: React.FC = () => {
   const { user } = useAuth();
-  const { orders, products, visits, expenses } = useData();
+  const { orders, visits, products, expenses } = useData();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
   const [isOpen, setIsOpen] = useState(false);
-  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const [activeTab, setActiveTab] = useState<'all' | 'dispatches' | 'orders' | 'alerts'>('all');
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => readStoredIds(DISMISSED_STORAGE_KEY));
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 340, maxHeight: 480 });
+  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 380, maxHeight: 520 });
+
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const prevIdsRef = useRef<Set<string>>(new Set());
-  const alertedIdsRef = useRef<Set<string>>(new Set(readStoredIds(ALERTED_STORAGE_KEY)));
   const hasNotificationSnapshotRef = useRef(false);
-  const { toast } = useToast();
 
   const updateDropdownPosition = useCallback(() => {
-    const rect = buttonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
-    const sidePadding = viewportWidth < 640 ? 12 : 16;
-    const width = Math.min(viewportWidth - sidePadding * 2, viewportWidth < 640 ? 360 : 340);
-    const left = Math.min(
-      Math.max(sidePadding, rect.right - width),
-      viewportWidth - width - sidePadding
-    );
-    const top = Math.min(rect.bottom + 8, window.innerHeight - 120);
-    const maxHeight = Math.max(240, window.innerHeight - top - sidePadding);
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(viewportWidth < 640 ? viewportWidth - 32 : 410, 420);
+    let left = rect.right - width;
+    if (left < 16) left = 16;
+    if (left + width > viewportWidth - 16) left = viewportWidth - width - 16;
+
+    const top = rect.bottom + 10;
+    const maxHeight = Math.min(560, viewportHeight - top - 24);
 
     setDropdownPosition({ top, left, width, maxHeight });
   }, []);
 
-  // Load broadcasts from backend API and dismissed list from localStorage
+  useEffect(() => {
+    if (!isOpen) return;
+    updateDropdownPosition();
+    const handleResizeOrScroll = () => updateDropdownPosition();
+    window.addEventListener('resize', handleResizeOrScroll);
+    window.addEventListener('scroll', handleResizeOrScroll, true);
+    return () => {
+      window.removeEventListener('resize', handleResizeOrScroll);
+      window.removeEventListener('scroll', handleResizeOrScroll, true);
+    };
+  }, [isOpen, updateDropdownPosition]);
+
   const loadNotifications = async () => {
     try {
-      const { crudApi } = await import('@/api/crud');
-      const { API_ENDPOINTS } = await import('@/api/endpoints');
-      const role = user?.role?.toUpperCase() || '';
-      const data = await crudApi.list(API_ENDPOINTS.BROADCASTS + `?role=${role}`);
-      setBroadcasts(Array.isArray(data) ? data.map((b: any) => ({
-        id: b.id,
-        message: b.message,
-        date: b.createdAt || b.created_at || new Date().toISOString(),
-        targetRole: b.targetRole || b.target_role || 'ALL',
-        author: b.author || 'Admin',
-      })) : []);
+      const res = await api.get('/broadcasts');
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        setBroadcasts(res.data.data);
+      }
     } catch (e) {
-      // Fallback: keep existing broadcasts if API fails
-      console.error('Failed to load broadcasts:', e);
+      console.error('Failed to load broadcasts', e);
     }
-
-    setDismissedIds(readStoredIds(DISMISSED_STORAGE_KEY));
-    alertedIdsRef.current = new Set(readStoredIds(ALERTED_STORAGE_KEY));
   };
 
   useEffect(() => {
     loadNotifications();
-    // Poll for new broadcasts every 5 minutes (not 30s - backend is on free tier)
     const interval = setInterval(loadNotifications, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user?.role]);
+  }, []);
 
-  // Close dropdown on click outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const clickedButton = containerRef.current?.contains(target);
-      const clickedDropdown = dropdownRef.current?.contains(target);
-      if (!clickedButton && !clickedDropdown) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(e.target as Node)
+      ) {
+        const portalEl = document.getElementById('notification-portal-root');
+        if (portalEl && portalEl.contains(e.target as Node)) return;
         setIsOpen(false);
       }
     };
@@ -122,49 +128,34 @@ export const NotificationDropdown: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    updateDropdownPosition();
-    window.addEventListener('resize', updateDropdownPosition);
-    window.addEventListener('scroll', updateDropdownPosition, true);
-
-    return () => {
-      window.removeEventListener('resize', updateDropdownPosition);
-      window.removeEventListener('scroll', updateDropdownPosition, true);
-    };
-  }, [isOpen, updateDropdownPosition]);
-
   if (!user) return null;
-
   const role = user.role.toUpperCase();
 
   // Generate dynamic, discrete notification list based on active user role
   const rawNotifications: NotificationItem[] = [];
 
-  // 1. SALES OFFICER / SALES: Order status updates & Scheduled visits today
+  // 1. SALES OFFICER / SALES: Order status updates & Scheduled visits
   if (role === 'SALES' || role === 'SALES_OFFICER') {
-    // Dynamic status update notifications for their own orders
     orders.forEach(o => {
       const email = o.soEmail || o.so_email || '';
       if (email.toLowerCase() === user.email.toLowerCase()) {
         if (o.status !== 'Pending') {
           const statusText = o.status === 'Cancelled' ? 'Rejected' : o.status;
           let icon = Clock;
-          let color = 'text-amber-500 bg-amber-500/10';
+          let color = 'text-amber-600 bg-amber-500/15 dark:text-amber-400 dark:bg-amber-950/60';
 
           if (o.status === 'Approved') {
             icon = CheckCircle2;
-            color = 'text-emerald-500 bg-emerald-500/10';
+            color = 'text-emerald-600 bg-emerald-500/15 dark:text-emerald-400 dark:bg-emerald-950/60';
           } else if (o.status === 'Dispatched') {
             icon = Package;
-            color = 'text-blue-500 bg-blue-500/10';
+            color = 'text-blue-600 bg-blue-500/15 dark:text-blue-400 dark:bg-blue-950/60';
           } else if (o.status === 'Completed') {
             icon = CheckCircle2;
-            color = 'text-teal-500 bg-teal-500/10';
+            color = 'text-teal-600 bg-teal-500/15 dark:text-teal-400 dark:bg-teal-950/60';
           } else if (o.status === 'Cancelled' || o.status === 'Returned') {
             icon = AlertTriangle;
-            color = 'text-rose-500 bg-rose-500/10';
+            color = 'text-rose-600 bg-rose-500/15 dark:text-rose-400 dark:bg-rose-950/60';
           }
 
           rawNotifications.push({
@@ -173,13 +164,14 @@ export const NotificationDropdown: React.FC = () => {
             message: `Your order #${o.id?.toString().slice(-6).toUpperCase()} status was changed to ${statusText}.`,
             date: o.date || new Date().toISOString(),
             icon,
-            color
+            color,
+            link: '/orders',
+            category: 'orders'
           });
         }
       }
     });
 
-    // Scheduled visits for today
     const todayStr = new Date().toISOString().split('T')[0];
     visits.forEach(v => {
       const email = v.soEmail || v.so_email || '';
@@ -192,7 +184,9 @@ export const NotificationDropdown: React.FC = () => {
             message: `You have a visit scheduled today at ${(v as any).partyName || 'Dealer'}.`,
             date: v.date || new Date().toISOString(),
             icon: MapPin,
-            color: 'text-sky-500 bg-sky-500/10'
+            color: 'text-sky-600 bg-sky-500/15 dark:text-sky-400 dark:bg-sky-950/60',
+            link: '/sales/visits',
+            category: 'general'
           });
         }
       }
@@ -201,7 +195,6 @@ export const NotificationDropdown: React.FC = () => {
 
   // 2. INVENTORY OFFICER & PRODUCTION: Approved orders ready for dispatch & Low stock alerts
   if (role === 'INVENTORY' || role === 'PRODUCTION') {
-    // New Order ready for dispatch
     orders.forEach(o => {
       if (o.status === 'Approved') {
         rawNotifications.push({
@@ -210,12 +203,13 @@ export const NotificationDropdown: React.FC = () => {
           message: `Order #${o.id?.toString().slice(-6).toUpperCase()} has been approved. Ready for dispatch packaging.`,
           date: o.date || new Date().toISOString(),
           icon: ShoppingCart,
-          color: 'text-indigo-500 bg-indigo-500/10'
+          color: 'text-indigo-600 bg-indigo-500/15 dark:text-indigo-400 dark:bg-indigo-950/60',
+          link: '/inventory/dispatch',
+          category: 'dispatches'
         });
       }
     });
 
-    // Low stock product alerts
     products.forEach(p => {
       const stock = p.availableStock ?? 0;
       const min = p.minimumStock ?? 5;
@@ -226,7 +220,9 @@ export const NotificationDropdown: React.FC = () => {
           message: `${p.name} stock level is low: ${stock} remaining (Min: ${min}).`,
           date: new Date().toISOString(),
           icon: Package,
-          color: 'text-orange-500 bg-orange-500/10'
+          color: 'text-orange-600 bg-orange-500/15 dark:text-orange-400 dark:bg-orange-950/60',
+          link: '/inventory',
+          category: 'alerts'
         });
       }
     });
@@ -234,7 +230,6 @@ export const NotificationDropdown: React.FC = () => {
 
   // 3. ADMIN / SUPERADMIN: New Orders awaiting approval & Out of Stock alerts
   if (role === 'ADMIN' || role === 'SUPERADMIN') {
-    // New orders awaiting approval
     orders.forEach(o => {
       if (o.status === 'Pending') {
         rawNotifications.push({
@@ -243,12 +238,13 @@ export const NotificationDropdown: React.FC = () => {
           message: `Order #${o.id?.toString().slice(-6).toUpperCase()} submitted by ${o.soEmail ? o.soEmail.split('@')[0] : 'Sales Executive'} is awaiting your approval.`,
           date: o.date || new Date().toISOString(),
           icon: Clock,
-          color: 'text-amber-500 bg-amber-500/10'
+          color: 'text-amber-600 bg-amber-500/15 dark:text-amber-400 dark:bg-amber-950/60',
+          link: '/orders',
+          category: 'orders'
         });
       }
     });
 
-    // Out of Stock alerts
     products.forEach(p => {
       const stock = p.availableStock ?? 0;
       if (stock <= 0) {
@@ -258,7 +254,9 @@ export const NotificationDropdown: React.FC = () => {
           message: `${p.name} is completely depleted. Please review supply.`,
           date: new Date().toISOString(),
           icon: AlertTriangle,
-          color: 'text-rose-600 bg-rose-500/10'
+          color: 'text-rose-600 bg-rose-500/15 dark:text-rose-400 dark:bg-rose-950/60',
+          link: '/inventory',
+          category: 'alerts'
         });
       }
     });
@@ -266,7 +264,6 @@ export const NotificationDropdown: React.FC = () => {
 
   // 4. HR: Unverified visits & Pending expenses
   if (role === 'HR') {
-    // Unverified visits
     visits.forEach(v => {
       const isPending = v.visitStatus?.toUpperCase() === 'PENDING' || v.visit_status?.toUpperCase() === 'PENDING';
       if (isPending) {
@@ -276,12 +273,13 @@ export const NotificationDropdown: React.FC = () => {
           message: `Field visit report by ${v.soEmail ? v.soEmail.split('@')[0] : 'Sales Executive'} awaits verification.`,
           date: v.date || new Date().toISOString(),
           icon: ClipboardList,
-          color: 'text-rose-500 bg-rose-500/10'
+          color: 'text-rose-600 bg-rose-500/15 dark:text-rose-400 dark:bg-rose-950/60',
+          link: '/sales/visits',
+          category: 'general'
         });
       }
     });
 
-    // Pending expense reviews
     expenses.forEach(e => {
       if (e.status?.toUpperCase() === 'PENDING') {
         rawNotifications.push({
@@ -290,7 +288,9 @@ export const NotificationDropdown: React.FC = () => {
           message: `Expense claim of ₹${(e.amount || 0).toLocaleString('en-IN')} by ${(e as any).userName || 'Staff'} is awaiting verification.`,
           date: (e as any).createdAt || new Date().toISOString(),
           icon: Receipt,
-          color: 'text-teal-500 bg-teal-500/10'
+          color: 'text-teal-600 bg-teal-500/15 dark:text-teal-400 dark:bg-teal-950/60',
+          link: '/hr',
+          category: 'general'
         });
       }
     });
@@ -305,7 +305,9 @@ export const NotificationDropdown: React.FC = () => {
         message: b.message,
         date: b.date,
         icon: Volume2,
-        color: 'text-amber-600 bg-amber-500/10'
+        color: 'text-amber-600 bg-amber-500/15 dark:text-amber-400 dark:bg-amber-950/60',
+        link: '/admin',
+        category: 'general'
       });
     }
   });
@@ -316,14 +318,33 @@ export const NotificationDropdown: React.FC = () => {
   // Filter out notifications that have already been dismissed/read
   const activeNotifications = rawNotifications.filter(n => !dismissedIds.includes(n.id));
 
-  // Dismiss notification helper
+  // Category Filtered items
+  const filteredNotifications = activeNotifications.filter(n => {
+    if (activeTab === 'all') return true;
+    if (activeTab === 'dispatches') return n.category === 'dispatches';
+    if (activeTab === 'orders') return n.category === 'orders';
+    if (activeTab === 'alerts') return n.category === 'alerts';
+    return true;
+  });
+
+  const dispatchesCount = activeNotifications.filter(n => n.category === 'dispatches').length;
+  const ordersCount = activeNotifications.filter(n => n.category === 'orders').length;
+  const alertsCount = activeNotifications.filter(n => n.category === 'alerts').length;
+
   const dismissNotification = (id: string) => {
     const updated = Array.from(new Set([...dismissedIds, id]));
     writeStoredIds(DISMISSED_STORAGE_KEY, updated);
     setDismissedIds(updated);
   };
 
-  // Clear/Dismiss all current active notifications
+  const handleNotificationClick = (notif: NotificationItem) => {
+    dismissNotification(notif.id);
+    setIsOpen(false);
+    if (notif.link) {
+      navigate(notif.link);
+    }
+  };
+
   const dismissAll = () => {
     const activeIds = activeNotifications.map(n => n.id);
     const updated = Array.from(new Set([...dismissedIds, ...activeIds]));
@@ -332,133 +353,70 @@ export const NotificationDropdown: React.FC = () => {
     setIsOpen(false);
   };
 
-  // Register Service Worker and request notification permission on mount
-  const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
-
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) return;
-    
-    navigator.serviceWorker.register('/sw.js').then(async (reg) => {
-      swRegistrationRef.current = reg;
-      
-      if ('Notification' in window && Notification.permission === 'default') {
-        try {
-          const perm = await Notification.requestPermission();
-          if (perm !== 'granted') return;
-        } catch { return; }
-      } else if (Notification.permission !== 'granted') {
-        return;
-      }
-
-      try {
-        let sub = await reg.pushManager.getSubscription();
-        if (!sub) {
-          const response = await api.get('webpush/vapid-public-key');
-          const publicVapidKey = response.data.publicKey;
-          if (publicVapidKey) {
-            const padding = '='.repeat((4 - publicVapidKey.length % 4) % 4);
-            const base64 = (publicVapidKey + padding).replace(/-/g, '+').replace(/_/g, '/');
-            const rawData = window.atob(base64);
-            const outputArray = new Uint8Array(rawData.length);
-            for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
-            
-            sub = await reg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: outputArray
-            });
-          }
-        }
-        
-        if (sub) {
-          await api.post('webpush/subscribe', {
-            subscription: sub.toJSON()
-          });
-        }
-      } catch (e) {
-        // Push subscription not supported or failed silently
-      }
-    }).catch(() => {});
-  }, []);
-
-  // Helper to show a native notification via the service worker
   const showNativeNotification = (title: string, body: string, tag?: string) => {
-    // Play notification sound
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
     try {
-      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-      audio.volume = 0.5;
-      audio.play().catch(() => { });
-    } catch (e) { }
-
-    // Show in-app toast as well
-    toast({ title, description: body });
-
-    // Send to service worker for native OS notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      if (swRegistrationRef.current?.active) {
-        swRegistrationRef.current.active.postMessage({
-          type: 'SHOW_NOTIFICATION',
-          title,
-          body,
-          icon: '/android-chrome-192x192.png',
-          tag: tag || 'kamla-' + Date.now(),
-          renotify: false,
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification(title, {
+            body,
+            icon: '/icon-192.png',
+            tag: tag || title
+          });
         });
       } else {
-        // Fallback: use Notification API directly
-        try {
-          new Notification(title, {
-            body,
-            icon: '/android-chrome-192x192.png',
-            tag: tag || 'kamla-' + Date.now(),
-          });
-        } catch (e) { }
+        new Notification(title, { body, tag });
       }
+    } catch (e) {
+      console.error('Failed to trigger native push notification', e);
     }
   };
 
-  // Detect new notifications to play sound and show native notification
-  const activeIdsString = activeNotifications.map(n => n.id).join(',');
   useEffect(() => {
     const currentIds = new Set(activeNotifications.map(n => n.id));
-
     if (!hasNotificationSnapshotRef.current) {
       hasNotificationSnapshotRef.current = true;
-      prevIdsRef.current = currentIds;
-      const alreadyAlerted = Array.from(new Set([...alertedIdsRef.current, ...currentIds]));
-      alertedIdsRef.current = new Set(alreadyAlerted);
-      writeStoredIds(ALERTED_STORAGE_KEY, alreadyAlerted);
+      writeStoredIds(ALERTED_STORAGE_KEY, Array.from(currentIds));
       return;
     }
 
+    const previousAlertedIds = readStoredIds(ALERTED_STORAGE_KEY);
     const newNotifs = activeNotifications.filter(
-      n => !prevIdsRef.current.has(n.id) && !alertedIdsRef.current.has(n.id)
+      n => !previousAlertedIds.includes(n.id)
     );
 
     if (newNotifs.length > 0) {
       newNotifs.forEach(n => {
         showNativeNotification(n.title, n.message, n.id);
       });
-
-      const alerted = Array.from(new Set([
-        ...alertedIdsRef.current,
-        ...newNotifs.map(n => n.id),
-      ]));
-      alertedIdsRef.current = new Set(alerted);
-      writeStoredIds(ALERTED_STORAGE_KEY, alerted);
+      const updatedAlerted = Array.from(
+        new Set([...previousAlertedIds, ...newNotifs.map(n => n.id)])
+      );
+      writeStoredIds(ALERTED_STORAGE_KEY, updatedAlerted);
     }
+  }, [activeNotifications]);
 
-    prevIdsRef.current = currentIds;
-  }, [activeIdsString]);
+  const formatDateLabel = (dateStr: string) => {
+    try {
+      const dt = new Date(dateStr);
+      if (isNaN(dt.getTime())) return 'Just now';
+      const day = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      const time = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
+      return `${day}, ${time}`;
+    } catch {
+      return 'Just now';
+    }
+  };
 
   const dropdown = isOpen ? createPortal(
     <AnimatePresence>
       <motion.div
-        ref={dropdownRef}
-        initial={{ opacity: 0, y: 8, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 8, scale: 0.95 }}
-        transition={{ duration: 0.2 }}
-        className="fixed bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl overflow-hidden flex flex-col z-[9999]"
+        id="notification-portal-root"
+        initial={{ opacity: 0, scale: 0.96, y: -6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: -6 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
+        className="fixed bg-card border border-border/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col z-[9999]"
         style={{
           top: dropdownPosition.top,
           left: dropdownPosition.left,
@@ -467,60 +425,138 @@ export const NotificationDropdown: React.FC = () => {
           transformOrigin: 'top right',
         }}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-muted/30 shrink-0">
+        {/* Modern Header matching user reference design */}
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-border/60 bg-muted/20 shrink-0">
           <div>
-            <h3 className="font-extrabold text-sm text-foreground">Notifications</h3>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
+            <h3 className="font-black text-base text-foreground tracking-tight flex items-center gap-2">
+              Notifications
+              {activeNotifications.length > 0 && (
+                <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full border border-primary/20">
+                  Live
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-muted-foreground font-medium mt-0.5">
               {activeNotifications.length === 0 ? 'All caught up' : `${activeNotifications.length} pending items`}
             </p>
           </div>
+
           {activeNotifications.length > 0 && (
             <button
               onClick={dismissAll}
-              className="text-[10px] font-black text-amber-500 hover:text-amber-600 transition-colors"
+              className="text-xs font-black text-amber-500 hover:text-amber-600 transition-colors px-2.5 py-1 rounded-lg hover:bg-amber-500/10 active:scale-95"
             >
               Clear All
             </button>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto divide-y divide-border/40">
-          {activeNotifications.length === 0 ? (
+        {/* Interactive Filter Category Tabs */}
+        {activeNotifications.length > 0 && (
+          <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40 bg-muted/10 shrink-0 overflow-x-auto no-scrollbar">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={cn(
+                "px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shrink-0",
+                activeTab === 'all'
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              All ({activeNotifications.length})
+            </button>
+            {dispatchesCount > 0 && (
+              <button
+                onClick={() => setActiveTab('dispatches')}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shrink-0 flex items-center gap-1",
+                  activeTab === 'dispatches'
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                Dispatches ({dispatchesCount})
+              </button>
+            )}
+            {ordersCount > 0 && (
+              <button
+                onClick={() => setActiveTab('orders')}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shrink-0 flex items-center gap-1",
+                  activeTab === 'orders'
+                    ? "bg-amber-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                Orders ({ordersCount})
+              </button>
+            )}
+            {alertsCount > 0 && (
+              <button
+                onClick={() => setActiveTab('alerts')}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shrink-0 flex items-center gap-1",
+                  activeTab === 'alerts'
+                    ? "bg-rose-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                Alerts ({alertsCount})
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Interactive Notification List */}
+        <div className="flex-1 overflow-y-auto divide-y divide-border/40 p-2 space-y-1.5">
+          {filteredNotifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2.5 opacity-80" />
-              <p className="text-xs font-bold text-foreground">No pending alerts</p>
-              <p className="text-[10px] text-muted-foreground mt-1 leading-normal max-w-[200px]">
-                Your notifications have been reviewed and cleared!
+              <CheckCircle2 className="w-9 h-9 text-emerald-500 mb-2.5 opacity-80" />
+              <p className="text-sm font-bold text-foreground">No pending notifications</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-normal max-w-[220px]">
+                {activeTab === 'all'
+                  ? 'Your alerts have been reviewed and cleared!'
+                  : `No notifications in ${activeTab} section.`}
               </p>
             </div>
           ) : (
-            activeNotifications.map((notif) => (
+            filteredNotifications.map((notif) => (
               <div
                 key={notif.id}
-                className="p-3.5 flex gap-3 hover:bg-muted/30 transition-colors group relative"
+                onClick={() => handleNotificationClick(notif)}
+                className="p-3.5 rounded-2xl flex gap-3.5 items-start bg-card hover:bg-accent/40 border border-border/40 transition-all duration-200 cursor-pointer relative group shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
               >
-                <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", notif.color)}>
-                  <notif.icon className="w-4 h-4" />
+                {/* Modern Pill Icon Container matching reference design */}
+                <div className={cn(
+                  "w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-inner transition-transform group-hover:scale-105",
+                  notif.color
+                )}>
+                  <notif.icon className="w-5 h-5" />
                 </div>
-                <div className="flex-1 min-w-0 pr-5">
-                  <p className="text-xs font-extrabold text-foreground leading-tight">
-                    {notif.title}
-                  </p>
-                  <p className="text-[10.5px] text-foreground/90 mt-1 leading-relaxed font-medium break-words">
+
+                {/* Content Box */}
+                <div className="flex-1 min-w-0 pr-6">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="text-xs font-black text-foreground group-hover:text-primary transition-colors tracking-tight">
+                      {notif.title}
+                    </p>
+                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed font-medium break-words">
                     {notif.message}
                   </p>
-                  <p className="text-[9px] text-muted-foreground mt-2 font-mono">
-                    {new Date(notif.date).toLocaleDateString('en-IN', {
-                      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-                    })}
+                  <p className="text-[10px] text-muted-foreground/80 font-mono mt-2 font-semibold">
+                    {formatDateLabel(notif.date)}
                   </p>
                 </div>
+
+                {/* Individual Dismiss Button */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     dismissNotification(notif.id);
                   }}
-                  className="absolute right-2.5 top-3.5 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all sm:opacity-0 sm:group-hover:opacity-100"
+                  className="absolute right-2.5 top-3 p-1 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-all opacity-80 sm:opacity-0 sm:group-hover:opacity-100"
                   title="Dismiss notification"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -543,9 +579,9 @@ export const NotificationDropdown: React.FC = () => {
           setIsOpen(open => !open);
         }}
         className={cn(
-          "relative p-2 rounded-xl border transition-all duration-300 outline-none flex items-center justify-center",
+          "relative p-2.5 rounded-xl border transition-all duration-300 outline-none flex items-center justify-center",
           isOpen
-            ? "bg-primary/10 border-primary text-primary"
+            ? "bg-primary/10 border-primary text-primary shadow-sm"
             : "bg-card border-border hover:bg-muted/50 text-muted-foreground hover:text-foreground"
         )}
         aria-label="Open notifications"

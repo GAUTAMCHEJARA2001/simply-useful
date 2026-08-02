@@ -143,15 +143,18 @@ api.interceptors.response.use(
     const normalizedError = normalizeApiError(error);
 
     if (IS_DEV) {
-      console.error('API ERROR:', {
-        url: normalizedError.url,
-        method: normalizedError.method,
-        status: normalizedError.status,
-        kind: normalizedError.kind,
-        retryable: normalizedError.retryable,
-        message: normalizedError.message,
-        data: normalizedError.data,
-      });
+      console.error(
+        `[API ERROR ${normalizedError.status || ''}] ${normalizedError.method || ''} ${normalizedError.url || ''} -> ${normalizedError.message || ''}`,
+        {
+          url: normalizedError.url,
+          method: normalizedError.method,
+          status: normalizedError.status,
+          kind: normalizedError.kind,
+          retryable: normalizedError.retryable,
+          message: normalizedError.message,
+          data: normalizedError.data,
+        }
+      );
     }
 
     return Promise.reject(normalizedError);

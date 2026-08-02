@@ -38,18 +38,31 @@ export const ReturnsTab: React.FC<ReturnsTabProps> = ({ returnType }) => {
       <SafeDataView data={returns} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable
           columns={['Type', 'Customer/Supplier', 'Return Bill', 'Vehicle', 'Reason', 'Net Amount', 'Return Date', 'Action']}
-          rows={filteredReturns.filter((r: any) => !returnType || r.type === returnType).map((r: any) => [
-            r.type || '-',
-            r.party?.name || r.party?.dealerName || r.party?.distributorName || r.partyName || '-',
-            r.challanNumber || r.challan_number || '-',
-            (r.vehicleNumber || r.vehicle_number || '-').toUpperCase(),
-            r.returnReason || r.return_reason || '-',
-            Currency(r.netAmount || r.total_amount || 0),
-            r.returnDate || r.return_date || (r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN') : '-'),
-            <Button key={r.id} size="sm" variant="outline" onClick={() => handleOpenModal(r)}>
-              <Eye className="w-4 h-4 mr-1.5" /> View / Edit
-            </Button>
-          ])}
+          rows={filteredReturns.filter((r: any) => !returnType || r.type === returnType).map((r: any) => {
+            const rawReason = r.returnReason || r.return_reason || r.remarks || '';
+            const vehMatch = rawReason.match(/\[VEHICLE:\s*([^\]]+)\]/i);
+            const displayVehicle = vehMatch ? vehMatch[1].toUpperCase() : (r.vehicleNumber || r.vehicle_number || '-').toUpperCase();
+
+            const cleanReason = rawReason
+              .replace(/\[VEHICLE:\s*[^\]]+\]/gi, '')
+              .replace(/\[PR NO:\s*[^\]]+\]/gi, '')
+              .replace(/\[SR BILL:\s*[^\]]+\]/gi, '')
+              .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
+              .trim() || '-';
+
+            return [
+              r.type || '-',
+              r.party?.name || r.party?.dealerName || r.party?.distributorName || r.partyName || '-',
+              r.challanNumber || r.challan_number || '-',
+              displayVehicle,
+              cleanReason,
+              Currency(r.netAmount || r.total_amount || 0),
+              r.returnDate || r.return_date || (r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN') : '-'),
+              <Button key={r.id} size="sm" variant="outline" onClick={() => handleOpenModal(r)}>
+                <Eye className="w-4 h-4 mr-1.5" /> View / Edit
+              </Button>
+            ];
+          })}
         />
       </SafeDataView>
 

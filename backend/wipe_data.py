@@ -14,25 +14,10 @@ from api.models import (
 )
 from django.db import transaction
 
-def wipe_tenant(db_name):
-    print(f"Wiping Tenant Data for {db_name}...")
+def wipe_all():
+    print("Wiping Test/Dummy Users and Access from db_master...")
     try:
-        with transaction.atomic(using=db_name):
-            # CRM / Leads
-
-            # Transactions
-            
-            # Masters
-            print(f"Tenant {db_name} wiped successfully.")
-    except Exception as e:
-        print(f"Error wiping {db_name}: {e}")
-
-def wipe_global():
-    print("Wiping Global Data (Users, Userwarehouseaccess)...")
-    try:
-        Userwarehouseaccess.objects.using('default').all().delete()
-        
-        # Delete only the dummy users we created
+        Userwarehouseaccess.objects.all().delete()
         dummy_user_emails = [
             'jignesh@kamla.com',
             'deepak@kamla.com',
@@ -40,16 +25,11 @@ def wipe_global():
             'amit@kamla.com',
             'priya@kamla.com'
         ]
-        User.objects.using('default').filter(email__in=dummy_user_emails).delete()
-        print("Global data wiped successfully.")
+        User.objects.filter(email__in=dummy_user_emails).delete()
+        print("Data wiped successfully.")
     except Exception as e:
-        print(f"Error wiping global: {e}")
+        print(f"Error wiping data: {e}")
 
 if __name__ == "__main__":
-    wipe_global()
-    from api.models import Warehouse
-    for wh in Warehouse.objects.filter(active=True):
-        alias = wh.db_name or wh.schema_name
-        if alias:
-            wipe_tenant(alias)
+    wipe_all()
     print("Done!")

@@ -12,6 +12,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { useToast } from '@/hooks/use-toast';
 import { Modal } from '@/components/Modal';
+import { UserAuditTag } from '@/components/UserAuditTag';
 
 const ReturnedOrders: React.FC = () => {
   const { orders, products, refreshAll } = useData();
@@ -265,6 +266,12 @@ const ReturnedOrders: React.FC = () => {
 
           {selectedOrder && (
             <div className="space-y-6 mt-2">
+              <UserAuditTag 
+                createdBy={(selectedOrder as any).createdBy || selectedOrder.so_email || selectedOrder.soEmail} 
+                createdAt={selectedOrder.createdAt || selectedOrder.date} 
+                lastEditedBy={(selectedOrder as any).lastEditedBy} 
+              />
+
               {/* REASON */}
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <h3 className="text-xs font-bold text-red-800 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5"/> Reason for Return</h3>

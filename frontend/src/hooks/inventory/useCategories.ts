@@ -12,6 +12,8 @@ export const useCategories = () => {
       const data = res.data?.data || res.data || [];
       return data as Category[];
     },
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    gcTime: 60 * 60 * 1000,
   });
 };
 

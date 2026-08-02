@@ -3,21 +3,14 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from django.core.management import call_command
-from api.db_router import setup_dynamic_tenant_databases
-setup_dynamic_tenant_databases()
-
-from api.models import Company, Warehouse, User
+from api.models import Company, Warehouse, User, Userwarehouseaccess
 import bcrypt
 import uuid
 
 print("Flushing db_master...")
 call_command('flush', '--no-input', database='default')
-print("Flushing wh_nashik...")
-call_command('flush', '--no-input', database='wh_nashik')
-print("Flushing wh_navsari...")
-call_command('flush', '--no-input', database='wh_navsari')
 
-print("Seeding core configuration...")
+print("Seeding core configuration for Single Tenant-Based Database...")
 # Create Company
 c = Company.objects.create(
     id="cmo75yliq0000wesurjpett1n",
@@ -28,25 +21,32 @@ c = Company.objects.create(
 )
 
 # Create Warehouses
-Warehouse.objects.create(
+w1 = Warehouse.objects.create(
+    id=1,
+    name="MAIN WAREHOUSE",
+    address="Primary Distribution Center",
+    active=True,
+    companyid=c
+)
+w2 = Warehouse.objects.create(
     id=4,
     name="NAVSARI",
     address="Navsari, Gujarat",
     active=True,
-    db_name="wh_navsari"
+    companyid=c
 )
-Warehouse.objects.create(
+w3 = Warehouse.objects.create(
     id=5,
     name="NASHIK",
     address="Nashik, Maharashtra",
     active=True,
-    db_name="wh_nashik"
+    companyid=c
 )
 
 # Create Superadmin
 hashed = bcrypt.hashpw(b'admin123', bcrypt.gensalt()).decode('utf-8')
-User.objects.create(
-    id=str(uuid.uuid4())[:25],
+admin_user = User.objects.create(
+    id="superadmin-1",
     name="System Admin",
     email="admin@simplyuseful.com",
     hashedpassword=hashed,
@@ -54,6 +54,14 @@ User.objects.create(
     active=True,
     companyid=c
 )
+
+# Grant all warehouse access
+for w in [w1, w2, w3]:
+    Userwarehouseaccess.objects.create(
+        id=f"acc_{uuid.uuid4().hex[:12]}",
+        userid=admin_user,
+        warehouseid=w
+    )
 
 print("\n--- FACTORY RESET COMPLETE ---")
 print("Login ID : admin@simplyuseful.com")

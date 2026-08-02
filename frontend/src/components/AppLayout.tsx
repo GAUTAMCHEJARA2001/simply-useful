@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, ShoppingCart, Users, MapPin, Receipt,
   Package, BarChart3, Settings, LogOut, Menu, X, Building2,
-  ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store, BookOpen
+  ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store, BookOpen, Activity, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -24,7 +24,7 @@ const navItems: NavItem[] = [
   { label: 'Main Overview', path: '/sales', icon: LayoutDashboard, feature: 'view_sales_dashboard' },
   { label: 'New Order', path: '/sales/order', icon: ShoppingCart, feature: 'create_order' },
   { label: 'My Order List', path: '/sales/orders', icon: ClipboardList, feature: 'view_own_orders' },
-  { label: 'Party Ledger', path: '/sales/party-ledger', icon: BookOpen, feature: 'view_sales_dashboard' },
+  { label: 'My Ledger Requests', path: '/sales/ledger-requests', icon: FileText, feature: 'view_sales_dashboard' },
   { label: 'Customer Visits', path: '/sales/visits', icon: MapPin, feature: 'track_visits' },
   { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses' },
   { label: 'CRM Leads', path: '/sales/crm', icon: Users, feature: 'track_visits' },
@@ -35,6 +35,8 @@ const navItems: NavItem[] = [
   { label: 'Dealers', path: '/admin/dealers', icon: Users, feature: 'manage_customers' },
   { label: 'Distributors', path: '/admin/distributors', icon: Users, feature: 'manage_customers' },
   { label: 'SO Territory', path: '/admin/so-mapping', icon: UserCheck, feature: 'manage_customers' },
+  { label: 'Activity & Audit Logs', path: '/admin/activity-logs', icon: Activity, feature: 'view_admin_dashboard' },
+  { label: 'Ledger Fulfillment', path: '/admin/ledger-requests', icon: FileText, feature: 'view_admin_dashboard' },
   { label: 'Staff Dashboard', path: '/hr', icon: Users, feature: 'view_reports' },
   { label: 'Order and Dispatch Room', path: '/inventory', icon: Package, feature: 'view_inventory_dashboard' },
   { label: 'Manage Stock', path: '/inventory/manage', icon: Package, feature: 'view_inventory_dashboard' },
@@ -48,13 +50,14 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
   const { can } = usePermissions();
-
   const navigate = useNavigate();
 
   if (!user) return null;
 
   const filteredNav = navItems.filter(item => {
     if (item.path === '/admin/global-inventory') return user.role === 'SUPERADMIN';
+    if (item.path === '/admin/activity-logs') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
+    if (item.path === '/admin/ledger-requests') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/reports') return user.role === 'SUPERADMIN';
     return can(item.feature);
   });
@@ -146,7 +149,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
           <button
             onClick={handleLogout}
-            className="sidebar-link w-full text-destructive hover:bg-destructive/10"
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-destructive hover:bg-sidebar-accent rounded-lg transition-colors"
           >
             <LogOut className="w-4 h-4" />
             <span>Sign Out</span>
@@ -186,4 +189,3 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 export default AppLayout;
-

@@ -32,8 +32,10 @@ export const inventoryService = {
   getUnits: () => api.get(API_ENDPOINTS.MASTERS.UNITS),
   getMarkets: () => api.get(API_ENDPOINTS.MASTERS.MARKETS),
   getRegions: () => api.get(API_ENDPOINTS.MASTERS.REGIONS),
-  getProductsMaster: (customWhId?: string) => 
-    api.get(API_ENDPOINTS.MASTERS.PRODUCTS, customWhId ? { headers: { 'X-Warehouse-ID': customWhId } } : undefined),
+  getProductsMaster: (customWhId?: string, isGlobal?: boolean) => {
+    const url = isGlobal ? `${API_ENDPOINTS.MASTERS.PRODUCTS}?global=true` : API_ENDPOINTS.MASTERS.PRODUCTS;
+    return api.get(url, customWhId ? { headers: { 'X-Warehouse-ID': customWhId } } : undefined);
+  },
 
   // Reports & Dashboard
   getDashboardKPIs: () => api.get(API_ENDPOINTS.REPORTS.DASHBOARD),

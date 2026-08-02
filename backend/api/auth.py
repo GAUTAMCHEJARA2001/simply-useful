@@ -108,13 +108,6 @@ class JWTAuthentication(authentication.BaseAuthentication):
                 name=user_model.name or ""
             )
 
-            # Enforce access control for restricted users
-            if jwt_user.role in ['INVENTORY', 'PRODUCTION'] and request.tenant:
-                from api.models import Userwarehouseaccess
-                # Userwarehouseaccess lives in the tenant schema
-                if not Userwarehouseaccess.objects.filter(userid_id=jwt_user.id, warehouseid_id=request.tenant.id).exists():
-                    raise exceptions.AuthenticationFailed('Access denied to this warehouse context')
-                
             return (jwt_user, token)
         except User.DoesNotExist:
             # Recreate dynamic user fallback if user details were in payload

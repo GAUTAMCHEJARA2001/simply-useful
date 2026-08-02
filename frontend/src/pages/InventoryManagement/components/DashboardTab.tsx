@@ -27,6 +27,8 @@ import {
 } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import { useWarehouse } from '@/contexts/WarehouseContext';
+import { useStocksByWarehouse } from '@/hooks/inventory/useStock';
 import { api } from '@/api/client';
 import apiClient from '@/api/client';
 import { orderService } from '@/api/services/order.service';
@@ -58,6 +60,8 @@ export const DashboardTab: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { fyLabel } = useFinancialYear();
+  const { activeWarehouseId } = useWarehouse();
+  const { data: stocksByWarehouse = {} } = useStocksByWarehouse();
   
   // Data Source 1: DataContext
   const { orders = [], products = [], warehouses = [], updateOrderStatus, refreshAll } = useData();
@@ -124,7 +128,32 @@ export const DashboardTab: React.FC = () => {
     return orders.filter(o => o.status === 'Approved' || o.status === 'Partially Dispatched');
   }, [orders]);
 
-  // Helper to check stock shortage for an order
+  const getWhAvailableStock = useCallback((prod: any, prodId: any, prodName: any, orderWh: any) => {
+    let targetWhId = null;
+    if (orderWh && orderWh !== 'GLOBAL') {
+      const whObj = warehouses.find(w => String(w.id) === String(orderWh) || w.name === String(orderWh));
+      targetWhId = whObj ? String(whObj.id) : String(orderWh);
+    } else if (activeWarehouseId && activeWarehouseId !== 'GLOBAL') {
+      targetWhId = String(activeWarehouseId);
+    }
+
+    if (targetWhId && stocksByWarehouse && Object.keys(stocksByWarehouse).length > 0) {
+      const whMap = stocksByWarehouse[targetWhId] || (orderWh ? stocksByWarehouse[String(orderWh)] : null);
+      if (whMap) {
+        const pId = prod?.id || prodId;
+        const pName = prod?.name || prod?.productName || prodName;
+        const pSku = prod?.productCode || prod?.sku;
+        if (pId && whMap[pId] !== undefined) return whMap[pId];
+        if (pSku && whMap[pSku] !== undefined) return whMap[pSku];
+        if (pName && whMap[pName] !== undefined) return whMap[pName];
+        return 0;
+      }
+    }
+
+    return prod ? (prod.availableStock ?? prod.stockQty ?? 0) : 0;
+  }, [warehouses, activeWarehouseId, stocksByWarehouse]);
+
+  // Helper to check stock shortage for an order (scoped to assigned warehouse if allocated)
   const checkOrderShortage = useCallback((order: any) => {
     const shortages: any[] = [];
     let hasShortage = false;
@@ -133,7 +162,7 @@ export const DashboardTab: React.FC = () => {
     for (const item of items) {
       const itemProductId = item.productId || (typeof item.product === 'object' ? item.product?.id : item.product);
       const prod = products.find(p => p.id === itemProductId || p.productCode === item.product || p.name === item.product);
-      const available = prod ? (prod.availableStock ?? prod.stockQty ?? 0) : 0;
+      const available = getWhAvailableStock(prod, itemProductId, item.productName || item.product, order.assignedWarehouse);
       
       const remainingToDispatch = (item.qty || 0) - (item.sentQty || 0);
       if (available < remainingToDispatch) {
@@ -147,7 +176,7 @@ export const DashboardTab: React.FC = () => {
       }
     }
     return { hasShortage, shortages };
-  }, [products]);
+  }, [products, getWhAvailableStock]);
 
   // Classified dispatches
   const dispatchesCount = useMemo(() => {

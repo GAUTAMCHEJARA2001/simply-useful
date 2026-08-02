@@ -20,6 +20,7 @@ class Bom(models.Model):
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
     outputquantity = models.FloatField(db_column='outputQuantity', default=1.0, blank=True, null=True)  # Field name made lowercase.
     warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
+    status = models.TextField(default='PENDING_APPROVAL')  # PENDING_APPROVAL, APPROVED, REJECTED
 
     class Meta:
         db_table = 'BOM'
@@ -70,6 +71,13 @@ class Dealer(models.Model):
     outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     active = models.BooleanField()
     territory = models.TextField(blank=True, null=True)
+    
+    gst_number = models.CharField(max_length=50, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    contact_person = models.CharField(max_length=255, blank=True, null=True)
+
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
@@ -89,6 +97,10 @@ class Dealer(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['dealercode', 'companyid'], name='unique_dealer_per_company')
         ]
+        indexes = [
+            models.Index(fields=['warehouseid', 'active'], name='idx_dealer_wh_active'),
+            models.Index(fields=['assignedsoemail', 'active'], name='idx_dealer_so_active'),
+        ]
 
 
 class Distributor(models.Model):
@@ -101,6 +113,12 @@ class Distributor(models.Model):
     outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     active = models.BooleanField()
     territory = models.TextField(blank=True, null=True)
+    
+    gst_number = models.CharField(max_length=50, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    contact_person = models.CharField(max_length=255, blank=True, null=True)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
@@ -110,6 +128,10 @@ class Distributor(models.Model):
         db_table = 'Distributor'
         constraints = [
             models.UniqueConstraint(fields=['distributorname', 'companyid'], name='unique_distributor_per_company')
+        ]
+        indexes = [
+            models.Index(fields=['warehouseid', 'active'], name='idx_distributor_wh_active'),
+            models.Index(fields=['assignedsoemail', 'active'], name='idx_distributor_so_active'),
         ]
 
 
@@ -180,6 +202,11 @@ class Order(models.Model):
 
     class Meta:
         db_table = 'Order'
+        indexes = [
+            models.Index(fields=['warehouseid', 'status'], name='idx_order_wh_status'),
+            models.Index(fields=['warehouseid', 'date'], name='idx_order_wh_date'),
+            models.Index(fields=['companyid', 'soemail'], name='idx_order_company_so'),
+        ]
 
 
 class Orderitem(models.Model):
@@ -195,6 +222,9 @@ class Orderitem(models.Model):
 
     class Meta:
         db_table = 'OrderItem'
+        indexes = [
+            models.Index(fields=['orderid', 'productid'], name='idx_orderitem_order_prod'),
+        ]
 
 
 class Dispatchlog(models.Model):
@@ -267,6 +297,10 @@ class Product(models.Model):
         db_table = 'Product'
         constraints = [
             models.UniqueConstraint(fields=['productcode', 'companyid'], name='unique_product_per_company')
+        ]
+        indexes = [
+            models.Index(fields=['companyid', 'active'], name='idx_product_company_active'),
+            models.Index(fields=['warehouseid', 'active'], name='idx_product_wh_active'),
         ]
 
 
@@ -358,6 +392,7 @@ class Supplier(models.Model):
     address = models.TextField(blank=True, null=True)
     active = models.BooleanField()
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', db_constraint=False, null=True, blank=True)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
 
@@ -556,6 +591,11 @@ class Stocktransaction(models.Model):
 
     class Meta:
         db_table = 'StockTransaction'
+        indexes = [
+            models.Index(fields=['warehouseid', 'productid'], name='idx_stocktxn_wh_prod'),
+            models.Index(fields=['warehouseid', 'reason'], name='idx_stocktxn_wh_reason'),
+            models.Index(fields=['transactiontype', 'createdat'], name='idx_st_type_date'),
+        ]
 
 class PushSubscription(models.Model):
     user = models.ForeignKey('core.User', models.CASCADE, related_name='push_subscriptions', db_constraint=False)
@@ -582,3 +622,59 @@ class BusyLedgerEntry(models.Model):
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     short_nar = models.CharField(max_length=500, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Activitylog(models.Model):
+    id = models.TextField(primary_key=True)
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', blank=True, null=True, db_constraint=False)
+    user_email = models.TextField(db_column='userEmail', blank=True, null=True)
+    user_name = models.TextField(db_column='userName', blank=True, null=True)
+    user_role = models.TextField(db_column='userRole', blank=True, null=True)
+    log_type = models.TextField(db_column='logType', default='ACTION')  # ACTION, ERROR, PERMISSION, WARN
+    feature = models.TextField(default='General')
+    action = models.TextField()
+    details_json = models.TextField(db_column='detailsJson', blank=True, null=True)
+    ip_address = models.TextField(db_column='ipAddress', blank=True, null=True)
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'ActivityLog'
+        indexes = [
+            models.Index(fields=['log_type', 'createdat'], name='idx_actlog_type_date'),
+            models.Index(fields=['user_email', 'createdat'], name='idx_actlog_user_date'),
+        ]
+
+class LedgerRequest(models.Model):
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('COMPLETED', 'Completed'),
+        ('REJECTED', 'Rejected'),
+    )
+    DOC_CHOICES = (
+        ('LEDGER', 'Ledger'),
+        ('BILL', 'Bill'),
+        ('PRICELIST', 'Latest Price List'),
+        ('OTHER', 'Other'),
+    )
+    
+    party_code = models.CharField(max_length=100)
+    party_name = models.CharField(max_length=255)
+    requested_by = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True, db_constraint=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    # New Document Request Fields
+    document_type = models.CharField(max_length=20, choices=DOC_CHOICES, default='LEDGER')
+    other_document_name = models.CharField(max_length=255, null=True, blank=True)
+    from_date = models.DateField(null=True, blank=True)
+    to_date = models.DateField(null=True, blank=True)
+    remarks = models.TextField(null=True, blank=True)
+    
+    requested_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Admin uploads file when fulfilling
+    file_url = models.URLField(max_length=500, null=True, blank=True)
+    file_name = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        db_table = 'LedgerRequest'

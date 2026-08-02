@@ -22,10 +22,22 @@ export const ProductsTab: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [search, setSearch] = useState<string>('');
-  const [filterCategoryId, setFilterCategoryId] = useState<string>('');
+  const [filterCategoryId, setFilterCategoryId] = useState<string>(() => {
+    return localStorage.getItem('products_tab_category_filter') || 'all';
+  });
+
+  const handleCategoryFilterChange = (val: string) => {
+    setFilterCategoryId(val);
+    if (val && val !== 'all') {
+      localStorage.setItem('products_tab_category_filter', val);
+    } else {
+      localStorage.removeItem('products_tab_category_filter');
+    }
+  };
   
   // Data Queries
   const { data: products = [], isLoading: loadingProducts, error: errorProducts, refetch } = useProducts();
+  const { data: globalProducts = [] } = useProducts({ global: true });
   const { data: categories = [] } = useCategories();
   const { data: brands = [] } = useBrands();
   const { data: warehouses = [] } = useWarehouses();
@@ -49,8 +61,16 @@ export const ProductsTab: React.FC = () => {
       (p.name || p.productName || '').toLowerCase().includes(search.toLowerCase()) || 
       (p.sku || p.productCode || '').toLowerCase().includes(search.toLowerCase());
       
-    const catId = String(p.categoryId || p.categoryRef?.id || p.category?.id || '');
-    const matchesCategory = !filterCategoryId || filterCategoryId === 'all' || catId === String(filterCategoryId);
+    const catId = String(p.categoryId || p.categoryRef?.id || (typeof p.category === 'object' && p.category ? p.category.id : p.category) || '');
+    const parentCatId = String(
+      p.categoryRef?.parentId || 
+      p.categoryRef?.parent_id || 
+      p.categoryRef?.parent?.id || 
+      categories.find((c: any) => String(c.id) === catId)?.parentId || 
+      categories.find((c: any) => String(c.id) === catId)?.parent_id || 
+      ''
+    );
+    const matchesCategory = !filterCategoryId || filterCategoryId === 'all' || catId === String(filterCategoryId) || parentCatId === String(filterCategoryId);
     
     return matchesSearch && matchesCategory;
   });
@@ -180,12 +200,14 @@ export const ProductsTab: React.FC = () => {
         <select
           className="border border-border rounded-xl px-4 py-2 text-sm bg-muted/20 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all sm:w-64"
           value={filterCategoryId}
-          onChange={(e) => setFilterCategoryId(e.target.value)}
+          onChange={(e) => handleCategoryFilterChange(e.target.value)}
         >
           <option value="all">All Categories</option>
-          {categories.map((c: any) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
+          {categories
+            .filter((c: any) => !c.parentId && !c.parent_id && !c.parent)
+            .map((c: any) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
         </select>
       </div>
 
@@ -228,6 +250,49 @@ export const ProductsTab: React.FC = () => {
 
       <Modal isOpen={modal} title={form.id ? "Edit Product" : "Add Product"} onClose={() => setModal(false)}>
         <div className="space-y-4">
+            {!form.id && (
+              <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
+                <label className="text-sm font-semibold text-primary block">
+                  Select from Global Master Catalogue (Optional)
+                </label>
+                <select
+                  onChange={e => {
+                    const selectedId = e.target.value;
+                    if (!selectedId) return;
+                    const p = globalProducts.find((gp: any) => String(gp.id) === String(selectedId));
+                    if (p) {
+                      const catId = p.categoryId || p.categoryRef?.id || (typeof p.category === 'object' && p.category ? p.category.id : p.category) || '';
+                      const brId = p.brandId || p.brandRef?.id || (typeof p.brand === 'object' && p.brand ? p.brand.id : '') || '';
+                      const unId = p.unitId || p.unitRef?.id || (typeof p.unit === 'object' && p.unit ? p.unit.id : p.unit) || '';
+                      setForm({
+                        ...form,
+                        name: p.name || p.productName || '',
+                        productCode: p.productCode || p.sku || '',
+                        sku: p.sku || p.productCode || '',
+                        brandId: brId ? Number(brId) : undefined,
+                        categoryId: String(catId || ''),
+                        unitId: unId ? Number(unId) : undefined,
+                        rate: Number(p.rate || 0),
+                        gst: Number(p.gst !== undefined ? p.gst : 18)
+                      });
+                      if (catId) setParentCatId(String(catId));
+                    }
+                  }}
+                  className="w-full border border-primary/30 rounded-lg px-3 py-2 bg-background text-sm font-medium"
+                >
+                  <option value="">-- Type / Select existing company product to add to this warehouse --</option>
+                  {globalProducts.map((gp: any) => (
+                    <option key={gp.id} value={gp.id}>
+                      {(gp.productCode || gp.sku) ? `[${gp.productCode || gp.sku}] ` : ''}{gp.name || gp.productName}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Selecting an existing product will fill its details. Set Opening Stock below and Save to link it to your warehouse.
+                </p>
+              </div>
+            )}
+
             <div>
               <label className="text-sm font-medium block mb-1">Brand</label>
               <select value={form.brandId || form.brand_id || ''} onChange={e => setForm({ ...form, brandId: parseInt(e.target.value) })}

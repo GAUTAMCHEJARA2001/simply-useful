@@ -2,11 +2,12 @@
 setlocal enabledelayedexpansion
 
 :: =================================================================
-::  SIMPLY USEFUL - ELITE PLATFORM MANAGER v2.1 (PLATFORM EDITION)
+::  SIMPLY USEFUL - ELITE PLATFORM MANAGER v2.2 (PLATFORM EDITION)
 :: =================================================================
-:: v2.1 Updates:
-:: - Added Production Approvals stock validation workflow & Production Manager role
-:: - Version banner updated to v2.1
+:: v2.2 Updates:
+:: - Added Local PostgreSQL DB support & composite database indexes
+:: - Added [8] SETUP DB to initialize/reset local tenant, warehouses, and superadmin account
+:: - Automated setup_local_tenant check on platform startup
 :: =================================================================
 
 set "BASE_DIR=%~dp0"
@@ -15,7 +16,7 @@ set "BASE_DIR=%~dp0"
 cls
 echo.
 echo  ###############################################################
-echo   SIMPLY USEFUL  -  ELITE PLATFORM MANAGER  v2.1
+echo   SIMPLY USEFUL  -  ELITE PLATFORM MANAGER  v2.2
 echo  ###############################################################
 echo.
 echo   PLATFORM
@@ -28,13 +29,16 @@ echo   [4]  TESTS       Full-Stack Test Suite (Django + Vitest)
 echo   [5]  AUDIT       System audit (TypeScript, build, migrations, deps)
 echo   [6]  SWAGGER     Open browsable REST API explorer
 echo   [7]  OPEN APP    Launch frontend + API docs in browser
+echo   [8]  SETUP DB    Initialize/Reset Local DB + Default Superadmin
+echo   [9]  NEW TENANT  Create another Company / Tenant in Single DB
+echo   [10] MASTER AUDIT Full Enterprise Verification (Health, Tests, Flow, CRUD)
 echo.
-echo   [8]  EXIT
+echo   [0]  EXIT
 echo.
 echo   Project: "%BASE_DIR%"
 echo  ###############################################################
 echo.
-set /p choice="  Select an option [1-8]: "
+set /p choice="  Select an option [0-10]: "
 
 if "%choice%"=="1"  goto START
 if "%choice%"=="2"  goto STOP
@@ -43,7 +47,24 @@ if "%choice%"=="4"  goto TEST
 if "%choice%"=="5"  goto AUDIT
 if "%choice%"=="6"  goto SWAGGER
 if "%choice%"=="7"  goto OPENAPP
-if "%choice%"=="8" exit
+if "%choice%"=="8"  goto SETUPDB
+if "%choice%"=="9"  goto NEWTENANT
+if "%choice%"=="10" goto MASTERAUDIT
+if "%choice%"=="0" exit
+goto MENU
+
+:: =================================================================
+:MASTERAUDIT
+:: =================================================================
+echo.
+echo  [MASTER AUDIT] Running Complete Full-Stack Audit & E2E Verification...
+if exist "%BASE_DIR%run_master_audit.py" (
+    "%BASE_DIR%backend\venv\Scripts\python" "%BASE_DIR%run_master_audit.py"
+) else (
+    echo  [ERROR] run_master_audit.py not found in root directory.
+)
+echo.
+pause
 goto MENU
 
 :: =================================================================
@@ -98,7 +119,7 @@ if not exist "%BASE_DIR%backend\venv" (
     cd /d "%BASE_DIR%"
 )
 
-start "Simply Useful - Backend" cmd /k "cd /d "%BASE_DIR%backend" && venv\Scripts\python manage.py migrate && echo. && echo  [BACKEND] http://localhost:4000 && echo  [API]     http://localhost:4000/api/v1/ && echo. && venv\Scripts\python manage.py runserver 0.0.0.0:4000"
+start "Simply Useful - Backend" cmd /k "cd /d "%BASE_DIR%backend" && venv\Scripts\python manage.py migrate && venv\Scripts\python setup_local_tenant.py && echo. && echo  [BACKEND] http://localhost:4000 && echo  [API]     http://localhost:4000/api/v1/ && echo. && venv\Scripts\python manage.py runserver 0.0.0.0:4000"
 
 :: --- FRONTEND ---
 echo.
@@ -340,6 +361,49 @@ start http://localhost:4000/api/v1/
 echo  [OK] Launched:
 echo       Frontend  http://localhost:8080
 echo       API Docs  http://localhost:4000/api/v1/
+echo.
+pause
+goto MENU
+
+:: =================================================================
+:SETUPDB
+:: =================================================================
+echo.
+echo  [SETUP DB] Initializing / Rebuilding Local Tenant Database...
+if exist "%BASE_DIR%backend" (
+    cd /d "%BASE_DIR%backend"
+    venv\Scripts\python manage.py migrate
+    venv\Scripts\python setup_local_tenant.py
+    cd /d "%BASE_DIR%"
+) else (
+    echo  [ERROR] Backend directory not found.
+)
+echo.
+pause
+goto MENU
+
+:: =================================================================
+:NEWTENANT
+:: =================================================================
+echo.
+echo  [NEW TENANT] Create another Company / Tenant in Single DB
+echo.
+set /p CMP_NAME="  Enter new Company Name (e.g. Kamla Ceramics): "
+if "%CMP_NAME%"=="" set CMP_NAME="Kamla Ceramics"
+set /p CMP_EMAIL="  Enter Superadmin Login Email (e.g. admin@kamla.com): "
+if "%CMP_EMAIL%"=="" set CMP_EMAIL="admin@kamla.com"
+set /p CMP_PW="  Enter Superadmin Login Password [default: admin123]: "
+if "%CMP_PW%"=="" set CMP_PW=admin123
+set /p CMP_WHS="  Enter Warehouses (comma-separated, default: SURAT,AHMEDABAD): "
+if "%CMP_WHS%"=="" set CMP_WHS="SURAT,AHMEDABAD"
+
+if exist "%BASE_DIR%backend" (
+    cd /d "%BASE_DIR%backend"
+    venv\Scripts\python create_company.py --name "%CMP_NAME%" --email "%CMP_EMAIL%" --password "%CMP_PW%" --warehouses "%CMP_WHS%"
+    cd /d "%BASE_DIR%"
+) else (
+    echo  [ERROR] Backend directory not found.
+)
 echo.
 pause
 goto MENU

@@ -3,8 +3,9 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from django.db import connections
-from api.models import Company, Warehouse, User
+from api.models import Company, Warehouse, User, Userwarehouseaccess
 import bcrypt
+import uuid
 
 def truncate_all(alias):
     print(f"Truncating {alias}...")
@@ -20,10 +21,8 @@ def truncate_all(alias):
             c.execute(f"TRUNCATE TABLE {', '.join(f'\"{t}\"' for t in tables)} CASCADE;")
 
 truncate_all('default')
-truncate_all('wh_nashik')
-truncate_all('wh_navsari')
 
-print("Seeding core configuration...")
+print("Seeding core configuration for Single Tenant-Based Database...")
 c = Company.objects.create(
     id="cmo75yliq0000wesurjpett1n",
     name="Simply Useful",
@@ -32,23 +31,30 @@ c = Company.objects.create(
     active=True
 )
 
-Warehouse.objects.create(
+w1 = Warehouse.objects.create(
+    id=1,
+    name="MAIN WAREHOUSE",
+    address="Primary Distribution Center",
+    active=True,
+    companyid=c
+)
+w2 = Warehouse.objects.create(
     id=4,
     name="NAVSARI",
     address="Navsari, Gujarat",
     active=True,
-    db_name="wh_navsari"
+    companyid=c
 )
-Warehouse.objects.create(
+w3 = Warehouse.objects.create(
     id=5,
     name="NASHIK",
     address="Nashik, Maharashtra",
     active=True,
-    db_name="wh_nashik"
+    companyid=c
 )
 
 hashed = bcrypt.hashpw(b'admin123', bcrypt.gensalt()).decode('utf-8')
-User.objects.create(
+admin_user = User.objects.create(
     id="superadmin-1",
     name="System Admin",
     email="admin@simplyuseful.com",
@@ -57,6 +63,13 @@ User.objects.create(
     active=True,
     companyid=c
 )
+
+for w in [w1, w2, w3]:
+    Userwarehouseaccess.objects.create(
+        id=f"acc_{uuid.uuid4().hex[:12]}",
+        userid=admin_user,
+        warehouseid=w
+    )
 
 print("\n--- FACTORY RESET COMPLETE ---")
 print("Login ID : admin@simplyuseful.com")

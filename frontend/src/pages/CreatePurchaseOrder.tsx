@@ -314,15 +314,27 @@ const CreatePurchaseOrder: React.FC = () => {
                             <CommandList>
                               <CommandEmpty>No product found.</CommandEmpty>
                               <CommandGroup>
-                                {products.map((p) => (
-                                  <CommandItem key={p.id} value={`${p.name} ${p.brand?.name || ''} - ${p.productCode || p.product_code || ''} - ${p.id}`} onSelect={() => updateItem(idx, 'product_id', p.id)}>
-                                    <Check className={`mr-2 h-4 w-4 ${item.product_id === p.id ? "opacity-100" : "opacity-0"}`} />
-                                    <div className="flex flex-col">
-                                      <span className="font-medium">{p.name}</span>
-                                      <span className="text-[10px] text-muted-foreground">₹{p.rate || 0} / {p.unit?.name || (typeof p.unit === 'string' ? p.unit : '') || 'Unit'}{p.brand?.name ? ` - ${p.brand.name}` : ''}</span>
-                                    </div>
-                                  </CommandItem>
-                                ))}
+                                {products.map((p) => {
+                                  const parentCat = p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName;
+                                  const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name);
+                                  const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
+                                  return (
+                                    <CommandItem key={p.id} value={`${p.name} ${p.brand?.name || ''} ${catText} - ${p.productCode || p.product_code || ''} - ${p.id}`} onSelect={() => updateItem(idx, 'product_id', p.id)}>
+                                      <Check className={`mr-2 h-4 w-4 ${item.product_id === p.id ? "opacity-100" : "opacity-0"}`} />
+                                      <div className="flex items-center justify-between w-full pr-1 gap-2">
+                                        <div className="flex flex-col truncate">
+                                          <span className="font-medium">{p.name}</span>
+                                          <span className="text-[10px] text-muted-foreground">₹{p.rate || 0} / {p.unit?.name || (typeof p.unit === 'string' ? p.unit : '') || 'Unit'}{p.brand?.name ? ` - ${p.brand.name}` : ''}</span>
+                                        </div>
+                                        {catText ? (
+                                          <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20 shrink-0">
+                                            {catText}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </CommandItem>
+                                  );
+                                })}
                               </CommandGroup>
                             </CommandList>
                           </Command>

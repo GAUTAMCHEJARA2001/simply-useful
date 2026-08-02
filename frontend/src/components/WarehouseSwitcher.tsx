@@ -61,9 +61,8 @@ export const WarehouseSwitcher: React.FC = () => {
       // Clear all cached queries so fresh data is fetched for the new warehouse
       await queryClient.invalidateQueries();
 
-      // Navigate to the same page base (strip sub-paths to force component remount)
-      const basePath = allowedPaths.find(p => location.pathname.startsWith(p)) || location.pathname;
-      navigate(basePath, { replace: true });
+      // Stay on the exact current page and sub-path / query parameters so the user is not redirected
+      navigate(`${location.pathname}${location.search}`, { replace: true });
     } finally {
       setSwitching(false);
     }

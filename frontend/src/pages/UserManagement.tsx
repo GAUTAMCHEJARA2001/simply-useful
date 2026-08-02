@@ -13,6 +13,7 @@ import { Search, Plus, Edit, Trash2, Shield, Lock, Key, Users, Settings2, Tag, L
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import apiService from '@/api/apiService';
+import { useDebounce } from '@/hooks/useDebounce';
 
 const roles: UserRole[] = ['SALES', 'ADMIN', 'HR', 'INVENTORY', 'PRODUCTION', 'SUPERADMIN'];
 
@@ -43,6 +44,7 @@ const UserManagement: React.FC = () => {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -69,6 +71,9 @@ const UserManagement: React.FC = () => {
   const [searchProd, setSearchProd] = useState('');
   const [searchBrand, setSearchBrand] = useState('');
   const [searchCat, setSearchCat] = useState('');
+  const debouncedSearchProd = useDebounce(searchProd, 300);
+  const debouncedSearchBrand = useDebounce(searchBrand, 300);
+  const debouncedSearchCat = useDebounce(searchCat, 300);
 
   const openAssignments = async (u: AppUserRecord) => {
     setAssignUser(u);
@@ -287,9 +292,9 @@ const UserManagement: React.FC = () => {
   };
 
   const filtered = users.filter(u =>
-    (u.name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (u.email || '').toLowerCase().includes(search.toLowerCase()) ||
-    (u.territory || '').toLowerCase().includes(search.toLowerCase())
+    (u.name || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    (u.email || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    (u.territory || '').toLowerCase().includes(debouncedSearch.toLowerCase())
   );
 
   const fetchWarehousesOnce = async () => {
@@ -803,7 +808,7 @@ const UserManagement: React.FC = () => {
                         </Label>
                         <button
                           type="button"
-                          onClick={() => handleSelectAllBrands(allBrands.filter(b => b.name.toLowerCase().includes(searchBrand.toLowerCase())))}
+                          onClick={() => handleSelectAllBrands(allBrands.filter(b => b.name.toLowerCase().includes(debouncedSearchBrand.toLowerCase())))}
                           className="text-[10px] text-primary hover:underline font-semibold"
                         >
                           Select All
@@ -819,7 +824,7 @@ const UserManagement: React.FC = () => {
                         />
                       </div>
                       <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                        {allBrands.filter(b => b.name.toLowerCase().includes(searchBrand.toLowerCase())).map(b => (
+                        {allBrands.filter(b => b.name.toLowerCase().includes(debouncedSearchBrand.toLowerCase())).map(b => (
                           <label key={b.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1.5 rounded transition-all">
                             <input 
                               type="checkbox" 
@@ -837,7 +842,7 @@ const UserManagement: React.FC = () => {
                             <span>{b.name}</span>
                           </label>
                         ))}
-                        {allBrands.filter(b => b.name.toLowerCase().includes(searchBrand.toLowerCase())).length === 0 && (
+                        {allBrands.filter(b => b.name.toLowerCase().includes(debouncedSearchBrand.toLowerCase())).length === 0 && (
                           <div className="text-center py-4 text-xs text-muted-foreground">No brands found.</div>
                         )}
                       </div>
@@ -852,7 +857,7 @@ const UserManagement: React.FC = () => {
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => handleSelectAllCategories(allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(searchCat.toLowerCase())))}
+                            onClick={() => handleSelectAllCategories(allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(debouncedSearchCat.toLowerCase())))}
                             className="text-[10px] text-primary hover:underline font-semibold"
                           >
                             All Cats
@@ -860,7 +865,7 @@ const UserManagement: React.FC = () => {
                           <span className="text-muted-foreground text-[10px]">|</span>
                           <button
                             type="button"
-                            onClick={() => handleSelectAllSubcategories(allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(searchCat.toLowerCase())))}
+                            onClick={() => handleSelectAllSubcategories(allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(debouncedSearchCat.toLowerCase())))}
                             className="text-[10px] text-primary hover:underline font-semibold"
                           >
                             All Subs
@@ -877,7 +882,7 @@ const UserManagement: React.FC = () => {
                         />
                       </div>
                       <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                        {allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(searchCat.toLowerCase())).map(mainCat => {
+                        {allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(debouncedSearchCat.toLowerCase())).map(mainCat => {
                           const subs = allCategories.filter(c => (c.parentId ?? c.parent_id) === mainCat.id);
                           return (
                             <div key={mainCat.id} className="space-y-1">
@@ -906,7 +911,7 @@ const UserManagement: React.FC = () => {
                             </div>
                           );
                         })}
-                        {allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(searchCat.toLowerCase())).length === 0 && (
+                        {allCategories.filter(c => !(c.parentId ?? c.parent_id) && c.name.toLowerCase().includes(debouncedSearchCat.toLowerCase())).length === 0 && (
                           <div className="text-center py-4 text-xs text-muted-foreground">No categories found.</div>
                         )}
                       </div>
@@ -969,11 +974,11 @@ const UserManagement: React.FC = () => {
 
                     <div className="flex items-center justify-between border-t pt-2 mt-2">
                       <Label className="text-xs font-bold text-primary flex items-center gap-1">
-                        <Package className="w-3.5 h-3.5" /> Products ({getFilteredProducts().filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())).length})
+                        <Package className="w-3.5 h-3.5" /> Products ({getFilteredProducts().filter(p => !debouncedSearchProd || p.name.toLowerCase().includes(debouncedSearchProd.toLowerCase())).length})
                       </Label>
                       <button
                         type="button"
-                        onClick={() => handleSelectAllProducts(getFilteredProducts().filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())))}
+                        onClick={() => handleSelectAllProducts(getFilteredProducts().filter(p => !debouncedSearchProd || p.name.toLowerCase().includes(debouncedSearchProd.toLowerCase())))}
                         className="text-[10px] text-primary hover:underline font-semibold"
                       >
                         Select All (Filtered)
@@ -991,7 +996,7 @@ const UserManagement: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-1 gap-1 p-2 border border-border rounded-xl bg-card max-h-52 overflow-y-auto shadow-inner">
-                      {getFilteredProducts().filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())).map(p => (
+                      {getFilteredProducts().filter(p => !debouncedSearchProd || p.name.toLowerCase().includes(debouncedSearchProd.toLowerCase())).map(p => (
                         <label key={p.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-muted/50 p-1.5 rounded border border-transparent hover:border-border/40 transition-all">
                           <input 
                             type="checkbox" 
@@ -1014,7 +1019,7 @@ const UserManagement: React.FC = () => {
                           )}
                         </label>
                       ))}
-                      {getFilteredProducts().filter(p => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase())).length === 0 && (
+                      {getFilteredProducts().filter(p => !debouncedSearchProd || p.name.toLowerCase().includes(debouncedSearchProd.toLowerCase())).length === 0 && (
                         <div className="text-center py-4 text-xs text-muted-foreground">No products match filters.</div>
                       )}
                     </div>
