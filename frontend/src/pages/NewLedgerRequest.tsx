@@ -89,6 +89,38 @@ const NewLedgerRequest: React.FC = () => {
     }
   };
 
+  const setQuickDate = (type: 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_FY' | 'LAST_FY') => {
+    const now = new Date();
+    let from, to;
+    
+    const formatDate = (d: Date) => {
+      const offset = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - (offset*60*1000));
+      return local.toISOString().split('T')[0];
+    };
+
+    if (type === 'THIS_MONTH') {
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    } else if (type === 'LAST_MONTH') {
+      from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      to = new Date(now.getFullYear(), now.getMonth(), 0);
+    } else if (type === 'THIS_FY') {
+      const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+      from = new Date(startYear, 3, 1);
+      to = new Date(startYear + 1, 2, 31);
+    } else if (type === 'LAST_FY') {
+      const startYear = now.getMonth() >= 3 ? now.getFullYear() - 1 : now.getFullYear() - 2;
+      from = new Date(startYear, 3, 1);
+      to = new Date(startYear + 1, 2, 31);
+    }
+
+    if (from && to) {
+      setFromDate(formatDate(from));
+      setToDate(formatDate(to));
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-4 mb-6">
@@ -182,14 +214,22 @@ const NewLedgerRequest: React.FC = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-base">From Date (Optional)</Label>
-                  <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="bg-white h-12" />
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setQuickDate('THIS_MONTH')}>This Month</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setQuickDate('LAST_MONTH')}>Last Month</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setQuickDate('THIS_FY')}>This FY</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setQuickDate('LAST_FY')}>Last FY</Button>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-base">To Date (Optional)</Label>
-                  <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="bg-white h-12" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-base">From Date (Optional)</Label>
+                    <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="bg-white h-12" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-base">To Date (Optional)</Label>
+                    <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="bg-white h-12" />
+                  </div>
                 </div>
               </div>
 

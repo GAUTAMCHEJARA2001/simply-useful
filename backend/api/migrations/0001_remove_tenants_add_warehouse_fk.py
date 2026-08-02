@@ -8,21 +8,6 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    replaces = [
-        ('api', '0001_initial'),
-        ('api', '0002_delete_userwarehouseaccess'),
-        ('api', '0003_alter_dealer_distributorname'),
-        ('api', '0004_order_dispatchdate_order_dispatchwarehouse_and_more'),
-        ('api', '0005_orderitem_returnedqty_orderitem_sentqty_dispatchlog_and_more'),
-        ('api', '0006_alter_inventory_unique_together_and_more'),
-        ('api', '0007_pushsubscription'),
-        ('api', '0008_busyparty_busyledgerentry'),
-        ('api', '0009_distributor_distributorcode'),
-        ('api', '0010_add_warehouse_to_dealer_distributor'),
-        ('api', '0011_add_performance_indexes'),
-        ('api', '0012_dealer_warehouseid_distributor_warehouseid_and_more'),
-    ]
-
     initial = True
 
     dependencies = [
