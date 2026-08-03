@@ -788,8 +788,8 @@ def bulk_template(request, entity):
         ),
         'dealers': (
             'dealers_template.csv',
-            ['dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'distributorName', 'creditLimit', 'outstanding', 'active', 'territory'],
-            [['D-001', 'Sample Dealer', 'Jaipur', 'sales@example.com', 'Sample Distributor', '100000', '0', 'true', 'T-WEST']],
+            ['dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'contactPerson', 'contactNumber', 'email', 'gstNumber', 'address', 'distributorName', 'creditLimit', 'outstanding', 'active', 'territory'],
+            [['D-001', 'Sample Dealer', 'Jaipur', 'sales@example.com', 'John Doe', '9876543210', 'dealer@example.com', '08ABCDE1234F1Z5', '123 Main St', 'Sample Distributor', '100000', '0', 'true', 'T-WEST']],
             [
                 'INSTRUCTION: Fill in dealer details.',
                 'dealerCode and dealerName are required.',
@@ -943,6 +943,11 @@ def bulk_import(request, entity):
                 values = {
                     'dealername': name, 'city': row.get('city') or '',
                     'assignedsoemail': row.get('assignedSoEmail') or row.get('assigned_so_email') or '',
+                    'contact_person': (row.get('contactPerson') or row.get('contact_person') or '').strip(),
+                    'phone': (row.get('contactNumber') or row.get('phone') or '').strip(),
+                    'email': (row.get('email') or '').strip(),
+                    'gst_number': (row.get('gstNumber') or row.get('gst_number') or '').strip(),
+                    'address': (row.get('address') or '').strip(),
                     'distributorname': row.get('distributorName') or row.get('distributor_name') or '',
                     'creditlimit': _num(row.get('creditLimit') or row.get('credit_limit')),
                     'outstanding': _num(row.get('outstanding')),
