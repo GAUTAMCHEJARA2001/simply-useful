@@ -775,15 +775,15 @@ def bulk_template(request, entity):
     templates = {
         'products': (
             'products_template.csv',
-            ['productCode', 'name', 'bagSize', 'category', 'subcategory', 'brand', 'unit', 'rate', 'gst', 'openingStock', 'minimumStock', 'warehouse', 'active'],
-            [['FG-001', 'Sample Product', '50 KG', 'FINISHED GOOD', 'Tile Adhesive', 'Default Brand', 'BAG', '100', '18', '0', '10', 'MAIN WAREHOUSE', 'true']],
+            ['productCode', 'productName', 'category', 'subcategory', 'brand', 'unit', 'price', 'gst', 'openingStock', 'minimumStock', 'warehouse', 'active'],
+            [['PRD-001', 'Sample Product', 'FINISHED GOOD', 'Tile Adhesive', 'Default Brand', 'BAG', '100', '18', '0', '10', 'MAIN WAREHOUSE', 'true']],
             [
                 'INSTRUCTION: Fill in the product details.',
-                'productCode is optional (auto-generated if left blank).',
+                'productCode (SKU) is optional (auto-assigned by system if left blank).',
                 'category and subcategory will be automatically created if they do not exist.',
                 'gst should be a percentage number (e.g. 18).',
-                'warehouse should be the name of the warehouse where this product belongs (e.g. MAIN WAREHOUSE, NAVSARI, NASHIK).',
-                'active must be true or false (e.g. true for active, false for inactive).'
+                'warehouse should be the name of the warehouse where this product belongs (e.g. MAIN WAREHOUSE).',
+                'active must be true or false.'
             ]
         ),
         'dealers': (
