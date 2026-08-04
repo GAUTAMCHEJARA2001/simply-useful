@@ -27,6 +27,7 @@ const navItems: NavItem[] = [
   { label: 'My Ledger Requests', path: '/sales/ledger-requests', icon: FileText, feature: 'view_sales_dashboard' },
   { label: 'Customer Visits', path: '/sales/visits', icon: MapPin, feature: 'track_visits' },
   { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses' },
+  { label: 'Submit Payment', path: '/sales/payments/new', icon: Receipt, feature: 'view_sales_dashboard' },
   { label: 'CRM Leads', path: '/sales/crm', icon: Users, feature: 'track_visits' },
   { label: 'My Territory', path: '/sales/territory', icon: Store, feature: 'track_visits' },
   { label: 'Admin Panels', path: '/admin', icon: Settings, feature: 'view_admin_dashboard' },
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { label: 'SO Territory', path: '/admin/so-mapping', icon: UserCheck, feature: 'manage_customers' },
   { label: 'Activity & Audit Logs', path: '/admin/activity-logs', icon: Activity, feature: 'view_admin_dashboard' },
   { label: 'Ledger Fulfillment', path: '/admin/ledger-requests', icon: FileText, feature: 'view_admin_dashboard' },
+  { label: 'Payment Approvals', path: '/admin/payments', icon: Receipt, feature: 'view_admin_dashboard' },
   { label: 'Staff Dashboard', path: '/hr', icon: Users, feature: 'view_reports' },
   { label: 'Order and Dispatch Room', path: '/inventory', icon: Package, feature: 'view_inventory_dashboard' },
   { label: 'Manage Stock', path: '/inventory/manage', icon: Package, feature: 'view_inventory_dashboard' },
@@ -58,6 +60,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (item.path === '/admin/global-inventory') return user.role === 'SUPERADMIN';
     if (item.path === '/admin/activity-logs') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/admin/ledger-requests') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
+    if (item.path === '/admin/payments') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/reports') return user.role === 'SUPERADMIN';
     return can(item.feature);
   });

@@ -35,7 +35,7 @@ from api.views import (
     # Analytics & Decision Intelligence
     trigger_analytics_etl, get_analytics_kpis,
     get_analytics_predictions, get_analytics_alerts, action_analytics_alert, get_analytics_cfo_liquidity,
-    get_analytics_bottlenecks, get_analytics_data_quality
+    get_analytics_bottlenecks, get_analytics_data_quality, PaymentReceiptViewSet
 )
 from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties, import_busy_ledger, get_sync_status, ledger_requests_view, fulfill_ledger_request
 
@@ -59,6 +59,7 @@ router.register('expenses', ExpenseViewSet, basename='expenses')
 router.register('bom', BOMViewSet, basename='bom')
 router.register('crm/leads', LeadViewSet, basename='crm-leads')
 router.register('broadcasts', BroadcastViewSet, basename='broadcasts')
+router.register('payments', PaymentReceiptViewSet, basename='payments')
 
 urlpatterns = [
     # Auth

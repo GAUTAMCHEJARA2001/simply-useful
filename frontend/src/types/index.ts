@@ -363,3 +363,20 @@ export interface Unit {
   name: string;
   active?: boolean;
 }
+
+export interface PaymentReceipt {
+  id?: string;
+  partyId: string;
+  partyName: string;
+  partyType?: string;
+  amount: number;
+  paymentMode: string;
+  photoUrl?: string;
+  status?: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  remarks?: string;
+  submittedBy?: User;
+  verifiedBy?: User;
+  createdAt?: string;
+  updatedAt?: string;
+  verifiedAt?: string;
+}

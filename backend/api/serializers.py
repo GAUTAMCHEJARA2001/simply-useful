@@ -5,7 +5,7 @@ from api.models import (
     Dealer, Distributor, Order, Orderitem, Visit, Expense, Bom, Bomitem, Supplier, Labour,
     Purchase, Purchaseitem, Purchaseorder, Purchaseorderitem,
     Lead, LeadFollowUp, LeadStageHistory,
-    Dispatchlog, Dispatchlogitem, Returnlog, Returnlogitem
+    Dispatchlog, Dispatchlogitem, Returnlog, Returnlogitem, PaymentReceipt
 )
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -1145,3 +1145,25 @@ class ReturnlogSerializer(serializers.ModelSerializer):
     class Meta:
         model = Returnlog
         fields = ['id', 'orderId', 'returnDate', 'remarks', 'createdAt', 'items']
+
+
+class PaymentReceiptSerializer(serializers.ModelSerializer):
+    partyId = serializers.CharField(source='party_id')
+    partyName = serializers.CharField(source='party_name')
+    partyType = serializers.CharField(source='party_type', required=False)
+    paymentMode = serializers.CharField(source='payment_mode')
+    photoUrl = serializers.CharField(source='photo_url', required=False, allow_null=True)
+    companyId = serializers.CharField(source='companyid_id', read_only=True)
+    submittedBy = UserSerializer(source='submitted_by', read_only=True)
+    verifiedBy = UserSerializer(source='verified_by', read_only=True)
+    createdAt = serializers.DateTimeField(source='created_at', read_only=True)
+    updatedAt = serializers.DateTimeField(source='updated_at', read_only=True)
+    verifiedAt = serializers.DateTimeField(source='verified_at', read_only=True)
+
+    class Meta:
+        model = PaymentReceipt
+        fields = [
+            'id', 'partyId', 'partyName', 'partyType', 'amount', 'paymentMode', 
+            'photoUrl', 'status', 'remarks', 'submittedBy', 'companyId', 
+            'createdAt', 'updatedAt', 'verifiedAt', 'verifiedBy'
+        ]

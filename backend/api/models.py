@@ -678,3 +678,25 @@ class LedgerRequest(models.Model):
 
     class Meta:
         db_table = 'LedgerRequest'
+
+
+class PaymentReceipt(models.Model):
+    id = models.TextField(primary_key=True)
+    party_id = models.TextField(db_column='partyId')
+    party_name = models.TextField(db_column='partyName')
+    party_type = models.CharField(max_length=50, default='DEALER') # DEALER or DISTRIBUTOR
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    payment_mode = models.CharField(max_length=50) # UPI, NEFT, CHEQUE, CASH
+    photo_url = models.URLField(max_length=500, null=True, blank=True)
+    status = models.CharField(max_length=20, default='PENDING') # PENDING, VERIFIED, REJECTED
+    remarks = models.TextField(null=True, blank=True)
+    
+    submitted_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='submittedById', db_constraint=False, related_name='submitted_payments')
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    created_at = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    updated_at = models.DateTimeField(db_column='updatedAt', default=timezone.now)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='verifiedById', db_constraint=False, null=True, blank=True, related_name='verified_payments')
+
+    class Meta:
+        db_table = 'PaymentReceipt'

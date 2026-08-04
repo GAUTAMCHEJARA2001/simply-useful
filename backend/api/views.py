@@ -7,8 +7,8 @@ from rest_framework.decorators import api_view, permission_classes, action, pars
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
-from api.models import Company, User, Product, Category, Brand, Unit, Warehouse, Region, Market, Dealer, Distributor, Order, Orderitem, Visit, Expense, Bom, Bomitem, Purchase, Supplier, Labour, Lead, Stocktransaction
-from api.serializers import CompanySerializer, UserSerializer, ProductSerializer, CategorySerializer, BrandSerializer, UnitSerializer, WarehouseSerializer, RegionSerializer, MarketSerializer, DealerSerializer, DistributorSerializer, OrderSerializer, VisitSerializer, ExpenseSerializer, BomSerializer, SupplierSerializer, LabourSerializer
+from api.models import Company, User, Product, Category, Brand, Unit, Warehouse, Region, Market, Dealer, Distributor, Order, Orderitem, Visit, Expense, Bom, Bomitem, Purchase, Supplier, Labour, Lead, Stocktransaction, PaymentReceipt
+from api.serializers import CompanySerializer, UserSerializer, ProductSerializer, CategorySerializer, BrandSerializer, UnitSerializer, WarehouseSerializer, RegionSerializer, MarketSerializer, DealerSerializer, DistributorSerializer, OrderSerializer, VisitSerializer, ExpenseSerializer, BomSerializer, SupplierSerializer, LabourSerializer, PaymentReceiptSerializer
 from api.auth import generate_tokens
 
 def send_success(data=None, message='Done', status_code=200):
@@ -3943,6 +3943,82 @@ class CompanyViewSet(viewsets.ModelViewSet):
         )
         serializer = CompanySerializer(company)
         return send_success(serializer.data, 'Company created successfully', 201)
+
+class PaymentReceiptViewSet(viewsets.ModelViewSet):
+    serializer_class = PaymentReceiptSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        company_id = user.companyid_id
+        if user.role in ['ADMIN', 'SUPERADMIN']:
+            return PaymentReceipt.objects.filter(companyid_id=company_id).order_by('-created_at')
+        return PaymentReceipt.objects.filter(companyid_id=company_id, submitted_by=user).order_by('-created_at')
+
+    def create(self, request, *args, **kwargs):
+        # We override create to just call our custom upload_receipt method or handle it here
+        return self.upload_receipt(request)
+
+    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_receipt(self, request):
+        import uuid
+        import cloudinary.uploader
+        
+        user = request.user
+        data = request.data
+        
+        party_id = data.get('partyId')
+        party_name = data.get('partyName')
+        amount = data.get('amount')
+        payment_mode = data.get('paymentMode')
+        remarks = data.get('remarks')
+        party_type = data.get('partyType', 'DEALER')
+        
+        if not party_id or not party_name or not amount or not payment_mode:
+            return send_error("partyId, partyName, amount, and paymentMode are required.", 400)
+            
+        photo_file = request.FILES.get('photo')
+        photo_url = None
+        
+        if photo_file:
+            try:
+                upload_result = cloudinary.uploader.upload(photo_file, folder='payment_receipts')
+                photo_url = upload_result.get('secure_url')
+            except Exception as e:
+                return send_error(f"Image upload failed: {str(e)}", 500)
+                
+        receipt = PaymentReceipt.objects.create(
+            id=f"pr_{uuid.uuid4().hex[:16]}",
+            party_id=party_id,
+            party_name=party_name,
+            party_type=party_type,
+            amount=amount,
+            payment_mode=payment_mode,
+            photo_url=photo_url,
+            remarks=remarks,
+            submitted_by=user,
+            companyid=user.companyid
+        )
+        
+        serializer = self.get_serializer(receipt)
+        return send_success(serializer.data, "Payment receipt submitted successfully", 201)
+
+    @action(detail=True, methods=['patch'])
+    def verify(self, request, pk=None):
+        if request.user.role not in ['ADMIN', 'SUPERADMIN']:
+            return send_error("Unauthorized", 403)
+            
+        receipt = self.get_object()
+        status_val = request.data.get('status')
+        if status_val not in ['VERIFIED', 'REJECTED']:
+            return send_error("Invalid status", 400)
+            
+        receipt.status = status_val
+        receipt.verified_by = request.user
+        receipt.verified_at = timezone.now()
+        receipt.save()
+        
+        serializer = self.get_serializer(receipt)
+        return send_success(serializer.data, f"Payment receipt marked as {status_val}")
 
 # Re-export modularized view modules
 from api.views_analytics import *

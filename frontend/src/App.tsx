@@ -71,6 +71,8 @@ const ReturnedOrders = safeLazy(() => import("./pages/ReturnedOrders"), "Returne
 const RejectedOrders = safeLazy(() => import("./pages/RejectedOrders"), "RejectedOrders");
 const SalesLedgerRequestsPage = safeLazy(() => import("./pages/SalesLedgerRequestsPage"), "SalesLedgerRequestsPage");
 const NewLedgerRequest = safeLazy(() => import("./pages/NewLedgerRequest"), "NewLedgerRequest");
+const SubmitPaymentPage = safeLazy(() => import("./pages/SubmitPaymentPage"), "SubmitPaymentPage");
+const AdminPaymentsPage = safeLazy(() => import("./pages/AdminPaymentsPage"), "AdminPaymentsPage");
 const AdminLedgerRequestsPage = safeLazy(() => import("./pages/AdminLedgerRequestsPage"), "AdminLedgerRequestsPage");
 const CreatePurchaseOrder = safeLazy(() => import("./pages/CreatePurchaseOrder"), "CreatePurchaseOrder");
 const GlobalInventory = safeLazy(() => import("./pages/GlobalInventory"), "GlobalInventory");
@@ -209,6 +211,7 @@ const App = () => {
                       <Route path="/sales/territory" element={<ProtectedRoute><MyTerritory /></ProtectedRoute>} />
                       <Route path="/sales/ledger-requests" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><SalesLedgerRequestsPage /></ProtectedRoute>} />
                       <Route path="/sales/new-ledger-request" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><NewLedgerRequest /></ProtectedRoute>} />
+                      <Route path="/sales/payments/new" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><SubmitPaymentPage /></ProtectedRoute>} />
 
                       {/* Admin */}
                       <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
@@ -222,6 +225,7 @@ const App = () => {
                       <Route path="/admin/so-mapping" element={<ProtectedRoute><SOMapping /></ProtectedRoute>} />
                       <Route path="/admin/activity-logs" element={<ProtectedRoute><AuditLogsPage /></ProtectedRoute>} />
                       <Route path="/admin/ledger-requests" element={<ProtectedRoute><AdminLedgerRequestsPage /></ProtectedRoute>} />
+                      <Route path="/admin/payments" element={<ProtectedRoute><AdminPaymentsPage /></ProtectedRoute>} />
                       <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
                       {/* HR */}
