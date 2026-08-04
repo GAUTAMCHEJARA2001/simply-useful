@@ -3949,10 +3949,10 @@ class PaymentReceiptViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        company_id = user.companyid_id
+        company_id = getattr(user, 'companyId', None)
         if user.role in ['ADMIN', 'SUPERADMIN']:
             return PaymentReceipt.objects.filter(companyid_id=company_id).order_by('-created_at')
-        return PaymentReceipt.objects.filter(companyid_id=company_id, submitted_by=user).order_by('-created_at')
+        return PaymentReceipt.objects.filter(companyid_id=company_id, submitted_by_id=user.id).order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
         # We override create to just call our custom upload_receipt method or handle it here
@@ -3995,8 +3995,8 @@ class PaymentReceiptViewSet(viewsets.ModelViewSet):
             payment_mode=payment_mode,
             photo_url=photo_url,
             remarks=remarks,
-            submitted_by=user,
-            companyid=user.companyid
+            submitted_by_id=user.id,
+            companyid_id=getattr(user, 'companyId', None)
         )
         
         serializer = self.get_serializer(receipt)
@@ -4013,7 +4013,7 @@ class PaymentReceiptViewSet(viewsets.ModelViewSet):
             return send_error("Invalid status", 400)
             
         receipt.status = status_val
-        receipt.verified_by = request.user
+        receipt.verified_by_id = request.user.id
         receipt.verified_at = timezone.now()
         receipt.save()
         
