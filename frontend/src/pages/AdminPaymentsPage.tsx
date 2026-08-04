@@ -19,7 +19,7 @@ const AdminPaymentsPage: React.FC = () => {
     try {
       setIsLoading(true);
       const data = await paymentService.getAll();
-      setPayments(data.data || data); // Handle standard response { success, data }
+      setPayments(data.results || data.data || data || []); // Handle paginated DRF response or standard response
     } catch (err: any) {
       toast({ title: 'Error', description: 'Failed to fetch payments', variant: 'destructive' });
     } finally {

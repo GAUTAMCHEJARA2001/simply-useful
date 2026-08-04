@@ -2,7 +2,7 @@ import { api } from '../client';
 import { PaymentReceipt } from '../../types';
 
 export const paymentService = {
-  getAll: async (): Promise<{ data: PaymentReceipt[] }> => {
+  getAll: async () => {
     const response = await api.get('/payments');
     return response.data;
   },
