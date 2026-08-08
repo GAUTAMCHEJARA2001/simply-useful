@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useProductions, useProductionMutations } from '@/hooks/inventory/useProductions';
 import { useProducts } from '@/hooks/inventory/useProducts';
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,21 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   });
   const [showFinishedDropdown, setShowFinishedDropdown] = useState<boolean>(false);
   const [showRawDropdown, setShowRawDropdown] = useState<boolean>(false);
+  const finishedDropdownRef = useRef<HTMLDivElement>(null);
+  const rawDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (finishedDropdownRef.current && !finishedDropdownRef.current.contains(event.target as Node)) {
+        setShowFinishedDropdown(false);
+      }
+      if (rawDropdownRef.current && !rawDropdownRef.current.contains(event.target as Node)) {
+        setShowRawDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleFinishedCatFilterChange = (val: string) => {
     setFinishedCatFilter(val);
@@ -192,6 +207,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   };
 
   const addIngredient = (p: any) => {
+    setIngSearch('');
+    setShowRawDropdown(false);
     if (batchItems.some((i: any) => i.productId === p.id)) {
       toast({ title: 'Duplicate Item', description: 'This product is already in the batch ingredients list.' });
       return;
@@ -202,8 +219,6 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       quantity: 1, 
       unit: p.unit?.name || p.unit || 'KG'
     }]);
-    setIngSearch('');
-    setShowRawDropdown(false);
   };
 
   const removeIngredient = (idx: number) => {
@@ -394,7 +409,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
           setBatchItems([]); 
         }}>
           <div className="space-y-4">
-            <div className="relative">
+            <div className="relative" ref={finishedDropdownRef}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1.5">
                 <label className="text-sm font-medium">Finished Product <span className="text-destructive">*</span></label>
                 <div className="flex items-center gap-1.5">
@@ -566,7 +581,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                   </select>
                 </div>
               </div>
-              <div className="relative mb-3">
+              <div className="relative mb-3" ref={rawDropdownRef}>
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <input 
                   type="text"
