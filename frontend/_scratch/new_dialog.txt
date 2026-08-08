@@ -1,0 +1,249 @@
+<form id="onboarding-form" onSubmit={handleSubmit} className="space-y-8">
+                
+                {/* 1. Basic Information */}
+                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                  <h3 className="text-lg font-semibold mb-4 border-b pb-2">1. Basic Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Party Type</Label>
+                      <Select value={selectedRequest?.partyType} onValueChange={(val: any) => setPartyType(val)}>
+                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="DEALER">Dealer</SelectItem><SelectItem value="DISTRIBUTOR">Distributor</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Firm Name *</Label>
+                      <Input required value={selectedRequest?.partyName} readOnly disabled className="bg-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Contact Person *</Label>
+                      <Input required value={selectedRequest?.contactPerson} readOnly disabled className="bg-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Phone *</Label>
+                      <Input required value={selectedRequest?.phone} readOnly disabled className="bg-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input type="email" value={selectedRequest?.email} readOnly disabled className="bg-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Fax No</Label>
+                      <Input value={extendedData.faxNo} readOnly disabled)} className="bg-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>City / Area *</Label>
+                      <Input required value={selectedRequest?.cityOrArea} readOnly disabled className="bg-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>GST Number</Label>
+                      <Input value={selectedRequest?.gstNumber} readOnly disabled className="bg-white" />
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                      <Label>Registered Address *</Label>
+                      <Input required value={selectedRequest?.address} readOnly disabled className="bg-white" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Bank Details */}
+                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                  <h3 className="text-lg font-semibold mb-4 border-b pb-2">2. Bank Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="col-span-2 space-y-2">
+                      <Label>Name & Address of Bank</Label>
+                      <Input value={extendedData.bankName} readOnly disabled)} className="bg-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Type of A/c</Label>
+                      <Select value={extendedData.bankAccountType} onValueChange={(val: any) => setExtendedData({...extendedData, bankAccountType: val})}>
+                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Savings">Savings</SelectItem>
+                          <SelectItem value="Current">Current</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Account No</Label>
+                      <Input value={extendedData.bankAccountNo} readOnly disabled)} className="bg-white" />
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                      <Label>Name of Authorised Signatory</Label>
+                      <Input value={extendedData.bankSignatory} readOnly disabled)} className="bg-white" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Status & Existing Dealerships */}
+                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                  <h3 className="text-lg font-semibold mb-4 border-b pb-2">3. Business Status</h3>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Status of Firm</Label>
+                        <Select value={extendedData.firmStatus} onValueChange={(val: any) => setExtendedData({...extendedData, firmStatus: val})}>
+                          <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Proprietorship">Proprietorship</SelectItem>
+                            <SelectItem value="Partnership">Partnership</SelectItem>
+                            <SelectItem value="Limited Company">Limited Company</SelectItem>
+                            <SelectItem value="Private Ltd. Co.">Private Ltd. Co.</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2 flex flex-col justify-end">
+                        <label className="flex items-center space-x-2 text-sm font-medium">
+                          <input type="checkbox" checked={extendedData.isRegisteredDealer} readOnly disabled)} className="rounded border-gray-300" />
+                          <span>Are you a registered dealer?</span>
+                        </label>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label>Existing Dealerships (Name of firm/company under which dealership exist)</Label>
+                        <Button type="button" variant="outline" size="sm" onClick={addDealership}><Plus className="w-4 h-4 mr-1"/> Add</Button>
+                      </div>
+                      {selectedRequest?.extendedData?.existingDealerships?.map((d: any, i: number) => (
+                        <div key={i} className="flex gap-2 items-center bg-gray-50 p-2 rounded">
+                          <Input placeholder="Company Name" value={d.companyName} readOnly disabled className="bg-white" />
+                          <Input placeholder="Products" value={d.products} readOnly disabled className="bg-white" />
+                          <Input placeholder="Qty" value={d.quantity} readOnly disabled className="bg-white w-24" />
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeDealership(i)}><Trash2 className="w-4 h-4 text-red-500"/></Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2 mt-4">
+                      <div className="flex justify-between items-center">
+                        <Label>Details of Proprietor/Partners/Directors</Label>
+                        <Button type="button" variant="outline" size="sm" onClick={addProprietor}><Plus className="w-4 h-4 mr-1"/> Add</Button>
+                      </div>
+                      {selectedRequest?.extendedData?.proprietorDetails?.map((p: any, i: number) => (
+                        <div key={i} className="flex gap-2 items-center bg-gray-50 p-2 rounded">
+                          <Input placeholder="Name" value={p.name} readOnly disabled className="bg-white" />
+                          <Input placeholder="DOB" type="date" value={p.dob} readOnly disabled className="bg-white" />
+                          <Input placeholder="Father's Name" value={p.fathersName} readOnly disabled className="bg-white" />
+                          <Input placeholder="Marital Status" value={p.maritalStatus} readOnly disabled className="bg-white" />
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeProprietor(i)}><Trash2 className="w-4 h-4 text-red-500"/></Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Operations & Security */}
+                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                  <h3 className="text-lg font-semibold mb-4 border-b pb-2">4. Operations & Security</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div className="space-y-2">
+                      <Label>Turnover (Last 3 Yrs in Lacs)</Label>
+                      <div className="flex gap-2">
+                        <Input placeholder="Yr 1" value={extendedData.turnoverLast3Years?.[0]} readOnly disabled)}} className="bg-white" />
+                        <Input placeholder="Yr 2" value={extendedData.turnoverLast3Years?.[1]} readOnly disabled)}} className="bg-white" />
+                        <Input placeholder="Yr 3" value={extendedData.turnoverLast3Years?.[2]} readOnly disabled)}} className="bg-white" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>No. of Persons Employed</Label>
+                      <Input value={extendedData.personsEmployed} readOnly disabled)} className="bg-white" />
+                    </div>
+                  </div>
+
+                  <h4 className="font-medium mb-2">Security Deposit (If Any)</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-6">
+                    <Input placeholder="DD/Cheque No" value={extendedData.securityDeposit?.ddChequeNo} readOnly disabled})} className="bg-white" />
+                    <Input placeholder="Bank" value={extendedData.securityDeposit?.bank} readOnly disabled})} className="bg-white" />
+                    <Input placeholder="Payable At" value={extendedData.securityDeposit?.payableAt} readOnly disabled})} className="bg-white" />
+                  </div>
+
+                  <h4 className="font-medium mb-2 mt-4 text-primary">Cheque Submission Details (For Printing Letter)</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 bg-blue-50 p-4 rounded border border-blue-100">
+                    <div className="space-y-2">
+                      <Label>Cheque Bank Name</Label>
+                      <Input placeholder="e.g. HDFC Bank" value={extendedData.chequeBankName} readOnly disabled)} className="bg-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Cheque Numbers</Label>
+                      <Input placeholder="Comma separated, e.g. 100234, 100235" value={extendedData.chequeNumbers} readOnly disabled)} className="bg-white" />
+                    </div>
+                  </div>
+
+                  <h4 className="font-medium mb-2">Godown Details</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2 flex flex-col justify-end">
+                        <label className="flex items-center space-x-2 text-sm font-medium">
+                          <input type="checkbox" checked={extendedData.hasGodown} readOnly disabled)} className="rounded border-gray-300" />
+                          <span>Do you have godown facility?</span>
+                        </label>
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                      <Label>Godown Address</Label>
+                      <Input value={extendedData.godownAddress} readOnly disabled)} className="bg-white" disabled={!extendedData.hasGodown} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Area (sq. feet)</Label>
+                      <Input value={extendedData.godownArea} readOnly disabled)} className="bg-white" disabled={!extendedData.hasGodown} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Capacity (in bags)</Label>
+                      <Input value={extendedData.godownCapacity} readOnly disabled)} className="bg-white" disabled={!extendedData.hasGodown} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Document Uploads */}
+                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                  <h3 className="text-lg font-semibold mb-4 border-b pb-2">5. Document Uploads</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[
+                      { label: 'Aadhaar (Front)', key: 'docAadhaarFront', multiple: false },
+                      { label: 'Aadhaar (Back)', key: 'docAadhaarBack', multiple: false },
+                      { label: 'PAN Card', key: 'docPan', multiple: false },
+                      { label: 'GST Certificate', key: 'docGst', multiple: false },
+                      { label: 'Address Proof', key: 'docAddressProof', multiple: false },
+                      { label: 'Udhyam Certificate', key: 'docUdhyam', multiple: false },
+                      { label: 'Person Photo', key: 'docPersonPhoto', multiple: false },
+                    ].map((field) => (
+                      <div key={field.key} className="space-y-2">
+                        <Label>{field.label}</Label>
+                        <Input type="file" readOnly disabled className="bg-white text-xs" />
+                        {files[field.key] && <p className="text-xs text-green-600 truncate mt-1">Selected: {(files[field.key] as File).name}</p>}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-8 space-y-6">
+                    <div className="space-y-2">
+                      <Label>Security Cheques (Multiple)</Label>
+                      <Input type="file" multiple readOnly disabled className="bg-white text-xs" />
+                      {Array.isArray(files.docSecurityCheques) && files.docSecurityCheques.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {(files.docSecurityCheques as File[]).map((f, idx) => (
+                            <span key={idx} className="inline-flex items-center gap-1 bg-gray-100 text-xs px-2 py-1 rounded">
+                              {f.name} <button type="button" onClick={() => removeFile('docSecurityCheques', idx)} className="text-red-500 ml-1 font-bold">×</button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Showroom Photos (Multiple)</Label>
+                      <Input type="file" multiple readOnly disabled className="bg-white text-xs" />
+                      {Array.isArray(files.docShowroomPhotos) && files.docShowroomPhotos.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {(files.docShowroomPhotos as File[]).map((f, idx) => (
+                            <span key={idx} className="inline-flex items-center gap-1 bg-gray-100 text-xs px-2 py-1 rounded">
+                              {f.name} <button type="button" onClick={() => removeFile('docShowroomPhotos', idx)} className="text-red-500 ml-1 font-bold">×</button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </form>

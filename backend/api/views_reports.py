@@ -21,7 +21,9 @@ def report_dashboard_kpis(request):
 
     today = datetime.date.today()
 
-    active_products = Product.objects.filter(companyid_id=company_id)
+    active_products = Product.objects.all()
+    if company_id and request.user.role != 'SUPERADMIN':
+        active_products = active_products.filter(companyid_id=company_id)
     if assigned_wh_ids and not is_global_request:
         active_products = active_products.filter(warehouseid_id__in=assigned_wh_ids)
     elif wh_header and not is_global_request:
@@ -30,7 +32,9 @@ def report_dashboard_kpis(request):
     all_stocks = _compute_all_product_stocks(company_id, request=request)
     low_stock = sum(1 for s in all_stocks if s['currentStock'] <= s['minimumStock'])
 
-    orders_qs = Order.objects.filter(companyid_id=company_id)
+    orders_qs = Order.objects.all()
+    if company_id and request.user.role != 'SUPERADMIN':
+        orders_qs = orders_qs.filter(companyid_id=company_id)
     if assigned_wh_ids and not is_global_request:
         orders_qs = orders_qs.filter(warehouseid_id__in=assigned_wh_ids)
     elif wh_header and not is_global_request:

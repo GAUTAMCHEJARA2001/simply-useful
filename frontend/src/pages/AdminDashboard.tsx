@@ -136,15 +136,15 @@ const AdminDashboard: React.FC = () => {
   };
   const pendingOrders = fyOrders.filter(o => o.status === 'Pending');
   const totalDealers = dealers.filter(d => d.active).length;
-  const totalRevenue = dashboardData?.revenue || 0;
+  const totalRevenue = dashboardData?.totalSalesOverall || 0;
   const formattedRevenue = totalRevenue >= 100000 ? `₹${(totalRevenue / 100000).toFixed(2)}L` : `₹${(totalRevenue / 1000).toFixed(0)}K`;
   const completionRate = fyOrders.length > 0 ? Math.round((pipeline.Completed / fyOrders.length) * 100) : 0;
 
   const kpis = [
-    { label: 'Total Orders', value: dashboardData?.orders || fyOrders.length, icon: ShoppingCart, color: 'bg-primary/10 text-primary' },
-    { label: 'Active Dealers', value: dashboardData?.dealers || totalDealers, icon: Users, color: 'bg-success/10 text-success' },
+    { label: 'Total Orders', value: dashboardData?.totalOrdersCount ?? fyOrders.length, icon: ShoppingCart, color: 'bg-primary/10 text-primary' },
+    { label: 'Active Dealers', value: dashboardData?.activeDealersCount ?? totalDealers, icon: Users, color: 'bg-success/10 text-success' },
     { label: 'Revenue', value: formattedRevenue, icon: TrendingUp, color: 'bg-accent/10 text-accent' },
-    { label: 'Total Products', value: dashboardData?.products || 0, icon: Warehouse, color: 'bg-purple-500/10 text-purple-600' },
+    { label: 'Total Products', value: dashboardData?.activeProductsCount ?? 0, icon: Warehouse, color: 'bg-purple-500/10 text-purple-600' },
   ];
 
   const pipelineItems = [

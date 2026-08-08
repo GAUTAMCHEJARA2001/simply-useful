@@ -1459,8 +1459,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         company_id = _get_company_id(self.request)
+        user_role = (getattr(self.request.user, 'role', '') or '').upper()
         qs = Order.objects.all()
-        if company_id:
+        if company_id and user_role != 'SUPERADMIN':
             qs = qs.filter(companyid_id=company_id)
         wh_header = self.request.headers.get('X-Warehouse-Id') or self.request.headers.get('X-Warehouse-ID') or self.request.headers.get('x-warehouse-id')
         if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
@@ -1471,8 +1472,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         pk = self.kwargs[lookup_url_kwarg]
         company_id = _get_company_id(self.request)
+        user_role = (getattr(self.request.user, 'role', '') or '').upper()
         qs = Order.objects.all()
-        if company_id:
+        if company_id and user_role != 'SUPERADMIN':
             qs = qs.filter(companyid_id=company_id)
         try:
             return qs.get(id=pk)
@@ -1487,7 +1489,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         company_id = _get_company_id(self.request)
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         qs = Order.objects.all()
-        if company_id:
+        if company_id and user_role != 'SUPERADMIN':
             qs = qs.filter(companyid_id=company_id)
         wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
         if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
