@@ -910,11 +910,11 @@ def bulk_import(request, entity):
                         attempts = 0
                         while attempts < 100:
                             rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                        candidate_code = f'{prefix}-{rand_suffix}'
-                        if not Product.objects.filter(productcode=candidate_code, companyid_id=company_id).exists():
-                            code = candidate_code
-                            break
-                        attempts += 1
+                            candidate_code = f'{prefix}-{rand_suffix}'
+                            if not Product.objects.filter(productcode=candidate_code, companyid_id=company_id).exists():
+                                code = candidate_code
+                                break
+                            attempts += 1
                     if not code:
                         skipped.append({'row': index, 'reason': 'Failed to generate unique product code'})
                         continue
