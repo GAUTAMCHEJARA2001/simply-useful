@@ -18,6 +18,8 @@ const OnboardingRequestsPanel: React.FC = () => {
 
   const pendingRequests = requests?.filter(r => r.status === 'PENDING') || [];
 
+  if (pendingRequests.length === 0) return null;
+
   return (
     <Card className="border-orange-100 shadow-sm bg-orange-50/30">
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
