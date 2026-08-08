@@ -176,7 +176,7 @@ class ProductSerializer(serializers.ModelSerializer):
     categoryId = serializers.IntegerField(source='categoryid_id', required=True)
     openingStock = serializers.IntegerField(source='openingstock', default=0)
     minimumStock = serializers.IntegerField(source='minimumstock', default=0)
-    defaultWarehouseId = serializers.IntegerField(source='defaultwarehouseid', required=False, allow_null=True)
+    defaultWarehouseId = serializers.IntegerField(source='warehouseid_id', required=False, allow_null=True)
     gst = serializers.FloatField(required=False, default=18.0)
     rate = serializers.FloatField(required=False, default=0.0)
     
