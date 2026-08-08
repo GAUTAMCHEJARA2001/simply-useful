@@ -17,6 +17,7 @@ const SettingsPage: React.FC = () => {
     const bulkFileInputRef = React.useRef<HTMLInputElement>(null);
     const [bulkType, setBulkType] = React.useState('products');
     const [bulkFile, setBulkFile] = React.useState<File | null>(null);
+    const [isImporting, setIsImporting] = React.useState(false);
     const [backupStatus, setBackupStatus] = React.useState<{
         pg_dump_found: boolean;
         pg_dump_path: string;
@@ -341,6 +342,7 @@ const SettingsPage: React.FC = () => {
         }
         const payload = new FormData();
         payload.append('file', bulkFile);
+        setIsImporting(true);
         try {
             const res = await api.post(`/bulk/${bulkType}/import`, payload, {
                 headers: { 'Content-Type': 'multipart/form-data' },
@@ -351,6 +353,8 @@ const SettingsPage: React.FC = () => {
             if (bulkFileInputRef.current) bulkFileInputRef.current.value = '';
         } catch (error: any) {
             toast.error(error?.response?.data?.message || 'Import failed');
+        } finally {
+            setIsImporting(false);
         }
     };
 
@@ -616,8 +620,13 @@ const SettingsPage: React.FC = () => {
                                     />
                                 </div>
                                 <div className="flex justify-end">
-                                    <Button onClick={handleBulkImport}>
-                                        <Upload className="w-4 h-4 mr-2" /> Import Sheet
+                                    <Button onClick={handleBulkImport} disabled={isImporting || !bulkFile}>
+                                        {isImporting ? (
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                        ) : (
+                                            <Upload className="w-4 h-4 mr-2" />
+                                        )}
+                                        {isImporting ? 'Importing...' : 'Import Sheet'}
                                     </Button>
                                 </div>
                             </div>
