@@ -17,6 +17,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import LedgerRequestsPanel from '@/components/admin/LedgerRequestsPanel';
+import OnboardingRequestsPanel from '@/components/admin/OnboardingRequestsPanel';
+import PaymentRequestsPanel from '@/components/admin/PaymentRequestsPanel';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700',
@@ -209,7 +211,11 @@ const AdminDashboard: React.FC = () => {
         ))}
       </div>
 
-      <LedgerRequestsPanel />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <LedgerRequestsPanel />
+        <OnboardingRequestsPanel />
+        <PaymentRequestsPanel />
+      </div>
 
       {/* ── Order Pipeline ─────────────────────────────────── */}
       <Card>

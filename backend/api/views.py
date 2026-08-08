@@ -900,12 +900,16 @@ def bulk_import(request, entity):
                     updated += 1
                     code = existing.productcode
                 else:
+                    code_val = (row.get('productCode') or row.get('product_code') or '').strip()
                     company = Company.objects.filter(id=company_id).first()
                     prefix = getattr(company, 'skuprefix', 'PRD') or 'PRD'
                     code = None
-                    attempts = 0
-                    while attempts < 100:
-                        rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                    if code_val and not Product.objects.filter(productcode=code_val, companyid_id=company_id).exists():
+                        code = code_val
+                    else:
+                        attempts = 0
+                        while attempts < 100:
+                            rand_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
                         candidate_code = f'{prefix}-{rand_suffix}'
                         if not Product.objects.filter(productcode=candidate_code, companyid_id=company_id).exists():
                             code = candidate_code
@@ -4023,6 +4027,8 @@ class PaymentReceiptViewSet(viewsets.ModelViewSet):
 # Re-export modularized view modules
 from api.views_analytics import *
 from api.views_backups import *
+from api.views_reports import *
+from api.views_onboarding import *
 from api.views_reports import *
 from api.views_leads import *
 from api.views_masters import *

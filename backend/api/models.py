@@ -700,3 +700,43 @@ class PaymentReceipt(models.Model):
 
     class Meta:
         db_table = 'PaymentReceipt'
+
+class PartyOnboardingRequest(models.Model):
+    id = models.TextField(primary_key=True)
+    party_type = models.CharField(max_length=50, default='DEALER') # DEALER or DISTRIBUTOR
+    party_name = models.CharField(max_length=255)
+    city_or_area = models.CharField(max_length=255)
+    gst_number = models.CharField(max_length=50, blank=True, null=True)
+    address = models.TextField()
+    phone = models.CharField(max_length=50)
+    email = models.EmailField(blank=True, null=True)
+    contact_person = models.CharField(max_length=255)
+    
+    # Document URLs (Cloudinary)
+    doc_aadhaar_front = models.URLField(max_length=500, blank=True, null=True)
+    doc_aadhaar_back = models.URLField(max_length=500, blank=True, null=True)
+    doc_pan = models.URLField(max_length=500, blank=True, null=True)
+    doc_gst = models.URLField(max_length=500, blank=True, null=True)
+    doc_address_proof = models.URLField(max_length=500, blank=True, null=True)
+    doc_udhyam = models.URLField(max_length=500, blank=True, null=True)
+    doc_security_cheques = models.JSONField(default=list, blank=True)
+    doc_person_photo = models.URLField(max_length=500, blank=True, null=True)
+    doc_showroom_photos = models.JSONField(default=list, blank=True)
+    doc_signed_form = models.JSONField(default=list, blank=True, null=True)
+    
+    status = models.CharField(max_length=20, default='PENDING') # PENDING, APPROVED, REJECTED
+    remarks = models.TextField(blank=True, null=True)
+    extended_data = models.JSONField(default=dict, blank=True)
+    
+    created_party_id = models.TextField(blank=True, null=True) # ID of the created Dealer/Distributor after approval
+    
+    submitted_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='submittedById', db_constraint=False, related_name='submitted_onboardings')
+    reviewed_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='reviewedById', db_constraint=False, related_name='reviewed_onboardings', blank=True, null=True)
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    
+    created_at = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    updated_at = models.DateTimeField(db_column='updatedAt', default=timezone.now)
+    reviewed_at = models.DateTimeField(db_column='reviewedAt', blank=True, null=True)
+
+    class Meta:
+        db_table = 'PartyOnboardingRequest'

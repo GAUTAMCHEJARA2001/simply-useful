@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,7 @@ const WhatsAppIcon = ({ className = "w-3 h-3" }: { className?: string }) => (
 const LeadDetails: React.FC<LeadDetailsProps> = ({ lead, open, onClose, onRefresh, users, canManage }) => {
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
   const SALES_ONLY_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER'];
@@ -232,6 +234,29 @@ const LeadDetails: React.FC<LeadDetailsProps> = ({ lead, open, onClose, onRefres
                 >
                   {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <ShieldAlert className="w-4 h-4 mr-2" />}
                   Mark Lead as Lost
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Action Trigger Card - ONBOARDING FOR WON LEADS */}
+          {lead.status === 'WON' && (
+            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent shadow-sm">
+              <CardContent className="p-4 flex flex-col gap-3">
+                <div className="flex gap-2.5 items-start">
+                  <UserCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-bold text-sm text-foreground">Onboard Party</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      This lead has been won. Start the formal onboarding process for Dealer or Distributor.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  className="w-full mt-1 bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 text-xs rounded-lg shadow-sm flex items-center justify-center transition-all"
+                  onClick={() => navigate('/sales/onboarding', { state: { prefillLead: lead } })}
+                >
+                  Create Dealer / Distributor Request
                 </Button>
               </CardContent>
             </Card>

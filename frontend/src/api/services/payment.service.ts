@@ -4,7 +4,8 @@ import { PaymentReceipt } from '../../types';
 export const paymentService = {
   getAll: async () => {
     const response = await api.get('/payments');
-    return response.data;
+    const data = response.data;
+    return data.results || data.data || data || [];
   },
 
   submitPayment: async (formData: FormData) => {

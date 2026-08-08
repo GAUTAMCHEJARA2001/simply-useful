@@ -30,6 +30,7 @@ const navItems: NavItem[] = [
   { label: 'Submit Payment', path: '/sales/payments/new', icon: Receipt, feature: 'view_sales_dashboard' },
   { label: 'CRM Leads', path: '/sales/crm', icon: Users, feature: 'track_visits' },
   { label: 'My Territory', path: '/sales/territory', icon: Store, feature: 'track_visits' },
+  { label: 'Party Onboarding', path: '/sales/onboarding', icon: UserCheck, feature: 'view_sales_dashboard' },
   { label: 'Admin Panels', path: '/admin', icon: Settings, feature: 'view_admin_dashboard' },
   { label: 'Global Stock', path: '/admin/global-inventory', icon: Globe, feature: 'view_admin_dashboard' },
   { label: 'Cancelled Orders', path: '/admin/rejected', icon: XCircle, feature: 'view_admin_dashboard' },
@@ -39,6 +40,7 @@ const navItems: NavItem[] = [
   { label: 'Activity & Audit Logs', path: '/admin/activity-logs', icon: Activity, feature: 'view_admin_dashboard' },
   { label: 'Ledger Fulfillment', path: '/admin/ledger-requests', icon: FileText, feature: 'view_admin_dashboard' },
   { label: 'Payment Approvals', path: '/admin/payments', icon: Receipt, feature: 'view_admin_dashboard' },
+  { label: 'Onboarding Approvals', path: '/admin/onboarding', icon: UserCheck, feature: 'view_admin_dashboard' },
   { label: 'Staff Dashboard', path: '/hr', icon: Users, feature: 'view_reports' },
   { label: 'Order and Dispatch Room', path: '/inventory', icon: Package, feature: 'view_inventory_dashboard' },
   { label: 'Manage Stock', path: '/inventory/manage', icon: Package, feature: 'view_inventory_dashboard' },
@@ -61,6 +63,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (item.path === '/admin/activity-logs') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/admin/ledger-requests') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/admin/payments') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
+    if (item.path === '/admin/onboarding') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/reports') return user.role === 'SUPERADMIN';
     return can(item.feature);
   });
@@ -82,7 +85,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <FinancialYearProvider>
-    <div className="h-screen w-full flex bg-background overflow-hidden">
+    <div className="h-screen print:h-auto w-full flex bg-background overflow-hidden print:overflow-visible">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -94,7 +97,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static top-0 left-0 z-50 h-full w-64 bg-sidebar flex flex-col transition-transform duration-300 lg:translate-x-0 shrink-0",
+          "fixed lg:static top-0 left-0 z-50 h-full w-64 bg-sidebar flex flex-col transition-transform duration-300 lg:translate-x-0 shrink-0 print:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -161,9 +164,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 print:block">
         {/* Top bar */}
-        <header className="flex-none h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 overflow-visible w-full z-30">
+        <header className="flex-none h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 overflow-visible w-full z-30 print:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden mr-1.5 sm:mr-3 p-1 sm:p-1.5 rounded-lg hover:bg-muted transition-colors"
@@ -182,7 +185,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden overflow-y-auto min-w-0">
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden overflow-y-auto min-w-0 print:p-0 print:overflow-visible">
           {children}
         </main>
       </div>

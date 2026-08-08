@@ -380,3 +380,73 @@ export interface PaymentReceipt {
   updatedAt?: string;
   verifiedAt?: string;
 }
+
+export interface DealerExtendedData {
+  faxNo?: string;
+  bankName?: string;
+  bankAccountType?: string;
+  bankAccountNo?: string;
+  bankSignatory?: string;
+  firmStatus?: string;
+  existingDealerships?: Array<{ companyName: string, products: string, quantity: string, remarks: string }>;
+  proprietorDetails?: Array<{ name: string, dob: string, fathersName: string, maritalStatus: string }>;
+  associateFirms?: string;
+  turnoverLast3Years?: string[];
+  securityDeposit?: {
+    ddChequeNo: string;
+    date: string;
+    amount: string;
+    bank: string;
+    payableAt: string;
+  };
+  chequeBankName?: string;
+  chequeNumbers?: string;
+  isRegisteredDealer?: boolean;
+  personsEmployed?: string;
+  hasGodown?: boolean;
+  godownAddress?: string;
+  godownArea?: string;
+  godownCapacity?: string;
+  godownConstruction?: string;
+  expectedMonthlySales?: string;
+  experience?: string;
+  financialStanding?: string;
+  marketReputation?: string;
+  fieldReviews?: Record<string, { status: 'APPROVED' | 'REJECTED'; comment: string }>;
+  [key: string]: any;
+}
+
+export interface PartyOnboardingRequest {
+  id?: string;
+  partyType: 'DEALER' | 'DISTRIBUTOR';
+  partyName: string;
+  cityOrArea: string;
+  gstNumber?: string;
+  address: string;
+  phone: string;
+  email?: string;
+  contactPerson: string;
+  
+  docAadhaarFront?: string | File;
+  docAadhaarBack?: string | File;
+  docPan?: string | File;
+  docGst?: string | File;
+  docAddressProof?: string | File;
+  docUdhyam?: string | File;
+  docSecurityCheques?: (string | File)[];
+  docPersonPhoto?: string | File;
+  docShowroomPhotos?: (string | File)[];
+  docSignedForm?: (string | File)[];
+  
+  extendedData?: DealerExtendedData;
+
+  status?: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED';
+  remarks?: string;
+  createdPartyId?: string;
+  
+  submittedBy?: User;
+  reviewedBy?: User;
+  createdAt?: string;
+  updatedAt?: string;
+  reviewedAt?: string;
+}

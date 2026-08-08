@@ -80,6 +80,9 @@ const LeadsPage = safeLazy(() => import("./pages/CRM/LeadsPage"), "LeadsPage");
 const SOMapping = safeLazy(() => import("./pages/SOMapping"), "SOMapping");
 const MyTerritory = safeLazy(() => import("./pages/MyTerritory"), "MyTerritory");
 const AuditLogsPage = safeLazy(() => import("./pages/AuditLogsPage"), "AuditLogsPage");
+const OnboardingRequestsPage = safeLazy(() => import("./pages/OnboardingRequestsPage"), "OnboardingRequestsPage");
+const AdminOnboardingPage = safeLazy(() => import("./pages/AdminOnboardingPage"), "AdminOnboardingPage");
+const PrintableOnboardingForm = safeLazy(() => import("./pages/PrintableOnboardingForm"), "PrintableOnboardingForm");
 
 
 
@@ -212,6 +215,8 @@ const App = () => {
                       <Route path="/sales/ledger-requests" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><SalesLedgerRequestsPage /></ProtectedRoute>} />
                       <Route path="/sales/new-ledger-request" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><NewLedgerRequest /></ProtectedRoute>} />
                       <Route path="/sales/payments/new" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><SubmitPaymentPage /></ProtectedRoute>} />
+                      <Route path="/sales/onboarding" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><OnboardingRequestsPage /></ProtectedRoute>} />
+                      <Route path="/sales/onboarding/:id/print" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><PrintableOnboardingForm /></ProtectedRoute>} />
 
                       {/* Admin */}
                       <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
@@ -226,6 +231,7 @@ const App = () => {
                       <Route path="/admin/activity-logs" element={<ProtectedRoute><AuditLogsPage /></ProtectedRoute>} />
                       <Route path="/admin/ledger-requests" element={<ProtectedRoute><AdminLedgerRequestsPage /></ProtectedRoute>} />
                       <Route path="/admin/payments" element={<ProtectedRoute><AdminPaymentsPage /></ProtectedRoute>} />
+                      <Route path="/admin/onboarding" element={<ProtectedRoute><AdminOnboardingPage /></ProtectedRoute>} />
                       <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
                       {/* HR */}
