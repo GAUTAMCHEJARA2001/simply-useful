@@ -611,7 +611,7 @@ const SettingsPage: React.FC = () => {
                                     <Input
                                         ref={bulkFileInputRef}
                                         type="file"
-                                        accept=".csv,text/csv"
+                                        accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                                         onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
                                     />
                                 </div>
