@@ -44,6 +44,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             allowed_ids = get_allowed_product_ids_for_user(user_id)
             if allowed_ids is not None:
                 queryset = queryset.filter(id__in=allowed_ids)
+            else:
+                queryset = queryset.none()
         return queryset
 
     def list(self, request, *args, **kwargs):
@@ -64,6 +66,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             allowed_product_ids = get_allowed_product_ids_for_user(self.request.user.id)
             if allowed_product_ids is not None:
                 queryset = queryset.filter(id__in=allowed_product_ids)
+            else:
+                queryset = queryset.none()
 
         if search:
             queryset = queryset.filter(Q(name__icontains=search) | Q(productcode__icontains=search))
