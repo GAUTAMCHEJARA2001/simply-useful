@@ -24,7 +24,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         real_user = User.objects.filter(id=user_id).first()
         company_id = real_user.companyid_id if real_user else getattr(self.request.user, 'companyId', None)
         queryset = Product.objects.filter(companyid_id=company_id) if company_id else Product.objects.all()
-        admin_roles = {'ADMIN', 'SUPERADMIN', 'HR'}
+        admin_roles = {'ADMIN', 'SUPERADMIN', 'HR', 'INVENTORY', 'PRODUCTION'}
         user_role = getattr(self.request.user, 'role', '') or ''
         is_write_op = self.request.method in ('PUT', 'PATCH', 'DELETE', 'POST')
         skip_assignment_filter = user_role.upper() in admin_roles or is_write_op
@@ -52,7 +52,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         from api.models import Warehouse, Product, Userproductaccess
         from api.models import Purchaseitem, Orderitem, Stocktransaction
         from django.db.models import Sum, Q
-        admin_roles = {'ADMIN', 'SUPERADMIN', 'HR'}
+        admin_roles = {'ADMIN', 'SUPERADMIN', 'HR', 'INVENTORY', 'PRODUCTION'}
         user_role = getattr(self.request.user, 'role', '') or ''
         is_admin = user_role.upper() in admin_roles
         search = request.query_params.get('search', '').strip()

@@ -25,7 +25,7 @@ def report_dashboard_kpis(request):
     if assigned_wh_ids and not is_global_request:
         active_products = active_products.filter(warehouseid_id__in=assigned_wh_ids)
     elif wh_header and not is_global_request:
-        active_products = active_products.filter(warehouseid_id_id=wh_header)
+        active_products = active_products.filter(warehouseid_id=wh_header)
 
     all_stocks = _compute_all_product_stocks(company_id, request=request)
     low_stock = sum(1 for s in all_stocks if s['currentStock'] <= s['minimumStock'])
@@ -34,7 +34,7 @@ def report_dashboard_kpis(request):
     if assigned_wh_ids and not is_global_request:
         orders_qs = orders_qs.filter(warehouseid_id__in=assigned_wh_ids)
     elif wh_header and not is_global_request:
-        orders_qs = orders_qs.filter(warehouseid_id_id=wh_header)
+        orders_qs = orders_qs.filter(warehouseid_id=wh_header)
 
     today_orders = orders_qs.filter(createdat__date=today)
     total_sales_today = sum(o.grandtotal or 0 for o in today_orders)
