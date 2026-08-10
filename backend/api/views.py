@@ -3280,17 +3280,7 @@ def transaction_production_materials(request, pk):
     sts = Stocktransaction.objects.filter(referenceid=pk, transactiontype='CONSUMED').prefetch_related('productid', 'productid__unitid')
     for st in sts:
         materials.append({'productId': st.productid.id if st.productid else st.productid_id, 'productName': st.productid.name if st.productid else 'Unknown', 'quantity': abs(st.quantity), 'unit': st.productid.unitid.name if st.productid and st.productid.unitid else 'KG'})
-    return send_success(materials, 'Materials fetched')
-
-from rest_framework.decorators import permission_classes
-from rest_framework.permissions import AllowAny
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def fix_old_productions(request):
-    from api.models import Stocktransaction
-    updated = Stocktransaction.objects.filter(transactiontype='PRODUCTION', warehouseid_id=1).update(warehouseid_id=2)
-    return send_success({'updated': updated}, f'Moved {updated} productions from MAIN to NAVSARI FACTORY')
+    return send_success(materials, 'Production materials fetched')
 
 @api_view(['PUT', 'DELETE'])
 def transaction_productions_detail(request, pk):
