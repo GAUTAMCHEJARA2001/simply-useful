@@ -361,6 +361,29 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
               </div>
             </div>
           ])}
+          onView={async (idx: number) => {
+            const p = filteredProductions[idx];
+            try {
+              const matRes = await apiClient<any[]>(`/inv/transactions/productions/${p.id}/materials`);
+              const mats = matRes && matRes.data ? matRes.data : (Array.isArray(matRes) ? matRes : []);
+              
+              setForm({
+                id: p.id,
+                productId: p.productId,
+                productName: p.finishedProductName,
+                quantity: p.quantityProduced,
+                warehouseId: p.warehouseId,
+                date: p.createdAt ? p.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]
+              });
+              if (mats.length > 0) {
+                setBatchItems(mats);
+                setSelectedRecipe({ items: [] }); // Set non-null to bypass auto-scaling
+              }
+              setModal(true);
+            } catch (e: any) {
+              toast({ title: 'Error', description: 'Failed to load production run details.', variant: 'destructive' });
+            }
+          }}
           onEdit={async (idx: number) => {
             const p = filteredProductions[idx];
             try {

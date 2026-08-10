@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Trash2, Edit, ChevronUp, ChevronDown } from 'lucide-react';
+import { Trash2, Edit, ChevronUp, ChevronDown, Eye } from 'lucide-react';
 
 interface DataTableProps {
   columns: string[];
   rows: any[][];
   onDelete?: (idx: number) => void;
   onEdit?: (idx: number) => void;
+  onView?: (idx: number) => void;
   onRowClick?: (idx: number) => void;
   columnWidths?: string[];
 }
@@ -26,7 +27,7 @@ const getCellValue = (cell: any): string | number => {
   return String(cell);
 };
 
-export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, onEdit, onRowClick, columnWidths }) => {
+export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, onEdit, onView, onRowClick, columnWidths }) => {
   const storageKey = useMemo(() => {
     return `datatable_sort_${columns.join('_').replace(/[^a-zA-Z0-9]/g, '_')}`;
   }, [columns]);
@@ -135,7 +136,7 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
                   </th>
                 );
               })}
-              {(onDelete || onEdit) && <th className="px-4 py-3 text-right text-muted-foreground font-medium">Action</th>}
+              {(onView || onDelete || onEdit) && <th className="px-4 py-3 text-right text-muted-foreground font-medium">Action</th>}
             </tr>
           </thead>
           <tbody>
@@ -163,15 +164,20 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
                       <div className={columnWidths?.[j] ? 'truncate' : ''}>{cell ?? '—'}</div>
                     </td>
                   ))}
-                  {(onDelete || onEdit) && (
+                  {(onView || onDelete || onEdit) && (
                     <td className="px-4 py-3 text-right flex justify-end gap-1">
+                      {onView && (
+                        <button onClick={(e) => { e.stopPropagation(); onView(index); }} className="p-1.5 rounded-lg hover:bg-blue-500/10 text-blue-500 transition-colors" title="View details">
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {onEdit && (
-                        <button onClick={() => onEdit(index)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors">
+                        <button onClick={(e) => { e.stopPropagation(); onEdit(index); }} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Edit">
                           <Edit className="w-3.5 h-3.5" />
                         </button>
                       )}
                       {onDelete && (
-                        <button onClick={() => onDelete(index)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors">
+                        <button onClick={(e) => { e.stopPropagation(); onDelete(index); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Delete">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
@@ -205,8 +211,13 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
                   </div>
                 ))}
               </div>
-              {(onDelete || onEdit) && (
+              {(onView || onDelete || onEdit) && (
                 <div className="flex gap-2 pt-3 mt-2 border-t border-border/30">
+                  {onView && (
+                    <button onClick={(e) => { e.stopPropagation(); onView(index); }} className="flex-1 flex items-center justify-center gap-2 py-2 rounded-md bg-blue-500/10 text-blue-600 font-semibold text-xs transition-colors hover:bg-blue-500/20">
+                      <Eye className="w-3.5 h-3.5" /> View
+                    </button>
+                  )}
                   {onEdit && (
                     <button onClick={() => onEdit(index)} className="flex-1 flex justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-sm font-semibold transition-colors active:scale-[0.98]">
                       <Edit className="w-4 h-4" /> Edit

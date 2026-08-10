@@ -155,6 +155,7 @@ export const ProductionApprovalsTab: React.FC = () => {
             )
           ])}
           onRowClick={handleRowClick} 
+          onView={handleRowClick}
         />
       </SafeDataView>
 
