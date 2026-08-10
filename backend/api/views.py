@@ -2926,8 +2926,8 @@ def transaction_approve(request, pk):
             return send_error('Production transaction not found', 404)
             
         try:
-            Stocktransaction.objects.filter(id=pk).update(reason='')
-            Stocktransaction.objects.filter(referenceid=pk).update(reason='')
+            Stocktransaction.objects.filter(id=pk).update(reason='APPROVED', approved_by=request.user)
+            Stocktransaction.objects.filter(referenceid=pk).update(reason='APPROVED', approved_by=request.user)
         except Exception as e:
             pass
         return send_success({'id': pk, 'status': 'Approved'}, 'Production approved successfully')
@@ -3033,8 +3033,8 @@ def transaction_reject(request, pk):
             return send_error('Production transaction not found', 404)
             
         try:
-            Stocktransaction.objects.filter(id=pk).update(reason='REJECTED')
-            Stocktransaction.objects.filter(referenceid=pk).update(reason='REJECTED')
+            Stocktransaction.objects.filter(id=pk).update(reason='REJECTED', approved_by=request.user)
+            Stocktransaction.objects.filter(referenceid=pk).update(reason='REJECTED', approved_by=request.user)
         except Exception as e:
             pass
         return send_success({'id': pk, 'status': 'Rejected'}, 'Production rejected successfully')
@@ -3205,8 +3205,13 @@ def transaction_productions(request):
                 'warehouseId': wh_id,
                 'warehouseName': wh_name,
                 'quantityProduced': st.quantity,
-                'status': st_status,
-                'createdAt': st.createdat.isoformat() if st.createdat else None
+                'status': 'Deleted' if st.is_deleted else st_status,
+                'createdAt': st.createdat.isoformat() if st.createdat else None,
+                'createdBy': st.created_by.name if st.created_by else None,
+                'approvedBy': st.approved_by.name if st.approved_by else None,
+                'deletedBy': st.deleted_by.name if st.deleted_by else None,
+                'deleteReason': st.delete_reason,
+                'isDeleted': st.is_deleted
             })
         return send_success(rows, 'Productions fetched')
     elif request.method == 'POST':
@@ -3218,6 +3223,10 @@ def transaction_productions(request):
             wh_id = int(wh_id)
         except ValueError:
             wh_id = 1
+            
+        if assigned_wh_ids and wh_id not in assigned_wh_ids:
+            return Response({'success': False, 'message': 'You are not authorized to create productions in this warehouse.'}, status=status.HTTP_403_FORBIDDEN)
+            
         wh = resolve_warehouse(wh_id)
         if not wh:
             return Response({'success': False, 'message': 'Invalid warehouse'}, status=status.HTTP_400_BAD_REQUEST)
@@ -3233,7 +3242,7 @@ def transaction_productions(request):
             
         st_reason = 'PENDING_APPROVAL'
         
-        Stocktransaction.objects.create(id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='PRODUCTION', quantity=qty_produced, referenceid='PROD', reason=st_reason, createdat=now)
+        Stocktransaction.objects.create(id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='PRODUCTION', quantity=qty_produced, referenceid='PROD', reason=st_reason, createdat=now, created_by=request.user)
         custom_items = data.get('items')
         if custom_items is not None and isinstance(custom_items, list):
             prod_ids = [item.get('productId') or item.get('product_id') for item in custom_items if (item.get('productId') or item.get('product_id'))]
@@ -3364,11 +3373,51 @@ def transaction_productions_detail(request, pk):
         return send_success({'id': pk, **data}, 'Production updated')
     elif request.method == 'DELETE':
         from django.db.models import Q
+        
+        if request.user.role == 'PRODUCTION':
+            return Response({'success': False, 'message': 'Production managers cannot delete production entries.'}, status=status.HTTP_403_FORBIDDEN)
+            
+        reason = request.data.get('reason')
+        if not reason:
+            return Response({'success': False, 'message': 'Deletion reason is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            
         sts = Stocktransaction.objects.filter(Q(id=pk) | Q(referenceid=pk))
         if sts.exists():
             product_ids = set(sts.values_list('productid_id', flat=True))
             with transaction.atomic():
-                sts.delete()
+                sts.update(is_deleted=True, deleted_by=request.user, delete_reason=reason)
+                # Instead of physical delete, reverse the quantities
+                for st in sts:
+                    # In a typical soft-delete we might reverse quantities or just exclude is_deleted=True from current stock calculations
+                    # Since current stock sum relies on ALL Stocktransactions, we should either:
+                    # 1. Reverse the quantity by creating a balancing transaction
+                    # 2. Set the quantity to 0 on these soft-deleted entries
+                    # Let's set quantity to 0 so they don't affect stock, but keep original info in reference or reason if needed. 
+                    # Wait, if we set quantity to 0, we lose what the original quantity was in the UI unless we store it.
+                    # A better way is to update the stock aggregation queries to exclude is_deleted=True!
+                    # However, since I can't safely change all stock aggregations without risk, 
+                    # it's safer to just set quantity=0 and store the old quantity in the reason string if needed, 
+                    # or add an original_quantity field.
+                    # Since we are adding fields, we can just exclude is_deleted=True in the GET endpoints, but we MUST exclude it in current_stock!
+                    pass
+                
+                # Best approach without touching all stock logic:
+                # Keep quantity as is, but create reversing transactions!
+                for st in sts:
+                    # Create a reverse transaction
+                    rev_id = 'st_' + uuid.uuid4().hex[:20]
+                    Stocktransaction.objects.create(
+                        id=rev_id,
+                        productid_id=st.productid_id,
+                        warehouseid_id=st.warehouseid_id,
+                        transactiontype='ADJUSTMENT',
+                        quantity=-st.quantity,
+                        referenceid=f"REV-{st.id}",
+                        reason=f"Reversal for deleted production: {reason}",
+                        createdat=timezone.now(),
+                        created_by=request.user
+                    )
+                    
                 for p_id in product_ids:
                     if p_id:
                         pass

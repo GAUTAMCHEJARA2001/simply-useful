@@ -588,6 +588,11 @@ class Stocktransaction(models.Model):
     referenceid = models.TextField(db_column='referenceId', blank=True, null=True)
     reason = models.TextField(blank=True, null=True)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    created_by = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_stock_transactions', db_column='createdBy')
+    approved_by = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_stock_transactions', db_column='approvedBy')
+    deleted_by = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='deleted_stock_transactions', db_column='deletedBy')
+    delete_reason = models.TextField(db_column='deleteReason', blank=True, null=True)
+    is_deleted = models.BooleanField(db_column='isDeleted', default=False)
 
     class Meta:
         db_table = 'StockTransaction'

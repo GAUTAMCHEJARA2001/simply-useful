@@ -17,21 +17,25 @@ export const ProductionApprovalsTab: React.FC = () => {
   const [selected, setSelected] = useState<any>(null);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [materials, setMaterials] = useState<any[]>([]);
-  const [statusFilter, setStatusFilter] = useState<'Pending' | 'Approved' | 'Rejected' | 'All'>('Pending');
+  const [statusFilter, setStatusFilter] = useState<'Pending' | 'Approved' | 'Rejected' | 'Deleted' | 'All'>('Pending');
 
   const { filterBySelectedFY } = useFinancialYear();
 
-  const filteredProductions = filterBySelectedFY(productions, (p: any) => p.date || p.createdAt).filter((p: any) => {
+  const fyProductions = filterBySelectedFY(productions, (p: any) => p.date || p.createdAt);
+  
+  const filteredProductions = fyProductions.filter((p: any) => {
     if (statusFilter === 'Pending') return p.status === 'Pending';
     if (statusFilter === 'Approved') return (p.status || '').toUpperCase() === 'APPROVED';
     if (statusFilter === 'Rejected') return p.status === 'Rejected';
+    if (statusFilter === 'Deleted') return p.status === 'Deleted';
     return true;
   });
 
-  const pendingCount = filteredProductions.filter((p: any) => p.status === 'Pending').length;
-  const approvedCount = filteredProductions.filter((p: any) => (p.status || '').toUpperCase() === 'APPROVED').length;
-  const rejectedCount = filteredProductions.filter((p: any) => p.status === 'Rejected').length;
-  const totalCount = filteredProductions.length;
+  const pendingCount = fyProductions.filter((p: any) => p.status === 'Pending').length;
+  const approvedCount = fyProductions.filter((p: any) => (p.status || '').toUpperCase() === 'APPROVED').length;
+  const rejectedCount = fyProductions.filter((p: any) => p.status === 'Rejected').length;
+  const deletedCount = fyProductions.filter((p: any) => p.status === 'Deleted').length;
+  const totalCount = fyProductions.length;
 
   const handleRowClick = async (idx: number) => {
     const p = filteredProductions[idx];
@@ -83,6 +87,7 @@ export const ProductionApprovalsTab: React.FC = () => {
             { id: 'Pending', label: 'Pending Approval', count: pendingCount },
             { id: 'Approved', label: 'Approved', count: approvedCount },
             { id: 'Rejected', label: 'Rejected', count: rejectedCount },
+            { id: 'Deleted', label: 'Deleted', count: deletedCount },
             { id: 'All', label: 'All', count: totalCount }
           ].map(f => (
             <button
@@ -132,13 +137,21 @@ export const ProductionApprovalsTab: React.FC = () => {
                 </Button>
               </div>
             ) : (
-              <span className={`inline-block text-[10px] px-2.5 py-0.5 rounded-full border font-bold uppercase tracking-wider ${
-                (p.status || '').toUpperCase() === 'APPROVED'
-                  ? 'bg-success/15 text-success border-success/30'
-                  : 'bg-destructive/15 text-destructive border-destructive/30'
-              }`} key={p.id}>
-                {p.status}
-              </span>
+              <div key={p.id} className="flex flex-col gap-1 items-start">
+                <span className={`inline-block text-[10px] px-2.5 py-0.5 rounded-full border font-bold uppercase tracking-wider ${
+                  (p.status || '').toUpperCase() === 'APPROVED'
+                    ? 'bg-success/15 text-success border-success/30'
+                    : 'bg-destructive/15 text-destructive border-destructive/30'
+                }`}>
+                  {p.status}
+                </span>
+                <div className="text-[10px] text-muted-foreground flex flex-col mt-0.5 whitespace-nowrap">
+                  {p.createdBy && <span>Created by {p.createdBy}</span>}
+                  {p.approvedBy && <span>{(p.status || '').toUpperCase() === 'REJECTED' ? 'Rejected' : 'Approved'} by {p.approvedBy}</span>}
+                  {p.deletedBy && <span>Deleted by {p.deletedBy}</span>}
+                  {p.deleteReason && <span className="max-w-[150px] truncate" title={p.deleteReason}>Reason: {p.deleteReason}</span>}
+                </div>
+              </div>
             )
           ])}
           onRowClick={handleRowClick} 

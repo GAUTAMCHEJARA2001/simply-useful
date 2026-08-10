@@ -319,11 +319,15 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
             />
           </div>
           <Button size="sm" onClick={() => {
-            setForm(prev => ({
-              ...prev,
-              warehouseId: localStorage.getItem('prod_modal_last_wh') || prev.warehouseId || warehouses[0]?.id || '',
-              date: localStorage.getItem('prod_modal_last_date') || prev.date || new Date().toISOString().split('T')[0]
-            }));
+            setForm(prev => {
+              const lastWh = localStorage.getItem('prod_modal_last_wh');
+              const isValid = warehouses.some(w => String(w.id) === String(lastWh));
+              return {
+                ...prev,
+                warehouseId: isValid ? lastWh : (warehouses[0]?.id || ''),
+                date: localStorage.getItem('prod_modal_last_date') || prev.date || new Date().toISOString().split('T')[0]
+              };
+            });
             setModal(true);
           }} className="h-9">
             <Plus className="w-4 h-4 mr-1.5" /> New Production Run
@@ -339,15 +343,23 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
             formatDecimal(p.quantityProduced || p.quantity_produced || 0), 
             p.warehouseName || p.warehouse?.name || '—', 
             p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—',
-            <span className={`inline-block text-[10px] px-2.5 py-0.5 rounded-full border font-bold uppercase tracking-wider ${
-              (p.status || '').toUpperCase() === 'APPROVED'
-                ? 'bg-success/15 text-success border-success/30'
-                : (p.status || '').toUpperCase() === 'PENDING'
-                ? 'bg-warning/15 text-warning border-warning/30'
-                : 'bg-destructive/15 text-destructive border-destructive/30'
-            }`} key={p.id}>
-              {p.status || 'Approved'}
-            </span>
+            <div key={p.id} className="flex flex-col gap-1 items-start">
+              <span className={`inline-block text-[10px] px-2.5 py-0.5 rounded-full border font-bold uppercase tracking-wider ${
+                (p.status || '').toUpperCase() === 'APPROVED'
+                  ? 'bg-success/15 text-success border-success/30'
+                  : (p.status || '').toUpperCase() === 'PENDING'
+                  ? 'bg-warning/15 text-warning border-warning/30'
+                  : 'bg-destructive/15 text-destructive border-destructive/30'
+              }`}>
+                {p.status || 'Approved'}
+              </span>
+              <div className="text-[10px] text-muted-foreground flex flex-col mt-0.5 whitespace-nowrap">
+                {p.createdBy && <span>Created by {p.createdBy}</span>}
+                {p.approvedBy && <span>{(p.status || '').toUpperCase() === 'REJECTED' ? 'Rejected' : 'Approved'} by {p.approvedBy}</span>}
+                {p.deletedBy && <span>Deleted by {p.deletedBy}</span>}
+                {p.deleteReason && <span className="max-w-[150px] truncate" title={p.deleteReason}>Reason: {p.deleteReason}</span>}
+              </div>
+            </div>
           ])}
           onEdit={async (idx: number) => {
             const p = filteredProductions[idx];
@@ -384,8 +396,13 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
           onDelete={async (idx: number) => {
             const p = productions[idx];
             if (!confirm('Are you sure you want to delete this production run? All stock changes will be completely reversed.')) return;
+            const reason = prompt('Please enter a reason for deleting this production run:');
+            if (!reason) {
+              toast({ title: 'Error', description: 'A reason is required to delete.', variant: 'destructive' });
+              return;
+            }
             try {
-              await apiClient(`/inv/transactions/productions/${p.id}`, { method: 'DELETE' });
+              await apiClient(`/inv/transactions/productions/${p.id}`, { method: 'DELETE', data: { reason } });
               toast({ title: 'Success', description: 'Production run deleted successfully.' });
               refetch();
             } catch (e: any) {
@@ -398,12 +415,16 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       {modal && (
         <Modal title={form.id ? "Edit Production Run" : "Record New Production Run"} onClose={() => { 
           setModal(false); 
-          setForm({ 
-            productId: '', 
-            productName: '', 
-            quantity: 1, 
-            warehouseId: localStorage.getItem('prod_modal_last_wh') || warehouses[0]?.id || '', 
-            date: localStorage.getItem('prod_modal_last_date') || new Date().toISOString().split('T')[0] 
+          setForm(prev => {
+            const lastWh = localStorage.getItem('prod_modal_last_wh');
+            const isValid = warehouses.some(w => String(w.id) === String(lastWh));
+            return { 
+              productId: '', 
+              productName: '', 
+              quantity: 1, 
+              warehouseId: isValid ? lastWh : (warehouses[0]?.id || ''), 
+              date: localStorage.getItem('prod_modal_last_date') || new Date().toISOString().split('T')[0] 
+            };
           }); 
           setSelectedRecipe(null); 
           setBatchItems([]); 
