@@ -444,7 +444,7 @@ class WarehouseViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         company_id = _get_company_id(request)
         queryset = Warehouse.objects.filter(companyid_id=company_id) if company_id else Warehouse.objects.all()
-        if request.user and ('masters/warehouses' not in request.path or request.user.role == 'INVENTORY'):
+        if request.user and ('masters/warehouses' not in request.path or request.user.role in ('INVENTORY', 'PRODUCTION')):
             user_id = request.user.id
             from api.models import Userwarehouseaccess
             has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()

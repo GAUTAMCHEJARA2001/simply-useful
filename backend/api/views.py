@@ -3184,10 +3184,13 @@ def transaction_productions(request):
     user_id = request.user.id
     has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()
     assigned_wh_ids = []
-    if has_wh_assignments and request.user.role == 'INVENTORY':
+    if has_wh_assignments and request.user.role in ('INVENTORY', 'PRODUCTION'):
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
+    company_id = _get_company_id(request)
     if request.method == 'GET':
         qs = Stocktransaction.objects.filter(transactiontype='PRODUCTION').select_related('productid', 'warehouseid').order_by('-createdat')
+        if company_id and request.user.role != 'SUPERADMIN':
+            qs = qs.filter(productid__companyid_id=company_id)
         if assigned_wh_ids:
             qs = qs.filter(warehouseid_id__in=assigned_wh_ids)
         rows = []
