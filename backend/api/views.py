@@ -3175,6 +3175,20 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
             negatives.append({'productId': pid, 'name': name, 'currentStock': current_stock - old_consumed, 'consuming': consuming_qty, 'deficit': abs(new_stock)})
     return negatives
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def fix_old_productions(request):
+    from django.core.management import call_command
+    import sys
+    from io import StringIO
+    
+    out = StringIO()
+    try:
+        call_command('migrate', stdout=out)
+        return send_success({'output': out.getvalue()}, 'Migrations applied successfully on Render')
+    except Exception as e:
+        return send_error(f'Migration failed: {str(e)}', 500)
+
 @api_view(['GET', 'POST'])
 def transaction_productions(request):
     from api.models import Stocktransaction, Product, Warehouse, Userwarehouseaccess
