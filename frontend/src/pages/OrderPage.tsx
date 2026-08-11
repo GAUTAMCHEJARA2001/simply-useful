@@ -372,6 +372,49 @@ const OrderPage: React.FC = () => {
                       </CommandGroup>
                     </CommandList>
                   </Command>
+                  {selectedParty && (
+                    <div className="bg-muted/30 border-t border-border p-3 text-xs flex flex-col gap-1.5">
+                      {partyType === 'Dealer' && dealersByName.get(selectedParty) ? (() => {
+                        const d = dealersByName.get(selectedParty);
+                        return (
+                          <>
+                            <div className="flex justify-between items-start">
+                              <span className="font-semibold text-foreground">{d.dealerName}</span>
+                              <span className="text-muted-foreground bg-muted px-1.5 rounded text-[10px]">DEALER</span>
+                            </div>
+                            <div className="grid grid-cols-[60px_1fr] gap-x-2 gap-y-1 mt-1 text-muted-foreground">
+                              <span className="font-medium">Address:</span>
+                              <span className="break-words line-clamp-2" title={d.address || '—'}>{d.address || '—'}</span>
+                              <span className="font-medium">Contact:</span>
+                              <span>{d.contactPerson ? `${d.contactPerson} ` : ''}{d.phone ? `(${d.phone})` : '—'}</span>
+                              <span className="font-medium">GST:</span>
+                              <span className="uppercase">{d.gstNumber || '—'}</span>
+                            </div>
+                          </>
+                        );
+                      })() : partyType === 'Distributor' && distributorsByName.get(selectedParty) ? (() => {
+                        const d = distributorsByName.get(selectedParty);
+                        return (
+                          <>
+                            <div className="flex justify-between items-start">
+                              <span className="font-semibold text-foreground">{d.distributorName}</span>
+                              <span className="text-muted-foreground bg-muted px-1.5 rounded text-[10px]">DISTRIBUTOR</span>
+                            </div>
+                            <div className="grid grid-cols-[60px_1fr] gap-x-2 gap-y-1 mt-1 text-muted-foreground">
+                              <span className="font-medium">Address:</span>
+                              <span className="break-words line-clamp-2" title={d.address || '—'}>{d.address || '—'}</span>
+                              <span className="font-medium">Contact:</span>
+                              <span>{d.contactPerson ? `${d.contactPerson} ` : ''}{d.phone ? `(${d.phone})` : '—'}</span>
+                              <span className="font-medium">GST:</span>
+                              <span className="uppercase">{d.gstNumber || '—'}</span>
+                            </div>
+                          </>
+                        );
+                      })() : (
+                        <div className="text-muted-foreground italic">No additional details available.</div>
+                      )}
+                    </div>
+                  )}
                 </PopoverContent>
               </Popover>
             </div>
