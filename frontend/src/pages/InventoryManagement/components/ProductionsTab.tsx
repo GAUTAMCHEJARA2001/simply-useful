@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatDecimal } from '@/utils/format';
 import { Input } from '@/components/ui/input';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -29,6 +30,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   const { toast } = useToast();
   const { data: productions = [], isLoading, error, refetch } = useProductions();
   const { saveProduction } = useProductionMutations();
+  const { user } = useAuth();
 
   const [modal, setModal] = useState<boolean>(false);
   const [deficitModal, setDeficitModal] = useState<boolean>(false);
@@ -475,7 +477,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 return acc + (item.quantity * (p?.rate || 0));
               }, 0);
               const costPerBag = totalCost / (form.quantity || 1);
-              if (batchItems.length > 0) {
+              if (batchItems.length > 0 && user?.role === 'SUPERADMIN') {
                 return (
                   <div className="bg-primary/10 border border-primary/20 p-3 rounded-lg flex items-center justify-between text-xs">
                     <div>
