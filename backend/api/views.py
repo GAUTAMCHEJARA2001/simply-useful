@@ -1515,10 +1515,6 @@ class OrderViewSet(viewsets.ModelViewSet):
         if request.user.email:
             data['soEmail'] = request.user.email
 
-        # Attach Creator Audit Tag
-        # Attach Creator Audit Tag
-        data['narration'] = _append_user_audit_tag(data.get('narration', ''), request.user, 'CREATE')
-
         import uuid
         if 'id' not in data or not data['id']:
             data['id'] = 'c' + uuid.uuid4().hex[:23]
@@ -1574,34 +1570,6 @@ class OrderViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         product_ids = list(instance.orderitem_set.values_list('productid_id', flat=True))
         data = request.data.copy()
-
-        # Attach Editor Audit Tag while preserving CREATED BY
-        new_clean_narration = data.get('narration') or ''
-        old_narration = instance.narration or ''
-        
-        # Extract existing CREATED BY tag
-        import re
-        c_match = re.search(r'\[CREATED BY:[^\]]+\]', old_narration, flags=re.IGNORECASE)
-        created_by_tag = c_match.group(0) + ' ' if c_match else ''
-        
-        # Extract existing count for EDIT tag
-        count = 1
-        cnt_match = re.search(r'\[EDITED BY:[^\]]*\(Count:\s*(\d+)\)\]', old_narration, re.IGNORECASE)
-        if cnt_match:
-            try:
-                count = int(cnt_match.group(1)) + 1
-            except Exception:
-                count = 1
-                
-        # Build the final string
-        from django.utils import timezone
-        u_name = getattr(request.user, 'name', None) or getattr(request.user, 'email', 'System User')
-        u_email = getattr(request.user, 'email', '')
-        u_role = (getattr(request.user, 'role', '') or 'USER').upper()
-        now_str = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
-        edit_tag = f"[EDITED BY: {u_name} ({u_email} - {u_role}) AT {now_str} (Count: {count})] "
-        
-        data['narration'] = f"{created_by_tag}{edit_tag}{new_clean_narration}".strip()
 
         import uuid
         if 'items' in data:
