@@ -498,6 +498,14 @@ class OrderSerializer(serializers.ModelSerializer):
 
     createdBy = serializers.SerializerMethodField(read_only=True)
     lastEditedBy = serializers.SerializerMethodField(read_only=True)
+    narration = serializers.SerializerMethodField()
+
+    def get_narration(self, obj):
+        import re
+        text = obj.narration or ''
+        text = re.sub(r'\[CREATED BY:[^\]]+\]\s*', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\[EDITED BY:[^\]]+\]\s*', '', text, flags=re.IGNORECASE)
+        return text.strip()
 
     class Meta:
         model = Order

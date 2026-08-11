@@ -36,10 +36,13 @@ const OrderPage: React.FC = () => {
   const [warehouseId, setWarehouseId] = useState<string | number>(1);
   const [showSummary, setShowSummary] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [showHistory, setShowHistory] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openPartyCombobox, setOpenPartyCombobox] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [highlightedParty, setHighlightedParty] = useState('');
+  const [activeOrder, setActiveOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     if (!id && user?.email) {
@@ -546,7 +549,14 @@ const OrderPage: React.FC = () => {
       <Card>
         <CardContent className="pt-6 space-y-4">
           <div className="space-y-2">
-            <Label>General Narration</Label>
+            <div className="flex items-center justify-between">
+              <Label>General Narration</Label>
+              {orderId && (
+                <Button variant="ghost" size="sm" onClick={() => setShowHistory(true)} className="h-6 px-2 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground">
+                  <Activity className="w-3 h-3 mr-1" /> View History
+                </Button>
+              )}
+            </div>
             <Textarea placeholder="Order notes..." value={narration} onChange={e => setNarration(e.target.value)} rows={3} />
           </div>
           {creditWarning && (
@@ -645,6 +655,46 @@ const OrderPage: React.FC = () => {
               {isSubmitting ? "Submitting..." : "Confirm & Submit"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={showHistory} onOpenChange={setShowHistory}>
+        <DialogContent className="max-w-sm" aria-describedby="order-history-desc">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Activity className="w-5 h-5 text-primary" /> Order History</DialogTitle>
+            <DialogDescription id="order-history-desc" className="sr-only">Audit trail showing who created and last edited this order.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {location.state?.order?.createdBy ? (
+              <div className="flex items-start gap-3 bg-secondary/30 p-3 rounded-xl border border-border">
+                <div className="p-2 bg-primary/10 rounded-full shrink-0"><UserCheck className="w-4 h-4 text-primary" /></div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-muted-foreground mb-0.5">Created By</p>
+                  <p className="text-sm font-semibold">{location.state.order.createdBy.name}</p>
+                  <p className="text-xs text-muted-foreground">{location.state.order.createdBy.email}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{new Date(location.state.order.createdBy.at).toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground italic text-center py-4">No creation history found.</p>
+            )}
+            
+            {location.state?.order?.lastEditedBy && (
+              <div className="flex items-start gap-3 bg-secondary/30 p-3 rounded-xl border border-border">
+                <div className="p-2 bg-blue-500/10 rounded-full shrink-0"><Edit className="w-4 h-4 text-blue-500" /></div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-muted-foreground mb-0.5">Last Edited By</p>
+                  <p className="text-sm font-semibold">{location.state.order.lastEditedBy.name}</p>
+                  <p className="text-xs text-muted-foreground">{location.state.order.lastEditedBy.email}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{new Date(location.state.order.lastEditedBy.at).toLocaleString('en-IN')}</p>
+                  <p className="text-[9px] font-bold text-blue-500/70 mt-1 uppercase tracking-wider">Total Edits: {location.state.order.lastEditedBy.count}</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end pt-2 border-t border-border mt-2">
+            <Button variant="outline" size="sm" onClick={() => setShowHistory(false)}>Close</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
