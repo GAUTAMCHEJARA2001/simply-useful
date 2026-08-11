@@ -352,10 +352,7 @@ const OrderPage: React.FC = () => {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[300px] sm:w-[400px] p-0" align="start">
-                  <Command onValueChange={(val) => {
-                    const matched = parties.find(p => p.toLowerCase() === val);
-                    if (matched) setHighlightedParty(matched);
-                  }}>
+                  <Command onValueChange={setHighlightedParty}>
                     <CommandInput placeholder={`Search ${partyType}...`} className="h-9" />
                     <CommandList>
                       <CommandEmpty>No {partyType.toLowerCase()} found.</CommandEmpty>
@@ -376,30 +373,38 @@ const OrderPage: React.FC = () => {
                       </CommandGroup>
                     </CommandList>
                   </Command>
-                  {(highlightedParty || selectedParty) && (
-                    <div className="bg-muted/30 border-t border-border p-3 text-xs flex flex-col gap-1.5">
-                      {partyType === 'Dealer' && dealersByName.get(highlightedParty || selectedParty) ? (() => {
-                        const d = dealersByName.get(highlightedParty || selectedParty);
-                        return (
-                          <>
-                            <div className="flex justify-between items-start">
-                              <span className="font-semibold text-foreground">{d.dealerName}</span>
-                              <span className="text-muted-foreground bg-muted px-1.5 rounded text-[10px]">DEALER</span>
-                            </div>
-                            <div className="grid grid-cols-[60px_1fr] gap-x-2 gap-y-1 mt-1 text-muted-foreground">
-                              <span className="font-medium">Address:</span>
-                              <span className="break-words line-clamp-2" title={d.address || '—'}>{d.address || '—'}</span>
-                              <span className="font-medium">Contact:</span>
-                              <span>{d.contactPerson ? `${d.contactPerson} ` : ''}{d.phone ? `(${d.phone})` : '—'}</span>
-                              <span className="font-medium">GST:</span>
-                              <span className="uppercase">{d.gstNumber || '—'}</span>
-                            </div>
-                          </>
-                        );
-                      })() : partyType === 'Distributor' && distributorsByName.get(highlightedParty || selectedParty) ? (() => {
-                        const d = distributorsByName.get(highlightedParty || selectedParty);
-                        return (
-                          <>
+                  {(highlightedParty || selectedParty) && (() => {
+                    const exactParty = parties.find(p => p.toLowerCase() === highlightedParty?.toLowerCase()) || selectedParty;
+                    if (!exactParty) return null;
+                    
+                    if (partyType === 'Dealer') {
+                      const d = dealersByName.get(exactParty);
+                      if (!d) return (
+                        <div className="bg-muted/30 border-t border-border p-3 text-xs text-muted-foreground italic">No additional details available.</div>
+                      );
+                      return (
+                        <div className="bg-muted/30 border-t border-border p-3 text-xs flex flex-col gap-1.5">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-foreground">{d.dealerName}</span>
+                            <span className="text-muted-foreground bg-muted px-1.5 rounded text-[10px]">DEALER</span>
+                          </div>
+                          <div className="grid grid-cols-[60px_1fr] gap-x-2 gap-y-1 mt-1 text-muted-foreground">
+                            <span className="font-medium">Address:</span>
+                            <span className="break-words line-clamp-2" title={d.address || '—'}>{d.address || '—'}</span>
+                            <span className="font-medium">Contact:</span>
+                            <span>{d.contactPerson ? `${d.contactPerson} ` : ''}{d.phone ? `(${d.phone})` : '—'}</span>
+                            <span className="font-medium">GST:</span>
+                            <span className="uppercase">{d.gstNumber || '—'}</span>
+                          </div>
+                        </div>
+                      );
+                    } else if (partyType === 'Distributor') {
+                      const d = distributorsByName.get(exactParty);
+                      if (!d) return (
+                        <div className="bg-muted/30 border-t border-border p-3 text-xs text-muted-foreground italic">No additional details available.</div>
+                      );
+                      return (
+                        <div className="bg-muted/30 border-t border-border p-3 text-xs flex flex-col gap-1.5">
                             <div className="flex justify-between items-start">
                               <span className="font-semibold text-foreground">{d.distributorName}</span>
                               <span className="text-muted-foreground bg-muted px-1.5 rounded text-[10px]">DISTRIBUTOR</span>
@@ -412,13 +417,11 @@ const OrderPage: React.FC = () => {
                               <span className="font-medium">GST:</span>
                               <span className="uppercase">{d.gstNumber || '—'}</span>
                             </div>
-                          </>
-                        );
-                      })() : (
-                        <div className="text-muted-foreground italic">No additional details available.</div>
-                      )}
-                    </div>
-                  )}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </PopoverContent>
               </Popover>
             </div>
