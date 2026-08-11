@@ -587,6 +587,8 @@ class Stocktransaction(models.Model):
     quantity = models.FloatField()
     referenceid = models.TextField(db_column='referenceId', blank=True, null=True)
     reason = models.TextField(blank=True, null=True)
+    batches = models.FloatField(blank=True, null=True)
+    expected_quantity = models.FloatField(db_column='expectedQuantity', blank=True, null=True)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     created_by = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_stock_transactions', db_column='createdBy')
     approved_by = models.ForeignKey('core.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_stock_transactions', db_column='approvedBy')

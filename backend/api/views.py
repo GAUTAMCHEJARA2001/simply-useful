@@ -3219,6 +3219,8 @@ def transaction_productions(request):
                 'warehouseId': wh_id,
                 'warehouseName': wh_name,
                 'quantityProduced': st.quantity,
+                'batches': st.batches or 1.0,
+                'expectedQuantity': st.expected_quantity,
                 'status': 'Deleted' if st.is_deleted else st_status,
                 'createdAt': st.createdat.isoformat() if st.createdat else None,
                 'createdBy': st.created_by.name if st.created_by else None,
@@ -3232,6 +3234,8 @@ def transaction_productions(request):
         data = request.data.copy()
         prod_id = data.get('productId') or data.get('product_id')
         qty_produced = float(data.get('quantity') or data.get('quantity_produced') or 0)
+        batches = float(data.get('batches') or 1.0)
+        expected_quantity = float(data.get('expectedQuantity') or data.get('expected_quantity') or 0)
         wh_id = data.get('warehouse_id') or data.get('warehouseId') or 1
         try:
             wh_id = int(wh_id)
@@ -3256,7 +3260,11 @@ def transaction_productions(request):
             
         st_reason = 'PENDING_APPROVAL'
         
-        Stocktransaction.objects.create(id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='PRODUCTION', quantity=qty_produced, referenceid='PROD', reason=st_reason, createdat=now, created_by_id=request.user.id)
+        Stocktransaction.objects.create(
+            id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='PRODUCTION', 
+            quantity=qty_produced, batches=batches, expected_quantity=expected_quantity,
+            referenceid='PROD', reason=st_reason, createdat=now, created_by_id=request.user.id
+        )
         custom_items = data.get('items')
         if custom_items is not None and isinstance(custom_items, list):
             prod_ids = [item.get('productId') or item.get('product_id') for item in custom_items if (item.get('productId') or item.get('product_id'))]
@@ -3307,6 +3315,8 @@ def transaction_productions_detail(request, pk):
         data = request.data.copy()
         prod_id = data.get('productId') or data.get('product_id')
         qty_produced = float(data.get('quantity') or data.get('quantity_produced') or 0)
+        batches = float(data.get('batches') or 1.0)
+        expected_quantity = float(data.get('expectedQuantity') or data.get('expected_quantity') or 0)
         wh_id = data.get('warehouse_id') or data.get('warehouseId') or 1
         try:
             wh_id = int(wh_id)

@@ -36,6 +36,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   const [form, setForm] = useState<any>({ 
     productId: '', 
     productName: '', 
+    batches: 1,
     quantity: 1, 
     warehouseId: '',
     date: new Date().toISOString().split('T')[0]
@@ -128,7 +129,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
     fetchMasters();
   }, []);
 
-  // Dynamically scale ingredient quantities based on recipe standard ratios and entered yield quantity
+  // Dynamically scale ingredient quantities based on recipe standard ratios and entered number of batches
   useEffect(() => {
     if (!selectedRecipe) {
       setBatchItems([]);
@@ -137,17 +138,18 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
     // Only scale if the recipe has standard items (preserves manually edited list during updates)
     if (selectedRecipe.items && selectedRecipe.items.length > 0) {
       const newItems = (selectedRecipe.items || []).map((item: any) => {
-        const ratio = (item.qty || item.quantity || 0) / (selectedRecipe.outputQuantity || 1);
+        // Here we scale by number of batches instead of actual yield quantity
+        const standardQty = item.qty || item.quantity || 0;
         return {
           productId: item.productId,
           productName: item.productName || item.materialName,
-          quantity: parseFloat((ratio * (form.quantity || 0)).toFixed(2)) || 0,
+          quantity: parseFloat((standardQty * (form.batches || 1)).toFixed(2)) || 0,
           unit: item.unit
         };
       });
       setBatchItems(newItems);
     }
-  }, [form.quantity, selectedRecipe]);
+  }, [form.batches, selectedRecipe]);
   const recipesByProduct = React.useMemo(() => {
     const map = new Map();
     for (const r of recipes) {
@@ -248,6 +250,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       const payload = {
         productId: form.productId,
         warehouseId: form.warehouseId,
+        batches: form.batches,
+        expectedQuantity: (selectedRecipe?.outputQuantity || 1) * form.batches,
         quantity: form.quantity,
         date: form.date,
         items: batchItems // Send adjustable/custom raw materials consumption list
@@ -267,6 +271,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       setForm({ 
         productId: '', 
         productName: '', 
+        batches: 1,
         quantity: 1, 
         warehouseId: form.warehouseId || warehouses[0]?.id || '',
         date: form.date || new Date().toISOString().split('T')[0]
@@ -337,12 +342,20 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
 
       <SafeDataView data={filteredProductions} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable 
-          columns={['Finished Product', 'Qty Produced', 'Warehouse', 'Date', 'Status']}
-          rows={filteredProductions.map((p: any) => [
-            p.finishedProductName || p.finished_product?.name || '—', 
-            formatDecimal(p.quantityProduced || p.quantity_produced || 0), 
-            p.warehouseName || p.warehouse?.name || '—', 
-            p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—',
+          columns={['Finished Product', 'Standard Yield', 'Actual Yield', 'Variance', 'Warehouse', 'Date', 'Status']}
+          rows={filteredProductions.map((p: any) => {
+            const expected = p.expectedQuantity || p.quantityProduced || 0;
+            const actual = p.quantityProduced || p.quantity_produced || 0;
+            const variance = actual - expected;
+            return [
+              p.finishedProductName || p.finished_product?.name || '—', 
+              formatDecimal(expected),
+              formatDecimal(actual),
+              <span key="var" className={`font-bold ${variance > 0 ? 'text-green-600' : variance < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                {variance > 0 ? '+' : ''}{formatDecimal(variance)}
+              </span>,
+              p.warehouseName || p.warehouse?.name || '—', 
+              p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—',
             <div key={p.id} className="flex flex-col gap-1 items-start">
               <span className={`inline-block text-[10px] px-2.5 py-0.5 rounded-full border font-bold uppercase tracking-wider ${
                 (p.status || '').toUpperCase() === 'APPROVED'
@@ -360,7 +373,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 {p.deleteReason && <span className="max-w-[150px] truncate" title={p.deleteReason}>Reason: {p.deleteReason}</span>}
               </div>
             </div>
-          ])}
+            ];
+          })}
           onView={async (idx: number) => {
             const p = filteredProductions[idx];
             try {
@@ -371,6 +385,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 id: p.id,
                 productId: p.productId,
                 productName: p.finishedProductName,
+                batches: p.batches || 1,
                 quantity: p.quantityProduced,
                 warehouseId: p.warehouseId,
                 date: p.createdAt ? p.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]
@@ -394,6 +409,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 id: p.id,
                 productId: p.productId,
                 productName: p.finishedProductName,
+                batches: p.batches || 1,
                 quantity: p.quantityProduced,
                 warehouseId: p.warehouseId,
                 date: p.createdAt ? p.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]
@@ -453,6 +469,26 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
           setBatchItems([]); 
         }}>
           <div className="space-y-4">
+            {(() => {
+              const totalCost = batchItems.reduce((acc, item) => {
+                const p = productsById.get(String(item.productId));
+                return acc + (item.quantity * (p?.rate || 0));
+              }, 0);
+              const costPerBag = totalCost / (form.quantity || 1);
+              if (batchItems.length > 0) {
+                return (
+                  <div className="bg-primary/10 border border-primary/20 p-3 rounded-lg flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-semibold text-primary">Total Material Cost:</span> ₹{formatDecimal(totalCost)}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-primary">Cost per Unit (Actual Yield):</span> ₹{formatDecimal(costPerBag)}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             <div className="relative" ref={finishedDropdownRef}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1.5">
                 <label className="text-sm font-medium">Finished Product <span className="text-destructive">*</span></label>
@@ -570,7 +606,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium block mb-1">Warehouse <span className="text-destructive">*</span></label>
                 <select 
@@ -586,14 +622,26 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">Quantity Produced <span className="text-destructive">*</span></label>
+                <label className="text-sm font-medium block mb-1">Number of Batches <span className="text-destructive">*</span></label>
+                <input 
+                  type="number" 
+                  min="0.01" 
+                  step="any"
+                  value={form.batches || ''} 
+                  onChange={e => setForm({ ...form, batches: parseFloat(e.target.value) || 0 })}
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="e.g. 1"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium block mb-1">Actual Quantity Produced <span className="text-destructive">*</span></label>
                 <input 
                   type="number" 
                   min="0.01" 
                   step="any"
                   value={form.quantity || ''} 
                   onChange={e => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })}
-                  placeholder="Enter yield quantity"
                   className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
