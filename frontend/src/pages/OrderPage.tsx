@@ -361,6 +361,7 @@ const OrderPage: React.FC = () => {
                           <CommandItem
                             key={p}
                             value={p}
+                            onMouseEnter={() => setHighlightedParty(p)}
                             onSelect={() => {
                               setSelectedParty(p);
                               setOpenPartyCombobox(false);
