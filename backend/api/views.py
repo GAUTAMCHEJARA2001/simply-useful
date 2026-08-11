@@ -2926,8 +2926,8 @@ def transaction_approve(request, pk):
             return send_error('Production transaction not found', 404)
             
         try:
-            Stocktransaction.objects.filter(id=pk).update(reason='APPROVED', approved_by=request.user)
-            Stocktransaction.objects.filter(referenceid=pk).update(reason='APPROVED', approved_by=request.user)
+            Stocktransaction.objects.filter(id=pk).update(reason='APPROVED', approved_by_id=request.user.id)
+            Stocktransaction.objects.filter(referenceid=pk).update(reason='APPROVED', approved_by_id=request.user.id)
         except Exception as e:
             pass
         return send_success({'id': pk, 'status': 'Approved'}, 'Production approved successfully')
@@ -3033,8 +3033,8 @@ def transaction_reject(request, pk):
             return send_error('Production transaction not found', 404)
             
         try:
-            Stocktransaction.objects.filter(id=pk).update(reason='REJECTED', approved_by=request.user)
-            Stocktransaction.objects.filter(referenceid=pk).update(reason='REJECTED', approved_by=request.user)
+            Stocktransaction.objects.filter(id=pk).update(reason='REJECTED', approved_by_id=request.user.id)
+            Stocktransaction.objects.filter(referenceid=pk).update(reason='REJECTED', approved_by_id=request.user.id)
         except Exception as e:
             pass
         return send_success({'id': pk, 'status': 'Rejected'}, 'Production rejected successfully')
@@ -3256,7 +3256,7 @@ def transaction_productions(request):
             
         st_reason = 'PENDING_APPROVAL'
         
-        Stocktransaction.objects.create(id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='PRODUCTION', quantity=qty_produced, referenceid='PROD', reason=st_reason, createdat=now, created_by=request.user)
+        Stocktransaction.objects.create(id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='PRODUCTION', quantity=qty_produced, referenceid='PROD', reason=st_reason, createdat=now, created_by_id=request.user.id)
         custom_items = data.get('items')
         if custom_items is not None and isinstance(custom_items, list):
             prod_ids = [item.get('productId') or item.get('product_id') for item in custom_items if (item.get('productId') or item.get('product_id'))]
@@ -3389,7 +3389,7 @@ def transaction_productions_detail(request, pk):
         if sts.exists():
             product_ids = set(sts.values_list('productid_id', flat=True))
             with transaction.atomic():
-                sts.update(is_deleted=True, deleted_by=request.user, delete_reason=reason)
+                sts.update(is_deleted=True, deleted_by_id=request.user.id, delete_reason=reason)
                 # Instead of physical delete, reverse the quantities
                 for st in sts:
                     # In a typical soft-delete we might reverse quantities or just exclude is_deleted=True from current stock calculations
