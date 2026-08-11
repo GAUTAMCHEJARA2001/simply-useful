@@ -39,6 +39,7 @@ const OrderPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openPartyCombobox, setOpenPartyCombobox] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [highlightedParty, setHighlightedParty] = useState('');
 
   useEffect(() => {
     if (!id && user?.email) {
@@ -351,7 +352,10 @@ const OrderPage: React.FC = () => {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[300px] sm:w-[400px] p-0" align="start">
-                  <Command>
+                  <Command onValueChange={(val) => {
+                    const matched = parties.find(p => p.toLowerCase() === val);
+                    if (matched) setHighlightedParty(matched);
+                  }}>
                     <CommandInput placeholder={`Search ${partyType}...`} className="h-9" />
                     <CommandList>
                       <CommandEmpty>No {partyType.toLowerCase()} found.</CommandEmpty>
@@ -372,10 +376,10 @@ const OrderPage: React.FC = () => {
                       </CommandGroup>
                     </CommandList>
                   </Command>
-                  {selectedParty && (
+                  {(highlightedParty || selectedParty) && (
                     <div className="bg-muted/30 border-t border-border p-3 text-xs flex flex-col gap-1.5">
-                      {partyType === 'Dealer' && dealersByName.get(selectedParty) ? (() => {
-                        const d = dealersByName.get(selectedParty);
+                      {partyType === 'Dealer' && dealersByName.get(highlightedParty || selectedParty) ? (() => {
+                        const d = dealersByName.get(highlightedParty || selectedParty);
                         return (
                           <>
                             <div className="flex justify-between items-start">
@@ -392,8 +396,8 @@ const OrderPage: React.FC = () => {
                             </div>
                           </>
                         );
-                      })() : partyType === 'Distributor' && distributorsByName.get(selectedParty) ? (() => {
-                        const d = distributorsByName.get(selectedParty);
+                      })() : partyType === 'Distributor' && distributorsByName.get(highlightedParty || selectedParty) ? (() => {
+                        const d = distributorsByName.get(highlightedParty || selectedParty);
                         return (
                           <>
                             <div className="flex justify-between items-start">
