@@ -3223,9 +3223,9 @@ def transaction_productions(request):
                 'expectedQuantity': st.expected_quantity,
                 'status': 'Deleted' if st.is_deleted else st_status,
                 'createdAt': st.createdat.isoformat() if st.createdat else None,
-                'createdBy': st.created_by.name if st.created_by else None,
-                'approvedBy': st.approved_by.name if st.approved_by else None,
-                'deletedBy': st.deleted_by.name if st.deleted_by else None,
+                'createdBy': (st.created_by.name or st.created_by.email) if st.created_by else None,
+                'approvedBy': (st.approved_by.name or st.approved_by.email) if st.approved_by else None,
+                'deletedBy': (st.deleted_by.name or st.deleted_by.email) if st.deleted_by else None,
                 'deleteReason': st.delete_reason,
                 'isDeleted': st.is_deleted
             })
