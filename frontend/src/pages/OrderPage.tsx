@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { OrderItem, Order } from '@/types';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, ShoppingCart, AlertTriangle, Check, ChevronsUpDown } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, AlertTriangle, Check, ChevronsUpDown, Activity, UserCheck, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ const OrderPage: React.FC = () => {
 
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [partyType, setPartyType] = useState<'Dealer' | 'Distributor'>('Dealer');
   const [selectedParty, setSelectedParty] = useState('');
@@ -551,7 +552,7 @@ const OrderPage: React.FC = () => {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>General Narration</Label>
-              {orderId && (
+              {id && (
                 <Button variant="ghost" size="sm" onClick={() => setShowHistory(true)} className="h-6 px-2 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground">
                   <Activity className="w-3 h-3 mr-1" /> View History
                 </Button>
