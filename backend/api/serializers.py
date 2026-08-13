@@ -144,6 +144,16 @@ class SupplierSerializer(serializers.ModelSerializer):
             'email', 'gstNumber', 'address', 'active', 'companyId', 'warehouseId', 'createdAt', 'updatedAt'
         ]
 
+    def to_internal_value(self, data):
+        data = data.copy()
+        if data.get('warehouseId') == 'GLOBAL' or data.get('warehouseId') == '':
+            data['warehouseId'] = None
+        if not data.get('id'):
+            # Auto-generate a string ID if none provided
+            import uuid
+            data['id'] = f"sup_{uuid.uuid4().hex[:12]}"
+        return super().to_internal_value(data)
+
 
 class LabourSerializer(serializers.ModelSerializer):
     dailyWage = serializers.FloatField(source='dailywage', default=0.0, required=False)
