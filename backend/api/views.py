@@ -2738,14 +2738,15 @@ def transaction_sales(request):
                         for rli in rl.items.all():
                             global_returns[rli.productid_id] = global_returns.get(rli.productid_id, 0) + rli.qty
                             
-                dispatch_logs.sort(key=lambda x: (x.dispatchdate, x.createdat), reverse=True)
+                from django.utils import timezone
+                dispatch_logs.sort(key=lambda x: (x.dispatchdate or timezone.now(), x.createdat or timezone.now()), reverse=True)
                 for log in dispatch_logs:
                     sale = d.copy()
                     sale['id'] = log.id
                     sale['originalOrderId'] = d['id']
                     sale['invoiceNumber'] = log.invoicenumber
                     sale['challanNumber'] = log.invoicenumber
-                    sale['date'] = log.dispatchdate.strftime('%Y-%m-%d')
+                    sale['date'] = log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else (log.createdat.strftime('%Y-%m-%d') if log.createdat else '')
                     sale['isDispatchLog'] = True
                     sale['driverMobileNumber'] = log.drivermobile
                     log_items = log.items.all()
