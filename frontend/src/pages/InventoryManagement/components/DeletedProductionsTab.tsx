@@ -98,9 +98,10 @@ export const DeletedProductionsTab: React.FC = () => {
 
       {viewModal && viewData && (
         <Modal
+          isOpen={true}
           title="Deleted Production Details"
           onClose={() => setViewModal(false)}
-          className="max-w-3xl"
+          maxWidth="max-w-3xl"
         >
           <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
