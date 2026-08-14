@@ -5,7 +5,7 @@ import uuid
 
 # Setup Django
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from api.models import Product, Stocktransaction, Bom, Bomitem, Warehouse
@@ -18,9 +18,9 @@ def run_tests():
     print("Starting production variance tests...")
     
     # Setup test data
-    company, _ = Company.objects.get_or_create(id='test_company', defaults={'name': 'Test Company'})
+    company, _ = Company.objects.get_or_create(id='test_company', defaults={'name': 'Test Company', 'active': True})
     wh, _ = Warehouse.objects.get_or_create(id=1, defaults={'name': 'Test WH', 'companyid': company, 'active': True})
-    user, _ = User.objects.get_or_create(id='test_user', defaults={'email': 'test@test.com', 'role': 'SUPERADMIN', 'name': 'Test'})
+    user, _ = User.objects.get_or_create(id='test_user', defaults={'email': 'test@test.com', 'role': 'SUPERADMIN', 'name': 'Test', 'active': True})
     
     # Products
     fg, _ = Product.objects.get_or_create(id='fg1', defaults={'name': 'Wall Putty 20kg', 'productcode': 'WP20', 'companyid': company, 'active': True, 'rate': 100, 'gst': 18, 'openingstock': 0, 'minimumstock': 0})

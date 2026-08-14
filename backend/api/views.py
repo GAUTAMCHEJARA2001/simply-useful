@@ -3242,7 +3242,15 @@ def transaction_productions(request):
         if not wh:
             return Response({'success': False, 'message': 'Invalid warehouse'}, status=status.HTTP_400_BAD_REQUEST)
         st_id = 'st_' + uuid.uuid4().hex[:20]
-        now = timezone.now()
+        
+        req_date = data.get('date') or data.get('createdAt')
+        if req_date:
+            if len(req_date) == 10:
+                req_date += 'T00:00:00Z'
+            now = req_date
+        else:
+            now = timezone.now()
+            
         product = resolve_product_for_db(prod_id)
         if not product:
             return Response({'success': False, 'message': 'Product not found'}, status=status.HTTP_400_BAD_REQUEST)
