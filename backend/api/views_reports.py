@@ -174,7 +174,7 @@ def report_stock_ledger(request, pk):
     # 1. Fetch Stocktransaction entries
     st_qs = Stocktransaction.objects.filter(
         Q(productid_id=product.id) | Q(productid__productcode=product.productcode)
-    )
+    ).exclude(is_deleted=True)
     if company_id:
         st_qs = st_qs.filter(productid__companyid_id=company_id)
     if target_wh_ids:

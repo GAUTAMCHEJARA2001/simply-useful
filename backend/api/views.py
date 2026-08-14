@@ -2315,7 +2315,7 @@ def _compute_all_product_stocks(company_id=None, request=None, target_wh_ids=Non
 
         st_qs = Stocktransaction.objects.exclude(
             reason__in=['PENDING_APPROVAL', 'REJECTED']
-        )
+        ).exclude(is_deleted=True)
         if target_wh_ids:
             st_qs = st_qs.filter(warehouseid_id__in=target_wh_ids)
         stock_tx_data = st_qs.values('productid_id', 'transactiontype').annotate(total=Sum('quantity'))
@@ -3368,7 +3368,7 @@ def transaction_productions_detail(request, pk):
                     if item_prod_id and item_qty > 0:
                         item_prod = resolve_product_for_db(item_prod_id)
                         if item_prod:
-                            Stocktransaction.objects.create(id='st_' + uuid.uuid4().hex[:20], productid=item_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-item_qty, referenceid=pk, createdat=now_str)
+                            Stocktransaction.objects.create(id='st_' + uuid.uuid4().hex[:20], productid=item_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-item_qty, referenceid=pk, reason=main_st.reason, createdat=now_str)
                             new_product_ids.add(item_prod.id)
             else:
                 try:
@@ -3379,7 +3379,7 @@ def transaction_productions_detail(request, pk):
                         for b_item in Bomitem.objects.filter(bomid=bom):
                             m_prod = Product.objects.filter(name=b_item.materialname).first()
                             if m_prod:
-                                Stocktransaction.objects.create(id='st_' + uuid.uuid4().hex[:20], productid=m_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-(b_item.qty * qty_produced), referenceid=pk, createdat=now_str)
+                                Stocktransaction.objects.create(id='st_' + uuid.uuid4().hex[:20], productid=m_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-(b_item.qty * qty_produced), referenceid=pk, reason=main_st.reason, createdat=now_str)
                                 new_product_ids.add(m_prod.id)
                 except Exception as e:
                     print('Error updating BOM consumption:', e)
