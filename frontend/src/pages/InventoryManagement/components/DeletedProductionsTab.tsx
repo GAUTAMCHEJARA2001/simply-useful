@@ -13,7 +13,7 @@ export const DeletedProductionsTab: React.FC = () => {
   const { filterBySelectedFY } = useFinancialYear();
 
   const filteredProductions = filterBySelectedFY(productions, (p: any) => p.date || p.createdAt).filter((p: any) => {
-    if (p.status !== 'Deleted' && !p.isDeleted) return false;
+    if ((p.status || '').toUpperCase() !== 'DELETED' && !p.isDeleted && !p.is_deleted) return false;
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     const s = [
