@@ -304,6 +304,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   const { filterBySelectedFY } = useFinancialYear();
 
   const filteredProductions = filterBySelectedFY(productions, (p: any) => p.date || p.createdAt).filter((p: any) => {
+    if (p.status === 'Deleted' || p.isDeleted) return false;
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     const s = [

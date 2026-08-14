@@ -18,6 +18,7 @@ import { PurchaseOrdersTab } from './InventoryManagement/components/PurchaseOrde
 import { PurchasesTab } from './InventoryManagement/components/PurchasesTab';
 import { SalesTab } from './InventoryManagement/components/SalesTab';
 import { ProductionsTab } from './InventoryManagement/components/ProductionsTab';
+import { DeletedProductionsTab } from './InventoryManagement/components/DeletedProductionsTab';
 import { AdjustmentsTab } from './InventoryManagement/components/AdjustmentsTab';
 import { AttendanceTab } from './InventoryManagement/components/AttendanceTab';
 import { ApprovalsTab } from './InventoryManagement/components/ApprovalsTab';
@@ -50,6 +51,7 @@ const InventoryManagement: React.FC = () => {
     { id: 'purchases', label: 'Purchases', icon: ShoppingCart, group: 'Transactions' },
     { id: 'sales', label: 'Sales', icon: DollarSign, group: 'Transactions' },
     { id: 'productions', label: 'Production', icon: Factory, group: 'Transactions' },
+    { id: 'deleted_productions', label: 'Deleted Production Entry', icon: Trash2, group: 'Transactions' },
     { id: 'production_approvals', label: 'Production Approvals', icon: UserCheck, group: 'Transactions' },
     { id: 'adjustments', label: 'Adjustments', icon: ClipboardList, group: 'Transactions' },
     { id: 'attendance', label: 'Attendance', icon: UserCheck, group: 'Transactions' },
@@ -82,7 +84,7 @@ const InventoryManagement: React.FC = () => {
               .filter(n => n.group === group)
               .filter(n => {
                 if (user?.role === 'PRODUCTION') {
-                  return ['dashboard', 'total_stock', 'stock_ledger', 'products', 'bom', 'productions'].includes(n.id);
+                  return ['dashboard', 'total_stock', 'stock_ledger', 'products', 'bom', 'productions', 'deleted_productions'].includes(n.id);
                 }
                 if (n.id === 'bom') return ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '');
                 if (n.id === 'production_approvals') return ['SUPERADMIN', 'ADMIN', 'INVENTORY'].includes(user?.role || '');
@@ -106,7 +108,7 @@ const InventoryManagement: React.FC = () => {
             {navItems
               .filter(n => {
                 if (user?.role === 'PRODUCTION') {
-                  return ['dashboard', 'total_stock', 'stock_ledger', 'products', 'bom', 'productions'].includes(n.id);
+                  return ['dashboard', 'total_stock', 'stock_ledger', 'products', 'bom', 'productions', 'deleted_productions'].includes(n.id);
                 }
                 if (n.id === 'bom') return ['SUPERADMIN', 'ADMIN', 'INVENTORY', 'INVENTORY_MANAGER', 'MANAGER'].includes(user?.role || '');
                 if (n.id === 'production_approvals') return ['SUPERADMIN', 'ADMIN', 'INVENTORY'].includes(user?.role || '');
@@ -136,6 +138,7 @@ const InventoryManagement: React.FC = () => {
         {tab === 'purchases' && <PurchasesTab />}
         {tab === 'sales' && <SalesTab />}
         {tab === 'productions' && <ProductionsTab onTabChange={setTab} />}
+        {tab === 'deleted_productions' && <DeletedProductionsTab />}
         {tab === 'production_approvals' && <ProductionApprovalsTab />}
         {tab === 'adjustments' && <AdjustmentsTab />}
         {tab === 'attendance' && <AttendanceTab />}
