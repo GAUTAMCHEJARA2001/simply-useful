@@ -593,16 +593,12 @@ class OrderSerializer(serializers.ModelSerializer):
         instance.save()
         
         if items_data is not None:
-            # Build a map of existing items by product ID for upsert
+            # Build a map of existing items by ID for upsert
             old_items = instance.orderitem_set.all()
-            old_by_product = {}
-            for item in old_items:
-                pid = item.productid_id
-                if pid:
-                    old_by_product[pid] = item
+            old_by_id = {item.id: item for item in old_items if item.id}
             
-            # Track which products are in the new items
-            seen_products = set()
+            # Track which item IDs are in the new items
+            seen_ids = set()
             
             for item_data in items_data:
                 import uuid
@@ -615,16 +611,17 @@ class OrderSerializer(serializers.ModelSerializer):
                 if not p_id:
                     continue
                 
-                seen_products.add(p_id)
-                
                 # Remove non-model fields before create/update
                 item_data.pop('product', None)
                 item_data.pop('orderId', None)
                 item_data.pop('order_id', None)
                 
-                if p_id in old_by_product:
+                item_id = item_data.get('id')
+                
+                if item_id and item_id in old_by_id:
                     # UPDATE existing item - preserve sentqty/returnedqty
-                    old_item = old_by_product[p_id]
+                    seen_ids.add(item_id)
+                    old_item = old_by_id[item_id]
                     item_data.pop('sentqty', None)
                     item_data.pop('returnedqty', None)
                     for attr, val in item_data.items():
@@ -632,13 +629,15 @@ class OrderSerializer(serializers.ModelSerializer):
                     old_item.save()
                 else:
                     # CREATE new item
-                    if 'id' not in item_data or not item_data['id']:
-                        item_data['id'] = 'c' + uuid.uuid4().hex[:23]
+                    if not item_id:
+                        item_id = 'c' + uuid.uuid4().hex[:23]
+                        item_data['id'] = item_id
                     Orderitem.objects.create(orderid=instance, **item_data)
+                    seen_ids.add(item_id)
             
             # Delete items that were removed from the order
-            for pid, old_item in old_by_product.items():
-                if pid not in seen_products:
+            for old_id, old_item in old_by_id.items():
+                if old_id not in seen_ids:
                     old_item.delete()
                 
         return instance

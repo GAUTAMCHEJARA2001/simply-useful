@@ -2,7 +2,7 @@ import React from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { BarChart3, Package, Truck, ShoppingCart, Factory, Sliders, ClipboardList, UserCheck, Warehouse as WarehouseIcon, TrendingUp, DollarSign } from 'lucide-react';
+import { BarChart3, Package, Truck, ShoppingCart, Factory, Sliders, ClipboardList, UserCheck, Warehouse as WarehouseIcon, TrendingUp, DollarSign, Trash2 } from 'lucide-react';
 import { DashboardTab } from './InventoryManagement/components/DashboardTab';
 import { ProductsTab } from './InventoryManagement/components/ProductsTab';
 import { CategoriesTab } from './InventoryManagement/components/CategoriesTab';
