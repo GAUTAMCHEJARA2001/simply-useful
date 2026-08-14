@@ -1,16 +1,23 @@
 import React, { useState } from 'react';
 import { useProductions } from '@/hooks/inventory/useProductions';
 import { DataTable } from '@/components/DataTable';
-import { Search } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { SafeDataView } from '@/components/SafeDataView';
 import { formatDecimal } from '@/utils/format';
 import { Input } from '@/components/ui/input';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import { Modal } from '@/components/Modal';
+import apiClient from '@/api/client';
 
 export const DeletedProductionsTab: React.FC = () => {
   const { data: productions = [], isLoading, error } = useProductions();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const { filterBySelectedFY } = useFinancialYear();
+
+  const [viewModal, setViewModal] = useState<boolean>(false);
+  const [viewData, setViewData] = useState<any>(null);
+  const [viewMaterials, setViewMaterials] = useState<any[]>([]);
+  const [isViewing, setIsViewing] = useState<boolean>(false);
 
   const filteredProductions = filterBySelectedFY(productions, (p: any) => p.date || p.createdAt).filter((p: any) => {
     if ((p.status || '').toUpperCase() !== 'DELETED' && !p.isDeleted && !p.is_deleted) return false;
@@ -39,8 +46,28 @@ export const DeletedProductionsTab: React.FC = () => {
       </div>
 
       <SafeDataView isLoading={isLoading} error={error} data={filteredProductions}>
+        {isViewing && (
+          <div className="flex items-center justify-center p-4 text-muted-foreground">
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Fetching details...
+          </div>
+        )}
         <DataTable 
           columns={['Finished Product', 'Standard Yield', 'Actual Yield', 'Variance', 'Warehouse', 'Date', 'Status']}
+          onView={async (idx: number) => {
+            const p = filteredProductions[idx];
+            try {
+              setIsViewing(true);
+              const matRes = await apiClient<any[]>(`/inv/transactions/productions/${p.id}/materials`);
+              const mats = matRes && matRes.data ? matRes.data : (Array.isArray(matRes) ? matRes : []);
+              setViewData(p);
+              setViewMaterials(mats);
+              setViewModal(true);
+            } catch (err) {
+              console.error(err);
+            } finally {
+              setIsViewing(false);
+            }
+          }}
           rows={filteredProductions.map((p: any) => {
             const expected = p.expectedQuantity || p.quantityProduced || 0;
             const actual = p.quantityProduced || p.quantity_produced || 0;
@@ -68,6 +95,69 @@ export const DeletedProductionsTab: React.FC = () => {
           })}
         />
       </SafeDataView>
+
+      {viewModal && viewData && (
+        <Modal
+          title="Deleted Production Details"
+          onClose={() => setViewModal(false)}
+          className="max-w-3xl"
+        >
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground">Finished Product</label>
+                <div className="font-medium">{viewData.finishedProductName || viewData.finished_product?.name || '—'}</div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Warehouse</label>
+                <div className="font-medium">{viewData.warehouseName || viewData.warehouse?.name || '—'}</div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Standard Yield</label>
+                <div className="font-medium">{formatDecimal(viewData.expectedQuantity || viewData.quantityProduced || 0)}</div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Actual Yield</label>
+                <div className="font-medium">{formatDecimal(viewData.quantityProduced || viewData.quantity_produced || 0)}</div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-3">Raw Materials Consumed</h4>
+              <div className="border border-border rounded-xl overflow-hidden">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-muted text-muted-foreground text-xs">
+                    <tr>
+                      <th className="p-3 font-medium">Material</th>
+                      <th className="p-3 font-medium text-right">Quantity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {viewMaterials.length > 0 ? viewMaterials.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-muted/50 transition-colors">
+                        <td className="p-3">{item.productName || item.product_name || '—'}</td>
+                        <td className="p-3 text-right">{formatDecimal(item.quantity || item.qty || 0)}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={2} className="p-4 text-center text-muted-foreground">No materials recorded</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-destructive/10 text-destructive p-4 rounded-xl text-sm border border-destructive/20">
+              <h4 className="font-bold mb-1">Deletion Information</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                <div><span className="opacity-70">Deleted By:</span> {viewData.deletedBy || 'System'}</div>
+                <div><span className="opacity-70">Reason:</span> {viewData.deleteReason || 'No reason provided'}</div>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
