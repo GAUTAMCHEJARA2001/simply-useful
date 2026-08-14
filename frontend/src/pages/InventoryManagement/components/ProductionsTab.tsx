@@ -55,6 +55,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   const [productSearch, setProductSearch] = useState<string>('');
   const [ingSearch, setIngSearch] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [deleteModal, setDeleteModal] = useState<{show: boolean, idx: number, reason: string}>({ show: false, idx: -1, reason: '' });
 
   const { data: products = [] } = useProducts({ warehouseId: form.warehouseId || undefined });
 
@@ -438,21 +439,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
               toast({ title: 'Error', description: 'Failed to load production run details.', variant: 'destructive' });
             }
           }}
-          onDelete={async (idx: number) => {
-            const p = productions[idx];
-            if (!confirm('Are you sure you want to delete this production run? All stock changes will be completely reversed.')) return;
-            const reason = prompt('Please enter a reason for deleting this production run:');
-            if (!reason) {
-              toast({ title: 'Error', description: 'A reason is required to delete.', variant: 'destructive' });
-              return;
-            }
-            try {
-              await apiClient(`/inv/transactions/productions/${p.id}`, { method: 'DELETE', data: { reason } });
-              toast({ title: 'Success', description: 'Production run deleted successfully.' });
-              refetch();
-            } catch (e: any) {
-              toast({ title: 'Error', description: e.message || 'Delete failed', variant: 'destructive' });
-            }
+          onDelete={(idx: number) => {
+            setDeleteModal({ show: true, idx, reason: '' });
           }}
         />
       </SafeDataView>
@@ -932,6 +920,57 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 className="h-9 px-4 text-xs font-bold"
               >
                 {deficitItems.every((item: any) => (item.deficit || 0) <= 0) ? 'Proceed with Production' : 'Close Warning'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      
+      {deleteModal.show && (
+        <Modal title="Delete Production Run" onClose={() => setDeleteModal({ show: false, idx: -1, reason: '' })}>
+          <div className="space-y-4">
+            <div className="bg-destructive/10 p-3 rounded-lg border border-destructive/20 flex items-start gap-3 text-destructive">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-bold">Warning: This action cannot be undone.</p>
+                <p>Are you sure you want to delete this production run? All stock changes will be completely reversed.</p>
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium block mb-1">Reason for deletion <span className="text-destructive">*</span></label>
+              <textarea 
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 min-h-[100px]"
+                placeholder="Please explain why this production is being deleted..."
+                value={deleteModal.reason}
+                onChange={(e) => setDeleteModal(prev => ({ ...prev, reason: e.target.value }))}
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <Button variant="outline" onClick={() => setDeleteModal({ show: false, idx: -1, reason: '' })}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                disabled={!deleteModal.reason.trim() || isSubmitting}
+                onClick={async () => {
+                  const p = productions[deleteModal.idx];
+                  setIsSubmitting(true);
+                  try {
+                    await apiClient(`/inv/transactions/productions/${p.id}`, { method: 'DELETE', data: { reason: deleteModal.reason } });
+                    toast({ title: 'Success', description: 'Production run deleted successfully.' });
+                    setDeleteModal({ show: false, idx: -1, reason: '' });
+                    refetch();
+                  } catch (e: any) {
+                    toast({ title: 'Error', description: e.message || 'Delete failed', variant: 'destructive' });
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }}
+              >
+                {isSubmitting ? 'Deleting...' : 'Delete Production'}
               </Button>
             </div>
           </div>
