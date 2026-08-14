@@ -3430,7 +3430,7 @@ def transaction_productions_detail(request, pk):
                         referenceid=f"REV-{st.id}",
                         reason=f"Reversal for deleted production: {reason}",
                         createdat=timezone.now(),
-                        created_by=request.user
+                        created_by_id=request.user.id
                     )
                     
                 for p_id in product_ids:
