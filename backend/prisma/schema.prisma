@@ -115,6 +115,7 @@ model Dealer {
   city            String
   assignedSoEmail String
   distributorName String?
+  brand           String?
   creditLimit     Float    @default(0)
   outstanding     Float    @default(0)
   active          Boolean  @default(true)
@@ -131,6 +132,7 @@ model Distributor {
   distributorName String   @unique
   area            String
   assignedSoEmail String
+  brand           String?
   creditLimit     Float    @default(0)
   outstanding     Float    @default(0)
   active          Boolean  @default(true)

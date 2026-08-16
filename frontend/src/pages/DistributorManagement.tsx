@@ -16,7 +16,7 @@ import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
 
 const PAGE_SIZE = 25;
 
-const emptyDist: Distributor = { distributorCode: '', distributorName: '', area: '', assignedSoEmail: '', creditLimit: 0, outstanding: 0, active: true, territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '' };
+const emptyDist: Distributor = { distributorCode: '', distributorName: '', area: '', assignedSoEmail: '', creditLimit: 0, outstanding: 0, active: true, territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '', brand: '' };
 
 const DistributorManagement: React.FC = () => {
   const { users, addDistributor, updateDistributor, deleteDistributor } = useData();
@@ -178,6 +178,7 @@ const DistributorManagement: React.FC = () => {
                     <div><span className="text-muted-foreground">Credit:</span> ₹{d.creditLimit.toLocaleString()}</div>
                     <div><span className="text-muted-foreground">Outstanding:</span> ₹{d.outstanding.toLocaleString()}</div>
                     <div><span className="text-muted-foreground">SO:</span> {d.assignedSoEmail?.split('@')[0] || 'Unknown'}</div>
+                    <div><span className="text-muted-foreground">Brand:</span> {d.brand || '—'}</div>
                   </div>
                   {can('manage_customers') && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border">
@@ -196,7 +197,7 @@ const DistributorManagement: React.FC = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    {['Code', 'Name', 'Area', 'Territory', 'SO', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
+                    {['Code', 'Name', 'Area', 'Territory', 'Brand', 'SO', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
                     ))}
                   </tr>
@@ -208,6 +209,7 @@ const DistributorManagement: React.FC = () => {
                       <td className="px-4 py-3 font-medium">{d.distributorName}</td>
                       <td className="px-4 py-3">{d.area}</td>
                       <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
+                      <td className="px-4 py-3 font-medium text-xs text-primary">{d.brand || '—'}</td>
                       <td className="px-4 py-3 text-xs">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</td>
                       <td className="px-4 py-3">₹{d.creditLimit.toLocaleString()}</td>
                       <td className="px-4 py-3">₹{d.outstanding.toLocaleString()}</td>
@@ -292,6 +294,7 @@ const DistributorManagement: React.FC = () => {
               <div className="space-y-2"><Label>Credit Limit</Label><Input type="number" value={form.creditLimit} onChange={e => uf('creditLimit', Number(e.target.value))} /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Brand</Label><Input value={form.brand || ''} onChange={e => uf('brand', e.target.value)} placeholder="e.g. A Brand" /></div>
               <div className="space-y-2"><Label>Status</Label>
                 <Select value={form.active ? 'active' : 'blocked'} onValueChange={v => uf('active', v === 'active')}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

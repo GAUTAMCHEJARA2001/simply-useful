@@ -37,6 +37,7 @@ export interface Dealer {
   state?: string;
   assignedSoEmail: string;
   distributorName?: string;
+  brand?: string;
   creditLimit: number;
   outstanding: number;
   active: boolean;
@@ -59,6 +60,7 @@ export interface Distributor {
   distributorName: string;
   area: string;
   assignedSoEmail: string;
+  brand?: string;
   creditLimit: number;
   outstanding: number;
   active: boolean;

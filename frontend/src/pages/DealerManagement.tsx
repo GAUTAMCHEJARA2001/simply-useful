@@ -19,7 +19,7 @@ const PAGE_SIZE = 25;
 const emptyDealer: Dealer = {
   dealerCode: '', dealerName: '', city: '', assignedSoEmail: '',
   distributorName: '', creditLimit: 0, outstanding: 0, active: true,
-  territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '',
+  territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '', brand: '',
 };
 
 const DealerManagement: React.FC = () => {
@@ -197,6 +197,7 @@ const DealerManagement: React.FC = () => {
                     <div><span className="text-muted-foreground">Outstanding:</span> <span className="font-medium">₹{d.outstanding.toLocaleString()}</span></div>
                     <div><span className="text-muted-foreground">SO:</span> <span className="font-medium">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</span></div>
                     <div><span className="text-muted-foreground">Distributor:</span> <span className="font-medium">{d.distributorName || 'Direct'}</span></div>
+                    <div><span className="text-muted-foreground">Brand:</span> <span className="font-medium">{d.brand || '—'}</span></div>
                   </div>
                   {can('manage_customers') && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-border">
@@ -217,7 +218,7 @@ const DealerManagement: React.FC = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      {['Code', 'Name', 'City', 'Territory', 'SO', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
+                      {['Code', 'Name', 'City', 'Territory', 'Brand', 'SO', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
                       ))}
                     </tr>
@@ -229,6 +230,7 @@ const DealerManagement: React.FC = () => {
                         <td className="px-4 py-3 font-medium">{d.dealerName}</td>
                         <td className="px-4 py-3">{d.city}</td>
                         <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
+                        <td className="px-4 py-3 font-medium text-xs text-primary">{d.brand || '—'}</td>
                         <td className="px-4 py-3 text-xs">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</td>
                         <td className="px-4 py-3 text-xs">{d.distributorName || '—'}</td>
                         <td className="px-4 py-3">₹{d.creditLimit.toLocaleString()}</td>
@@ -355,6 +357,10 @@ const DealerManagement: React.FC = () => {
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Brand</Label>
+                <Input value={form.brand || ''} onChange={e => updateForm('brand', e.target.value)} placeholder="e.g. A Brand" />
+              </div>
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={form.active ? 'active' : 'blocked'} onValueChange={v => updateForm('active', v === 'active')}>
