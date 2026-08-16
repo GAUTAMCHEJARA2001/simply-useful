@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Search, Plus, Edit, Trash2, BookOpen, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -300,27 +301,40 @@ const DealerManagement: React.FC = () => {
               </div>
               <div className="space-y-2 col-span-1 sm:col-span-2">
                 <Label>Assigned SOs *</Label>
-                <div className="flex flex-col gap-2 max-h-40 overflow-y-auto border p-3 rounded-md">
-                  {salesUsers.filter(u => u.email).map(u => (
-                    <div key={u.email} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`so-${u.email}`}
-                        checked={(form.assignedSoEmails || []).includes(u.email)}
-                        onCheckedChange={(checked) => {
-                          const current = form.assignedSoEmails || [];
-                          if (checked) {
-                            updateForm('assignedSoEmails', [...current, u.email]);
-                          } else {
-                            updateForm('assignedSoEmails', current.filter(e => e !== u.email));
-                          }
-                        }}
-                      />
-                      <label htmlFor={`so-${u.email}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        {u.name} ({u.email})
-                      </label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between font-normal text-left h-10">
+                      <span className="truncate">
+                        {(form.assignedSoEmails || []).length > 0
+                          ? (form.assignedSoEmails || []).map(e => salesUsers.find(u => u.email === e)?.name || e).join(', ')
+                          : "Select Sales Officers..."}
+                      </span>
+                      <Plus className="w-4 h-4 opacity-50 shrink-0" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-2" align="start">
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {salesUsers.filter(u => u.email).map(u => (
+                        <label key={u.email} className="flex items-center space-x-2 p-2 rounded-md hover:bg-muted cursor-pointer transition-colors border border-transparent hover:border-border">
+                          <Checkbox
+                            checked={Array.isArray(form.assignedSoEmails) && form.assignedSoEmails.includes(u.email)}
+                            onCheckedChange={(checked) => {
+                              const current = Array.isArray(form.assignedSoEmails) ? form.assignedSoEmails : [];
+                              if (checked) {
+                                updateForm('assignedSoEmails', [...current, u.email]);
+                              } else {
+                                updateForm('assignedSoEmails', current.filter(e => e !== u.email));
+                              }
+                            }}
+                          />
+                          <span className="text-sm font-medium leading-none">
+                            {u.name} ({u.email})
+                          </span>
+                        </label>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
