@@ -9,9 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, UserCheck, Users, Shuffle, Store, Building2, CheckCircle2 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Search, UserCheck, Users, Shuffle, Store, Building2, CheckCircle2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Dealer, Distributor } from '@/types';
+import { Dealer, Distributor, User } from '@/types';
 
 type PartyType = 'dealer' | 'distributor';
 
@@ -20,9 +22,10 @@ interface MappingRow {
   name: string;
   city: string;
   type: PartyType;
-  currentSoEmail: string;
-  pendingSoEmail: string | null; // null = no change
+  currentSoEmails: string[];
+  pendingSoEmails: string[] | null; // null = no change
   territory: string;
+  brand: string;
 }
 
 const SOMapping: React.FC = () => {
@@ -43,9 +46,10 @@ const SOMapping: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterSo, setFilterSo] = useState('all');      // filter table by current SO
   const [filterType, setFilterType] = useState<'all' | 'dealer' | 'distributor'>('all');
+  const [filterBrand, setFilterBrand] = useState('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkSo, setBulkSo] = useState('');
-  const [pending, setPending] = useState<Map<string, string>>(new Map()); // id â†’ new soEmail
+  const [bulkAction, setBulkAction] = useState<'add' | 'remove'>('add');
   const [saving, setSaving] = useState<Set<string>>(new Set());
 
   // Build unified rows
@@ -53,50 +57,53 @@ const SOMapping: React.FC = () => {
     const dealerRows: MappingRow[] = dealers.map(d => ({
       id: `dlr_${d.dealerCode}`,
       name: d.dealerName,
-      city: d.city || 'â€”',
+      city: d.city || '—',
       type: 'dealer',
-      currentSoEmail: d.assignedSoEmail || '',
-      pendingSoEmail: null,
-      territory: d.territory || 'â€”',
+      currentSoEmails: d.assignedSoEmails || [],
+      pendingSoEmails: null,
+      territory: d.territory || '—',
+      brand: d.brand || '—',
     }));
     const distRows: MappingRow[] = distributors.map(d => ({
       id: `dst_${d.distributorName}`,
       name: d.distributorName,
-      city: (d as any).city || d.area || 'â€”',
+      city: (d as any).city || d.area || '—',
       type: 'distributor',
-      currentSoEmail: d.assignedSoEmail || '',
-      pendingSoEmail: null,
-      territory: d.territory || 'â€”',
+      currentSoEmails: d.assignedSoEmails || [],
+      pendingSoEmails: null,
+      territory: d.territory || '—',
+      brand: d.brand || '—',
     }));
     return [...dealerRows, ...distRows];
   }, [dealers, distributors]);
 
-  // Merge pending changes into display
-  const rows: MappingRow[] = useMemo(() => {
-    return allRows.map(r => ({
-      ...r,
-      pendingSoEmail: pending.get(r.id) ?? null,
-    }));
-  }, [allRows, pending]);
+  const uniqueBrands = useMemo(() => {
+    const brands = new Set<string>();
+    allRows.forEach(r => { if (r.brand && r.brand !== '—') brands.add(r.brand); });
+    return Array.from(brands).sort();
+  }, [allRows]);
+
+  const rows = allRows; // direct display, instant save
 
   const filteredRows = useMemo(() => {
     return rows.filter(r => {
       if (filterType !== 'all' && r.type !== filterType) return false;
+      if (filterBrand !== 'all' && r.brand !== filterBrand) return false;
       if (filterSo !== 'all') {
-        const effectiveSo = r.pendingSoEmail ?? r.currentSoEmail;
-        if (effectiveSo.toLowerCase() !== filterSo.toLowerCase()) return false;
+        if (!r.currentSoEmails.includes(filterSo)) return false;
       }
       if (search) {
         const q = search.toLowerCase();
         return (
           r.name.toLowerCase().includes(q) ||
           r.city.toLowerCase().includes(q) ||
-          (r.territory || '').toLowerCase().includes(q)
+          (r.territory || '').toLowerCase().includes(q) ||
+          (r.brand || '').toLowerCase().includes(q)
         );
       }
       return true;
     });
-  }, [rows, filterType, filterSo, search]);
+  }, [rows, filterType, filterSo, filterBrand, search]);
 
   // SO name lookup
   const soName = (email: string) => {
@@ -105,31 +112,38 @@ const SOMapping: React.FC = () => {
   };
 
   // Per-row SO change (instant save)
-  const handleRowChange = async (row: MappingRow, newSoEmail: string) => {
-    if (newSoEmail === (row.currentSoEmail)) return;
-
+  const handleRowChange = async (row: MappingRow, newEmails: string[]) => {
     setSaving(prev => new Set(prev).add(row.id));
     try {
       if (row.type === 'dealer') {
         const dealerCode = row.id.replace('dlr_', '');
         const dealer = dealers.find(d => d.dealerCode === dealerCode);
-        if (dealer) await updateDealer(dealerCode, { ...dealer, assignedSoEmail: newSoEmail });
+        if (dealer) await updateDealer(dealerCode, { ...dealer, assignedSoEmails: newEmails });
       } else {
         const distName = row.id.replace('dst_', '');
         const dist = distributors.find(d => d.distributorName === distName);
-        if (dist) await updateDistributor(distName, { ...dist, assignedSoEmail: newSoEmail });
+        if (dist) await updateDistributor(distName, { ...dist, assignedSoEmails: newEmails });
       }
-      // Remove from pending after save
-      setPending(prev => { const m = new Map(prev); m.delete(row.id); return m; });
       toast({
         title: 'Mapping Updated',
-        description: `${row.name} â†’ ${soName(newSoEmail)}`,
+        description: `${row.name} SOs updated.`,
       });
     } catch {
       toast({ title: 'Save Failed', description: 'Could not update mapping.', variant: 'destructive' });
     } finally {
       setSaving(prev => { const s = new Set(prev); s.delete(row.id); return s; });
     }
+  };
+
+  // Toggle single SO for a row
+  const toggleSoForRow = async (row: MappingRow, email: string, checked: boolean) => {
+    const current = new Set(row.currentSoEmails);
+    if (checked) {
+      current.add(email);
+    } else {
+      current.delete(email);
+    }
+    await handleRowChange(row, Array.from(current));
   };
 
   // Bulk reassign
@@ -140,7 +154,13 @@ const SOMapping: React.FC = () => {
     }
     const targets = filteredRows.filter(r => selected.has(r.id));
     for (const row of targets) {
-      await handleRowChange(row, bulkSo);
+      const current = new Set(row.currentSoEmails);
+      if (bulkAction === 'add') {
+        current.add(bulkSo);
+      } else {
+        current.delete(bulkSo);
+      }
+      await handleRowChange(row, Array.from(current));
     }
     setSelected(new Set());
     setBulkSo('');
@@ -166,17 +186,23 @@ const SOMapping: React.FC = () => {
     const map = new Map<string, { dealers: number; distributors: number }>();
     salesUsers.forEach(u => map.set(u.email, { dealers: 0, distributors: 0 }));
     map.set('unassigned', { dealers: 0, distributors: 0 });
+    
     allRows.forEach(r => {
-      const key = r.currentSoEmail || 'unassigned';
-      if (!map.has(key)) map.set(key, { dealers: 0, distributors: 0 });
-      const entry = map.get(key)!;
-      if (r.type === 'dealer') entry.dealers++;
-      else entry.distributors++;
+      if (r.currentSoEmails.length === 0) {
+        const entry = map.get('unassigned')!;
+        if (r.type === 'dealer') entry.dealers++;
+        else entry.distributors++;
+      } else {
+        r.currentSoEmails.forEach(email => {
+          if (!map.has(email)) map.set(email, { dealers: 0, distributors: 0 });
+          const entry = map.get(email)!;
+          if (r.type === 'dealer') entry.dealers++;
+          else entry.distributors++;
+        });
+      }
     });
     return map;
   }, [allRows, salesUsers]);
-
-  const pendingCount = pending.size;
 
   return (
     <div className="space-y-6">
@@ -187,14 +213,9 @@ const SOMapping: React.FC = () => {
             <UserCheck className="w-8 h-8 text-primary" /> SO Territory Mapping
           </h1>
           <p className="page-subheader">
-            Assign or reassign dealers & distributors to Sales Officers. Changes save instantly.
+            Assign multiple Sales Officers to dealers & distributors. Changes save instantly.
           </p>
         </div>
-        {pendingCount > 0 && (
-          <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-xs font-semibold px-3 py-1">
-            {pendingCount} unsaved changes
-          </Badge>
-        )}
       </div>
 
       {/* SO Summary Cards */}
@@ -258,7 +279,7 @@ const SOMapping: React.FC = () => {
           <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name or city..."
+              placeholder="Search by name, city, territory, or brand..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-9 h-9"
@@ -276,14 +297,35 @@ const SOMapping: React.FC = () => {
             <option value="distributor">Distributors Only</option>
           </select>
 
+          {/* Brand Filter */}
+          <select
+            value={filterBrand}
+            onChange={e => setFilterBrand(e.target.value)}
+            className="h-9 px-3 rounded-lg border border-input bg-background text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+          >
+            <option value="all">All Brands</option>
+            {uniqueBrands.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+
           {/* Bulk reassign strip */}
           <div className="flex items-center gap-2 border border-border/60 rounded-xl px-3 py-1.5 bg-muted/30">
             <Shuffle className="w-4 h-4 text-muted-foreground shrink-0" />
             <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
-              Bulk: {selected.size} selected â†’
+              Bulk: {selected.size} selected ?
             </span>
+            <Select value={bulkAction} onValueChange={(val: 'add' | 'remove') => setBulkAction(val)}>
+              <SelectTrigger className="h-7 w-24 text-xs border-border/60 bg-transparent">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="add">Add SO</SelectItem>
+                <SelectItem value="remove">Remove SO</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={bulkSo} onValueChange={setBulkSo}>
-              <SelectTrigger className="h-7 w-40 text-xs border-0 bg-transparent p-0 focus:ring-0">
+              <SelectTrigger className="h-7 w-40 text-xs border-border/60 bg-transparent">
                 <SelectValue placeholder="Pick SO..." />
               </SelectTrigger>
               <SelectContent>
@@ -314,7 +356,7 @@ const SOMapping: React.FC = () => {
               {filteredRows.length} {filterType === 'all' ? 'parties' : filterType + 's'}
               {filterSo !== 'all' && ` for ${soName(filterSo)}`}
             </CardTitle>
-            <span className="text-[10px] text-muted-foreground">Click SO dropdown per row to reassign instantly</span>
+            <span className="text-[10px] text-muted-foreground">Select multiple SOs per row to reassign</span>
           </div>
         </CardHeader>
 
@@ -334,16 +376,17 @@ const SOMapping: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Name</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">City / Area</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Territory</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Brand</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Current SO</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-52">Assign To</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Current SOs</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-52">Assign SOs</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody>
               {filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No parties match your current filters.
                   </td>
                 </tr>
@@ -351,8 +394,7 @@ const SOMapping: React.FC = () => {
               {filteredRows.map((row, idx) => {
                 const isSaving = saving.has(row.id);
                 const isChecked = selected.has(row.id);
-                const effectiveSo = row.currentSoEmail;
-                const isChanged = false; // saved instantly
+                const effectiveSos = row.currentSoEmails;
  
                 return (
                   <tr
@@ -374,7 +416,8 @@ const SOMapping: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 font-semibold">{row.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{row.city}</td>
-                    <td className="px-4 py-3 font-medium text-xs text-primary">{row.territory || 'â€”'}</td>
+                    <td className="px-4 py-3 font-medium text-xs text-primary">{row.territory}</td>
+                    <td className="px-4 py-3 font-medium text-xs text-amber-600">{row.brand}</td>
                     <td className="px-4 py-3">
                       <span className={cn(
                         'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
@@ -385,29 +428,31 @@ const SOMapping: React.FC = () => {
                         {row.type}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className="text-muted-foreground">{soName(effectiveSo)}</span>
+                    <td className="px-4 py-3 text-xs max-w-[150px] truncate" title={effectiveSos.map(soName).join(', ')}>
+                      <span className="text-muted-foreground">{effectiveSos.length > 0 ? effectiveSos.map(soName).join(', ') : 'Unassigned'}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <Select
-                        value={effectiveSo}
-                        onValueChange={val => handleRowChange(row, val)}
-                        disabled={isSaving}
-                      >
-                        <SelectTrigger className="h-8 text-xs border-border/60 hover:border-primary/60 transition-colors">
-                          <SelectValue placeholder="Assign SO..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {salesUsers.map(so => (
-                            <SelectItem key={so.email} value={so.email} className="text-xs">
-                              {so.name}
-                              <span className="text-muted-foreground ml-1">
-                                ({(soSummary.get(so.email)?.[row.type === 'dealer' ? 'dealers' : 'distributors'] || 0)} {row.type}s)
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="w-full justify-between h-8 text-xs px-2 border-border/60 hover:border-primary/60" disabled={isSaving}>
+                            <span>{effectiveSos.length} selected</span>
+                            <Plus className="w-3.5 h-3.5 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-56 p-2" align="start">
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {salesUsers.map(so => (
+                              <label key={so.email} className="flex items-center space-x-2 p-1.5 rounded-md hover:bg-muted cursor-pointer transition-colors">
+                                <Checkbox 
+                                  checked={effectiveSos.includes(so.email)}
+                                  onCheckedChange={(checked) => toggleSoForRow(row, so.email, checked as boolean)}
+                                />
+                                <span className="text-xs font-medium">{so.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </td>
                     <td className="px-4 py-3 text-center">
                       {isSaving ? (
@@ -433,7 +478,7 @@ const SOMapping: React.FC = () => {
           {filteredRows.map(row => {
             const isSaving = saving.has(row.id);
             const isChecked = selected.has(row.id);
-            const effectiveSo = row.currentSoEmail;
+            const effectiveSos = row.currentSoEmails;
 
             return (
               <div
@@ -451,7 +496,7 @@ const SOMapping: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-semibold text-sm">{row.name}</p>
-                        <p className="text-xs text-muted-foreground">{row.city} {row.territory ? `Â· Territory: ${row.territory}` : ''}</p>
+                        <p className="text-xs text-muted-foreground">{row.city} {row.territory ? `· Territory: ${row.territory}` : ''} {row.brand !== '—' ? `· Brand: ${row.brand}` : ''}</p>
                       </div>
                       <span className={cn(
                         'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase',
@@ -461,23 +506,27 @@ const SOMapping: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground font-semibold uppercase">Assign to:</span>
-                      <Select
-                        value={effectiveSo}
-                        onValueChange={val => handleRowChange(row, val)}
-                        disabled={isSaving}
-                      >
-                        <SelectTrigger className="h-7 text-xs flex-1 border-border/60">
-                          <SelectValue placeholder="Pick SO..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {salesUsers.map(so => (
-                            <SelectItem key={so.email} value={so.email} className="text-xs">
-                              {so.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <span className="text-[10px] text-muted-foreground font-semibold uppercase">Assign SOs:</span>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="flex-1 justify-between h-7 text-xs px-2 border-border/60" disabled={isSaving}>
+                            <span>{effectiveSos.length} selected</span>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-56 p-2" align="end">
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {salesUsers.map(so => (
+                              <label key={so.email} className="flex items-center space-x-2 p-1.5 rounded-md hover:bg-muted cursor-pointer transition-colors">
+                                <Checkbox 
+                                  checked={effectiveSos.includes(so.email)}
+                                  onCheckedChange={(checked) => toggleSoForRow(row, so.email, checked as boolean)}
+                                />
+                                <span className="text-xs font-medium">{so.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                       {isSaving && (
                         <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
                       )}
