@@ -57,29 +57,29 @@ const SOMapping: React.FC = () => {
     const dealerRows: MappingRow[] = dealers.map(d => ({
       id: `dlr_${d.dealerCode}`,
       name: d.dealerName,
-      city: d.city || '—',
+      city: d.city || 'â€”',
       type: 'dealer',
       currentSoEmails: d.assignedSoEmails || [],
       pendingSoEmails: null,
-      territory: d.territory || '—',
-      brand: d.brand || '—',
+      territory: d.territory || 'â€”',
+      brand: d.brand || 'â€”',
     }));
     const distRows: MappingRow[] = distributors.map(d => ({
       id: `dst_${d.distributorName}`,
       name: d.distributorName,
-      city: (d as any).city || d.area || '—',
+      city: (d as any).city || d.area || 'â€”',
       type: 'distributor',
       currentSoEmails: d.assignedSoEmails || [],
       pendingSoEmails: null,
-      territory: d.territory || '—',
-      brand: d.brand || '—',
+      territory: d.territory || 'â€”',
+      brand: d.brand || 'â€”',
     }));
     return [...dealerRows, ...distRows];
   }, [dealers, distributors]);
 
   const uniqueBrands = useMemo(() => {
     const brands = new Set<string>();
-    allRows.forEach(r => { if (r.brand && r.brand !== '—') brands.add(r.brand); });
+    allRows.forEach(r => { if (r.brand && r.brand !== 'â€”') brands.add(r.brand); });
     return Array.from(brands).sort();
   }, [allRows]);
 
@@ -496,7 +496,7 @@ const SOMapping: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-semibold text-sm">{row.name}</p>
-                        <p className="text-xs text-muted-foreground">{row.city} {row.territory ? `· Territory: ${row.territory}` : ''} {row.brand !== '—' ? `· Brand: ${row.brand}` : ''}</p>
+                        <p className="text-xs text-muted-foreground">{row.city} {row.territory ? `Â· Territory: ${row.territory}` : ''} {row.brand !== 'â€”' ? `Â· Brand: ${row.brand}` : ''}</p>
                       </div>
                       <span className={cn(
                         'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase',
