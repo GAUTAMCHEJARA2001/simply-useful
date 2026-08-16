@@ -28,6 +28,44 @@ interface MappingRow {
   brand: string;
 }
 
+const SoSelectCell = ({ row, salesUsers, effectiveSos, toggleSoForRow, isSaving }: any) => {
+  const [search, setSearch] = useState("");
+  const filteredSos = salesUsers.filter((so: any) => so.name?.toLowerCase().includes(search.toLowerCase()) || so.email?.toLowerCase().includes(search.toLowerCase()));
+  
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full justify-between h-8 text-xs px-2 border-border/60 hover:border-primary/60" disabled={isSaving}>
+          <span>{effectiveSos.length} selected</span>
+          <Plus className="w-3.5 h-3.5 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2" align="start">
+        <div className="mb-2 px-1">
+          <Input 
+            placeholder="Search SO..." 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)} 
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="space-y-1 max-h-60 overflow-y-auto">
+          {filteredSos.map((so: any) => (
+            <label key={so.email} className="flex items-center space-x-2 p-1.5 rounded-md hover:bg-muted cursor-pointer transition-colors">
+              <Checkbox 
+                checked={effectiveSos.includes(so.email)}
+                onCheckedChange={(checked) => toggleSoForRow(row, so.email, checked as boolean)}
+              />
+              <span className="text-xs font-medium">{so.name}</span>
+            </label>
+          ))}
+          {filteredSos.length === 0 && <div className="text-xs text-muted-foreground p-2 text-center">No SO found</div>}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 const SOMapping: React.FC = () => {
   const { user } = useAuth();
   const { dealers, distributors, users, updateDealer, updateDistributor } = useData();
@@ -432,27 +470,13 @@ const SOMapping: React.FC = () => {
                       <span className="text-muted-foreground">{effectiveSos.length > 0 ? effectiveSos.map(soName).join(', ') : 'Unassigned'}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" className="w-full justify-between h-8 text-xs px-2 border-border/60 hover:border-primary/60" disabled={isSaving}>
-                            <span>{effectiveSos.length} selected</span>
-                            <Plus className="w-3.5 h-3.5 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-56 p-2" align="start">
-                          <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {salesUsers.map(so => (
-                              <label key={so.email} className="flex items-center space-x-2 p-1.5 rounded-md hover:bg-muted cursor-pointer transition-colors">
-                                <Checkbox 
-                                  checked={effectiveSos.includes(so.email)}
-                                  onCheckedChange={(checked) => toggleSoForRow(row, so.email, checked as boolean)}
-                                />
-                                <span className="text-xs font-medium">{so.name}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
+                      <SoSelectCell 
+                        row={row} 
+                        salesUsers={salesUsers} 
+                        effectiveSos={effectiveSos} 
+                        toggleSoForRow={toggleSoForRow} 
+                        isSaving={isSaving} 
+                      />
                     </td>
                     <td className="px-4 py-3 text-center">
                       {isSaving ? (
