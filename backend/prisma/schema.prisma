@@ -89,6 +89,7 @@ model Product {
   @@index([unitId])
   @@index([categoryId])
   @@index([companyId])
+  @@unique([name, companyId], map: "unique_product_per_company")
 }
 
 model Category {
@@ -129,6 +130,7 @@ model Dealer {
 
 model Distributor {
   id              String   @id @default(cuid())
+  distributorCode String?  @unique
   distributorName String   @unique
   area            String
   assignedSoEmails String[]
