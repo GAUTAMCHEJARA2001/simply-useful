@@ -131,8 +131,8 @@ const DealerManagement: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.dealerName || !form.city || !form.assignedSoEmails || form.assignedSoEmails.length === 0) {
-      toast({ title: 'Missing Fields', description: 'Please fill all required fields, including at least one Sales Officer.', variant: 'destructive' });
+    if (!form.dealerName || !form.city) {
+      toast({ title: 'Validation Error', description: 'Please fill out all required fields.', variant: 'destructive' });
       return;
     }
     try {
@@ -303,47 +303,57 @@ const DealerManagement: React.FC = () => {
                 <Input value={form.city} onChange={e => updateForm('city', e.target.value)} />
               </div>
               <div className="space-y-2 col-span-1 sm:col-span-2">
-                <Label>Assigned SOs *</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between font-normal text-left h-10">
-                      <span className="truncate">
-                        {(form.assignedSoEmails || []).length > 0
-                          ? `${(form.assignedSoEmails || []).length} selected`
-                          : "Select Sales Officers..."}
-                      </span>
-                      <Plus className="w-4 h-4 opacity-50 shrink-0" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[300px] p-2" align="start">
-                    <div className="mb-2 px-1">
-                      <Input 
-                        placeholder="Search SO..." 
-                        value={soSearch} 
-                        onChange={(e) => setSoSearch(e.target.value)} 
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {salesUsers
-                        .filter(so => so.name?.toLowerCase().includes(soSearch.toLowerCase()) || so.email?.toLowerCase().includes(soSearch.toLowerCase()))
-                        .map(u => (
-                        <label key={u.email} className="flex items-center space-x-2 p-1 rounded hover:bg-muted cursor-pointer transition-colors">
+                <div>
+                  <Label className="text-xs mb-1.5 block">Assigned SOs</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between font-normal text-left h-10">
+                        <span className="truncate">
+                          {(form.assignedSoEmails || []).length > 0
+                            ? `${(form.assignedSoEmails || []).length} selected`
+                            : "No Sales Officer"}
+                        </span>
+                        <Plus className="w-4 h-4 opacity-50 shrink-0" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-2" align="start">
+                      <div className="mb-2 px-1">
+                        <Input 
+                          placeholder="Search SO..." 
+                          value={soSearch} 
+                          onChange={(e) => setSoSearch(e.target.value)} 
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        <label className="flex items-center space-x-2 p-1 rounded hover:bg-muted cursor-pointer transition-colors border-b pb-2 mb-1">
                           <Checkbox 
-                            checked={(form.assignedSoEmails || []).includes(u.email)}
+                            checked={(form.assignedSoEmails || []).length === 0}
                             onCheckedChange={(checked) => {
-                              const current = form.assignedSoEmails || [];
-                              if (checked) updateForm('assignedSoEmails', [...current, u.email]);
-                              else updateForm('assignedSoEmails', current.filter(e => e !== u.email));
+                              if (checked) updateForm('assignedSoEmails', []);
                             }}
                           />
-                          <span className="text-sm">{u.name} ({u.email})</span>
+                          <span className="text-sm font-medium">No Sales Officer</span>
                         </label>
-                      ))}
-                      {salesUsers.filter(so => so.name?.toLowerCase().includes(soSearch.toLowerCase()) || so.email?.toLowerCase().includes(soSearch.toLowerCase())).length === 0 && (
-                        <div className="text-sm text-muted-foreground p-2 text-center">No Sales Officer found</div>
-                      )}
-                    </div>
+                        {salesUsers
+                          .filter(so => so.name?.toLowerCase().includes(soSearch.toLowerCase()) || so.email?.toLowerCase().includes(soSearch.toLowerCase()))
+                          .map(u => (
+                          <label key={u.email} className="flex items-center space-x-2 p-1 rounded hover:bg-muted cursor-pointer transition-colors">
+                            <Checkbox 
+                              checked={(form.assignedSoEmails || []).includes(u.email)}
+                              onCheckedChange={(checked) => {
+                                const current = form.assignedSoEmails || [];
+                                if (checked) updateForm('assignedSoEmails', [...current, u.email]);
+                                else updateForm('assignedSoEmails', current.filter(e => e !== u.email));
+                              }}
+                            />
+                            <span className="text-sm">{u.name} ({u.email})</span>
+                          </label>
+                        ))}
+                        {salesUsers.filter(so => so.name?.toLowerCase().includes(soSearch.toLowerCase()) || so.email?.toLowerCase().includes(soSearch.toLowerCase())).length === 0 && (
+                          <div className="text-sm text-muted-foreground p-2 text-center">No Sales Officer found</div>
+                        )}
+                      </div>
                   </PopoverContent>
                 </Popover>
               </div>

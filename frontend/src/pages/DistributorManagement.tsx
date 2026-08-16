@@ -121,8 +121,9 @@ const DistributorManagement: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.distributorName || !form.area || !form.assignedSoEmails || form.assignedSoEmails.length === 0) {
-      toast({ title: 'Missing Fields', description: 'Fill all required fields, including at least one Sales Officer.', variant: 'destructive' }); return;
+    if (!form.distributorName || !form.area) {
+      toast({ title: 'Validation Error', description: 'Please fill out all required fields.', variant: 'destructive' });
+      return;
     }
     try {
       if (editing) {
@@ -266,19 +267,19 @@ const DistributorManagement: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Distributor Code</Label><Input value={form.distributorCode || ''} onChange={e => uf('distributorCode', e.target.value)} disabled={!!editing} /></div>
-              <div className="space-y-2"><Label>Name *</Label><Input value={form.distributorName} onChange={e => uf('distributorName', e.target.value)} /></div>
+              <div className="space-y-2"><Label>Name</Label><Input value={form.distributorName} onChange={e => uf('distributorName', e.target.value)} /></div>
             </div>
             <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2"><Label>Area *</Label><Input value={form.area} onChange={e => uf('area', e.target.value)} /></div>
+              <div className="space-y-2"><Label>Area</Label><Input value={form.area} onChange={e => uf('area', e.target.value)} /></div>
               <div className="space-y-2">
-                <Label>Assigned SOs *</Label>
+                <Label className="text-xs mb-1.5 block">Assigned SOs</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-between font-normal text-left h-10">
                       <span className="truncate">
                         {(form.assignedSoEmails || []).length > 0
                           ? `${(form.assignedSoEmails || []).length} selected`
-                          : "Select Sales Officers..."}
+                          : "No Sales Officer"}
                       </span>
                       <Plus className="w-4 h-4 opacity-50 shrink-0" />
                     </Button>
@@ -293,6 +294,15 @@ const DistributorManagement: React.FC = () => {
                       />
                     </div>
                     <div className="space-y-2 max-h-60 overflow-y-auto">
+                      <label className="flex items-center space-x-2 p-1 rounded hover:bg-muted cursor-pointer transition-colors border-b pb-2 mb-1">
+                        <Checkbox 
+                          checked={(form.assignedSoEmails || []).length === 0}
+                          onCheckedChange={(checked) => {
+                            if (checked) setForm(prev => ({ ...prev, assignedSoEmails: [] }));
+                          }}
+                        />
+                        <span className="text-sm font-medium">No Sales Officer</span>
+                      </label>
                       {salesUsers
                         .filter(so => so.name?.toLowerCase().includes(soSearch.toLowerCase()) || so.email?.toLowerCase().includes(soSearch.toLowerCase()))
                         .map(u => (

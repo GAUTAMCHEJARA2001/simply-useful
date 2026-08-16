@@ -50,6 +50,17 @@ const SoSelectCell = ({ row, salesUsers, effectiveSos, toggleSoForRow, isSaving 
           />
         </div>
         <div className="space-y-1 max-h-60 overflow-y-auto">
+          <label className="flex items-center space-x-2 p-1.5 rounded-md hover:bg-muted cursor-pointer transition-colors border-b pb-2 mb-1">
+            <Checkbox 
+              checked={effectiveSos.length === 0}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  effectiveSos.forEach((email: string) => toggleSoForRow(row, email, false));
+                }
+              }}
+            />
+            <span className="text-xs font-medium">No Sales Officer</span>
+          </label>
           {filteredSos.map((so: any) => (
             <label key={so.email} className="flex items-center space-x-2 p-1.5 rounded-md hover:bg-muted cursor-pointer transition-colors">
               <Checkbox 
