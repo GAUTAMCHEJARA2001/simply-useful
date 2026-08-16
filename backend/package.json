@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
-    "build": "tsc",
+    "build": "npx prisma db push --accept-data-loss && tsc",
     "postinstall": "prisma generate",
     "reset": "rimraf node_modules package-lock.json && npm install",
     "test": "jest"
