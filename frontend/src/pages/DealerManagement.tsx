@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Search, Plus, Edit, Trash2, BookOpen, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -17,7 +18,7 @@ import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
 const PAGE_SIZE = 25;
 
 const emptyDealer: Dealer = {
-  dealerCode: '', dealerName: '', city: '', assignedSoEmail: '',
+  dealerCode: '', dealerName: '', city: '', assignedSoEmails: [],
   distributorName: '', creditLimit: 0, outstanding: 0, active: true,
   territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '', brand: '',
 };
@@ -123,8 +124,8 @@ const DealerManagement: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.dealerName || !form.city || !form.assignedSoEmail) {
-      toast({ title: 'Missing Fields', description: 'Please fill all required fields.', variant: 'destructive' });
+    if (!form.dealerName || !form.city || !form.assignedSoEmails || form.assignedSoEmails.length === 0) {
+      toast({ title: 'Missing Fields', description: 'Please fill all required fields, including at least one Sales Officer.', variant: 'destructive' });
       return;
     }
     try {
@@ -195,7 +196,7 @@ const DealerManagement: React.FC = () => {
                   <div className="grid grid-cols-2 gap-2 text-xs mt-3">
                     <div><span className="text-muted-foreground">Credit Limit:</span> <span className="font-medium">₹{d.creditLimit.toLocaleString()}</span></div>
                     <div><span className="text-muted-foreground">Outstanding:</span> <span className="font-medium">₹{d.outstanding.toLocaleString()}</span></div>
-                    <div><span className="text-muted-foreground">SO:</span> <span className="font-medium">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</span></div>
+                    <div className="col-span-2"><span className="text-muted-foreground">SOs:</span> <span className="font-medium">{d.assignedSoEmails?.map(email => email.split('@')[0]).join(', ') || 'Unknown'}</span></div>
                     <div><span className="text-muted-foreground">Distributor:</span> <span className="font-medium">{d.distributorName || 'Direct'}</span></div>
                     <div><span className="text-muted-foreground">Brand:</span> <span className="font-medium">{d.brand || '—'}</span></div>
                   </div>
@@ -218,7 +219,7 @@ const DealerManagement: React.FC = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      {['Code', 'Name', 'City', 'Territory', 'Brand', 'SO', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
+                      {['Code', 'Name', 'City', 'Territory', 'Brand', 'SOs', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
                       ))}
                     </tr>
@@ -231,7 +232,7 @@ const DealerManagement: React.FC = () => {
                         <td className="px-4 py-3">{d.city}</td>
                         <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
                         <td className="px-4 py-3 font-medium text-xs text-primary">{d.brand || '—'}</td>
-                        <td className="px-4 py-3 text-xs">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</td>
+                        <td className="px-4 py-3 text-xs max-w-[150px] truncate" title={d.assignedSoEmails?.join(', ')}>{d.assignedSoEmails?.map(email => email.split('@')[0]).join(', ') || 'Unknown'}</td>
                         <td className="px-4 py-3 text-xs">{d.distributorName || '—'}</td>
                         <td className="px-4 py-3">₹{d.creditLimit.toLocaleString()}</td>
                         <td className="px-4 py-3">₹{d.outstanding.toLocaleString()}</td>
@@ -294,14 +295,29 @@ const DealerManagement: React.FC = () => {
                 <Label>City *</Label>
                 <Input value={form.city} onChange={e => updateForm('city', e.target.value)} />
               </div>
-              <div className="space-y-2">
-                <Label>Assigned SO *</Label>
-                <Select value={form.assignedSoEmail} onValueChange={v => updateForm('assignedSoEmail', v)}>
-                  <SelectTrigger><SelectValue placeholder="Select SO" /></SelectTrigger>
-                  <SelectContent>
-                    {salesUsers.filter(u => u.email).map(u => <SelectItem key={u.email} value={u.email}>{u.name} ({u.email})</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2 col-span-1 sm:col-span-2">
+                <Label>Assigned SOs *</Label>
+                <div className="flex flex-col gap-2 max-h-40 overflow-y-auto border p-3 rounded-md">
+                  {salesUsers.filter(u => u.email).map(u => (
+                    <div key={u.email} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`so-${u.email}`}
+                        checked={(form.assignedSoEmails || []).includes(u.email)}
+                        onCheckedChange={(checked) => {
+                          const current = form.assignedSoEmails || [];
+                          if (checked) {
+                            updateForm('assignedSoEmails', [...current, u.email]);
+                          } else {
+                            updateForm('assignedSoEmails', current.filter(e => e !== u.email));
+                          }
+                        }}
+                      />
+                      <label htmlFor={`so-${u.email}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                        {u.name} ({u.email})
+                      </label>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

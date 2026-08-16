@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Search, Plus, Edit, Trash2, BookOpen, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -16,7 +17,7 @@ import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
 
 const PAGE_SIZE = 25;
 
-const emptyDist: Distributor = { distributorCode: '', distributorName: '', area: '', assignedSoEmail: '', creditLimit: 0, outstanding: 0, active: true, territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '', brand: '' };
+const emptyDist: Distributor = { distributorCode: '', distributorName: '', area: '', assignedSoEmails: [], creditLimit: 0, outstanding: 0, active: true, territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '', brand: '' };
 
 const DistributorManagement: React.FC = () => {
   const { users, addDistributor, updateDistributor, deleteDistributor } = useData();
@@ -109,8 +110,8 @@ const DistributorManagement: React.FC = () => {
   const openEdit = (d: Distributor) => { setEditing(d); setForm({ ...d }); setDialogOpen(true); };
 
   const handleSave = async () => {
-    if (!form.distributorName || !form.area || !form.assignedSoEmail) {
-      toast({ title: 'Missing Fields', description: 'Fill all required fields.', variant: 'destructive' }); return;
+    if (!form.distributorName || !form.area || !form.assignedSoEmails || form.assignedSoEmails.length === 0) {
+      toast({ title: 'Missing Fields', description: 'Fill all required fields, including at least one Sales Officer.', variant: 'destructive' }); return;
     }
     try {
       if (editing) {
@@ -177,7 +178,7 @@ const DistributorManagement: React.FC = () => {
                   <div className="grid grid-cols-2 gap-2 text-xs mt-3">
                     <div><span className="text-muted-foreground">Credit:</span> ₹{d.creditLimit.toLocaleString()}</div>
                     <div><span className="text-muted-foreground">Outstanding:</span> ₹{d.outstanding.toLocaleString()}</div>
-                    <div><span className="text-muted-foreground">SO:</span> {d.assignedSoEmail?.split('@')[0] || 'Unknown'}</div>
+                    <div className="col-span-2"><span className="text-muted-foreground">SOs:</span> {d.assignedSoEmails?.map(email => email.split('@')[0]).join(', ') || 'Unknown'}</div>
                     <div><span className="text-muted-foreground">Brand:</span> {d.brand || '—'}</div>
                   </div>
                   {can('manage_customers') && (
@@ -197,7 +198,7 @@ const DistributorManagement: React.FC = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    {['Code', 'Name', 'Area', 'Territory', 'Brand', 'SO', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
+                    {['Code', 'Name', 'Area', 'Territory', 'Brand', 'SOs', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
                     ))}
                   </tr>
@@ -210,7 +211,7 @@ const DistributorManagement: React.FC = () => {
                       <td className="px-4 py-3">{d.area}</td>
                       <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
                       <td className="px-4 py-3 font-medium text-xs text-primary">{d.brand || '—'}</td>
-                      <td className="px-4 py-3 text-xs">{d.assignedSoEmail?.split('@')[0] || 'Unknown'}</td>
+                      <td className="px-4 py-3 text-xs max-w-[150px] truncate" title={d.assignedSoEmails?.join(', ')}>{d.assignedSoEmails?.map(email => email.split('@')[0]).join(', ') || 'Unknown'}</td>
                       <td className="px-4 py-3">₹{d.creditLimit.toLocaleString()}</td>
                       <td className="px-4 py-3">₹{d.outstanding.toLocaleString()}</td>
                       <td className="px-4 py-3"><Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">{d.active ? 'Active' : 'Blocked'}</Badge></td>
@@ -256,13 +257,31 @@ const DistributorManagement: React.FC = () => {
               <div className="space-y-2"><Label>Distributor Code</Label><Input value={form.distributorCode || ''} onChange={e => uf('distributorCode', e.target.value)} disabled={!!editing} /></div>
               <div className="space-y-2"><Label>Name *</Label><Input value={form.distributorName} onChange={e => uf('distributorName', e.target.value)} /></div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2"><Label>Area *</Label><Input value={form.area} onChange={e => uf('area', e.target.value)} /></div>
-              <div className="space-y-2"><Label>Assigned SO *</Label>
-                <Select value={form.assignedSoEmail} onValueChange={v => uf('assignedSoEmail', v)}>
-                  <SelectTrigger><SelectValue placeholder="Select SO" /></SelectTrigger>
-                  <SelectContent>{salesUsers.filter(u => u.email).map(u => <SelectItem key={u.email} value={u.email}>{u.name} ({u.email})</SelectItem>)}</SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <Label>Assigned SOs *</Label>
+                <div className="flex flex-col gap-2 max-h-40 overflow-y-auto border p-3 rounded-md">
+                  {salesUsers.filter(u => u.email).map(u => (
+                    <div key={u.email} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`dist-so-${u.email}`}
+                        checked={(form.assignedSoEmails || []).includes(u.email)}
+                        onCheckedChange={(checked) => {
+                          const current = form.assignedSoEmails || [];
+                          if (checked) {
+                            uf('assignedSoEmails', [...current, u.email]);
+                          } else {
+                            uf('assignedSoEmails', current.filter(e => e !== u.email));
+                          }
+                        }}
+                      />
+                      <label htmlFor={`dist-so-${u.email}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                        {u.name} ({u.email})
+                      </label>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

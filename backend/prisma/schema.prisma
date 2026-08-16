@@ -113,7 +113,7 @@ model Dealer {
   dealerCode      String   @unique
   dealerName      String
   city            String
-  assignedSoEmail String
+  assignedSoEmails String[]
   distributorName String?
   brand           String?
   creditLimit     Float    @default(0)
@@ -131,7 +131,7 @@ model Distributor {
   id              String   @id @default(cuid())
   distributorName String   @unique
   area            String
-  assignedSoEmail String
+  assignedSoEmails String[]
   brand           String?
   creditLimit     Float    @default(0)
   outstanding     Float    @default(0)

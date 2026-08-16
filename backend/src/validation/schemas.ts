@@ -52,7 +52,7 @@ export const dealerSchema = z.object({
   dealerCode: z.string().min(2),
   dealerName: z.string().min(2),
   city: z.string(),
-  assignedSoEmail: z.string().email(),
+  assignedSoEmails: z.array(z.string().email()),
   distributorName: z.string().optional().nullable(),
   brand: z.string().optional().nullable(),
   creditLimit: z.number().min(0).optional(),
