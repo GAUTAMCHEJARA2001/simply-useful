@@ -365,7 +365,11 @@ class ProductSerializer(serializers.ModelSerializer):
 class DealerSerializer(serializers.ModelSerializer):
     dealerCode = serializers.CharField(source='dealercode')
     dealerName = serializers.CharField(source='dealername')
-    assignedSoEmail = serializers.CharField(source='assignedsoemail')
+    assignedSoEmail = serializers.CharField(source='assignedsoemail', required=False, allow_blank=True, allow_null=True)
+    assignedSoEmails = serializers.ListField(
+        child=serializers.CharField(), source='assignedsoemails', required=False, allow_empty=True, allow_null=True
+    )
+    brand = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     distributorName = serializers.CharField(source='distributorname', required=False, allow_blank=True, allow_null=True)
     creditLimit = serializers.FloatField(source='creditlimit', default=0.0)
     companyId = serializers.CharField(source='companyid_id')
@@ -382,7 +386,7 @@ class DealerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dealer
         fields = [
-            'id', 'dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'distributorName',
+            'id', 'dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'assignedSoEmails', 'brand', 'distributorName',
             'creditLimit', 'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
             'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId'
         ]
@@ -399,8 +403,13 @@ class DealerSerializer(serializers.ModelSerializer):
 
 
 class DistributorSerializer(serializers.ModelSerializer):
+    distributorCode = serializers.CharField(source='distributorcode', required=False, allow_blank=True, allow_null=True)
     distributorName = serializers.CharField(source='distributorname')
-    assignedSoEmail = serializers.CharField(source='assignedsoemail')
+    assignedSoEmail = serializers.CharField(source='assignedsoemail', required=False, allow_blank=True, allow_null=True)
+    assignedSoEmails = serializers.ListField(
+        child=serializers.CharField(), source='assignedsoemails', required=False, allow_empty=True, allow_null=True
+    )
+    brand = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     creditLimit = serializers.FloatField(source='creditlimit', default=0.0)
     companyId = serializers.CharField(source='companyid_id')
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)

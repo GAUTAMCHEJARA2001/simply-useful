@@ -6,6 +6,7 @@
 #   * Remove `` lines if you wish to allow Django to create, modify, and delete the table
 # Feel free to rename the models, but don't rename db_table values or field names.
 from django.db import models
+from django.contrib.postgres.fields import ArrayField
 from django.utils import timezone
 from decimal import Decimal
 from core.models import Company, User, Warehouse, Userwarehouseaccess
@@ -65,7 +66,9 @@ class Dealer(models.Model):
     dealercode = models.TextField(db_column='dealerCode')  # Field name made lowercase.
     dealername = models.TextField(db_column='dealerName')  # Field name made lowercase.
     city = models.TextField()
-    assignedsoemail = models.TextField(db_column='assignedSoEmail')  # Field name made lowercase.
+    assignedsoemail = models.TextField(db_column='assignedSoEmail', blank=True, null=True)  # Field name made lowercase.
+    assignedsoemails = ArrayField(models.TextField(), db_column='assignedSoEmails', blank=True, null=True, default=list)
+    brand = models.TextField(blank=True, null=True)
     distributorname = models.TextField(db_column='distributorName', blank=True, null=True)  # Field name made lowercase.
     creditlimit = models.DecimalField(db_column='creditLimit', max_digits=14, decimal_places=2, default=Decimal('0.00'))  # Field name made lowercase.
     outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
@@ -108,7 +111,9 @@ class Distributor(models.Model):
     distributorcode = models.TextField(db_column='distributorCode', unique=True, null=True, blank=True)
     distributorname = models.TextField(db_column='distributorName')  # Field name made lowercase.
     area = models.TextField()
-    assignedsoemail = models.TextField(db_column='assignedSoEmail')  # Field name made lowercase.
+    assignedsoemail = models.TextField(db_column='assignedSoEmail', blank=True, null=True)  # Field name made lowercase.
+    assignedsoemails = ArrayField(models.TextField(), db_column='assignedSoEmails', blank=True, null=True, default=list)
+    brand = models.TextField(blank=True, null=True)
     creditlimit = models.DecimalField(db_column='creditLimit', max_digits=14, decimal_places=2, default=Decimal('0.00'))  # Field name made lowercase.
     outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     active = models.BooleanField()
