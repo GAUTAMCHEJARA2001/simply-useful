@@ -97,7 +97,8 @@ const SOMapping: React.FC = () => {
   const [filterType, setFilterType] = useState<'all' | 'dealer' | 'distributor'>('all');
   const [filterBrand, setFilterBrand] = useState('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkSo, setBulkSo] = useState('');
+  const [bulkSos, setBulkSos] = useState<string[]>([]);
+  const [bulkSoSearch, setBulkSoSearch] = useState('');
   const [bulkAction, setBulkAction] = useState<'add' | 'remove'>('add');
   const [saving, setSaving] = useState<Set<string>>(new Set());
 
@@ -197,22 +198,26 @@ const SOMapping: React.FC = () => {
 
   // Bulk reassign
   const handleBulkApply = async () => {
-    if (!bulkSo || selected.size === 0) {
-      toast({ title: 'Select rows and an SO first', variant: 'destructive' });
+    if (bulkSos.length === 0 || selected.size === 0) {
+      toast({ title: 'Select rows and at least one SO first', variant: 'destructive' });
       return;
     }
     const targets = filteredRows.filter(r => selected.has(r.id));
     for (const row of targets) {
       const current = new Set(row.currentSoEmails);
-      if (bulkAction === 'add') {
-        current.add(bulkSo);
-      } else {
-        current.delete(bulkSo);
+      for (const so of bulkSos) {
+        if (bulkAction === 'add') {
+          if (so === 'none') current.clear();
+          else current.add(so);
+        } else {
+          if (so === 'none') current.clear();
+          else current.delete(so);
+        }
       }
       await handleRowChange(row, Array.from(current));
     }
     setSelected(new Set());
-    setBulkSo('');
+    setBulkSos([]);
   };
 
   const toggleSelect = (id: string) =>
@@ -373,22 +378,61 @@ const SOMapping: React.FC = () => {
                 <SelectItem value="remove">Remove SO</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={bulkSo} onValueChange={setBulkSo}>
-              <SelectTrigger className="h-7 w-40 text-xs border-border/60 bg-transparent">
-                <SelectValue placeholder="Pick SO..." />
-              </SelectTrigger>
-              <SelectContent>
-                {salesUsers.map(so => (
-                  <SelectItem key={so.email} value={so.email} className="text-xs">
-                    {so.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="h-7 text-xs w-[180px] justify-between font-normal text-left bg-white border-muted">
+                  <span className="truncate">
+                    {bulkSos.length > 0 
+                      ? `${bulkSos.length} selected`
+                      : "Select SOs..."}
+                  </span>
+                  <Plus className="w-3 h-3 opacity-50 shrink-0" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[200px] p-2" align="end">
+                <div className="mb-2 px-1">
+                  <Input 
+                    placeholder="Search SO..." 
+                    value={bulkSoSearch} 
+                    onChange={(e) => setBulkSoSearch(e.target.value)} 
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  <label className="flex items-center space-x-2 p-1 rounded hover:bg-muted cursor-pointer transition-colors border-b pb-2 mb-1">
+                    <Checkbox 
+                      checked={bulkSos.includes('none')}
+                      onCheckedChange={(checked) => {
+                        if (checked) setBulkSos(prev => [...prev, 'none']);
+                        else setBulkSos(prev => prev.filter(e => e !== 'none'));
+                      }}
+                    />
+                    <span className="text-xs font-medium">No Sales Officer</span>
+                  </label>
+                  {salesUsers
+                    .filter(so => so.name?.toLowerCase().includes(bulkSoSearch.toLowerCase()) || so.email?.toLowerCase().includes(bulkSoSearch.toLowerCase()))
+                    .map(so => (
+                    <label key={so.email} className="flex items-center space-x-2 p-1 rounded hover:bg-muted cursor-pointer transition-colors">
+                      <Checkbox 
+                        checked={bulkSos.includes(so.email)}
+                        onCheckedChange={(checked) => {
+                          if (checked) setBulkSos(prev => [...prev, so.email]);
+                          else setBulkSos(prev => prev.filter(e => e !== so.email));
+                        }}
+                      />
+                      <span className="text-xs">{so.name}</span>
+                    </label>
+                  ))}
+                  {salesUsers.filter(so => so.name?.toLowerCase().includes(bulkSoSearch.toLowerCase()) || so.email?.toLowerCase().includes(bulkSoSearch.toLowerCase())).length === 0 && (
+                    <div className="text-xs text-muted-foreground p-2 text-center">No Sales Officer found</div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button
               size="sm"
               className="h-7 text-xs px-3"
-              disabled={selected.size === 0 || !bulkSo}
+              disabled={selected.size === 0 || bulkSos.length === 0}
               onClick={handleBulkApply}
             >
               Apply
