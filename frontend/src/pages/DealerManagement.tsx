@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { apiService } from '@/api/apiService';
 import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
+import { useBrands } from '@/hooks/inventory/useBrands';
 
 const PAGE_SIZE = 25;
 
@@ -45,6 +46,8 @@ const DealerManagement: React.FC = () => {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const searchTimerRef = useRef<NodeJS.Timeout>();
   const currentSearchRef = useRef('');
+
+  const { data: brands = [] } = useBrands();
 
   const salesUsers = users.filter(u => u.role === 'SALES' && u.active);
 
@@ -375,7 +378,15 @@ const DealerManagement: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Brand</Label>
-                <Input value={form.brand || ''} onChange={e => updateForm('brand', e.target.value)} placeholder="e.g. A Brand" />
+                <Select value={form.brand || 'None'} onValueChange={v => updateForm('brand', v === 'None' ? '' : v)}>
+                  <SelectTrigger><SelectValue placeholder="Select Brand" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="None">None</SelectItem>
+                    {brands.map(b => (
+                      <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
