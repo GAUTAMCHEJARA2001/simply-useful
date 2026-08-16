@@ -38,6 +38,12 @@ export const orderRepository = {
     orderBy: { createdAt: 'desc' }
   }), []),
 
+  findBySoEmail: (soEmail: string) => safeQuery(() => prisma.order.findMany({
+    where: { soEmail },
+    include: { items: { include: { product: true } } },
+    orderBy: { createdAt: 'desc' }
+  }), []),
+
   findById: (id: string) => safeQuery(() => prisma.order.findUnique({
     where: { id },
     include: { items: { include: { product: true } } }

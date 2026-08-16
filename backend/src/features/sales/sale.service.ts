@@ -7,7 +7,10 @@ import { CreateSaleInput } from '../../validation/schemas';
  * Coordination for Orders and OrderItems.
  */
 
-export const getSales = async () => {
+export const getSales = async (user?: { email: string; role: string }) => {
+  if (user && user.role === 'SALES') {
+    return await orderRepository.findBySoEmail(user.email);
+  }
   return await orderRepository.findAll();
 };
 

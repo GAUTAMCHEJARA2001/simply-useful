@@ -5,8 +5,8 @@ import asyncHandler from '../../utils/asyncHandler';
 import { createSaleSchema } from '../../validation/schemas';
 import { sendSuccess, sendError } from '../../utils/response';
 
-export const getAll = asyncHandler(async (_req: AuthRequest, res: Response) => {
-  const sales = await saleService.getSales();
+export const getAll = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const sales = await saleService.getSales(req.user);
   return sendSuccess(res, sales, 'Sales fetched successfully');
 });
 
