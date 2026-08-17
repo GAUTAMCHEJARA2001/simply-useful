@@ -1560,7 +1560,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         full_serializer = OrderSerializer(order)
         try:
             from api.views_logs import log_activity_internal
-            log_activity_internal(user=request.user, log_type='ACTION', feature='Order & Dispatch', action=f"Created Sales Order {order.orderid} for {order.partyname} (₹{order.grandtotal})", details=data)
+            log_activity_internal(user=request.user, log_type='ACTION', feature='Order & Dispatch', action=f"Created Sales Order {order.orderid} for {order.partyname} (Rs. {float(order.grandtotal or 0):.2f})", details=data)
         except Exception:
             pass
         return send_success(full_serializer.data, 'Order created successfully', 201)
@@ -2084,7 +2084,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         expense = serializer.save()
         try:
             from api.views_logs import log_activity_internal
-            log_activity_internal(user=request.user, log_type='ACTION', feature='Expenses', action=f"Submitted Expense Claim for ₹{data.get('amount')} ({data.get('category', 'Expense')})", details=data)
+            log_activity_internal(user=request.user, log_type='ACTION', feature='Expenses', action=f"Submitted Expense Claim for Rs. {float(data.get('amount') or 0):.2f} ({data.get('category', 'Expense')})", details=data)
         except Exception:
             pass
         return send_success(serializer.data, 'Expense claim submitted', 201)
@@ -2102,7 +2102,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(expense)
         try:
             from api.views_logs import log_activity_internal
-            log_activity_internal(user=request.user, log_type='ACTION', feature='Expenses', action=f"Updated Expense Status for ₹{expense.amount} to {status_val}", details=request.data)
+            log_activity_internal(user=request.user, log_type='ACTION', feature='Expenses', action=f"Updated Expense Status for Rs. {float(expense.amount or 0):.2f} to {status_val}", details=request.data)
         except Exception:
             pass
         return send_success(serializer.data, 'Expense status updated successfully')

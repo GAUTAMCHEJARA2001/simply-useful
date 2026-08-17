@@ -370,7 +370,7 @@ def import_busy_ledger(request):
             if not val:
                 return 0.0
             try:
-                return float(str(val).replace(',', '').replace(' ', '').replace('₹', '').strip())
+                return float(str(val).replace(',', '').replace(' ', '').replace('Rs.', '').replace('₹', '').strip())
             except:
                 return 0.0
 
@@ -443,7 +443,7 @@ def import_busy_ledger(request):
 
         return Response({
             'success': True,
-            'message': f'Successfully imported {len(bulk_entries)} ledger entries for {party.name}. Updated outstanding balance to ₹{total_bal:,.2f}.'
+            'message': f'Successfully imported {len(bulk_entries)} ledger entries for {party.name}. Updated outstanding balance to Rs. {total_bal:,.2f}.'
         })
     except Exception as e:
         import traceback
