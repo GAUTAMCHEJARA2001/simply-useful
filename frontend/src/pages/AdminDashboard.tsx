@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Users, ShoppingCart, TrendingUp, CheckCircle, XCircle, Clock, Truck, Star, Warehouse, ClipboardList } from 'lucide-react';
+import { Users, ShoppingCart, TrendingUp, CheckCircle, XCircle, Clock, Truck, Star, Warehouse, ClipboardList, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { motion } from 'framer-motion';
@@ -33,7 +33,7 @@ const statusStyles: Record<string, string> = {
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { orders, dealers, users, warehouses, updateOrderStatus, updateOrderItems } = useData();
+  const { orders, dealers, products, users, warehouses, updateOrderStatus, updateOrderItems } = useData();
   const { toast } = useToast();
   const [broadcastText, setBroadcastText] = useState('');
   const [targetRole, setTargetRole] = useState('ALL');
@@ -136,15 +136,15 @@ const AdminDashboard: React.FC = () => {
   };
   const pendingOrders = fyOrders.filter(o => o.status === 'Pending');
   const totalDealers = dealers.filter(d => d.active).length;
-  const totalRevenue = dashboardData?.totalSalesOverall || 0;
+  const totalRevenue = fyOrders.reduce((sum, o) => sum + (o.grandTotal ?? o.grand_total ?? 0), 0);
   const formattedRevenue = totalRevenue >= 100000 ? `₹${(totalRevenue / 100000).toFixed(2)}L` : `₹${(totalRevenue / 1000).toFixed(0)}K`;
   const completionRate = fyOrders.length > 0 ? Math.round((pipeline.Completed / fyOrders.length) * 100) : 0;
 
   const kpis = [
-    { label: 'Total Orders', value: dashboardData?.totalOrdersCount ?? fyOrders.length, icon: ShoppingCart, color: 'bg-primary/10 text-primary' },
+    { label: 'Total Orders', value: fyOrders.length, icon: ShoppingCart, color: 'bg-primary/10 text-primary' },
     { label: 'Active Dealers', value: dashboardData?.activeDealersCount ?? totalDealers, icon: Users, color: 'bg-success/10 text-success' },
     { label: 'Revenue', value: formattedRevenue, icon: TrendingUp, color: 'bg-accent/10 text-accent' },
-    { label: 'Total Products', value: dashboardData?.activeProductsCount ?? 0, icon: Warehouse, color: 'bg-purple-500/10 text-purple-600' },
+    { label: 'Total Products', value: dashboardData?.activeProductsCount ?? products.length, icon: Warehouse, color: 'bg-purple-500/10 text-purple-600' },
   ];
 
   const pipelineItems = [
@@ -191,6 +191,98 @@ const AdminDashboard: React.FC = () => {
       description: `${orderId} — ${partyName} has been ${confirmOrder.action.toLowerCase()}. Inventory team notified.`,
     });
     setConfirmOrder(null);
+  };
+
+  const renderPendingOrder = (o: any) => {
+    const orderId = o.orderId || o.order_id || o.id || 'Unknown ID';
+    const partyName = o.partyName || o.party_name || 'Party';
+    const soEmail = o.soEmail || o.so_email || 'SO';
+    const grandTotal = o.grandTotal ?? o.grand_total ?? 0;
+    const displayStatus = o.status || 'Pending';
+    
+    return (
+      <div key={orderId} className="group flex flex-col bg-card hover:bg-accent/5 transition-colors border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md">
+        {/* Clickable Order Details Area */}
+        <div 
+          className="p-3.5 cursor-pointer"
+          onClick={() => setViewOrder(o)}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-foreground text-xs tracking-tight">{orderId}</span>
+              <span className={`text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusStyles[displayStatus]}`}>{displayStatus}</span>
+            </div>
+            <span className="font-bold text-primary text-sm">₹{grandTotal.toLocaleString()}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-2.5 text-xs text-muted-foreground mb-2">
+            <div>
+              <p className="text-[9px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Party Name</p>
+              <p className="font-medium text-foreground truncate" title={partyName}>{partyName}</p>
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Sales Officer</p>
+              <p className="font-medium text-foreground truncate text-[10px]" title={soEmail}>{soEmail}</p>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-muted-foreground truncate" title={o.items.map((i: any) => `${i.productName || (typeof i.product === 'object' && i.product ? (i.product as any).name || (i.product as any).productName : i.product)} ×${i.qty}`).join(', ')}>
+            {o.items.map((i: any) => `${i.productName || (typeof i.product === 'object' && i.product ? (i.product as any).name || (i.product as any).productName : i.product)} ×${i.qty}`).join(' | ')}
+          </p>
+
+          {o.narration && (
+            <p className="text-[10px] text-yellow-700 bg-yellow-500/10 px-2 py-1 rounded-md mt-2 border border-yellow-500/20 truncate">
+              📝 <span className="font-medium">Narration:</span> {o.narration}
+            </p>
+          )}
+        </div>
+
+        {/* Action Bar */}
+        <div className="bg-secondary/30 p-2.5 border-t border-border flex flex-col gap-2.5 mt-auto">
+          <div className="flex flex-col gap-2 w-full sm:flex-row sm:items-center sm:w-auto">
+              {(() => {
+                const activeSO = [...salesOfficers];
+                if (soEmail && !activeSO.some(u => u.email.toLowerCase() === soEmail.toLowerCase())) {
+                  const match = (users || []).find(u => u.email.toLowerCase() === soEmail.toLowerCase());
+                  if (match) activeSO.push(match);
+                  else activeSO.push({ id: soEmail, email: soEmail, name: soEmail, role: 'SALES', active: false } as any);
+                }
+                return (
+                  <Select value={soEmail || ''} onValueChange={(val) => handleReassignSO(orderId, val)}>
+                    <SelectTrigger className="h-7.5 py-0 px-2 text-[10px] w-full sm:w-[130px] bg-background border border-border rounded-md shadow-sm">
+                      <SelectValue placeholder="Assign SO" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeSO.map(so => <SelectItem key={so.id} value={so.email} className="text-xs">{so.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                );
+              })()}
+
+              <Select
+                value={String((o as any).assignedWarehouse || o.warehouseId || o.warehouseid || '')}
+                onValueChange={(val) => handleAssignWarehouse(orderId, val)}
+              >
+                <SelectTrigger className={`h-7.5 py-0 px-2 text-[10px] w-full sm:w-[130px] bg-background border rounded-md shadow-sm ${(o as any).assignedWarehouse || o.warehouseId || o.warehouseid ? 'border-border' : 'border-destructive/60'}`}>
+                  <SelectValue placeholder="Warehouse" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map(wh => <SelectItem key={wh.id} value={String(wh.id)} className="text-xs">{wh.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full sm:flex-row sm:w-auto shrink-0">
+            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white h-9 sm:h-7.5 px-3 text-xs shadow-sm flex items-center justify-center flex-1" onClick={() => setConfirmOrder({ order: o, action: 'Approved' })}>
+              <CheckCircle className="w-4 h-4 mr-1.5" /> Approve
+            </Button>
+            <Button size="sm" variant="destructive" className="h-9 sm:h-7.5 px-3 text-xs shadow-sm flex items-center justify-center flex-1" onClick={() => setConfirmOrder({ order: o, action: 'Cancelled', action_date: new Date().toISOString().split('T')[0] })}>
+              <XCircle className="w-4 h-4 mr-1.5" /> Reject
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -266,100 +358,28 @@ const AdminDashboard: React.FC = () => {
               Orders Waiting for Approval ({pendingOrders.length})
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {pendingOrders.map(o => {
-              const orderId = o.orderId || o.order_id || o.id || 'Unknown ID';
-              const partyName = o.partyName || o.party_name || 'Party';
-              const soEmail = o.soEmail || o.so_email || 'SO';
-              const grandTotal = o.grandTotal ?? o.grand_total ?? 0;
-              const displayStatus = o.status || 'Pending';
-              
-              return (
-                <div key={orderId} className="group flex flex-col bg-card hover:bg-accent/5 transition-colors border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md">
-                  {/* Clickable Order Details Area */}
-                  <div 
-                    className="p-3.5 cursor-pointer"
-                    onClick={() => setViewOrder(o)}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-foreground text-xs tracking-tight">{orderId}</span>
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusStyles[displayStatus]}`}>{displayStatus}</span>
-                      </div>
-                      <span className="font-bold text-primary text-sm">₹{grandTotal.toLocaleString()}</span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-x-2.5 text-xs text-muted-foreground mb-2">
-                      <div>
-                        <p className="text-[9px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Party Name</p>
-                        <p className="font-medium text-foreground truncate" title={partyName}>{partyName}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Sales Officer</p>
-                        <p className="font-medium text-foreground truncate text-[10px]" title={soEmail}>{soEmail}</p>
-                      </div>
-                    </div>
-
-                    <p className="text-[10px] text-muted-foreground truncate" title={o.items.map(i => `${i.productName || (typeof i.product === 'object' && i.product ? (i.product as any).name || (i.product as any).productName : i.product)} ×${i.qty}`).join(', ')}>
-                      {o.items.map(i => `${i.productName || (typeof i.product === 'object' && i.product ? (i.product as any).name || (i.product as any).productName : i.product)} ×${i.qty}`).join(' | ')}
-                    </p>
-
-                    {o.narration && (
-                      <p className="text-[10px] text-yellow-700 bg-yellow-500/10 px-2 py-1 rounded-md mt-2 border border-yellow-500/20 truncate">
-                        📝 <span className="font-medium">Narration:</span> {o.narration}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Action Bar */}
-                  <div className="bg-secondary/30 p-2.5 border-t border-border flex flex-col gap-2.5 mt-auto">
-                    <div className="flex flex-col gap-2 w-full sm:flex-row sm:items-center sm:w-auto">
-                        {(() => {
-                          const activeSO = [...salesOfficers];
-                          if (soEmail && !activeSO.some(u => u.email.toLowerCase() === soEmail.toLowerCase())) {
-                            const match = (users || []).find(u => u.email.toLowerCase() === soEmail.toLowerCase());
-                            if (match) activeSO.push(match);
-                            else activeSO.push({ id: soEmail, email: soEmail, name: soEmail, role: 'SALES', active: false } as any);
-                          }
-                          return (
-                            <Select value={soEmail || ''} onValueChange={(val) => handleReassignSO(orderId, val)}>
-                              <SelectTrigger className="h-7.5 py-0 px-2 text-[10px] w-full sm:w-[130px] bg-background border border-border rounded-md shadow-sm">
-                                <SelectValue placeholder="Assign SO" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {activeSO.map(so => <SelectItem key={so.id} value={so.email} className="text-xs">{so.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          );
-                        })()}
-
-                        <Select
-                          value={String((o as any).assignedWarehouse || '')}
-                          onValueChange={(val) => handleAssignWarehouse(orderId, val)}
-                        >
-                          <SelectTrigger className="h-7.5 py-0 px-2 text-[10px] w-full sm:w-[130px] bg-background border border-border rounded-md shadow-sm">
-                            <SelectValue placeholder="Warehouse" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {warehouses.map(wh => <SelectItem key={wh.id} value={String(wh.id)} className="text-xs">{wh.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div className="flex flex-col gap-2 w-full sm:flex-row sm:w-auto shrink-0">
-                      <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white h-9 sm:h-7.5 px-3 text-xs shadow-sm flex items-center justify-center flex-1" onClick={() => setConfirmOrder({ order: o, action: 'Approved' })}>
-                        <CheckCircle className="w-4 h-4 mr-1.5" /> Approve
-                      </Button>
-                      <Button size="sm" variant="destructive" className="h-9 sm:h-7.5 px-3 text-xs shadow-sm flex items-center justify-center flex-1" onClick={() => setConfirmOrder({ order: o, action: 'Cancelled', action_date: new Date().toISOString().split('T')[0] })}>
-                        <XCircle className="w-4 h-4 mr-1.5" /> Reject
-                      </Button>
-                    </div>
-                  </div>
+          <CardContent className="space-y-6">
+            {pendingOrders.filter(o => !((o as any).assignedWarehouse || o.warehouseId || o.warehouseid)).length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-destructive mb-3 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4" /> Warehouse Allocation Pending ({pendingOrders.filter(o => !((o as any).assignedWarehouse || o.warehouseId || o.warehouseid)).length})
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pendingOrders.filter(o => !((o as any).assignedWarehouse || o.warehouseId || o.warehouseid)).map(renderPendingOrder)}
                 </div>
-              );
-            })}
-            </div>
+              </div>
+            )}
+            
+            {pendingOrders.filter(o => (o as any).assignedWarehouse || o.warehouseId || o.warehouseid).length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-foreground/80 mb-3 flex items-center gap-1.5">
+                  <CheckCircle className="w-4 h-4 text-green-600" /> Allocated & Ready for Approval ({pendingOrders.filter(o => (o as any).assignedWarehouse || o.warehouseId || o.warehouseid).length})
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pendingOrders.filter(o => (o as any).assignedWarehouse || o.warehouseId || o.warehouseid).map(renderPendingOrder)}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
