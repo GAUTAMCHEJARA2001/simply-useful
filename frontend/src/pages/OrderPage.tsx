@@ -247,7 +247,7 @@ const OrderPage: React.FC = () => {
       grandTotal,
       partyName: selectedParty,
       distributor: selectedDistInfo?.distributorName || selectedParty,
-      warehouseId: Number(warehouseId) || 1,
+      assignedWarehouse: Number(warehouseId) || 1,
       soEmail,
     };
 
@@ -268,7 +268,7 @@ const OrderPage: React.FC = () => {
           status: 'Pending',
           totalAmount: grandTotal,
           grandTotal: grandTotal,
-          warehouseId: Number(warehouseId) || 1, 
+          assignedWarehouse: Number(warehouseId) || 1, 
         };
         await addOrder(newOrder as any);
         toast({ title: 'Order Placed Successfully!', description: `Order ${newOrder.orderId} for ${selectedParty}` });

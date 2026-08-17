@@ -34,7 +34,7 @@ const extractDispatchDetails = (narration: string) => {
 
 const MyOrders: React.FC = () => {
   const { user } = useAuth();
-  const { orders, products, users, updateOrderItems } = useData();
+  const { orders, products, users, warehouses, updateOrderItems } = useData();
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
   const { filterBySelectedFY, fyLabel } = useFinancialYear();
@@ -50,6 +50,22 @@ const MyOrders: React.FC = () => {
       toast({
         title: 'Sales Officer Reassigned',
         description: `Order ${orderId} is now assigned to ${soEmail}.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Reassignment Failed',
+        description: err.message || 'An error occurred.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleReassignWarehouse = async (orderId: string, warehouseId: string) => {
+    try {
+      await updateOrderItems(orderId, { assignedWarehouse: Number(warehouseId) });
+      toast({
+        title: 'Warehouse Reassigned',
+        description: `Order ${orderId} is now assigned to the selected warehouse.`,
       });
     } catch (err: any) {
       toast({
@@ -165,7 +181,7 @@ const MyOrders: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
-          <h1 className="page-header">My Orders</h1>
+          <h1 className="page-header">{isAdmin ? 'Order List' : 'My Orders'}</h1>
           <p className="page-subheader">
             {showAllTime
               ? `${totalPlacedCount} orders (All Time)`
@@ -300,6 +316,26 @@ const MyOrders: React.FC = () => {
                           </div>
                         ) : (
                           <span>SO: {order.soEmail || 'Unassigned'}</span>
+                        )}
+                        {isAdmin && warehouses && warehouses.length > 0 && (
+                          <div className="inline-flex items-center gap-1.5 ml-2 border-l border-border pl-2">
+                            <span className="font-semibold text-foreground/80 text-[11px]">WH:</span>
+                            <Select 
+                              value={String(order.assignedWarehouse || order.warehouseId || order.warehouseid || '')} 
+                              onValueChange={(val) => handleReassignWarehouse(displayId, val)}
+                            >
+                              <SelectTrigger className="h-7 py-0 px-2 text-[11px] min-w-[120px] bg-background border border-border/85 rounded-md">
+                                <SelectValue placeholder="Select WH" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {warehouses.map((wh: any) => (
+                                  <SelectItem key={wh.id} value={String(wh.id)} className="text-xs">
+                                    {wh.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         )}
                       </div>
                     </div>

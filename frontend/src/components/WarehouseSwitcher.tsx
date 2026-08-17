@@ -38,12 +38,6 @@ export const WarehouseSwitcher: React.FC = () => {
     return null;
   }
 
-  // Only show on inventory management pages
-  const allowedPaths = ['/inventory'];
-  if (!allowedPaths.some(p => location.pathname.startsWith(p))) {
-    return null;
-  }
-
   const handleWarehouseChange = async (value: string) => {
     if (switching) return;
     setSwitching(true);

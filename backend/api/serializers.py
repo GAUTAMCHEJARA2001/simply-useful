@@ -425,7 +425,7 @@ class DistributorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Distributor
         fields = [
-            'id', 'distributorName', 'area', 'assignedSoEmail', 'creditLimit',
+            'id', 'distributorCode', 'distributorName', 'area', 'assignedSoEmail', 'assignedSoEmails', 'brand', 'creditLimit',
             'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
             'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId'
         ]

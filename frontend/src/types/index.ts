@@ -149,6 +149,8 @@ export interface Order {
   grandTotal: number;
   dispatchDate?: string;
   assignedWarehouse?: string | number | null;
+  warehouseId?: string | number | null;
+  warehouseid?: string | number | null;
   returnDate?: string;
   cancelledDate?: string;
   order_id?: string;
