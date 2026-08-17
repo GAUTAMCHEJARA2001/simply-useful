@@ -66,7 +66,6 @@ class Dealer(models.Model):
     dealercode = models.TextField(db_column='dealerCode')  # Field name made lowercase.
     dealername = models.TextField(db_column='dealerName')  # Field name made lowercase.
     city = models.TextField()
-    assignedsoemail = models.TextField(db_column='assignedSoEmail', blank=True, null=True)  # Field name made lowercase.
     assignedsoemails = ArrayField(models.TextField(), db_column='assignedSoEmails', blank=True, null=True, default=list)
     brand = models.TextField(blank=True, null=True)
     distributorname = models.TextField(db_column='distributorName', blank=True, null=True)  # Field name made lowercase.
@@ -102,7 +101,6 @@ class Dealer(models.Model):
         ]
         indexes = [
             models.Index(fields=['warehouseid', 'active'], name='idx_dealer_wh_active'),
-            models.Index(fields=['assignedsoemail', 'active'], name='idx_dealer_so_active'),
         ]
 
 
@@ -111,7 +109,6 @@ class Distributor(models.Model):
     distributorcode = models.TextField(db_column='distributorCode', unique=True, null=True, blank=True)
     distributorname = models.TextField(db_column='distributorName')  # Field name made lowercase.
     area = models.TextField()
-    assignedsoemail = models.TextField(db_column='assignedSoEmail', blank=True, null=True)  # Field name made lowercase.
     assignedsoemails = ArrayField(models.TextField(), db_column='assignedSoEmails', blank=True, null=True, default=list)
     brand = models.TextField(blank=True, null=True)
     creditlimit = models.DecimalField(db_column='creditLimit', max_digits=14, decimal_places=2, default=Decimal('0.00'))  # Field name made lowercase.
@@ -136,7 +133,6 @@ class Distributor(models.Model):
         ]
         indexes = [
             models.Index(fields=['warehouseid', 'active'], name='idx_distributor_wh_active'),
-            models.Index(fields=['assignedsoemail', 'active'], name='idx_distributor_so_active'),
         ]
 
 

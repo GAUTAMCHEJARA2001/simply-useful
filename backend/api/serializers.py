@@ -365,7 +365,7 @@ class ProductSerializer(serializers.ModelSerializer):
 class DealerSerializer(serializers.ModelSerializer):
     dealerCode = serializers.CharField(source='dealercode')
     dealerName = serializers.CharField(source='dealername')
-    assignedSoEmail = serializers.CharField(source='assignedsoemail', required=False, allow_blank=True, allow_null=True)
+
     assignedSoEmails = serializers.ListField(
         child=serializers.CharField(), source='assignedsoemails', required=False, allow_empty=True, allow_null=True
     )
@@ -405,7 +405,7 @@ class DealerSerializer(serializers.ModelSerializer):
 class DistributorSerializer(serializers.ModelSerializer):
     distributorCode = serializers.CharField(source='distributorcode', required=False, allow_blank=True, allow_null=True)
     distributorName = serializers.CharField(source='distributorname')
-    assignedSoEmail = serializers.CharField(source='assignedsoemail', required=False, allow_blank=True, allow_null=True)
+
     assignedSoEmails = serializers.ListField(
         child=serializers.CharField(), source='assignedsoemails', required=False, allow_empty=True, allow_null=True
     )
