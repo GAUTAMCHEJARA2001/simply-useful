@@ -109,6 +109,14 @@ export const OrderTemplate: React.FC<OrderTemplateProps> = ({
       </View>
     </View>
 
+    {/* Narration Section */}
+    {data.narration && (
+      <View style={{ marginTop: 20, padding: 10, backgroundColor: '#f9fafb', borderRadius: 4, border: '1pt solid #e5e7eb' }}>
+        <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#374151', marginBottom: 4 }}>Narration / Notes:</Text>
+        <Text style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>{data.narration}</Text>
+      </View>
+    )}
+
     {/* Declaration */}
     <View style={{ marginTop: 40, fontSize: 8, color: '#777' }}>
       <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Terms & Conditions:</Text>

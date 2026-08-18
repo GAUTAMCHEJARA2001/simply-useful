@@ -759,6 +759,7 @@ class Estimate(models.Model):
     gst = models.CharField(max_length=50, blank=True, null=True)
     contact = models.CharField(max_length=50, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
+    narration = models.TextField(blank=True, null=True)
     grandtotal = models.FloatField(db_column='grandTotal', default=0.0)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)

@@ -1296,7 +1296,7 @@ class EstimateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Estimate
         fields = [
-            'id', 'estimateId', 'date', 'partyName', 'address', 'gst', 'contact', 'email', 'grandTotal',
+            'id', 'estimateId', 'date', 'partyName', 'address', 'gst', 'contact', 'email', 'narration', 'grandTotal',
             'companyId', 'createdAt', 'updatedAt', 'items'
         ]
         

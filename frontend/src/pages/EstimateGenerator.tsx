@@ -26,6 +26,7 @@ const EstimateGenerator: React.FC = () => {
   const [gst, setGst] = useState('');
   const [contact, setContact] = useState('');
   const [email, setEmail] = useState('');
+  const [narration, setNarration] = useState('');
   const [estimateId, setEstimateId] = useState('');
   const [dbId, setDbId] = useState('');
   
@@ -55,6 +56,7 @@ const EstimateGenerator: React.FC = () => {
         setGst(est.gst || '');
         setContact(est.contact || '');
         setEmail(est.email || '');
+        setNarration(est.narration || '');
         
         if (est.items && est.items.length > 0) {
           setItems(est.items.map((i: any) => ({
@@ -114,6 +116,7 @@ const EstimateGenerator: React.FC = () => {
       order_id: currentEstId,
       date: new Date().toISOString(),
       partyName: partyName || 'Walk-in Customer',
+      narration: narration,
       partyDetails: {
         name: partyName || 'Walk-in Customer',
         address: address,
@@ -150,6 +153,7 @@ const EstimateGenerator: React.FC = () => {
         gst,
         contact,
         email,
+        narration,
         grandTotal,
         items: items.filter(i => i.product && (i.qty || 0) > 0).map(i => ({
           product: typeof i.product === 'object' ? (i.product as any)?.id : i.product,
@@ -220,6 +224,10 @@ const EstimateGenerator: React.FC = () => {
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold">Email Address</Label>
             <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" />
+          </div>
+          <div className="space-y-1.5 md:col-span-2">
+            <Label className="text-xs font-semibold">General Narration / Notes</Label>
+            <Textarea value={narration} onChange={e => setNarration(e.target.value)} placeholder="Add any extra notes here..." rows={2} />
           </div>
         </CardContent>
       </Card>
