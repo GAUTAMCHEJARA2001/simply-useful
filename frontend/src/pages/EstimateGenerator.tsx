@@ -270,7 +270,7 @@ const EstimateGenerator: React.FC = () => {
                         <CommandList>
                           <CommandEmpty>No product found.</CommandEmpty>
                           <CommandGroup>
-                            {products.filter(p => p.active).map((p) => (
+                            {products.map((p) => (
                               <CommandItem
                                 key={p.id}
                                 value={p.name}

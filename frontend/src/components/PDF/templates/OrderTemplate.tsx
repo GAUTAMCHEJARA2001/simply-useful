@@ -27,12 +27,13 @@ interface OrderTemplateProps {
   };
   items: OrderItem[];
   totals: {
-    subtotal: number;
-    tax?: number;
-    discount?: number;
-    grandTotal: number;
+    subtotal: number | string;
+    tax: number | string;
+    grandTotal: number | string;
   };
   company: any;
+  theme?: 'zoho' | 'modern' | 'classic' | 'minimalist';
+  narration?: string;
 }
 
 export const OrderTemplate: React.FC<OrderTemplateProps> = ({
@@ -43,7 +44,9 @@ export const OrderTemplate: React.FC<OrderTemplateProps> = ({
   party,
   items,
   totals,
-  company
+  company,
+  theme = 'zoho',
+  narration
 }) => (
   <BaseLayout
     title={type}
@@ -110,10 +113,10 @@ export const OrderTemplate: React.FC<OrderTemplateProps> = ({
     </View>
 
     {/* Narration Section */}
-    {data.narration && (
+    {narration && (
       <View style={{ marginTop: 20, padding: 10, backgroundColor: '#f9fafb', borderRadius: 4, border: '1pt solid #e5e7eb' }}>
         <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#374151', marginBottom: 4 }}>Narration / Notes:</Text>
-        <Text style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>{data.narration}</Text>
+        <Text style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>{narration}</Text>
       </View>
     )}
 
