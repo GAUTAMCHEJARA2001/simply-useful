@@ -453,8 +453,8 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                         const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name);
                         const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
                         return (
-                          <button id="recipe-finished-item-${idx}" key={p.id} onClick={() => { setForm({ ...form, productId: p.id, productName: p.name, productCode: p.productCode || p.sku }); setProductSearch(''); setShowFinishedDropdown(false); }}
-                               className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === rawSelectedIndex ? 'bg-muted' : ''}`}>
+                          <button id={`recipe-finished-item-${idx}`} key={p.id} onClick={() => { setForm({ ...form, productId: p.id, productName: p.name, productCode: p.productCode || p.sku }); setProductSearch(''); setShowFinishedDropdown(false); }}
+                               className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === finishedSelectedIndex ? 'bg-muted' : ''}`}>
                               <div className="truncate flex items-center gap-1.5">
                                 <span className="font-medium text-foreground">{p.name}</span>
                                 <span className="text-[11px] text-muted-foreground">({p.productCode || p.sku})</span>
@@ -550,7 +550,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                               const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name);
                               const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
                               return (
-                                  <button id="recipe-raw-item-${idx}"  key={p.id} onClick={() => addIngredient(p)}
+                                  <button id={`recipe-raw-item-${idx}`}  key={p.id} onClick={() => addIngredient(p)}
                                       className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === rawSelectedIndex ? 'bg-muted' : ''}`}>
                                       <div className="truncate flex items-center gap-1.5">
                                       <span className="font-medium text-foreground">{p.name}</span>

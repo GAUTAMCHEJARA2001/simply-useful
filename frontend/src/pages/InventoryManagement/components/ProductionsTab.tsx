@@ -555,9 +555,10 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                       const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
                       return (
                         <button 
+                          id={`prod-finished-item-${idx}`}
                           key={p.id} 
                           onClick={() => selectFinishedProduct(p)}
-                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === rawSelectedIndex ? 'bg-muted' : ''}`}
+                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === finishedSelectedIndex ? 'bg-muted' : ''}`}
                         >
                           <div className="truncate flex items-center gap-1.5">
                             <span className="font-medium text-foreground">{p.name}</span>
@@ -688,7 +689,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                         const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : ''));
                         const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
                         return (
-                          <button id="prod-raw-item-${idx}"  key={p.id} onClick={() => addIngredient(p)}
+                          <button id={`prod-raw-item-${idx}`}  key={p.id} onClick={() => addIngredient(p)}
                               className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === rawSelectedIndex ? 'bg-muted' : ''}`}>
                               <div className="truncate flex items-center gap-1.5">
                                 <span className="font-medium text-foreground">{p.name}</span>
