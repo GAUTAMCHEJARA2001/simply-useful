@@ -44,6 +44,7 @@ const OrderPage: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [highlightedParty, setHighlightedParty] = useState('');
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
+  const [openProducts, setOpenProducts] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (!id && user?.email) {
@@ -479,7 +480,7 @@ const OrderPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5 sm:col-span-2 flex flex-col">
                   <Label className="text-xs">Product</Label>
-                  <Popover>
+                  <Popover open={openProducts[idx] || false} onOpenChange={(open) => setOpenProducts(prev => ({...prev, [idx]: open}))}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" role="combobox" className="w-full justify-between font-normal text-left h-11 px-3">
                         {item.product ? (
@@ -505,6 +506,7 @@ const OrderPage: React.FC = () => {
                                   value={`${p.productName} ${p.brand?.name || ''} ${category} - ${p.productCode || p.product_code || ''} - ${p.id}`}
                                   onSelect={() => {
                                     updateItem(idx, 'product', p.id!);
+                                    setOpenProducts(prev => ({...prev, [idx]: false}));
                                   }}
                                 >
                                   <Check className={`mr-2 h-4 w-4 shrink-0 ${item.product === p.id ? "opacity-100" : "opacity-0"}`} />

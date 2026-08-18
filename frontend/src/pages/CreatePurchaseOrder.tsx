@@ -41,6 +41,7 @@ const CreatePurchaseOrder: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submittedPO, setSubmittedPO] = useState<any>(null);
+  const [openProducts, setOpenProducts] = useState<Record<number, boolean>>({});
 
   // Form State
   const [supplierId, setSupplierId] = useState('');
@@ -301,7 +302,7 @@ const CreatePurchaseOrder: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                     <div className="md:col-span-5 space-y-1.5">
                       <Label className="text-[10px] uppercase font-bold text-muted-foreground">Product</Label>
-                      <Popover>
+                      <Popover open={openProducts[idx] || false} onOpenChange={(open) => setOpenProducts(prev => ({...prev, [idx]: open}))}>
                         <PopoverTrigger asChild>
                           <Button variant="outline" role="combobox" className="w-full justify-between h-10 px-3 font-normal">
                             {item.product_name ? <span className="truncate">{item.product_name}</span> : "Select Product..."}
@@ -319,7 +320,10 @@ const CreatePurchaseOrder: React.FC = () => {
                                   const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name);
                                   const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
                                   return (
-                                    <CommandItem key={p.id} value={`${p.name} ${p.brand?.name || ''} ${catText} - ${p.productCode || p.product_code || ''} - ${p.id}`} onSelect={() => updateItem(idx, 'product_id', p.id)}>
+                                    <CommandItem key={p.id} value={`${p.name} ${p.brand?.name || ''} ${catText} - ${p.productCode || p.product_code || ''} - ${p.id}`} onSelect={() => {
+                                      updateItem(idx, 'product_id', p.id);
+                                      setOpenProducts(prev => ({...prev, [idx]: false}));
+                                    }}>
                                       <Check className={`mr-2 h-4 w-4 ${item.product_id === p.id ? "opacity-100" : "opacity-0"}`} />
                                       <div className="flex items-center justify-between w-full pr-1 gap-2">
                                         <div className="flex flex-col truncate">
