@@ -946,7 +946,7 @@ def bulk_import(request, entity):
                         continue
                 values = {
                     'dealername': name, 'city': row.get('city') or '',
-                    'assignedsoemail': row.get('assignedSoEmail') or row.get('assigned_so_email') or '',
+                    'assignedsoemails': row.get('assignedSoEmail') or row.get('assigned_so_email') or '',
                     'contact_person': (row.get('contactPerson') or row.get('contact_person') or '').strip(),
                     'phone': (row.get('contactNumber') or row.get('phone') or '').strip(),
                     'email': (row.get('email') or '').strip(),
@@ -1004,7 +1004,7 @@ def bulk_import(request, entity):
                 values = {
                     'distributorname': name,
                     'area': row.get('area') or '',
-                    'assignedsoemail': row.get('assignedSoEmail') or row.get('assigned_so_email') or '',
+                    'assignedsoemails': row.get('assignedSoEmail') or row.get('assigned_so_email') or '',
                     'contact_person': (row.get('contactPerson') or row.get('contact_person') or '').strip(),
                     'phone': (row.get('contactNumber') or row.get('phone') or '').strip(),
                     'email': (row.get('email') or '').strip(),
@@ -1225,7 +1225,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         user_email = getattr(self.request.user, 'email', None)
         qs = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
         if user_role == 'SALES' and user_email:
-            qs = qs.filter(assignedsoemail=user_email)
+            qs = qs.filter(assignedsoemails__icontains=user_email)
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -1237,7 +1237,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         if user_role == 'SALES' and user_email:
-            qs = qs.filter(assignedsoemail=user_email)
+            qs = qs.filter(assignedsoemails__icontains=user_email)
 
         search = request.query_params.get('search', '').strip()
         if search:
@@ -1247,7 +1247,7 @@ class DealerViewSet(viewsets.ModelViewSet):
                 Q(dealercode__icontains=search) |
                 Q(city__icontains=search) |
                 Q(territory__icontains=search) |
-                Q(assignedsoemail__icontains=search) |
+                Q(assignedsoemails__icontains=search) |
                 Q(distributorname__icontains=search)
             )
 
@@ -1351,7 +1351,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         user_email = getattr(self.request.user, 'email', None)
         qs = Distributor.objects.filter(companyid_id=company_id) if company_id else Distributor.objects.all()
         if user_role == 'SALES' and user_email:
-            qs = qs.filter(assignedsoemail=user_email)
+            qs = qs.filter(assignedsoemails__icontains=user_email)
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -1363,7 +1363,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         if user_role == 'SALES' and user_email:
-            qs = qs.filter(assignedsoemail=user_email)
+            qs = qs.filter(assignedsoemails__icontains=user_email)
 
         search = request.query_params.get('search', '').strip()
         if search:
@@ -1372,7 +1372,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
                 Q(distributorname__icontains=search) |
                 Q(area__icontains=search) |
                 Q(territory__icontains=search) |
-                Q(assignedsoemail__icontains=search)
+                Q(assignedsoemails__icontains=search)
             )
 
         page = request.query_params.get('page')
