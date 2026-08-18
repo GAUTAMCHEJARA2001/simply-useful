@@ -26,7 +26,8 @@ const EstimateList: React.FC = () => {
       if (res.data?.success === false) {
         throw new Error(res.data.message);
       }
-      setEstimates(res.data || []);
+      const data = res.data?.results || res.data || [];
+      setEstimates(Array.isArray(data) ? data : []);
     } catch (e) {
       toast({ title: 'Error', description: 'Failed to fetch estimates', variant: 'destructive' });
     } finally {
