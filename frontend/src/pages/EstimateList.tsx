@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { FileText, Pencil, Plus, Search, Trash2 } from 'lucide-react';
-import DataTable from '@/components/DataTable';
+import { DataTable } from '@/components/DataTable';
 
 const EstimateList: React.FC = () => {
   const [estimates, setEstimates] = useState<any[]>([]);
@@ -51,37 +51,21 @@ const EstimateList: React.FC = () => {
     (est.estimateId || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const columns = [
-    {
-      header: 'Date',
-      accessor: (row: any) => new Date(row.date || row.createdAt).toLocaleDateString(),
-    },
-    {
-      header: 'Estimate ID',
-      accessor: (row: any) => row.estimateId || 'N/A',
-    },
-    {
-      header: 'Party Name',
-      accessor: (row: any) => row.partyName || 'Walk-in',
-    },
-    {
-      header: 'Amount',
-      accessor: (row: any) => `₹${(row.grandTotal || 0).toLocaleString()}`,
-    },
-    {
-      header: 'Actions',
-      accessor: (row: any) => (
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => navigate(`/sales/estimate/${row.id}`)}>
-            <Pencil className="w-4 h-4 mr-1" /> Edit
-          </Button>
-          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(row.id)}>
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      ),
-    }
-  ];
+  const columns = ['Date', 'Estimate ID', 'Party Name', 'Amount', 'Actions'];
+  const rows = filteredEstimates.map(est => [
+    new Date(est.date || est.createdAt).toLocaleDateString(),
+    est.estimateId || 'N/A',
+    est.partyName || 'Walk-in',
+    `₹${(est.grandTotal || 0).toLocaleString()}`,
+    <div className="flex items-center gap-2">
+      <Button variant="outline" size="sm" onClick={() => navigate(`/sales/estimate/${est.id}`)}>
+        <Pencil className="w-4 h-4 mr-1" /> Edit
+      </Button>
+      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(est.id)}>
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </div>
+  ]);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-10 mt-6">
@@ -109,12 +93,13 @@ const EstimateList: React.FC = () => {
             </div>
           </div>
           
-          <DataTable 
-            data={filteredEstimates}
-            columns={columns}
-            loading={loading}
-            emptyMessage="No estimates found."
-          />
+          {loading ? (
+             <div className="p-10 text-center">Loading estimates...</div>
+          ) : filteredEstimates.length === 0 ? (
+             <div className="p-10 text-center text-muted-foreground">No estimates found.</div>
+          ) : (
+             <DataTable columns={columns} rows={rows} />
+          )}
         </CardContent>
       </Card>
     </div>
