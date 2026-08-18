@@ -75,6 +75,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
     return localStorage.getItem('prod_modal_raw_cat_filter') || '';
   });
   const [showFinishedDropdown, setShowFinishedDropdown] = useState<boolean>(false);
+    const [showRawDropdown, setShowRawDropdown] = useState<boolean>(false);
     const [finishedSelectedIndex, setFinishedSelectedIndex] = useState<number>(0);
     const [rawSelectedIndex, setRawSelectedIndex] = useState<number>(0);
 
@@ -96,7 +97,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       }
     }, [rawSelectedIndex, showRawDropdown]);
 
-  const [showRawDropdown, setShowRawDropdown] = useState<boolean>(false);
+  
   const finishedDropdownRef = useRef<HTMLDivElement>(null);
   const rawDropdownRef = useRef<HTMLDivElement>(null);
 

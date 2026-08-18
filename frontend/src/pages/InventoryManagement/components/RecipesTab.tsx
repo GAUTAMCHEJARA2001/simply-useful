@@ -52,8 +52,9 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
     return localStorage.getItem('recipe_modal_raw_cat_filter') || '';
   });
   const [showFinishedDropdown, setShowFinishedDropdown] = useState<boolean>(false);
+  
   const [showRawDropdown, setShowRawDropdown] = useState<boolean>(false);
-  const [finishedSelectedIndex, setFinishedSelectedIndex] = useState<number>(0);
+    const [finishedSelectedIndex, setFinishedSelectedIndex] = useState<number>(0);
   const [rawSelectedIndex, setRawSelectedIndex] = useState<number>(0);
 
     useEffect(() => {
