@@ -53,6 +53,36 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
   });
   const [showFinishedDropdown, setShowFinishedDropdown] = useState<boolean>(false);
   const [showRawDropdown, setShowRawDropdown] = useState<boolean>(false);
+  const [finishedSelectedIndex, setFinishedSelectedIndex] = useState<number>(0);
+  const [rawSelectedIndex, setRawSelectedIndex] = useState<number>(0);
+
+  const filteredFinishedProducts = useMemo(() => {
+    return products.filter(p => {
+      if (finishedCatFilter) {
+        const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
+        const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name) || '').toUpperCase();
+        const selUpper = finishedCatFilter.toUpperCase();
+        if (parentCat !== selUpper && subCat !== selUpper) { return false; }
+      }
+      if (!productSearch) return true;
+      const s = productSearch.toLowerCase().trim();
+      return ((p.name && p.name.toLowerCase().includes(s)) || (p.productCode && p.productCode.toLowerCase().includes(s)) || (p.sku && p.sku.toLowerCase().includes(s)));
+    });
+  }, [products, finishedCatFilter, productSearch]);
+
+  const filteredRawProducts = useMemo(() => {
+    return products.filter(p => {
+      if (rawCatFilter) {
+        const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
+        const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name) || '').toUpperCase();
+        const selUpper = rawCatFilter.toUpperCase();
+        if (parentCat !== selUpper && subCat !== selUpper) { return false; }
+      }
+      if (!ingSearch) return true;
+      const s = ingSearch.toLowerCase().trim();
+      return ((p.name && p.name.toLowerCase().includes(s)) || (p.productCode && p.productCode.toLowerCase().includes(s)) || (p.sku && p.sku.toLowerCase().includes(s)));
+    });
+  }, [products, rawCatFilter, ingSearch]);
 
   const handleFinishedCatFilterChange = (val: string) => {
     setFinishedCatFilter(val);
@@ -99,7 +129,6 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
         return;
     }
     
-    // In global view, new recipes are blocked (button hidden), but edits need the correct header
     const config = isGlobal && form.assignedWarehouse ? { headers: { 'X-Warehouse-ID': form.assignedWarehouse } } : {};
     
     try {
@@ -371,7 +400,25 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                   onChange={e => {
                     setProductSearch(e.target.value);
                     setShowFinishedDropdown(true);
+                    setFinishedSelectedIndex(0);
                     setForm({ ...form, productId: '', productName: '' });
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setFinishedSelectedIndex(prev => Math.min(prev + 1, filteredFinishedProducts.length - 1));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setFinishedSelectedIndex(prev => Math.max(prev - 1, 0));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (showFinishedDropdown && filteredFinishedProducts[finishedSelectedIndex]) {
+                        const p = filteredFinishedProducts[finishedSelectedIndex];
+                        setForm({ ...form, productId: p.id, productName: p.name, productCode: p.productCode || p.sku });
+                        setProductSearch('');
+                        setShowFinishedDropdown(false);
+                      }
+                    }
                   }}
                   className="w-full border border-border rounded-lg pl-9 pr-3 py-2 bg-background text-sm disabled:opacity-75 disabled:bg-muted"
                 />
@@ -382,31 +429,13 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                       <span>Select Finished Product</span>
                       <button type="button" onClick={() => { setShowFinishedDropdown(false); setProductSearch(''); }} className="hover:text-foreground font-bold">✕</button>
                     </div>
-                    {products
-                      .filter(p => {
-                        if (finishedCatFilter) {
-                          const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
-                          const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name) || '').toUpperCase();
-                          const selUpper = finishedCatFilter.toUpperCase();
-                          if (parentCat !== selUpper && subCat !== selUpper) {
-                            return false;
-                          }
-                        }
-                        if (!productSearch) return true;
-                        const s = productSearch.toLowerCase().trim();
-                        return (
-                          (p.name && p.name.toLowerCase().includes(s)) ||
-                          (p.productCode && p.productCode.toLowerCase().includes(s)) ||
-                          (p.sku && p.sku.toLowerCase().includes(s))
-                        );
-                      })
-                      .map(p => {
+                    {filteredFinishedProducts.map((p, idx) => {
                         const parentCat = p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName;
                         const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name);
                         const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
                         return (
                           <button key={p.id} onClick={() => { setForm({ ...form, productId: p.id, productName: p.name, productCode: p.productCode || p.sku }); setProductSearch(''); setShowFinishedDropdown(false); }}
-                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2">
+                               className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === finishedSelectedIndex ? 'bg-muted' : ''}`}>
                               <div className="truncate flex items-center gap-1.5">
                                 <span className="font-medium text-foreground">{p.name}</span>
                                 <span className="text-[11px] text-muted-foreground">({p.productCode || p.sku})</span>
@@ -419,23 +448,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                           </button>
                         );
                       })}
-                    {products.filter(p => {
-                      if (finishedCatFilter) {
-                        const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
-                        const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name) || '').toUpperCase();
-                        const selUpper = finishedCatFilter.toUpperCase();
-                        if (parentCat !== selUpper && subCat !== selUpper) {
-                          return false;
-                        }
-                      }
-                      if (!productSearch) return true;
-                      const s = productSearch.toLowerCase().trim();
-                      return (
-                        (p.name && p.name.toLowerCase().includes(s)) ||
-                        (p.productCode && p.productCode.toLowerCase().includes(s)) ||
-                        (p.sku && p.sku.toLowerCase().includes(s))
-                      );
-                    }).length === 0 && (
+                    {filteredFinishedProducts.length === 0 && (
                       <div className="px-4 py-3 text-xs text-muted-foreground">
                         No products found matching filters.
                       </div>
@@ -488,6 +501,22 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                     onChange={e => {
                       setIngSearch(e.target.value);
                       setShowRawDropdown(true);
+                      setRawSelectedIndex(0);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setRawSelectedIndex(prev => Math.min(prev + 1, filteredRawProducts.length - 1));
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setRawSelectedIndex(prev => Math.max(prev - 1, 0));
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (showRawDropdown && filteredRawProducts[rawSelectedIndex]) {
+                          const p = filteredRawProducts[rawSelectedIndex];
+                          addIngredient(p);
+                        }
+                      }
                     }}
                     className="w-full border border-border rounded-lg pl-9 pr-3 py-2 bg-background text-sm"
                   />
@@ -497,32 +526,14 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                             <span>Select Ingredient</span>
                             <button type="button" onClick={() => { setShowRawDropdown(false); setIngSearch(''); }} className="hover:text-foreground font-bold">✕</button>
                           </div>
-                          {products
-                            .filter(p => {
-                              if (rawCatFilter) {
-                                const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
-                                const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name) || '').toUpperCase();
-                                const selUpper = rawCatFilter.toUpperCase();
-                                if (parentCat !== selUpper && subCat !== selUpper) {
-                                  return false;
-                                }
-                              }
-                              if (!ingSearch) return true;
-                              const s = ingSearch.toLowerCase().trim();
-                              return (
-                                (p.name && p.name.toLowerCase().includes(s)) ||
-                                (p.productCode && p.productCode.toLowerCase().includes(s)) ||
-                                (p.sku && p.sku.toLowerCase().includes(s))
-                              );
-                            })
-                            .map(p => {
+                          {filteredRawProducts.map((p, idx) => {
                               const parentCat = p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName;
                               const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name);
                               const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
                               return (
-                                <button key={p.id} onClick={() => addIngredient(p)}
-                                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2">
-                                    <div className="truncate flex items-center gap-1.5">
+                                  <button key={p.id} onClick={() => addIngredient(p)}
+                                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === rawSelectedIndex ? 'bg-muted' : ''}`}>
+                                      <div className="truncate flex items-center gap-1.5">
                                       <span className="font-medium text-foreground">{p.name}</span>
                                       <span className="text-[11px] text-muted-foreground">({p.productCode || p.sku})</span>
                                     </div>
@@ -534,23 +545,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                                 </button>
                               );
                             })}
-                          {products.filter(p => {
-                            if (rawCatFilter) {
-                              const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
-                              const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name) || '').toUpperCase();
-                              const selUpper = rawCatFilter.toUpperCase();
-                              if (parentCat !== selUpper && subCat !== selUpper) {
-                                return false;
-                              }
-                            }
-                            if (!ingSearch) return true;
-                            const s = ingSearch.toLowerCase().trim();
-                            return (
-                              (p.name && p.name.toLowerCase().includes(s)) ||
-                              (p.productCode && p.productCode.toLowerCase().includes(s)) ||
-                              (p.sku && p.sku.toLowerCase().includes(s))
-                            );
-                          }).length === 0 && (
+                          {filteredRawProducts.length === 0 && (
                             <div className="px-4 py-3 text-xs text-muted-foreground">
                               No raw materials found matching filters.
                             </div>
