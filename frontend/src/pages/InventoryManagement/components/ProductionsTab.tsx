@@ -567,8 +567,23 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                   onChange={e => {
                     setProductSearch(e.target.value);
                     setShowFinishedDropdown(true);
+                    setFinishedSelectedIndex(0);
                     setForm({ ...form, productId: '', productName: '' });
                     setSelectedRecipe(null);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setFinishedSelectedIndex((prev: number) => Math.min(prev + 1, filteredFinishedProducts.length - 1));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setFinishedSelectedIndex((prev: number) => Math.max(prev - 1, 0));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (showFinishedDropdown && filteredFinishedProducts[finishedSelectedIndex]) {
+                        selectFinishedProduct(filteredFinishedProducts[finishedSelectedIndex]);
+                      }
+                    }
                   }}
                   className="w-full border border-border rounded-lg pl-9 pr-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
@@ -705,6 +720,21 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                   onChange={e => {
                     setIngSearch(e.target.value);
                     setShowRawDropdown(true);
+                    setRawSelectedIndex(0);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setRawSelectedIndex((prev: number) => Math.min(prev + 1, filteredRawProducts.length - 1));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setRawSelectedIndex((prev: number) => Math.max(prev - 1, 0));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (showRawDropdown && filteredRawProducts[rawSelectedIndex]) {
+                        addIngredient(filteredRawProducts[rawSelectedIndex]);
+                      }
+                    }
                   }}
                   className="w-full border border-border rounded-lg pl-9 pr-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
