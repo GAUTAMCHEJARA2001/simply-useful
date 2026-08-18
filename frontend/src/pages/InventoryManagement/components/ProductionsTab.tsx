@@ -75,6 +75,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
     return localStorage.getItem('prod_modal_raw_cat_filter') || '';
   });
   const [showFinishedDropdown, setShowFinishedDropdown] = useState<boolean>(false);
+    const [finishedSelectedIndex, setFinishedSelectedIndex] = useState<number>(0);
+    const [rawSelectedIndex, setRawSelectedIndex] = useState<number>(0);
   const [showRawDropdown, setShowRawDropdown] = useState<boolean>(false);
   const finishedDropdownRef = useRef<HTMLDivElement>(null);
   const rawDropdownRef = useRef<HTMLDivElement>(null);
@@ -528,25 +530,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                     <span>Select Finished Product</span>
                     <button type="button" onClick={() => { setShowFinishedDropdown(false); setProductSearch(''); }} className="hover:text-foreground font-bold">✕</button>
                   </div>
-                  {products
-                    .filter(p => {
-                      if (finishedCatFilter) {
-                        const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
-                        const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
-                        const selUpper = finishedCatFilter.toUpperCase();
-                        if (parentCat !== selUpper && subCat !== selUpper) {
-                          return false;
-                        }
-                      }
-                      if (!productSearch) return true;
-                      const s = productSearch.toLowerCase().trim();
-                      return (
-                        (p.name && p.name.toLowerCase().includes(s)) ||
-                        (p.productCode && p.productCode.toLowerCase().includes(s)) ||
-                        (p.sku && p.sku.toLowerCase().includes(s))
-                      );
-                    })
-                    .map(p => {
+                  {filteredFinishedProducts.map((p, idx) => {
                       const parentCat = p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName;
                       const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : ''));
                       const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
@@ -554,7 +538,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                         <button 
                           key={p.id} 
                           onClick={() => selectFinishedProduct(p)}
-                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2"
+                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === finishedSelectedIndex ? 'bg-muted' : ''}`}
                         >
                           <div className="truncate flex items-center gap-1.5">
                             <span className="font-medium text-foreground">{p.name}</span>
@@ -568,23 +552,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                         </button>
                       );
                     })}
-                  {products.filter(p => {
-                    if (finishedCatFilter) {
-                      const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
-                      const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
-                      const selUpper = finishedCatFilter.toUpperCase();
-                      if (parentCat !== selUpper && subCat !== selUpper) {
-                        return false;
-                      }
-                    }
-                    if (!productSearch) return true;
-                    const s = productSearch.toLowerCase().trim();
-                    return (
-                      (p.name && p.name.toLowerCase().includes(s)) ||
-                      (p.productCode && p.productCode.toLowerCase().includes(s)) ||
-                      (p.sku && p.sku.toLowerCase().includes(s))
-                    );
-                  }).length === 0 && (
+                  {filteredFinishedProducts.length === 0 && (
                     <div className="px-4 py-3 text-xs text-muted-foreground">
                       No products found matching filters.
                     </div>
@@ -696,31 +664,13 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                       <span>Select Raw Material</span>
                       <button type="button" onClick={() => { setShowRawDropdown(false); setIngSearch(''); }} className="hover:text-foreground font-bold">✕</button>
                     </div>
-                    {products
-                      .filter(p => {
-                        if (rawCatFilter) {
-                          const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
-                          const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
-                          const selUpper = rawCatFilter.toUpperCase();
-                          if (parentCat !== selUpper && subCat !== selUpper) {
-                            return false;
-                          }
-                        }
-                        if (!ingSearch) return true;
-                        const s = ingSearch.toLowerCase().trim();
-                        return (
-                          (p.name && p.name.toLowerCase().includes(s)) ||
-                          (p.productCode && p.productCode.toLowerCase().includes(s)) ||
-                          (p.sku && p.sku.toLowerCase().includes(s))
-                        );
-                      })
-                      .map(p => {
+                    {filteredRawProducts.map((p, idx) => {
                         const parentCat = p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName;
                         const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : ''));
                         const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
                         return (
                           <button key={p.id} onClick={() => addIngredient(p)}
-                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2">
+                              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === finishedSelectedIndex ? 'bg-muted' : ''}`}>
                               <div className="truncate flex items-center gap-1.5">
                                 <span className="font-medium text-foreground">{p.name}</span>
                                 <span className="text-[11px] text-muted-foreground">({p.sku || p.productCode})</span>
@@ -733,23 +683,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                           </button>
                         );
                       })}
-                    {products.filter(p => {
-                      if (rawCatFilter) {
-                        const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
-                        const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
-                        const selUpper = rawCatFilter.toUpperCase();
-                        if (parentCat !== selUpper && subCat !== selUpper) {
-                          return false;
-                        }
-                      }
-                      if (!ingSearch) return true;
-                      const s = ingSearch.toLowerCase().trim();
-                      return (
-                        (p.name && p.name.toLowerCase().includes(s)) ||
-                        (p.productCode && p.productCode.toLowerCase().includes(s)) ||
-                        (p.sku && p.sku.toLowerCase().includes(s))
-                      );
-                    }).length === 0 && (
+                    {filteredRawProducts.length === 0 && (
                       <div className="px-4 py-3 text-xs text-muted-foreground">
                         No raw materials found matching filters.
                       </div>
