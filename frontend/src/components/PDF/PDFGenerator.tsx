@@ -37,7 +37,7 @@ const sanitizeValue = (val: any) => {
 };
 
 interface PDFGeneratorProps {
-  type: 'SALES_ORDER' | 'PURCHASE_ORDER' | 'PRODUCTION_ORDER' | 'STOCK_LEDGER';
+  type: 'SALES_ORDER' | 'PURCHASE_ORDER' | 'PRODUCTION_ORDER' | 'STOCK_LEDGER' | 'QUOTATION';
   data: any;
   filename?: string;
   buttonLabel?: string;
@@ -87,13 +87,13 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
     const safeCompany = { ...companyInfo, logo: level === 'FULL' ? companyInfo.logo : null };
 
     // 2. Map Invoices
-    if (type === 'SALES_ORDER' || type === 'PURCHASE_ORDER') {
+    if (type === 'SALES_ORDER' || type === 'PURCHASE_ORDER' || type === 'QUOTATION') {
       if (pdfFlags.enableEnterpriseInvoices) {
         return renderInvoicePDF({
           rawOrder: data,
           companyInfo: safeCompany,
-          documentType: type === 'SALES_ORDER' ? 'SALES ORDER' : 'PURCHASE ORDER',
-          themePreset: type === 'SALES_ORDER' ? 'zoho' : 'modern',
+          documentType: type === 'QUOTATION' ? 'QUOTATION' : (type === 'SALES_ORDER' ? 'SALES ORDER' : 'PURCHASE ORDER'),
+          themePreset: type === 'SALES_ORDER' || type === 'QUOTATION' ? 'zoho' : 'modern',
           densityMode: 'comfortable'
         });
       }
@@ -120,7 +120,7 @@ export const PDFGenerator: React.FC<PDFGeneratorProps> = ({
 
       return (
         <OrderTemplate
-          type={type === 'SALES_ORDER' ? 'SALES ORDER' : 'PURCHASE ORDER'}
+          type={type === 'QUOTATION' ? 'QUOTATION' : (type === 'SALES_ORDER' ? 'SALES ORDER' : 'PURCHASE ORDER')}
           orderNo={safeString(data.order_id || 'N/A')}
           date={safeString(data.date || new Date().toLocaleDateString())}
           party={{

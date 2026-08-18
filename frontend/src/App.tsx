@@ -52,6 +52,7 @@ const safeLazy = (importFn: () => Promise<{ default: React.ComponentType<any> }>
 const SalesDashboard = safeLazy(() => import("./pages/SalesDashboard"), "SalesDashboard");
 const OrderPage = safeLazy(() => import("./pages/OrderPage"), "OrderPage");
 const EstimateGenerator = safeLazy(() => import("./pages/EstimateGenerator"), "EstimateGenerator");
+const EstimateList = safeLazy(() => import("./pages/EstimateList"), "EstimateList");
 const MyOrders = safeLazy(() => import("./pages/MyOrders"), "MyOrders");
 const AdminDashboard = safeLazy(() => import("./pages/AdminDashboard"), "AdminDashboard");
 const DealerManagement = safeLazy(() => import("./pages/DealerManagement"), "DealerManagement");
@@ -208,7 +209,9 @@ const App = () => {
                       <Route path="/sales" element={<ProtectedRoute><SalesDashboard /></ProtectedRoute>} />
                       <Route path="/sales/order" element={<ProtectedRoute><OrderPage /></ProtectedRoute>} />
                       <Route path="/sales/order/:id" element={<ProtectedRoute><OrderPage /></ProtectedRoute>} />
+                      <Route path="/sales/estimates" element={<ProtectedRoute><EstimateList /></ProtectedRoute>} />
                       <Route path="/sales/estimate" element={<ProtectedRoute><EstimateGenerator /></ProtectedRoute>} />
+                      <Route path="/sales/estimate/:id" element={<ProtectedRoute><EstimateGenerator /></ProtectedRoute>} />
                       <Route path="/sales/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
                       <Route path="/sales/visits" element={<ProtectedRoute><VisitTracking /></ProtectedRoute>} />
                       <Route path="/sales/expenses" element={<ProtectedRoute><ExpenseEntry /></ProtectedRoute>} />

@@ -14,6 +14,7 @@ import { partyService } from './services/party.service';
 import { expenseService } from './services/expense.service';
 import { visitService } from './services/visit.service';
 import { settingsService } from './services/settings.service';
+import { estimateService } from './services/estimate.service';
 import { api } from './client';
 import { crudApi } from './crud';
 
@@ -27,6 +28,7 @@ export const apiService = {
   expenses: expenseService,
   visits: visitService,
   settings: settingsService,
+  estimates: estimateService,
   
   // Instance for raw access
   api,

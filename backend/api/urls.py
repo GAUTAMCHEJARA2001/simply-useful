@@ -9,8 +9,8 @@ from api.views import (
     BroadcastViewSet, CompanyViewSet,
     user_assignments,
     bulk_template, bulk_import, database_export, local_backup_status_view, download_postgres_dump_view, schedule_local_backup_view,
-    list_local_backups_view, restore_postgres_dump_view,
     create_system_log, list_system_logs, clear_system_logs,
+    EstimateViewSet,
     
     # Reports
     report_dashboard_kpis, report_sales_summary, report_low_stock, report_daily,
@@ -61,6 +61,7 @@ router.register('crm/leads', LeadViewSet, basename='crm-leads')
 router.register('onboarding', PartyOnboardingViewSet, basename='onboarding')
 router.register('broadcasts', BroadcastViewSet, basename='broadcasts')
 router.register('payments', PaymentReceiptViewSet, basename='payments')
+router.register('estimates', EstimateViewSet, basename='estimates')
 
 urlpatterns = [
     # Auth

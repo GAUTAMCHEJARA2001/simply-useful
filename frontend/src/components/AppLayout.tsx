@@ -23,7 +23,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Main Overview', path: '/sales', icon: LayoutDashboard, feature: 'view_sales_dashboard' },
   { label: 'New Order', path: '/sales/order', icon: ShoppingCart, feature: 'create_order' },
-  { label: 'Estimate Generator', path: '/sales/estimate', icon: FileText, feature: 'create_order' },
+  { label: 'Saved Estimates', path: '/sales/estimates', icon: FileText, feature: 'create_order' },
   { label: 'Order List', path: '/sales/orders', icon: ClipboardList, feature: 'view_own_orders' },
   { label: 'My Ledger Requests', path: '/sales/ledger-requests', icon: FileText, feature: 'view_sales_dashboard' },
   { label: 'Customer Visits', path: '/sales/visits', icon: MapPin, feature: 'track_visits' },

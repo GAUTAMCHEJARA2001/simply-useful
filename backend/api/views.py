@@ -4143,3 +4143,89 @@ from api.views_reports import *
 from api.views_leads import *
 from api.views_masters import *
 from api.views_logs import *
+
+
+import uuid
+from .models import Estimate, EstimateItem
+from .serializers import EstimateSerializer, EstimateItemSerializer
+
+class EstimateViewSet(viewsets.ModelViewSet):
+    queryset = Estimate.objects.all().order_by('-createdat')
+    serializer_class = EstimateSerializer
+
+    def create(self, request, *args, **kwargs):
+        try:
+            data = request.data
+            with transaction.atomic():
+                company_id = data.get('companyId')
+                if not company_id:
+                    company = Company.objects.first()
+                else:
+                    company = Company.objects.get(id=company_id)
+                
+                estimate_id = data.get('estimateId', f'EST-{uuid.uuid4().hex[:6].upper()}')
+                
+                est = Estimate.objects.create(
+                    id=str(uuid.uuid4()),
+                    estimateid=estimate_id,
+                    partyname=data.get('partyName'),
+                    address=data.get('address'),
+                    gst=data.get('gst'),
+                    contact=data.get('contact'),
+                    email=data.get('email'),
+                    grandtotal=float(data.get('grandTotal', 0)),
+                    companyid=company
+                )
+                
+                items = data.get('items', [])
+                for idx, item in enumerate(items):
+                    product = Product.objects.get(id=item['product']) if isinstance(item['product'], str) else Product.objects.get(id=item['product']['id'])
+                    EstimateItem.objects.create(
+                        id=str(uuid.uuid4()),
+                        estimateid=est,
+                        productid=product,
+                        qty=int(item.get('qty', 0)),
+                        price=float(item.get('price', 0)),
+                        total=float(item.get('total', 0)),
+                        itemremark=item.get('itemRemark', '')
+                    )
+                
+                serializer = self.get_serializer(est)
+                return Response({'success': True, 'data': serializer.data})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'success': False, 'message': str(e)}, status=500)
+
+    def update(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            data = request.data
+            with transaction.atomic():
+                instance.partyname = data.get('partyName', instance.partyname)
+                instance.address = data.get('address', instance.address)
+                instance.gst = data.get('gst', instance.gst)
+                instance.contact = data.get('contact', instance.contact)
+                instance.email = data.get('email', instance.email)
+                instance.grandtotal = float(data.get('grandTotal', instance.grandtotal))
+                instance.save()
+                
+                if 'items' in data:
+                    EstimateItem.objects.filter(estimateid=instance).delete()
+                    items = data.get('items', [])
+                    for idx, item in enumerate(items):
+                        product = Product.objects.get(id=item['product']) if isinstance(item['product'], str) else Product.objects.get(id=item['product']['id'])
+                        EstimateItem.objects.create(
+                            id=str(uuid.uuid4()),
+                            estimateid=instance,
+                            productid=product,
+                            qty=int(item.get('qty', 0)),
+                            price=float(item.get('price', 0)),
+                            total=float(item.get('total', 0)),
+                            itemremark=item.get('itemRemark', '')
+                        )
+                
+                serializer = self.get_serializer(instance)
+                return Response({'success': True, 'data': serializer.data})
+        except Exception as e:
+            return Response({'success': False, 'message': str(e)}, status=500)

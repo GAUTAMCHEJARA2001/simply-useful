@@ -748,3 +748,36 @@ class PartyOnboardingRequest(models.Model):
 
     class Meta:
         db_table = 'PartyOnboardingRequest'
+
+
+class Estimate(models.Model):
+    id = models.TextField(primary_key=True)
+    estimateid = models.TextField(db_column='estimateId', unique=True)
+    date = models.DateTimeField(default=timezone.now)
+    partyname = models.TextField(db_column='partyName', blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    gst = models.CharField(max_length=50, blank=True, null=True)
+    contact = models.CharField(max_length=50, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    grandtotal = models.FloatField(db_column='grandTotal', default=0.0)
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)
+
+    class Meta:
+        db_table = 'Estimate'
+
+class EstimateItem(models.Model):
+    id = models.TextField(primary_key=True)
+    estimateid = models.ForeignKey(Estimate, models.DO_NOTHING, db_column='estimateId', db_constraint=False, related_name='items')
+    productid = models.ForeignKey('Product', models.DO_NOTHING, db_column='productId', db_constraint=False)
+    qty = models.IntegerField()
+    price = models.FloatField()
+    total = models.FloatField()
+    itemremark = models.TextField(db_column='itemRemark', blank=True, null=True)
+
+    class Meta:
+        db_table = 'EstimateItem'
+        indexes = [
+            models.Index(fields=['estimateid', 'productid'], name='idx_estitem_est_prod'),
+        ]

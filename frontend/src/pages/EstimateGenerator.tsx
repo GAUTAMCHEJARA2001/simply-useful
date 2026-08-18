@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { OrderItem } from '@/types';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, FileText, Check, ChevronsUpDown } from 'lucide-react';
+import { Plus, Trash2, FileText, Check, ChevronsUpDown, Save, ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,8 +12,13 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { Textarea } from '@/components/ui/textarea';
+import { apiService } from '@/api/apiService';
+import { useToast } from '@/hooks/use-toast';
 
 const EstimateGenerator: React.FC = () => {
+  const { id } = useParams<{ id?: string }>();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const { products } = useData();
   
   const [partyName, setPartyName] = useState('');
@@ -20,11 +26,49 @@ const EstimateGenerator: React.FC = () => {
   const [gst, setGst] = useState('');
   const [contact, setContact] = useState('');
   const [email, setEmail] = useState('');
+  const [estimateId, setEstimateId] = useState('');
+  const [dbId, setDbId] = useState('');
   
   const [items, setItems] = useState<OrderItem[]>([
     { product: '', qty: 0, price: 0, total: 0, itemRemark: '' },
   ]);
   const [openComboboxIndex, setOpenComboboxIndex] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      loadEstimate(id);
+    }
+  }, [id]);
+
+  const loadEstimate = async (estimateDbId: string) => {
+    try {
+      setIsLoading(true);
+      const res = await apiService.estimates.getById(estimateDbId);
+      if (res.data) {
+        const est = res.data;
+        setDbId(est.id);
+        setEstimateId(est.estimateId);
+        setPartyName(est.partyName || '');
+        setAddress(est.address || '');
+        setGst(est.gst || '');
+        setContact(est.contact || '');
+        setEmail(est.email || '');
+        
+        if (est.items && est.items.length > 0) {
+          setItems(est.items.map((i: any) => ({
+            ...i,
+            product: i.product,
+          })));
+        }
+      }
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to load estimate', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getBagWeight = (bag_size: string): number => {
     const m = (bag_size || '').match(/(\d+)/);
@@ -65,8 +109,9 @@ const EstimateGenerator: React.FC = () => {
   
   // Construct a raw order payload that matches the PDF generator's expectations
   const estimatePayload = useMemo(() => {
+    const currentEstId = estimateId || `EST-${Date.now().toString().slice(-6)}`;
     return {
-      order_id: `EST-${Date.now().toString().slice(-6)}`,
+      order_id: currentEstId,
       date: new Date().toISOString(),
       partyName: partyName || 'Walk-in Customer',
       partyDetails: {
@@ -90,16 +135,64 @@ const EstimateGenerator: React.FC = () => {
       grandTotal: grandTotal,
       status: 'Estimate'
     }
-  }, [partyName, address, gst, contact, email, items, products, grandTotal]);
+  }, [estimateId, partyName, address, gst, contact, email, items, products, grandTotal]);
 
   const isValid = partyName.trim() !== '' && items.some(i => i.product && (i.qty || 0) > 0);
+
+  const handleSave = async () => {
+    if (!isValid) return;
+    try {
+      setIsSaving(true);
+      const payload = {
+        estimateId: estimatePayload.order_id,
+        partyName,
+        address,
+        gst,
+        contact,
+        email,
+        grandTotal,
+        items: items.filter(i => i.product && (i.qty || 0) > 0).map(i => ({
+          product: typeof i.product === 'object' ? (i.product as any)?.id : i.product,
+          qty: i.qty,
+          price: i.price,
+          total: i.total,
+          itemRemark: i.itemRemark
+        }))
+      };
+      
+      let res;
+      if (dbId) {
+        res = await apiService.estimates.update(dbId, payload);
+      } else {
+        res = await apiService.estimates.create(payload);
+      }
+      
+      if (res.data?.success) {
+        toast({ title: 'Success', description: 'Estimate saved successfully!' });
+        if (!dbId && res.data.data?.id) {
+           navigate(`/sales/estimate/${res.data.data.id}`, { replace: true });
+        }
+      } else {
+        toast({ title: 'Error', description: 'Failed to save estimate', variant: 'destructive' });
+      }
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to save estimate', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading) return <div className="p-10 text-center">Loading estimate...</div>;
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-10 mt-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Estimate Generator</h1>
-          <p className="text-sm text-muted-foreground mt-1">Generate dynamic Quotation PDFs for ad-hoc parties without saving them.</p>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/sales/estimates')}><ArrowLeft className="w-4 h-4" /></Button>
+            <h1 className="text-2xl font-bold text-foreground">Estimate Generator {estimateId ? `- ${estimateId}` : ''}</h1>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1 ml-10">Generate and save dynamic Quotation PDFs for ad-hoc parties.</p>
         </div>
       </div>
 
@@ -220,22 +313,31 @@ const EstimateGenerator: React.FC = () => {
              <span className="text-2xl font-bold text-success">₹{grandTotal.toLocaleString()}</span>
           </div>
           
-          {isValid ? (
-            <div className="w-full">
-                <PDFGenerator
-                    type="SALES_ORDER"
-                    data={{ ...estimatePayload, type: 'QUOTATION' }}
-                    filename={`Estimate_${estimatePayload.order_id}.pdf`}
-                    buttonLabel="Generate Estimate PDF"
-                    variant="default"
-                    size="lg"
-                />
-            </div>
-          ) : (
-            <Button disabled className="w-full action-button">
-              <FileText className="w-5 h-5 mr-2" /> Fill required fields to generate
+          <div className="flex gap-4 w-full">
+            <Button 
+                onClick={handleSave} 
+                disabled={!isValid || isSaving} 
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 h-12"
+            >
+              <Save className="w-5 h-5 mr-2" /> {isSaving ? 'Saving...' : (dbId ? 'Update Estimate' : 'Save Estimate')}
             </Button>
-          )}
+            {isValid ? (
+              <div className="flex-1">
+                  <PDFGenerator
+                      type="QUOTATION"
+                      data={{ ...estimatePayload, type: 'QUOTATION' }}
+                      filename={`Estimate_${estimatePayload.order_id}.pdf`}
+                      buttonLabel="Download PDF"
+                      variant="outline"
+                      size="lg"
+                  />
+              </div>
+            ) : (
+              <Button disabled variant="outline" className="flex-1 h-12">
+                <FileText className="w-5 h-5 mr-2" /> Download PDF
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
