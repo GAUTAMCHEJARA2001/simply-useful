@@ -648,7 +648,9 @@ const InventoryDashboard: React.FC = () => {
                         <span className="font-bold text-foreground text-xs tracking-tight">{orderId}</span>
                         <span className={`text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusStyles[displayStatus]}`}>{displayStatus}</span>
                       </div>
-                      <span className="font-bold text-primary text-sm">₹{grandTotal.toLocaleString()}</span>
+                      {user?.role !== 'INVENTORY' && (
+                        <span className="font-bold text-primary text-sm">₹{grandTotal.toLocaleString()}</span>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-x-2.5 gap-y-2 text-xs text-muted-foreground mb-2">
@@ -930,23 +932,27 @@ const InventoryDashboard: React.FC = () => {
                 />
 
                 {/* Header Info */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-secondary/20 p-3 rounded-xl border border-border text-xs">
-                  <div>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Order ID</p>
-                    <p className="font-semibold">{orderId}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Date</p>
-                    <p className="font-semibold">{date}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Warehouse</p>
-                    <p className="font-semibold">{wh ? wh.name : '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Total Amount</p>
-                    <p className="font-bold text-primary text-base">₹{grandTotal.toLocaleString()}</p>
-                  </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/20 border-y border-border">
+                    <div>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Order Date</p>
+                      <p className="font-medium text-sm">{date}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Status</p>
+                      <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider mt-0.5 ${statusStyles[viewOrder.status || 'Pending']}`}>
+                        {viewOrder.status || 'Pending'}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Warehouse</p>
+                      <p className="font-semibold">{wh ? wh.name : '—'}</p>
+                    </div>
+                    {user?.role !== 'INVENTORY' && (
+                      <div>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Total Amount</p>
+                        <p className="font-bold text-primary text-base">₹{grandTotal.toLocaleString()}</p>
+                      </div>
+                    )}
                 </div>
 
                 {/* People Info */}
