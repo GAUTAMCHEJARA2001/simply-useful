@@ -392,6 +392,18 @@ class DealerSerializer(serializers.ModelSerializer):
             'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId'
         ]
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Fix for assignedsoemails stored as text instead of array in db
+        emails = instance.assignedsoemails
+        if isinstance(emails, str):
+            ret['assignedSoEmails'] = [e.strip() for e in emails.split(',') if e.strip()]
+        elif isinstance(emails, list):
+            ret['assignedSoEmails'] = emails
+        else:
+            ret['assignedSoEmails'] = []
+        return ret
+
     def create(self, validated_data):
         for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
             validated_data.pop(key, None)
@@ -430,6 +442,18 @@ class DistributorSerializer(serializers.ModelSerializer):
             'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
             'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId'
         ]
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Fix for assignedsoemails stored as text instead of array in db
+        emails = instance.assignedsoemails
+        if isinstance(emails, str):
+            ret['assignedSoEmails'] = [e.strip() for e in emails.split(',') if e.strip()]
+        elif isinstance(emails, list):
+            ret['assignedSoEmails'] = emails
+        else:
+            ret['assignedSoEmails'] = []
+        return ret
 
     def create(self, validated_data):
         for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
