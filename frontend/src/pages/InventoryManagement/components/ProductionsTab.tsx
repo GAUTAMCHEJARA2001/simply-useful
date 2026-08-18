@@ -77,6 +77,25 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   const [showFinishedDropdown, setShowFinishedDropdown] = useState<boolean>(false);
     const [finishedSelectedIndex, setFinishedSelectedIndex] = useState<number>(0);
     const [rawSelectedIndex, setRawSelectedIndex] = useState<number>(0);
+
+    useEffect(() => {
+      if (showFinishedDropdown) {
+        const el = document.getElementById(`prod-finished-item-${finishedSelectedIndex}`);
+        if (el) {
+          el.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }, [finishedSelectedIndex, showFinishedDropdown]);
+
+    useEffect(() => {
+      if (showRawDropdown) {
+        const el = document.getElementById(`prod-raw-item-${rawSelectedIndex}`);
+        if (el) {
+          el.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }, [rawSelectedIndex, showRawDropdown]);
+
   const [showRawDropdown, setShowRawDropdown] = useState<boolean>(false);
   const finishedDropdownRef = useRef<HTMLDivElement>(null);
   const rawDropdownRef = useRef<HTMLDivElement>(null);
@@ -538,7 +557,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                         <button 
                           key={p.id} 
                           onClick={() => selectFinishedProduct(p)}
-                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === finishedSelectedIndex ? 'bg-muted' : ''}`}
+                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === rawSelectedIndex ? 'bg-muted' : ''}`}
                         >
                           <div className="truncate flex items-center gap-1.5">
                             <span className="font-medium text-foreground">{p.name}</span>
@@ -669,8 +688,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                         const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : ''));
                         const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
                         return (
-                          <button key={p.id} onClick={() => addIngredient(p)}
-                              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === finishedSelectedIndex ? 'bg-muted' : ''}`}>
+                          <button id="prod-raw-item-${idx}"  key={p.id} onClick={() => addIngredient(p)}
+                              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/20 last:border-b-0 flex items-center justify-between gap-2 ${idx === rawSelectedIndex ? 'bg-muted' : ''}`}>
                               <div className="truncate flex items-center gap-1.5">
                                 <span className="font-medium text-foreground">{p.name}</span>
                                 <span className="text-[11px] text-muted-foreground">({p.sku || p.productCode})</span>
