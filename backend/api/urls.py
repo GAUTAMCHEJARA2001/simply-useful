@@ -9,6 +9,7 @@ from api.views import (
     BroadcastViewSet, CompanyViewSet,
     user_assignments,
     bulk_template, bulk_import, database_export, local_backup_status_view, download_postgres_dump_view, schedule_local_backup_view,
+    list_local_backups_view, restore_postgres_dump_view,
     create_system_log, list_system_logs, clear_system_logs,
     EstimateViewSet,
     
