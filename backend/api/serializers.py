@@ -386,7 +386,7 @@ class DealerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dealer
         fields = [
-            'id', 'dealerCode', 'dealerName', 'city', 'assignedSoEmail', 'assignedSoEmails', 'brand', 'distributorName',
+            'id', 'dealerCode', 'dealerName', 'city', 'assignedSoEmails', 'brand', 'distributorName',
             'creditLimit', 'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
             'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId'
         ]
@@ -425,7 +425,7 @@ class DistributorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Distributor
         fields = [
-            'id', 'distributorCode', 'distributorName', 'area', 'assignedSoEmail', 'assignedSoEmails', 'brand', 'creditLimit',
+            'id', 'distributorCode', 'distributorName', 'area', 'assignedSoEmails', 'brand', 'creditLimit',
             'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
             'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId'
         ]
