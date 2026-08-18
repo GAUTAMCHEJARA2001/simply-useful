@@ -335,6 +335,35 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
     return s.includes(term);
   });
 
+
+  const filteredFinishedProducts = useMemo(() => {
+    return products.filter((p: any) => {
+      if (finishedCatFilter) {
+        const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
+        const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
+        const selUpper = finishedCatFilter.toUpperCase();
+        if (parentCat !== selUpper && subCat !== selUpper) { return false; }
+      }
+      if (!productSearch) return true;
+      const s = productSearch.toLowerCase().trim();
+      return ((p.name && p.name.toLowerCase().includes(s)) || (p.productCode && p.productCode.toLowerCase().includes(s)) || (p.sku && p.sku.toLowerCase().includes(s)));
+    });
+  }, [products, finishedCatFilter, productSearch]);
+
+  const filteredRawProducts = useMemo(() => {
+    return products.filter((p: any) => {
+      if (rawCatFilter) {
+        const parentCat = (p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName || '').toUpperCase();
+        const subCat = (p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : (typeof p.category === 'object' && p.category ? p.category.name : '')) || '').toUpperCase();
+        const selUpper = rawCatFilter.toUpperCase();
+        if (parentCat !== selUpper && subCat !== selUpper) { return false; }
+      }
+      if (!ingSearch) return true;
+      const s = ingSearch.toLowerCase().trim();
+      return ((p.name && p.name.toLowerCase().includes(s)) || (p.productCode && p.productCode.toLowerCase().includes(s)) || (p.sku && p.sku.toLowerCase().includes(s)));
+    });
+  }, [products, rawCatFilter, ingSearch]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -351,7 +380,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
             />
           </div>
           <Button size="sm" onClick={() => {
-            setForm(prev => {
+            setForm((prev: any) => {
               const lastWh = localStorage.getItem('prod_modal_last_wh');
               const isValid = warehouses.some(w => String(w.id) === String(lastWh));
               return {
@@ -471,7 +500,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
       {modal && (
         <Modal title={form.id ? "Edit Production Run" : "Record New Production Run"} onClose={() => { 
           setModal(false); 
-          setForm(prev => {
+          setForm((prev: any) => {
             const lastWh = localStorage.getItem('prod_modal_last_wh');
             const isValid = warehouses.some(w => String(w.id) === String(lastWh));
             return { 
@@ -899,7 +928,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                 className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 min-h-[100px]"
                 placeholder="Please explain why this production is being deleted..."
                 value={deleteModal.reason}
-                onChange={(e) => setDeleteModal(prev => ({ ...prev, reason: e.target.value }))}
+                onChange={(e) => setDeleteModal((prev: any) => ({ ...prev, reason: e.target.value }))}
                 autoFocus
               />
             </div>
