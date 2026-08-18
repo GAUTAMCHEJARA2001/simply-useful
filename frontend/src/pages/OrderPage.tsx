@@ -86,10 +86,16 @@ const OrderPage: React.FC = () => {
   const { can } = usePermissions();
 
   const userEmail = (user?.email || '').toLowerCase();
+  const isSales = user?.role === 'SALES' || user?.role === 'SALES_OFFICER';
 
-  // These are now purely data-driven based on what DataContext fetches (which is role-aware)
-  const myDealers = dealers.filter(d => d.active);
-  const myDistributors = distributors.filter(d => d.active);
+  // For Sales users, only show active dealers/distributors assigned to them.
+  const myDealers = isSales 
+    ? dealers.filter(d => d.active && (d.assignedSoEmails || []).some(e => e.toLowerCase() === userEmail))
+    : dealers.filter(d => d.active);
+    
+  const myDistributors = isSales
+    ? distributors.filter(d => d.active && (d.assignedSoEmails || []).some(e => e.toLowerCase() === userEmail))
+    : distributors.filter(d => d.active);
   const parties = useMemo(() => {
     const rawList = partyType === 'Dealer' 
       ? myDealers.map(d => d.dealerName) 

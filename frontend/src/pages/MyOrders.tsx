@@ -13,7 +13,20 @@ import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 
-const extractDispatchDetails = (narration: string) => {
+const extractDispatchDetails = (order: any) => {
+  if (!order) return null;
+  
+  if (order.invoiceNumber || order.vehicleNumber || order.driverName || order.dispatchDate) {
+    return {
+      invoice: order.invoiceNumber || '-',
+      vehicle: order.vehicleNumber || '-',
+      driver: order.driverName || '-',
+      mobile: order.driverMobile || '',
+      time: order.dispatchDate || '-'
+    };
+  }
+
+  const narration = order.narration || '';
   if (!narration) return null;
   const invoiceMatch = narration.match(/\[INVOICE:\s*([^\]]+)\]/i);
   const vehicleMatch = narration.match(/\[VEHICLE:\s*([^\]]+)\]/i);
@@ -24,11 +37,11 @@ const extractDispatchDetails = (narration: string) => {
   if (!invoiceMatch && !vehicleMatch && !driverMatch && !timeMatch) return null;
   
   return {
-    invoice: invoiceMatch ? invoiceMatch[1].trim() : '—',
-    vehicle: vehicleMatch ? vehicleMatch[1].trim().toUpperCase() : '—',
-    driver: driverMatch ? driverMatch[1].trim() : '—',
+    invoice: invoiceMatch ? invoiceMatch[1].trim() : '-',
+    vehicle: vehicleMatch ? vehicleMatch[1].trim() : '-',
+    driver: driverMatch ? driverMatch[1].trim() : '-',
     mobile: mobileMatch ? mobileMatch[1].trim() : '',
-    time: timeMatch ? timeMatch[1].trim() : '—',
+    time: timeMatch ? timeMatch[1].trim() : '-'
   };
 };
 
@@ -404,7 +417,7 @@ const MyOrders: React.FC = () => {
 
                   {/* Dispatch transit details */}
                   {(() => {
-                    const dispatch = extractDispatchDetails(order.narration);
+                    const dispatch = extractDispatchDetails(order);
                     if (!dispatch) return null;
                     return (
                       <div className="mt-3 p-3 bg-purple-500/5 border border-purple-500/20 rounded-xl text-xs space-y-2">
