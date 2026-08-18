@@ -291,10 +291,11 @@ const VisitTracking: React.FC = () => {
     setNextVisitDate(''); setNextVisitTimePart('');
   };
 
-  // ── Data ────────────────────────────────────────────────────
-  const isSalesOnly = user?.role === 'SALES';
+  // ── Data ────────────────────────────────────────────────────  // 📦 Data 📦
+  const userEmail = (user?.email || '').toLowerCase();
+  const isSalesOnly = user?.role === 'SALES' || user?.role === 'SALES_OFFICER';
   const myDealers = isSalesOnly
-    ? dealers.filter(d => (d.assignedSoEmail || '').toLowerCase() === (user?.email || '').toLowerCase() && d.active)
+    ? dealers.filter(d => d.active && (d.assignedSoEmails || []).some(e => e.toLowerCase() === userEmail))
     : dealers.filter(d => d.active);
 
   const dealerNames = useMemo(() => Array.from(new Set(myDealers.map(d => d.dealerName).filter(Boolean))), [myDealers]);
