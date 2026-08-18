@@ -536,6 +536,46 @@ class OrderSerializer(serializers.ModelSerializer):
             'createdBy', 'lastEditedBy'
         ]
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        try:
+            from api.utils_gst import calculate_gst_split
+            from api.models import Company
+            company = Company.objects.filter(id=instance.companyid_id).first()
+            company_gst = getattr(company, 'gst_number', '') or ''
+            
+            party_gst = ""
+            party_details = ret.get('partyDetails')
+            if party_details:
+                party_gst = party_details.get('gst') or party_details.get('gstNumber') or party_details.get('gst_number') or ""
+                
+            total_igst = 0
+            total_cgst = 0
+            total_sgst = 0
+            tax_type = "IGST"
+            
+            for item in ret.get('items', []):
+                base_amount = item.get('total', 0)
+                product = item.get('product') or {}
+                tax_p = product.get('gst', 18.0)
+                
+                split = calculate_gst_split(company_gst, party_gst, base_amount, tax_p)
+                item['tax_split'] = split
+                total_igst += split['igst']
+                total_cgst += split['cgst']
+                total_sgst += split['sgst']
+                tax_type = split['type']
+            
+            ret['taxSummary'] = {
+                'igst': total_igst,
+                'cgst': total_cgst,
+                'sgst': total_sgst,
+                'type': tax_type
+            }
+        except Exception as e:
+            ret['taxSummary'] = {'igst': 0, 'cgst': 0, 'sgst': 0, 'type': 'IGST'}
+        return ret
+
     def get_createdBy(self, obj):
         from api.views import _parse_user_audit_tags
         tags = _parse_user_audit_tags(obj.narration)

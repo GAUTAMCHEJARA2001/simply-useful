@@ -2409,19 +2409,49 @@ def transaction_purchases(request):
         all_purchases = list(Purchase.objects.prefetch_related('purchaseitem_set', 'purchaseorderid').all())
         if assigned_wh_ids:
             all_purchases = [p for p in all_purchases if p.warehouseid_id in assigned_wh_ids]
-        data = []
+        from api.utils_gst import calculate_gst_split
+        
+        company = Company.objects.filter(id=company_id).first()
+        company_gst = getattr(company, 'gst_number', '') or ''
+        
         for p in all_purchases:
             items_data = []
+            supplier_gst = getattr(p.supplierid, 'gst_number', '') if p.supplierid else ''
+            
+            total_igst = 0
+            total_cgst = 0
+            total_sgst = 0
+            tax_type = "IGST"
+            
             for item in p.purchaseitem_set.all():
                 prod_id = ''
+                tax_p = 18.0
                 try:
                     prod = Product.objects.filter(name=item.productname).first()
                     if prod:
                         prod_id = prod.id
+                        tax_p = getattr(prod, 'gst', 18.0)
                 except Exception:
                     pass
-                items_data.append({'id': item.id, 'productName': item.productname, 'productId': prod_id, 'qty': item.qty, 'quantity': item.qty, 'rate': item.rate, 'total': item.total, 'tax_percent': 18.0})
-            data.append({'id': p.id, 'purchaseId': p.purchaseid, 'date': p.date, 'vendorName': p.vendorname, 'supplierName': p.vendorname, 'supplier': {'name': p.vendorname}, 'supplier_id': p.supplierid_id, 'supplierId': p.supplierid_id, 'warehouse_id': p.warehouseid_id or '', 'warehouseId': p.warehouseid_id or '', 'grandTotal': p.grandtotal, 'netAmount': p.grandtotal, 'total_amount': p.grandtotal, 'status': p.status, 'companyId': p.companyid_id, 'createdAt': p.createdat, 'updatedAt': p.updatedat, 'challanNumber': p.challannumber or '', 'vehicleNumber': p.vehiclenumber or '', 'vehicle_number': p.vehiclenumber or '', 'totalTax': p.totaltax or 0.0, 'purchaseOrderId': p.purchaseorderid_id or '', 'purchase_order_id': p.purchaseorderid_id or '', 'purchaseOrderNumber': p.purchaseorderid.ponumber if p.purchaseorderid else '', 'items': items_data, 'lineItems': items_data})
+                
+                # Base amount without tax? item.total is with or without tax? Usually it's qty * rate (base amount). Let's use item.total as base.
+                split = calculate_gst_split(company_gst, supplier_gst, item.total, tax_p)
+                total_igst += split['igst']
+                total_cgst += split['cgst']
+                total_sgst += split['sgst']
+                tax_type = split['type']
+                
+                item_dict = {'id': item.id, 'productName': item.productname, 'productId': prod_id, 'qty': item.qty, 'quantity': item.qty, 'rate': item.rate, 'total': item.total, 'tax_percent': tax_p, 'tax_split': split}
+                items_data.append(item_dict)
+                
+            tax_summary = {
+                'igst': total_igst,
+                'cgst': total_cgst,
+                'sgst': total_sgst,
+                'type': tax_type
+            }
+                
+            data.append({'id': p.id, 'purchaseId': p.purchaseid, 'date': p.date, 'vendorName': p.vendorname, 'supplierName': p.vendorname, 'supplier': {'name': p.vendorname}, 'supplier_id': p.supplierid_id, 'supplierId': p.supplierid_id, 'warehouse_id': p.warehouseid_id or '', 'warehouseId': p.warehouseid_id or '', 'grandTotal': p.grandtotal, 'netAmount': p.grandtotal, 'total_amount': p.grandtotal, 'status': p.status, 'companyId': p.companyid_id, 'createdAt': p.createdat, 'updatedAt': p.updatedat, 'challanNumber': p.challannumber or '', 'vehicleNumber': p.vehiclenumber or '', 'vehicle_number': p.vehiclenumber or '', 'totalTax': p.totaltax or 0.0, 'purchaseOrderId': p.purchaseorderid_id or '', 'purchase_order_id': p.purchaseorderid_id or '', 'purchaseOrderNumber': p.purchaseorderid.ponumber if p.purchaseorderid else '', 'items': items_data, 'lineItems': items_data, 'taxSummary': tax_summary})
         return send_success(data, 'Purchases fetched')
     elif request.method == 'POST':
         data = request.data.copy()
