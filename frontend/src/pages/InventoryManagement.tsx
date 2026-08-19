@@ -25,6 +25,7 @@ import { ApprovalsTab } from './InventoryManagement/components/ApprovalsTab';
 import { ReturnsTab } from './InventoryManagement/components/ReturnsTab';
 import { RecipesTab } from './InventoryManagement/components/RecipesTab';
 import { ProductionApprovalsTab } from './InventoryManagement/components/ProductionApprovalsTab';
+import { WageCalculatorTab } from './InventoryManagement/components/WageCalculatorTab';
 import { useInventoryManagement, Tab } from '@/hooks/inventory/useInventoryManagement';
 
 const InventoryManagement: React.FC = () => {
@@ -45,8 +46,10 @@ const InventoryManagement: React.FC = () => {
     { id: 'brands', label: 'Brands', icon: Package, group: 'Masters' },
     { id: 'units', label: 'Units', icon: Sliders, group: 'Masters' },
     { id: 'suppliers', label: 'Suppliers', icon: Truck, group: 'Masters' },
-    { id: 'labour', label: 'Labour', icon: UserCheck, group: 'Masters' },
-    { id: 'settings', label: 'Settings', icon: Sliders, group: 'Masters' },
+    { id: 'settings', label: 'Settings', icon: Sliders, group: 'Admin' },
+    { id: 'labour', label: 'Labour Master', icon: UserCheck, group: 'Labour & Attendance' },
+    { id: 'attendance', label: 'Attendance', icon: ClipboardList, group: 'Labour & Attendance' },
+    { id: 'wage_calculator', label: 'Wage Calculator', icon: DollarSign, group: 'Labour & Attendance' },
     { id: 'purchase_orders', label: 'Purchase Orders', icon: ClipboardList, group: 'Transactions' },
     { id: 'purchases', label: 'Purchases', icon: ShoppingCart, group: 'Transactions' },
     { id: 'sales', label: 'Sales', icon: DollarSign, group: 'Transactions' },
@@ -140,9 +143,10 @@ const InventoryManagement: React.FC = () => {
         {tab === 'productions' && <ProductionsTab onTabChange={setTab} />}
         {tab === 'deleted_productions' && <DeletedProductionsTab />}
         {tab === 'production_approvals' && <ProductionApprovalsTab />}
-        {tab === 'adjustments' && <AdjustmentsTab />}
-        {tab === 'attendance' && <AttendanceTab />}
-        {tab === 'approvals' && <ApprovalsTab />}
+        { tab === 'adjustments' && <AdjustmentsTab /> }
+        { tab === 'attendance' && <AttendanceTab /> }
+        { tab === 'wage_calculator' && <WageCalculatorTab /> }
+        { tab === 'approvals' && <ApprovalsTab /> }
         {tab === 'purchase_returns' && <ReturnsTab returnType="Purchase Return" />}
         {tab === 'sales_returns' && <ReturnsTab returnType="Sales Return" />}
         {tab === 'bom' && <RecipesTab onRefresh={() => {}} />}

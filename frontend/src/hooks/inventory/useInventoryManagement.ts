@@ -3,7 +3,7 @@ import { useToast } from '@/hooks/use-toast';
 import { api } from '@/api/client';
 
 export type Tab = 'dashboard' | 'products' | 'categories' | 'sub_categories' | 'brands' | 'units' | 'suppliers' | 'labour' |
-  'purchases' | 'sales' | 'productions' | 'deleted_productions' | 'adjustments' | 'attendance' | 'approvals' | 'sales_returns' | 'purchase_returns' | 'reports' | 'settings' | 'stock_ledger' | 'purchase_orders' | 'total_stock' | 'bom' | 'production_approvals';
+  'purchases' | 'sales' | 'productions' | 'deleted_productions' | 'adjustments' | 'attendance' | 'approvals' | 'sales_returns' | 'purchase_returns' | 'reports' | 'settings' | 'stock_ledger' | 'purchase_orders' | 'total_stock' | 'bom' | 'production_approvals' | 'wage_calculator';
 
 export const useInventoryManagement = () => {
   const { toast } = useToast();
