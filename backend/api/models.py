@@ -232,6 +232,9 @@ class DailyAttendance(models.Model):
     bags_produced = models.FloatField(default=0.0)
     sales_achieved = models.FloatField(default=0.0)
     daily_advance = models.FloatField(default=0.0)
+    advance_slip_no = models.CharField(max_length=100, blank=True, null=True)
+    advance_medium = models.CharField(max_length=50, blank=True, null=True) # CASH, UPI, BANK
+    advance_note = models.TextField(blank=True, null=True)
     createdat = models.DateTimeField(default=timezone.now)
 
     class Meta:

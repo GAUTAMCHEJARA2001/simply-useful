@@ -16,8 +16,9 @@ export const AdvancedAttendanceTab: React.FC = () => {
   // state format: formData[empId][YYYY-MM-DD] = { status, daily_advance, ot_hours, ... }
   const [formData, setFormData] = useState<any>({});
   
-  // Detail Modal state
+  // Detail Modal states
   const [detailCell, setDetailCell] = useState<{empId: string, dateStr: string, empName: string} | null>(null);
+  const [advanceCell, setAdvanceCell] = useState<{empId: string, dateStr: string, empName: string} | null>(null);
 
   const daysInMonth = useMemo(() => {
     if (!selectedMonth) return 30;
@@ -146,13 +147,13 @@ export const AdvancedAttendanceTab: React.FC = () => {
                             <option value="LEAVE">L</option>
                           </select>
                           
-                          <input 
-                            type="number"
-                            placeholder="Adv ₹"
-                            className="w-full text-[10px] border border-transparent hover:border-border focus:border-primary rounded px-1 py-0.5 text-center bg-transparent"
-                            value={cell.daily_advance || ''}
-                            onChange={e => handleFieldChange(emp.id, dateStr, 'daily_advance', Number(e.target.value))}
-                          />
+                          <button 
+                            onClick={() => setAdvanceCell({empId: emp.id, dateStr, empName: emp.name})}
+                            className={`w-full text-[10px] border rounded px-1 py-0.5 text-center transition-colors
+                              ${cell.daily_advance ? 'border-primary bg-primary/10 text-primary font-bold' : 'border-transparent hover:border-border text-muted-foreground bg-transparent'}`}
+                          >
+                            {cell.daily_advance ? `₹${cell.daily_advance}` : 'Adv ₹'}
+                          </button>
                           
                           {/* Hover edit button for details (OT, Bags, etc) */}
                           <button 
@@ -214,6 +215,54 @@ export const AdvancedAttendanceTab: React.FC = () => {
                 </div>
                 <div className="pt-4 flex justify-end">
                   <Button onClick={() => setDetailCell(null)}>Done</Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Advance Modal */}
+      <Dialog open={!!advanceCell} onOpenChange={(open) => !open && setAdvanceCell(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Advance Details: {advanceCell?.empName}</DialogTitle>
+            <p className="text-sm text-muted-foreground">Date: {advanceCell?.dateStr}</p>
+          </DialogHeader>
+          
+          {advanceCell && (() => {
+            const row = formData[advanceCell.empId]?.[advanceCell.dateStr] || {};
+            return (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Advance Amount (₹)</label>
+                    <input type="number" min="0" step="0.01" className="w-full border rounded-lg px-3 py-2 text-sm"
+                      value={row.daily_advance || ''} onChange={e => handleFieldChange(advanceCell.empId, advanceCell.dateStr, 'daily_advance', Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Medium of Transfer</label>
+                    <select className="w-full border rounded-lg px-3 py-2 text-sm"
+                      value={row.advance_medium || ''} onChange={e => handleFieldChange(advanceCell.empId, advanceCell.dateStr, 'advance_medium', e.target.value)}>
+                      <option value="">- Select -</option>
+                      <option value="CASH">Cash</option>
+                      <option value="UPI">UPI</option>
+                      <option value="BANK_TRANSFER">Bank Transfer</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <label className="text-sm font-medium">Advance Slip No.</label>
+                    <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm"
+                      value={row.advance_slip_no || ''} onChange={e => handleFieldChange(advanceCell.empId, advanceCell.dateStr, 'advance_slip_no', e.target.value)} />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <label className="text-sm font-medium">Note / Remarks</label>
+                    <textarea className="w-full border rounded-lg px-3 py-2 text-sm" rows={3}
+                      value={row.advance_note || ''} onChange={e => handleFieldChange(advanceCell.empId, advanceCell.dateStr, 'advance_note', e.target.value)} />
+                  </div>
+                </div>
+                <div className="pt-4 flex justify-end">
+                  <Button onClick={() => setAdvanceCell(null)}>Done</Button>
                 </div>
               </div>
             );

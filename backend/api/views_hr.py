@@ -113,7 +113,10 @@ def hr_attendance(request):
                 'km_travelled': a.km_travelled,
                 'bags_produced': a.bags_produced,
                 'sales_achieved': a.sales_achieved,
-                'daily_advance': a.daily_advance
+                'daily_advance': a.daily_advance,
+                'advance_slip_no': a.advance_slip_no,
+                'advance_medium': a.advance_medium,
+                'advance_note': a.advance_note
             })
         return send_success(data, 'Attendance fetched')
 
@@ -137,6 +140,9 @@ def hr_attendance(request):
                     'bags_produced': float(r.get('bags_produced') or 0.0),
                     'sales_achieved': float(r.get('sales_achieved') or 0.0),
                     'daily_advance': float(r.get('daily_advance') or 0.0),
+                    'advance_slip_no': r.get('advance_slip_no') or '',
+                    'advance_medium': r.get('advance_medium') or '',
+                    'advance_note': r.get('advance_note') or ''
                 }
             )
         return send_success(None, 'Attendance records saved')
