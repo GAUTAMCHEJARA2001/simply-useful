@@ -109,24 +109,15 @@ export const EmployeeMasterTab: React.FC = () => {
     );
   }
 
-  const columns = [
-    { header: 'Name', accessor: 'name' as const },
-    { header: 'Type', accessor: (row: any) => row.employee_type === 'FIXED' ? 'Fixed (Monthly)' : 'Variable (Daily)' },
-    { header: 'Base Pay', accessor: (row: any) => row.employee_type === 'FIXED' ? `₹${row.base_salary_monthly}/mo` : `₹${row.dailywage}/day` },
-    { header: 'OT Rate', accessor: (row: any) => `₹${row.overtime_hourly_rate}/hr` },
-    { header: 'Travel Rate', accessor: (row: any) => `₹${row.travel_allowance_per_km}/km` },
-    { 
-      header: 'Actions', 
-      accessor: (row: any) => (
-        <div className="flex gap-2 justify-end">
-          <Button size="icon" variant="ghost" onClick={() => handleEdit(row)}><Edit2 className="w-4 h-4 text-blue-500" /></Button>
-          <Button size="icon" variant="ghost" onClick={() => {
-            if(confirm('Deactivate employee?')) deleteEmployee(row.id);
-          }}><Trash2 className="w-4 h-4 text-red-500" /></Button>
-        </div>
-      )
-    }
-  ];
+  const columns = ['Name', 'Type', 'Base Pay', 'OT Rate', 'Travel Rate'];
+  
+  const rows = employees.map((emp: any) => [
+    emp.name,
+    emp.employee_type === 'FIXED' ? 'Fixed (Monthly)' : 'Variable (Daily)',
+    emp.employee_type === 'FIXED' ? `₹${emp.base_salary_monthly}/mo` : `₹${emp.dailywage}/day`,
+    `₹${emp.overtime_hourly_rate}/hr`,
+    `₹${emp.travel_allowance_per_km}/km`
+  ]);
 
   return (
     <div className="space-y-4">
@@ -135,7 +126,14 @@ export const EmployeeMasterTab: React.FC = () => {
         <Button onClick={handleAddNew} className="gap-2"><Plus className="w-4 h-4" /> Add Employee</Button>
       </div>
       <SafeDataView isLoading={isLoading} error={error} data={employees} onRetry={refetch}>
-        <DataTable data={employees} columns={columns} />
+        <DataTable 
+          columns={columns} 
+          rows={rows} 
+          onEdit={(idx) => handleEdit(employees[idx])}
+          onDelete={(idx) => {
+            if(confirm('Deactivate employee?')) deleteEmployee(employees[idx].id);
+          }}
+        />
       </SafeDataView>
     </div>
   );
