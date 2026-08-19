@@ -10,7 +10,7 @@ from api.models import (
     Labour, LeaveType, EmployeeLeaveBalance, LeaveRecord,
     SalaryAdvance, DailyAttendance, SalarySlip, Company
 )
-from api.utils import send_success, send_error, _get_company_id
+from api.views import send_success, send_error, _get_company_id
 
 # --- EMPLOYEES ---
 @api_view(['GET', 'POST'])
