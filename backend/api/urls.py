@@ -64,6 +64,11 @@ router.register('broadcasts', BroadcastViewSet, basename='broadcasts')
 router.register('payments', PaymentReceiptViewSet, basename='payments')
 router.register('estimates', EstimateViewSet, basename='estimates')
 
+from api.views_hr import (
+    hr_employees, hr_employees_detail,
+    hr_attendance, hr_generate_payroll
+)
+
 urlpatterns = [
     # Auth
     path('auth/login', auth_login, name='auth-login'),
@@ -128,8 +133,15 @@ urlpatterns = [
     path('transactions/productions/<str:pk>', transaction_productions_detail, name='tx-production-detail'),
     path('transactions/productions/<str:pk>/materials', transaction_production_materials, name='tx-production-materials'),
     path('transactions/productions/migrate-db/run', fix_old_productions, name='tx-production-migrate'),
+    # HR & Payroll
+    path('hr/employees', hr_employees, name='hr-employees'),
+    path('hr/employees/<str:pk>', hr_employees_detail, name='hr-employee-detail'),
+    path('hr/attendance', hr_attendance, name='hr-attendance'),
+    path('hr/payroll/generate', hr_generate_payroll, name='hr-payroll-generate'),
+
     path('transactions/adjustments', transaction_adjustments, name='tx-adjustments'),
     path('transactions/adjustments/<str:pk>', transaction_adjustments_detail, name='tx-adjustment-detail'),
+    # Note: the old transactions/attendance was replaced by hr/attendance, but keeping dummy routes to prevent old frontend breakage
     path('transactions/attendance', transaction_attendance, name='tx-attendance'),
     path('transactions/attendance/<str:pk>', transaction_attendance_detail, name='tx-attendance-detail'),
     path('transactions/returns', transaction_returns, name='tx-returns'),

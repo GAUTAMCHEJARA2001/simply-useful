@@ -61,6 +61,7 @@ const UserManagement = safeLazy(() => import("./pages/UserManagement"), "UserMan
 const HRDashboard = safeLazy(() => import("./pages/HRDashboard"), "HRDashboard");
 const InventoryDashboard = safeLazy(() => import("./pages/InventoryDashboard"), "InventoryDashboard");
 const InventoryManagement = safeLazy(() => import('@/pages/InventoryManagement'), "InventoryManagement");
+const HRManagement = safeLazy(() => import('@/pages/HRManagement'), "HRManagement");
 const DispatchOrderPage = safeLazy(() => import('@/pages/DispatchOrderPage'), "DispatchOrderPage");
 const WarehouseManagement = safeLazy(() => import("./pages/WarehouseManagement"), "WarehouseManagement");
 const VisitTracking = safeLazy(() => import("./pages/VisitTracking"), "VisitTracking");
@@ -241,6 +242,9 @@ const App = () => {
 
                       {/* HR */}
                       <Route path="/hr" element={<ProtectedRoute><HRDashboard /></ProtectedRoute>} />
+
+                      {/* HR Module */}
+                      <Route path="/hr/manage" element={<ProtectedRoute><HRManagement /></ProtectedRoute>} />
 
                       {/* Inventory */}
                       <Route path="/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />
