@@ -231,6 +231,7 @@ class DailyAttendance(models.Model):
     km_travelled = models.FloatField(default=0.0)
     bags_produced = models.FloatField(default=0.0)
     sales_achieved = models.FloatField(default=0.0)
+    daily_advance = models.FloatField(default=0.0)
     createdat = models.DateTimeField(default=timezone.now)
 
     class Meta:

@@ -108,9 +108,12 @@ def hr_attendance(request):
                 'status': a.status,
                 'ot_hours': a.ot_hours,
                 'late_hours': a.late_hours,
+                'ot_hours': a.ot_hours,
+                'late_hours': a.late_hours,
                 'km_travelled': a.km_travelled,
                 'bags_produced': a.bags_produced,
-                'sales_achieved': a.sales_achieved
+                'sales_achieved': a.sales_achieved,
+                'daily_advance': a.daily_advance
             })
         return send_success(data, 'Attendance fetched')
 
@@ -133,6 +136,7 @@ def hr_attendance(request):
                     'km_travelled': float(r.get('km_travelled') or 0.0),
                     'bags_produced': float(r.get('bags_produced') or 0.0),
                     'sales_achieved': float(r.get('sales_achieved') or 0.0),
+                    'daily_advance': float(r.get('daily_advance') or 0.0),
                 }
             )
         return send_success(None, 'Attendance records saved')
@@ -162,10 +166,9 @@ def hr_generate_payroll(request):
         total_km = attendance.aggregate(Sum('km_travelled'))['km_travelled__sum'] or 0.0
         total_bags = attendance.aggregate(Sum('bags_produced'))['bags_produced__sum'] or 0.0
         total_sales = attendance.aggregate(Sum('sales_achieved'))['sales_achieved__sum'] or 0.0
+        total_daily_advance = attendance.aggregate(Sum('daily_advance'))['daily_advance__sum'] or 0.0
 
         # Calculate Payable Days
-        # If Fixed: typically they get paid for month length minus unpaid absents. We'll simplify to Days Present + WO + HalfDays(0.5)
-        # Or standard formula: (Base Salary / 30) * Paid Days
         payable_days = present_count + (half_day_count * 0.5)
         if emp.employee_type == 'FIXED':
             payable_days += wo_count # Weekly offs are paid for Fixed
@@ -203,7 +206,7 @@ def hr_generate_payroll(request):
             deduct = min(adv.deduction_per_month, adv.remaining_balance)
             advance_deduction += deduct
             
-        net_pay = gross_pay - late_deduction - advance_deduction
+        net_pay = gross_pay - late_deduction - advance_deduction - total_daily_advance
         
         payroll_data.append({
             'labour_id': emp.id,
@@ -230,8 +233,8 @@ def hr_generate_payroll(request):
             },
             'deductions': {
                 'late': round(late_deduction, 2),
-                'advance': round(advance_deduction, 2),
-                'total_deductions': round(late_deduction + advance_deduction, 2)
+                'advance': round(advance_deduction + total_daily_advance, 2),
+                'total_deductions': round(late_deduction + advance_deduction + total_daily_advance, 2)
             },
             'net_pay': round(net_pay, 2)
         })
