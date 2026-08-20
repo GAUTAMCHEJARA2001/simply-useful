@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useHRPayroll } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
-import { Printer, Download, Search, FileText } from 'lucide-react';
+import { Printer, Download, Search, FileText, Calculator } from 'lucide-react';
 
 const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -14,6 +14,7 @@ export const PayrollTab: React.FC = () => {
   const { data: payroll = [], isLoading, error, refetch } = useHRPayroll(fetchMonth);
 
   const [selectedSlip, setSelectedSlip] = useState<any>(null);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const handleGenerate = () => {
     setFetchMonth(selectedMonth);
@@ -108,6 +109,9 @@ export const PayrollTab: React.FC = () => {
             onChange={e => setSelectedMonth(e.target.value)}
             className="border rounded-lg px-3 py-2 text-sm bg-background"
           />
+          <Button variant="outline" onClick={() => setShowBreakdown(!showBreakdown)} className="gap-2">
+            <Calculator className="w-4 h-4" /> {showBreakdown ? 'Hide Breakdown' : 'Show Breakdown'}
+          </Button>
           <Button onClick={handleGenerate} className="gap-2"><Search className="w-4 h-4" /> Run Payroll</Button>
         </div>
       </div>
@@ -135,6 +139,18 @@ export const PayrollTab: React.FC = () => {
                     <span>Net Pay:</span> <span>{Currency(slip.net_pay)}</span>
                   </div>
                 </div>
+                
+                {showBreakdown && slip.breakdown && (
+                  <div className="mt-4 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-200 text-[11px] font-mono text-gray-700 space-y-1">
+                    <div className="font-bold text-gray-900 border-b border-gray-200 pb-1 mb-1">Calculation Breakdown</div>
+                    {slip.breakdown.basic && <div><span className="text-gray-500">Basic:</span> {slip.breakdown.basic}</div>}
+                    {slip.breakdown.ot && <div><span className="text-gray-500">OT:</span> {slip.breakdown.ot}</div>}
+                    {slip.breakdown.travel && <div><span className="text-gray-500">Travel:</span> {slip.breakdown.travel}</div>}
+                    {slip.breakdown.incentive && <div><span className="text-gray-500">Incentive:</span> {slip.breakdown.incentive}</div>}
+                    {slip.breakdown.late && <div><span className="text-gray-500">Late:</span> {slip.breakdown.late}</div>}
+                    {slip.breakdown.advance && <div><span className="text-gray-500">Advance:</span> {slip.breakdown.advance}</div>}
+                  </div>
+                )}
               </div>
               <Button variant="secondary" className="w-full gap-2" onClick={() => setSelectedSlip(slip)}>
                 <FileText className="w-4 h-4" /> View Salary Slip

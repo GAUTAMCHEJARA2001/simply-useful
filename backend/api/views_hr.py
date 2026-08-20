@@ -303,6 +303,7 @@ def hr_generate_payroll(request):
 
         # Base Pay
         basic_pay = 0.0
+        basic_calc = ""
         if emp.employee_type == 'FIXED':
             # Indian Norm: Split Base Salary Monthly into Basic(50%) and HRA(30%) and Allowances(20%)
             daily_rate = emp.base_salary_monthly / 30.0 # Standardize to 30 days
@@ -310,12 +311,14 @@ def hr_generate_payroll(request):
             basic_pay = gross_base * 0.50
             hra = gross_base * 0.30
             other_allowances = gross_base * 0.20
+            basic_calc = f"(₹{emp.base_salary_monthly}/30) * {payable_days} days * 50% = ₹{basic_pay:.2f}"
         else:
             # Variable / Daily
             gross_base = emp.dailywage * payable_days
             basic_pay = gross_base
             hra = 0.0
             other_allowances = 0.0
+            basic_calc = f"₹{emp.dailywage}/day * {payable_days} days = ₹{basic_pay:.2f}"
             
         
         # Additions
@@ -325,30 +328,59 @@ def hr_generate_payroll(request):
             base_hourly_rate = emp.dailywage / 8.0
 
         ot_pay = total_ot_hours * (base_hourly_rate * emp.overtime_hourly_rate)
+        ot_calc = f"{total_ot_hours} hrs * (₹{base_hourly_rate:.2f}/hr * {emp.overtime_hourly_rate}x) = ₹{ot_pay:.2f}" if total_ot_hours > 0 else ""
         
         # Calculate dynamic travel pay based on each day
         travel_pay = 0.0
+        bike_km_total = 0.0
+        car_km_total = 0.0
+        other_travel_total = 0.0
         for att in attendance:
             if att.travel_vehicle == 'BIKE':
                 travel_pay += (att.km_travelled * emp.bike_allowance_per_km)
+                bike_km_total += att.km_travelled
             elif att.travel_vehicle == 'CAR':
                 travel_pay += (att.km_travelled * emp.car_allowance_per_km)
+                car_km_total += att.km_travelled
             elif att.travel_vehicle == 'OTHER':
                 travel_pay += att.actual_travel_amount
+                other_travel_total += att.actual_travel_amount
+                
+        travel_calc = ""
+        if travel_pay > 0:
+            parts = []
+            if bike_km_total > 0: parts.append(f"{bike_km_total} km * ₹{emp.bike_allowance_per_km}/km (Bike)")
+            if car_km_total > 0: parts.append(f"{car_km_total} km * ₹{emp.car_allowance_per_km}/km (Car)")
+            if other_travel_total > 0: parts.append(f"₹{other_travel_total} (Other)")
+            travel_calc = " + ".join(parts) + f" = ₹{travel_pay:.2f}"
                 
         incentives = (total_bags * emp.bag_incentive_rate) + (total_sales * emp.sales_incentive_pct)
+        incentive_calc = ""
+        if incentives > 0:
+            parts = []
+            if total_bags > 0: parts.append(f"{total_bags} bags * ₹{emp.bag_incentive_rate}")
+            if total_sales > 0: parts.append(f"₹{total_sales} sales * {emp.sales_incentive_pct * 100}%")
+            incentive_calc = " + ".join(parts) + f" = ₹{incentives:.2f}"
         
         gross_pay = basic_pay + hra + other_allowances + ot_pay + travel_pay + incentives
         
         # Deductions
         late_deduction = total_late_hours * (base_hourly_rate * emp.late_deduction_rate)
+        late_calc = f"{total_late_hours} hrs * (₹{base_hourly_rate:.2f}/hr * {emp.late_deduction_rate}x) = ₹{late_deduction:.2f}" if total_late_hours > 0 else ""
         
         # Salary Advance (Check for active advances)
         advances = SalaryAdvance.objects.filter(labourid=emp, remaining_balance__gt=0)
         advance_deduction = 0.0
+        advance_calc_parts = []
         for adv in advances:
             deduct = min(adv.deduction_per_month, adv.remaining_balance)
             advance_deduction += deduct
+            advance_calc_parts.append(f"₹{deduct} (Monthly EMI)")
+            
+        if total_daily_advance > 0:
+            advance_calc_parts.append(f"₹{total_daily_advance} (Daily Advances)")
+            
+        advance_calc = " + ".join(advance_calc_parts) + f" = ₹{advance_deduction + total_daily_advance:.2f}" if advance_calc_parts else ""
             
         net_pay = gross_pay - late_deduction - advance_deduction - total_daily_advance
         
@@ -380,7 +412,15 @@ def hr_generate_payroll(request):
                 'advance': round(advance_deduction + total_daily_advance, 2),
                 'total_deductions': round(late_deduction + advance_deduction + total_daily_advance, 2)
             },
-            'net_pay': round(net_pay, 2)
+            'net_pay': round(net_pay, 2),
+            'breakdown': {
+                'basic': basic_calc,
+                'ot': ot_calc,
+                'travel': travel_calc,
+                'late': late_calc,
+                'incentive': incentive_calc,
+                'advance': advance_calc
+            }
         })
 
     return send_success(payroll_data, 'Payroll generated successfully')
