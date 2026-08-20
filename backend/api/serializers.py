@@ -382,7 +382,7 @@ class DealerSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    gst = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    gst = serializers.CharField(source='gst_number', required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Dealer
@@ -404,15 +404,6 @@ class DealerSerializer(serializers.ModelSerializer):
             ret['assignedSoEmails'] = []
         return ret
 
-    def create(self, validated_data):
-        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
-            validated_data.pop(key, None)
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
-            validated_data.pop(key, None)
-        return super().update(instance, validated_data)
 
 
 class DistributorSerializer(serializers.ModelSerializer):
@@ -433,7 +424,7 @@ class DistributorSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    gst = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    gst = serializers.CharField(source='gst_number', required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Distributor
@@ -455,15 +446,7 @@ class DistributorSerializer(serializers.ModelSerializer):
             ret['assignedSoEmails'] = []
         return ret
 
-    def create(self, validated_data):
-        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
-            validated_data.pop(key, None)
-        return super().create(validated_data)
 
-    def update(self, instance, validated_data):
-        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
-            validated_data.pop(key, None)
-        return super().update(instance, validated_data)
 
 
 class OrderitemSerializer(serializers.ModelSerializer):

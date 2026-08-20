@@ -1225,7 +1225,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         user_email = getattr(self.request.user, 'email', None)
         qs = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
         if user_role == 'SALES' and user_email:
-            qs = qs.filter(assignedsoemails__icontains=user_email)
+            qs = qs.filter(assignedsoemails__contains=[user_email])
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -1237,7 +1237,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         if user_role == 'SALES' and user_email:
-            qs = qs.filter(assignedsoemails__icontains=user_email)
+            qs = qs.filter(assignedsoemails__contains=[user_email])
 
         search = request.query_params.get('search', '').strip()
         if search:
@@ -1247,7 +1247,6 @@ class DealerViewSet(viewsets.ModelViewSet):
                 Q(dealercode__icontains=search) |
                 Q(city__icontains=search) |
                 Q(territory__icontains=search) |
-                Q(assignedsoemails__icontains=search) |
                 Q(distributorname__icontains=search)
             )
 
@@ -1315,9 +1314,7 @@ class DealerViewSet(viewsets.ModelViewSet):
                 attempts += 1
         serializer = DealerSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        validated = serializer.validated_data
-        instance = Dealer(**validated)
-        instance.save()
+        instance = serializer.save()
         return send_success(DealerSerializer(instance).data, 'Dealer created successfully', 201)
 
     def update(self, request, *args, **kwargs):
@@ -1351,7 +1348,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         user_email = getattr(self.request.user, 'email', None)
         qs = Distributor.objects.filter(companyid_id=company_id) if company_id else Distributor.objects.all()
         if user_role == 'SALES' and user_email:
-            qs = qs.filter(assignedsoemails__icontains=user_email)
+            qs = qs.filter(assignedsoemails__contains=[user_email])
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -1363,7 +1360,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         if user_role == 'SALES' and user_email:
-            qs = qs.filter(assignedsoemails__icontains=user_email)
+            qs = qs.filter(assignedsoemails__contains=[user_email])
 
         search = request.query_params.get('search', '').strip()
         if search:
@@ -1371,8 +1368,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 Q(distributorname__icontains=search) |
                 Q(area__icontains=search) |
-                Q(territory__icontains=search) |
-                Q(assignedsoemails__icontains=search)
+                Q(territory__icontains=search)
             )
 
         page = request.query_params.get('page')
@@ -1427,9 +1423,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
             data['id'] = 'c' + uuid.uuid4().hex[:23]
         serializer = DistributorSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        validated = serializer.validated_data
-        instance = Distributor(**validated)
-        instance.save()
+        instance = serializer.save()
         return send_success(DistributorSerializer(instance).data, 'Distributor created successfully', 201)
 
     def update(self, request, *args, **kwargs):
