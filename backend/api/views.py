@@ -2534,7 +2534,7 @@ def transaction_purchases(request):
                             product_name = prod.name
                         except Product.DoesNotExist:
                             pass
-                    Purchaseitem.objects.create(id=item_id, purchaseid=purchase_obj, productname=product_name, productid_id=prod_id, qty=qty, rate=rate, total=item_total)
+                    Purchaseitem.objects.create(id=item_id, purchaseid=purchase_obj, productname=product_name, qty=qty, rate=rate, total=item_total)
                     items_data.append({'id': item_id, 'productName': product_name, 'productId': prod_id, 'qty': qty, 'quantity': qty, 'rate': rate, 'total': item_total, 'tax_percent': tax_p})
         except IntegrityError:
             return send_error('Purchase could not be recorded because related data is out of sync. Please refresh and try again.', 409)
