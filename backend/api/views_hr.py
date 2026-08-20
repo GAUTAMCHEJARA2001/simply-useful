@@ -116,7 +116,7 @@ def hr_employees(request):
             warehouseid_id=data.get('warehouseid'),
             department=data.get('department'),
             designation=data.get('designation'),
-            reports_to_id=data.get('reports_to'),
+            reports_to_id=data.get('reports_to') or None,
             is_ot_eligible=bool(data.get('is_ot_eligible')),
             is_late_deduction_eligible=bool(data.get('is_late_deduction_eligible')),
             is_km_eligible=bool(data.get('is_km_eligible')),
@@ -146,7 +146,10 @@ def hr_employees_detail(request, pk):
         emp.contactinfo = data.get('contactinfo', emp.contactinfo)
         emp.department = data.get('department', emp.department)
         emp.designation = data.get('designation', emp.designation)
-        emp.reports_to_id = data.get('reports_to', emp.reports_to_id)
+        
+        reports_to_val = data.get('reports_to', emp.reports_to_id)
+        emp.reports_to_id = None if reports_to_val == '' else reports_to_val
+        
         if 'is_ot_eligible' in data: emp.is_ot_eligible = bool(data.get('is_ot_eligible'))
         if 'is_late_deduction_eligible' in data: emp.is_late_deduction_eligible = bool(data.get('is_late_deduction_eligible'))
         if 'is_km_eligible' in data: emp.is_km_eligible = bool(data.get('is_km_eligible'))
