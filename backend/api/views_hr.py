@@ -276,7 +276,12 @@ def hr_generate_payroll(request):
             
         
         # Additions
-        ot_pay = total_ot_hours * emp.overtime_hourly_rate
+        if emp.employee_type == 'FIXED':
+            base_hourly_rate = (emp.base_salary_monthly / 30.0) / 8.0
+        else:
+            base_hourly_rate = emp.dailywage / 8.0
+
+        ot_pay = total_ot_hours * (base_hourly_rate * emp.overtime_hourly_rate)
         
         # Calculate dynamic travel pay based on each day
         travel_pay = 0.0
@@ -293,7 +298,7 @@ def hr_generate_payroll(request):
         gross_pay = basic_pay + hra + other_allowances + ot_pay + travel_pay + incentives
         
         # Deductions
-        late_deduction = total_late_hours * emp.late_deduction_rate
+        late_deduction = total_late_hours * (base_hourly_rate * emp.late_deduction_rate)
         
         # Salary Advance (Check for active advances)
         advances = SalaryAdvance.objects.filter(labourid=emp, remaining_balance__gt=0)

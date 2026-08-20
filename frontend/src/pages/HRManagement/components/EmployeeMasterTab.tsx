@@ -84,12 +84,12 @@ export const EmployeeMasterTab: React.FC = () => {
             )}
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Overtime Hourly Rate (₹)</label>
+              <label className="text-sm font-medium">Overtime Multiplier (e.g. 1.5x)</label>
               <input type="number" min="0" step="0.01" className="w-full border rounded-lg px-3 py-2 text-sm"
                 value={formData.overtime_hourly_rate} onChange={e => setFormData({...formData, overtime_hourly_rate: Number(e.target.value)})} />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Late Deduction Hourly Rate (₹)</label>
+              <label className="text-sm font-medium">Late Deduction Multiplier (e.g. 1.0x)</label>
               <input type="number" min="0" step="0.01" className="w-full border rounded-lg px-3 py-2 text-sm"
                 value={formData.late_deduction_rate} onChange={e => setFormData({...formData, late_deduction_rate: Number(e.target.value)})} />
             </div>
@@ -175,7 +175,7 @@ export const EmployeeMasterTab: React.FC = () => {
     );
   }
 
-  const columns = ['Name', 'Department', 'Post', 'Type', 'Base Pay', 'OT Rate', 'Bike/Car Rate'];
+  const columns = ['Name', 'Department', 'Post', 'Type', 'Base Pay', 'OT Multiplier', 'Bike/Car Rate'];
   
   const rows = employees.map((emp: any) => [
     emp.name,
@@ -183,7 +183,7 @@ export const EmployeeMasterTab: React.FC = () => {
     emp.designation || '-',
     emp.employee_type === 'FIXED' ? 'Fixed (Monthly)' : 'Variable (Daily)',
     emp.employee_type === 'FIXED' ? `₹${emp.base_salary_monthly}/mo` : `₹${emp.dailywage}/day`,
-    emp.is_ot_eligible ? `₹${emp.overtime_hourly_rate}/hr` : 'N/A',
+    emp.is_ot_eligible ? `${emp.overtime_hourly_rate || 0}x` : 'N/A',
     emp.is_km_eligible ? `₹${emp.bike_allowance_per_km} / ₹${emp.car_allowance_per_km}` : 'N/A'
   ]);
 
