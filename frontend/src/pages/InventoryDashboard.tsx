@@ -843,22 +843,24 @@ const InventoryDashboard: React.FC = () => {
                       )}
 
                       {/* Admin Quick Approvals on the card itself */}
-                      {o.status === 'Pending' && (user?.role === 'SUPERADMIN' || user?.role === 'ADMIN') && (
+                      {(o.status === 'Pending' || o.status === 'Approved') && (user?.role === 'SUPERADMIN' || user?.role === 'ADMIN') && (
                         <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto shrink-0">
-                          <Button 
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white h-7.5 px-2 shadow-sm text-[10px] flex items-center justify-center"
-                            onClick={() => {
-                              setConfirmOrder({
-                                id: orderId,
-                                action: 'Approved',
-                                action_date: new Date().toISOString().split('T')[0],
-                                reason: ''
-                              });
-                            }}
-                          >
-                            <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
-                          </Button>
+                          {o.status === 'Pending' && (
+                            <Button 
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white h-7.5 px-2 shadow-sm text-[10px] flex items-center justify-center"
+                              onClick={() => {
+                                setConfirmOrder({
+                                  id: orderId,
+                                  action: 'Approved',
+                                  action_date: new Date().toISOString().split('T')[0],
+                                  reason: ''
+                                });
+                              }}
+                            >
+                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                            </Button>
+                          )}
                           <Button 
                             size="sm"
                             variant="destructive"
@@ -867,13 +869,13 @@ const InventoryDashboard: React.FC = () => {
                               setConfirmOrder({
                                 id: orderId,
                                 action: 'Cancelled',
-                                subAction: 'Reject',
+                                subAction: o.status === 'Approved' ? 'Cancel' : 'Reject',
                                 action_date: new Date().toISOString().split('T')[0],
                                 reason: ''
                               });
                             }}
                           >
-                            <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                            <XCircle className="w-3.5 h-3.5 mr-1" /> {o.status === 'Approved' ? 'Cancel' : 'Reject'}
                           </Button>
                         </div>
                       )}
@@ -1115,28 +1117,31 @@ const InventoryDashboard: React.FC = () => {
 
               return (
                 <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
-                  {/* Pending actions */}
-                  {viewOrder.status === 'Pending' && isAdminOrSuper && (
+                  {/* Pending/Approved Admin actions */}
+                  {(viewOrder.status === 'Pending' || viewOrder.status === 'Approved') && isAdminOrSuper && (
                     <>
                       <Button variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => {
                         setConfirmOrder({
                           id: orderId,
                           action: 'Cancelled',
-                          subAction: 'Reject',
+                          subAction: viewOrder.status === 'Approved' ? 'Cancel' : 'Reject',
                           action_date: new Date().toISOString().split('T')[0],
                           reason: ''
                         });
                         setViewOrder(null);
-                      }}>Reject</Button>
-                      <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => {
-                        setConfirmOrder({
-                          id: orderId,
-                          action: 'Approved',
-                          action_date: new Date().toISOString().split('T')[0],
-                          reason: ''
-                        });
-                        setViewOrder(null);
-                      }}>Approve</Button>
+                      }}>{viewOrder.status === 'Approved' ? 'Cancel' : 'Reject'}</Button>
+                      
+                      {viewOrder.status === 'Pending' && (
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => {
+                          setConfirmOrder({
+                            id: orderId,
+                            action: 'Approved',
+                            action_date: new Date().toISOString().split('T')[0],
+                            reason: ''
+                          });
+                          setViewOrder(null);
+                        }}>Approve</Button>
+                      )}
                     </>
                   )}
 

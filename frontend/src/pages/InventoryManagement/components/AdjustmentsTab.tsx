@@ -8,6 +8,7 @@ import { useWarehouses } from '@/hooks/inventory/useMasters';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
 import { formatDecimal } from '@/utils/format';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 export const AdjustmentsTab: React.FC = () => {
   const { data: adjustments = [], isLoading, error, refetch } = useAdjustments();
@@ -56,11 +57,12 @@ export const AdjustmentsTab: React.FC = () => {
         <div className="space-y-4">
           <div>
             <label className="text-sm font-medium block mb-1">Product</label>
-            <select value={form.productId || ''} onChange={e => setForm({ ...form, productId: e.target.value })}
-              className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm">
-              <option value="">-- Choose Product --</option>
-              {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect 
+              options={products.map((p: any) => ({ value: p.id, label: p.name }))}
+              value={form.productId || ''}
+              onChange={val => setForm({ ...form, productId: val })}
+              placeholder="-- Choose Product --"
+            />
           </div>
 
           <div>
