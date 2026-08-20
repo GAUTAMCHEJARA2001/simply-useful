@@ -28,7 +28,13 @@ export const EmployeeMasterTab: React.FC = () => {
       travel_allowance_per_km: 0,
       sales_incentive_pct: 0,
       bag_incentive_rate: 0,
-      contactinfo: ''
+      contactinfo: '',
+      department: '',
+      reports_to: '',
+      is_ot_eligible: false,
+      is_late_deduction_eligible: false,
+      is_km_eligible: false,
+      is_bag_eligible: false
     });
     setIsEditing(true);
   };
@@ -99,6 +105,46 @@ export const EmployeeMasterTab: React.FC = () => {
                 value={formData.bag_incentive_rate} onChange={e => setFormData({...formData, bag_incentive_rate: Number(e.target.value)})} />
             </div>
           </div>
+
+          <div className="pt-4 border-t border-border">
+            <h3 className="text-md font-semibold mb-4 text-primary">Hierarchy & Eligibility</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Department</label>
+                <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. Sales, Logistics"
+                  value={formData.department || ''} onChange={e => setFormData({...formData, department: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Reports To (Manager)</label>
+                <select className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.reports_to || ''} onChange={e => setFormData({...formData, reports_to: e.target.value})}>
+                  <option value="">- None -</option>
+                  {employees.filter((e: any) => e.id !== formData.id).map((e: any) => (
+                    <option key={e.id} value={e.id}>{e.name} ({e.department || 'No Dept'})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+              <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-2 rounded">
+                <input type="checkbox" checked={!!formData.is_ot_eligible} onChange={e => setFormData({...formData, is_ot_eligible: e.target.checked})} />
+                OT Eligible
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-2 rounded">
+                <input type="checkbox" checked={!!formData.is_late_deduction_eligible} onChange={e => setFormData({...formData, is_late_deduction_eligible: e.target.checked})} />
+                Late Deduction
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-2 rounded">
+                <input type="checkbox" checked={!!formData.is_km_eligible} onChange={e => setFormData({...formData, is_km_eligible: e.target.checked})} />
+                KM Eligible
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-2 rounded">
+                <input type="checkbox" checked={!!formData.is_bag_eligible} onChange={e => setFormData({...formData, is_bag_eligible: e.target.checked})} />
+                Bag Eligible
+              </label>
+            </div>
+          </div>
           
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
@@ -109,14 +155,15 @@ export const EmployeeMasterTab: React.FC = () => {
     );
   }
 
-  const columns = ['Name', 'Type', 'Base Pay', 'OT Rate', 'Travel Rate'];
+  const columns = ['Name', 'Department', 'Type', 'Base Pay', 'OT Rate', 'Travel Rate'];
   
   const rows = employees.map((emp: any) => [
     emp.name,
+    emp.department || '-',
     emp.employee_type === 'FIXED' ? 'Fixed (Monthly)' : 'Variable (Daily)',
     emp.employee_type === 'FIXED' ? `₹${emp.base_salary_monthly}/mo` : `₹${emp.dailywage}/day`,
-    `₹${emp.overtime_hourly_rate}/hr`,
-    `₹${emp.travel_allowance_per_km}/km`
+    emp.is_ot_eligible ? `₹${emp.overtime_hourly_rate}/hr` : 'N/A',
+    emp.is_km_eligible ? `₹${emp.travel_allowance_per_km}/km` : 'N/A'
   ]);
 
   return (

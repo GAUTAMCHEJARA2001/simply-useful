@@ -184,29 +184,38 @@ export const AdvancedAttendanceTab: React.FC = () => {
           
           {detailCell && (() => {
             const row = formData[detailCell.empId]?.[detailCell.dateStr] || {};
+            const currentEmp = employees.find((e: any) => e.id === detailCell.empId);
             return (
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">OT Hours</label>
-                    <input type="number" min="0" step="0.5" className="w-full border rounded-lg px-3 py-2 text-sm"
-                      value={row.ot_hours || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'ot_hours', Number(e.target.value))} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Late Hours</label>
-                    <input type="number" min="0" step="0.5" className="w-full border rounded-lg px-3 py-2 text-sm"
-                      value={row.late_hours || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'late_hours', Number(e.target.value))} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">KM Travelled</label>
-                    <input type="number" min="0" step="1" className="w-full border rounded-lg px-3 py-2 text-sm"
-                      value={row.km_travelled || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'km_travelled', Number(e.target.value))} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Bags Produced</label>
-                    <input type="number" min="0" step="1" className="w-full border rounded-lg px-3 py-2 text-sm"
-                      value={row.bags_produced || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'bags_produced', Number(e.target.value))} />
-                  </div>
+                  {currentEmp?.is_ot_eligible && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">OT Hours</label>
+                      <input type="number" min="0" step="0.5" className="w-full border rounded-lg px-3 py-2 text-sm"
+                        value={row.ot_hours || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'ot_hours', Number(e.target.value))} />
+                    </div>
+                  )}
+                  {currentEmp?.is_late_deduction_eligible && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Late Hours</label>
+                      <input type="number" min="0" step="0.5" className="w-full border rounded-lg px-3 py-2 text-sm"
+                        value={row.late_hours || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'late_hours', Number(e.target.value))} />
+                    </div>
+                  )}
+                  {currentEmp?.is_km_eligible && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">KM Travelled</label>
+                      <input type="number" min="0" step="1" className="w-full border rounded-lg px-3 py-2 text-sm"
+                        value={row.km_travelled || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'km_travelled', Number(e.target.value))} />
+                    </div>
+                  )}
+                  {currentEmp?.is_bag_eligible && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Bags Produced</label>
+                      <input type="number" min="0" step="1" className="w-full border rounded-lg px-3 py-2 text-sm"
+                        value={row.bags_produced || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'bags_produced', Number(e.target.value))} />
+                    </div>
+                  )}
                   <div className="space-y-2 col-span-2">
                     <label className="text-sm font-medium">Sales Achieved (₹)</label>
                     <input type="number" min="0" step="1" className="w-full border rounded-lg px-3 py-2 text-sm"

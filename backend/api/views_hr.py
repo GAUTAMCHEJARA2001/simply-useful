@@ -35,7 +35,13 @@ def hr_employees(request):
                 'sales_incentive_pct': l.sales_incentive_pct,
                 'bag_incentive_rate': l.bag_incentive_rate,
                 'contactinfo': l.contactinfo,
-                'warehouseid': l.warehouseid_id
+                'warehouseid': l.warehouseid_id,
+                'department': l.department,
+                'reports_to': l.reports_to_id,
+                'is_ot_eligible': l.is_ot_eligible,
+                'is_late_deduction_eligible': l.is_late_deduction_eligible,
+                'is_km_eligible': l.is_km_eligible,
+                'is_bag_eligible': l.is_bag_eligible
             })
         return send_success(employees, 'Employees fetched')
 
@@ -45,9 +51,9 @@ def hr_employees(request):
             company_id = 1 # fallback
 
         emp = Labour.objects.create(
-            name=data.get('name'),
-            companyid_id=company_id,
+            name=data.get('name', ''),
             employee_type=data.get('employee_type', 'VARIABLE'),
+            companyid_id=company_id,
             base_salary_monthly=float(data.get('base_salary_monthly') or 0.0),
             dailywage=float(data.get('dailywage') or 0.0),
             overtime_hourly_rate=float(data.get('overtime_hourly_rate') or 0.0),
@@ -56,7 +62,13 @@ def hr_employees(request):
             sales_incentive_pct=float(data.get('sales_incentive_pct') or 0.0),
             bag_incentive_rate=float(data.get('bag_incentive_rate') or 0.0),
             contactinfo=data.get('contactinfo', ''),
-            warehouseid_id=data.get('warehouseid')
+            warehouseid_id=data.get('warehouseid'),
+            department=data.get('department'),
+            reports_to_id=data.get('reports_to'),
+            is_ot_eligible=bool(data.get('is_ot_eligible')),
+            is_late_deduction_eligible=bool(data.get('is_late_deduction_eligible')),
+            is_km_eligible=bool(data.get('is_km_eligible')),
+            is_bag_eligible=bool(data.get('is_bag_eligible'))
         )
         return send_success({'id': emp.id, **data}, 'Employee created')
 
@@ -79,6 +91,13 @@ def hr_employees_detail(request, pk):
         emp.sales_incentive_pct = float(data.get('sales_incentive_pct') or emp.sales_incentive_pct)
         emp.bag_incentive_rate = float(data.get('bag_incentive_rate') or emp.bag_incentive_rate)
         emp.contactinfo = data.get('contactinfo', emp.contactinfo)
+        emp.department = data.get('department', emp.department)
+        emp.reports_to_id = data.get('reports_to', emp.reports_to_id)
+        if 'is_ot_eligible' in data: emp.is_ot_eligible = bool(data.get('is_ot_eligible'))
+        if 'is_late_deduction_eligible' in data: emp.is_late_deduction_eligible = bool(data.get('is_late_deduction_eligible'))
+        if 'is_km_eligible' in data: emp.is_km_eligible = bool(data.get('is_km_eligible'))
+        if 'is_bag_eligible' in data: emp.is_bag_eligible = bool(data.get('is_bag_eligible'))
+        
         if data.get('warehouseid'):
             emp.warehouseid_id = data.get('warehouseid')
         emp.save()

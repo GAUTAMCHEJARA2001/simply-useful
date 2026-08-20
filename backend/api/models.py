@@ -175,6 +175,14 @@ class Labour(models.Model):
     sales_incentive_pct = models.FloatField(default=0.0)
     bag_incentive_rate = models.FloatField(default=0.0)
     
+    # Hierarchy & Eligibility Flags
+    department = models.CharField(max_length=100, blank=True, null=True)
+    reports_to = models.ForeignKey('self', models.SET_NULL, blank=True, null=True, related_name='subordinates')
+    is_ot_eligible = models.BooleanField(default=False)
+    is_late_deduction_eligible = models.BooleanField(default=False)
+    is_km_eligible = models.BooleanField(default=False)
+    is_bag_eligible = models.BooleanField(default=False)
+    
     contactinfo = models.TextField(db_column='contactInfo', blank=True, null=True)
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)

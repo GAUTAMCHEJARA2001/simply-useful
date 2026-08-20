@@ -6,12 +6,13 @@ import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart } from 'luc
 import { EmployeeMasterTab } from './HRManagement/components/EmployeeMasterTab';
 import { AdvancedAttendanceTab } from './HRManagement/components/AdvancedAttendanceTab';
 import { PayrollTab } from './HRManagement/components/PayrollTab';
+import { OrgChartTab } from './HRManagement/components/OrgChartTab';
 
 // Remaining subcomponents
 const LeaveManagementTab = () => <div className="p-4">Leave Management Content</div>;
 const LoansAdvancesTab = () => <div className="p-4">Loans & Advances Content</div>;
 
-export type HRTab = 'employees' | 'attendance' | 'leaves' | 'loans' | 'payroll';
+export type HRTab = 'employees' | 'attendance' | 'leaves' | 'loans' | 'payroll' | 'orgchart';
 
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
@@ -22,6 +23,7 @@ const HRManagement: React.FC = () => {
 
   const navItems = [
     { id: 'employees', label: 'Employee Master', icon: Users },
+    { id: 'orgchart', label: 'Organization Chart', icon: Users },
     { id: 'attendance', label: 'Daily Attendance', icon: Clock },
     { id: 'leaves', label: 'Leave Management', icon: CalendarCheck },
     { id: 'loans', label: 'Loans & Advances', icon: Wallet },
@@ -50,6 +52,7 @@ const HRManagement: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background">
         {tab === 'employees' && <EmployeeMasterTab />}
+        {tab === 'orgchart' && <OrgChartTab />}
         {tab === 'attendance' && <AdvancedAttendanceTab />}
         {tab === 'leaves' && <LeaveManagementTab />}
         {tab === 'loans' && <LoansAdvancesTab />}
