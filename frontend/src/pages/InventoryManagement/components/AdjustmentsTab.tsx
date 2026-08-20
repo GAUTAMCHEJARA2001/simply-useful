@@ -62,7 +62,7 @@ export const AdjustmentsTab: React.FC = () => {
             <SearchableSelect 
               options={products.map((p: any) => {
                 const stock = aggregateStock.find((s: any) => s.productId === p.id);
-                const qty = stock ? Math.round(parseFloat(stock.totalStock || 0)) : 0;
+                const qty = stock ? Math.round(parseFloat(stock.quantity || stock.totalStock || 0)) : 0;
                 return { 
                   value: p.id, 
                   label: p.name,

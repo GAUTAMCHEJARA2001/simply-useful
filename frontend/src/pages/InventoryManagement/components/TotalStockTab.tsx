@@ -55,7 +55,7 @@ export const TotalStockTab: React.FC = () => {
                 s.productName, 
                 s.sku, 
                 s.categoryName, 
-                Math.round(parseFloat(s.totalStock || 0)), 
+                Math.round(parseFloat(s.quantity || s.totalStock || 0)), 
                 s.unit?.name || (typeof s.unit === 'string' ? s.unit : '') || '—'
               ])}
             />
