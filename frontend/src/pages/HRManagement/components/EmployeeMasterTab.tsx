@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
-import { useHREmployees, useHREmployeeMutations } from '@/hooks/hr/useHR';
+import { useHREmployees, useHREmployeeMutations, useHRDepartments, useHRDesignations } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
 import { DataTable } from '@/components/DataTable';
 
 export const EmployeeMasterTab: React.FC = () => {
   const { data: employees = [], isLoading, error, refetch } = useHREmployees();
+  const { data: departments = [] } = useHRDepartments();
+  const { data: designations = [] } = useHRDesignations();
   const { saveEmployee, deleteEmployee } = useHREmployeeMutations();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -31,6 +33,7 @@ export const EmployeeMasterTab: React.FC = () => {
       bag_incentive_rate: 0,
       contactinfo: '',
       department: '',
+      designation: '',
       reports_to: '',
       is_ot_eligible: false,
       is_late_deduction_eligible: false,
@@ -117,8 +120,19 @@ export const EmployeeMasterTab: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Department</label>
-                <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. Sales, Logistics"
-                  value={formData.department || ''} onChange={e => setFormData({...formData, department: e.target.value})} />
+                <select className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.department || ''} onChange={e => setFormData({...formData, department: e.target.value})}>
+                  <option value="">- Select -</option>
+                  {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Post (Designation)</label>
+                <select className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.designation || ''} onChange={e => setFormData({...formData, designation: e.target.value})}>
+                  <option value="">- Select -</option>
+                  {designations.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                </select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Reports To (Manager)</label>
@@ -126,10 +140,11 @@ export const EmployeeMasterTab: React.FC = () => {
                   value={formData.reports_to || ''} onChange={e => setFormData({...formData, reports_to: e.target.value})}>
                   <option value="">- None -</option>
                   {employees.filter((e: any) => e.id !== formData.id).map((e: any) => (
-                    <option key={e.id} value={e.id}>{e.name} ({e.department || 'No Dept'})</option>
+                    <option key={e.id} value={e.id}>{e.name} ({e.designation || e.department || 'No Post'})</option>
                   ))}
                 </select>
               </div>
+            </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
@@ -161,11 +176,12 @@ export const EmployeeMasterTab: React.FC = () => {
     );
   }
 
-  const columns = ['Name', 'Department', 'Type', 'Base Pay', 'OT Rate', 'Bike/Car Rate'];
+  const columns = ['Name', 'Department', 'Post', 'Type', 'Base Pay', 'OT Rate', 'Bike/Car Rate'];
   
   const rows = employees.map((emp: any) => [
     emp.name,
     emp.department || '-',
+    emp.designation || '-',
     emp.employee_type === 'FIXED' ? 'Fixed (Monthly)' : 'Variable (Daily)',
     emp.employee_type === 'FIXED' ? `₹${emp.base_salary_monthly}/mo` : `₹${emp.dailywage}/day`,
     emp.is_ot_eligible ? `₹${emp.overtime_hourly_rate}/hr` : 'N/A',

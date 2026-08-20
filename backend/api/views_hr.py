@@ -8,9 +8,57 @@ from django.db.models import Sum
 
 from api.models import (
     Labour, LeaveType, EmployeeLeaveBalance, LeaveRecord,
-    SalaryAdvance, DailyAttendance, SalarySlip, Company
+    SalaryAdvance, DailyAttendance, SalarySlip, Company,
+    HRDepartment, HRDesignation
 )
 from api.views import send_success, send_error, _get_company_id
+
+# --- MASTERS ---
+@api_view(['GET', 'POST'])
+def hr_departments(request):
+    company_id = _get_company_id(request)
+    if not company_id: return send_error('No company ID', 400)
+    
+    if request.method == 'GET':
+        qs = HRDepartment.objects.filter(companyid_id=company_id)
+        return send_success([{'id': q.id, 'name': q.name} for q in qs], 'Departments fetched')
+    
+    elif request.method == 'POST':
+        name = request.data.get('name')
+        if not name: return send_error('Name required', 400)
+        obj, created = HRDepartment.objects.get_or_create(companyid_id=company_id, name=name)
+        return send_success({'id': obj.id, 'name': obj.name}, 'Department created')
+
+@api_view(['DELETE'])
+def hr_departments_detail(request, pk):
+    try:
+        HRDepartment.objects.get(id=pk).delete()
+        return send_success(None, 'Department deleted')
+    except Exception:
+        return send_error('Not found', 404)
+
+@api_view(['GET', 'POST'])
+def hr_designations(request):
+    company_id = _get_company_id(request)
+    if not company_id: return send_error('No company ID', 400)
+    
+    if request.method == 'GET':
+        qs = HRDesignation.objects.filter(companyid_id=company_id)
+        return send_success([{'id': q.id, 'name': q.name} for q in qs], 'Designations fetched')
+    
+    elif request.method == 'POST':
+        name = request.data.get('name')
+        if not name: return send_error('Name required', 400)
+        obj, created = HRDesignation.objects.get_or_create(companyid_id=company_id, name=name)
+        return send_success({'id': obj.id, 'name': obj.name}, 'Designation created')
+
+@api_view(['DELETE'])
+def hr_designations_detail(request, pk):
+    try:
+        HRDesignation.objects.get(id=pk).delete()
+        return send_success(None, 'Designation deleted')
+    except Exception:
+        return send_error('Not found', 404)
 
 # --- EMPLOYEES ---
 @api_view(['GET', 'POST'])
@@ -38,6 +86,7 @@ def hr_employees(request):
                 'contactinfo': l.contactinfo,
                 'warehouseid': l.warehouseid_id,
                 'department': l.department,
+                'designation': l.designation,
                 'reports_to': l.reports_to_id,
                 'is_ot_eligible': l.is_ot_eligible,
                 'is_late_deduction_eligible': l.is_late_deduction_eligible,
@@ -66,6 +115,7 @@ def hr_employees(request):
             contactinfo=data.get('contactinfo', ''),
             warehouseid_id=data.get('warehouseid'),
             department=data.get('department'),
+            designation=data.get('designation'),
             reports_to_id=data.get('reports_to'),
             is_ot_eligible=bool(data.get('is_ot_eligible')),
             is_late_deduction_eligible=bool(data.get('is_late_deduction_eligible')),
@@ -95,6 +145,7 @@ def hr_employees_detail(request, pk):
         emp.bag_incentive_rate = float(data.get('bag_incentive_rate') or emp.bag_incentive_rate)
         emp.contactinfo = data.get('contactinfo', emp.contactinfo)
         emp.department = data.get('department', emp.department)
+        emp.designation = data.get('designation', emp.designation)
         emp.reports_to_id = data.get('reports_to', emp.reports_to_id)
         if 'is_ot_eligible' in data: emp.is_ot_eligible = bool(data.get('is_ot_eligible'))
         if 'is_late_deduction_eligible' in data: emp.is_late_deduction_eligible = bool(data.get('is_late_deduction_eligible'))

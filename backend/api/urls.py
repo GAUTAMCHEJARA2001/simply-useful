@@ -66,7 +66,9 @@ router.register('estimates', EstimateViewSet, basename='estimates')
 
 from api.views_hr import (
     hr_employees, hr_employees_detail,
-    hr_attendance, hr_generate_payroll
+    hr_attendance, hr_generate_payroll,
+    hr_departments, hr_departments_detail,
+    hr_designations, hr_designations_detail
 )
 
 urlpatterns = [
@@ -134,6 +136,10 @@ urlpatterns = [
     path('transactions/productions/<str:pk>/materials', transaction_production_materials, name='tx-production-materials'),
     path('transactions/productions/migrate-db/run', fix_old_productions, name='tx-production-migrate'),
     # HR & Payroll
+    path('hr/departments', hr_departments, name='hr-departments'),
+    path('hr/departments/<str:pk>', hr_departments_detail, name='hr-departments-detail'),
+    path('hr/designations', hr_designations, name='hr-designations'),
+    path('hr/designations/<str:pk>', hr_designations_detail, name='hr-designations-detail'),
     path('hr/employees', hr_employees, name='hr-employees'),
     path('hr/employees/<str:pk>', hr_employees_detail, name='hr-employee-detail'),
     path('hr/attendance', hr_attendance, name='hr-attendance'),

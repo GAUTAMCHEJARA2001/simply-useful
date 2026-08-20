@@ -84,3 +84,61 @@ export const useHRAttendanceMutations = () => {
     saveAttendance: saveMutation.mutateAsync
   };
 };
+
+// --- MASTERS ---
+
+export const useHRDepartments = () => {
+  return useQuery({
+    queryKey: ['hr_departments'],
+    queryFn: async () => {
+      const res = await api.get('/hr/departments');
+      return (res.data?.data || []) as any[];
+    }
+  });
+};
+
+export const useHRDesignations = () => {
+  return useQuery({
+    queryKey: ['hr_designations'],
+    queryFn: async () => {
+      const res = await api.get('/hr/designations');
+      return (res.data?.data || []) as any[];
+    }
+  });
+};
+
+export const useHRMasterMutations = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const addDepartment = useMutation({
+    mutationFn: (name: string) => api.post('/hr/departments', { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr_departments'] });
+      toast({ title: 'Success', description: 'Department added' });
+    }
+  });
+  const deleteDepartment = useMutation({
+    mutationFn: (id: string) => api.delete(`/hr/departments/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hr_departments'] })
+  });
+
+  const addDesignation = useMutation({
+    mutationFn: (name: string) => api.post('/hr/designations', { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr_designations'] });
+      toast({ title: 'Success', description: 'Designation added' });
+    }
+  });
+  const deleteDesignation = useMutation({
+    mutationFn: (id: string) => api.delete(`/hr/designations/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hr_designations'] })
+  });
+
+  return {
+    addDepartment: addDepartment.mutateAsync,
+    deleteDepartment: deleteDepartment.mutateAsync,
+    addDesignation: addDesignation.mutateAsync,
+    deleteDesignation: deleteDesignation.mutateAsync
+  };
+};

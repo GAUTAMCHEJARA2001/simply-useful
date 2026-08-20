@@ -154,6 +154,21 @@ class Expense(models.Model):
     class Meta:
         db_table = 'Expense'
 
+class HRDepartment(models.Model):
+    name = models.CharField(max_length=100)
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+
+    class Meta:
+        db_table = 'HRDepartment'
+        unique_together = (('name', 'companyid'),)
+
+class HRDesignation(models.Model):
+    name = models.CharField(max_length=100)
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+
+    class Meta:
+        db_table = 'HRDesignation'
+        unique_together = (('name', 'companyid'),)
 
 class Labour(models.Model):
     EMPLOYEE_TYPES = [
@@ -178,6 +193,7 @@ class Labour(models.Model):
     
     # Hierarchy & Eligibility Flags
     department = models.CharField(max_length=100, blank=True, null=True)
+    designation = models.CharField(max_length=100, blank=True, null=True)
     reports_to = models.ForeignKey('self', models.SET_NULL, blank=True, null=True, related_name='subordinates')
     is_ot_eligible = models.BooleanField(default=False)
     is_late_deduction_eligible = models.BooleanField(default=False)

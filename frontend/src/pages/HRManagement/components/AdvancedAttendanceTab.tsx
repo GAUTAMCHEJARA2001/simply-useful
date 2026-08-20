@@ -155,6 +155,11 @@ export const AdvancedAttendanceTab: React.FC = () => {
                             {cell.daily_advance ? `₹${cell.daily_advance}` : 'Adv ₹'}
                           </button>
                           
+                          {Number(cell.ot_hours) > 0 && <span className="text-[9px] font-bold bg-green-100 text-green-700 px-1 rounded w-full text-center">+{cell.ot_hours}h OT</span>}
+                          {Number(cell.late_hours) > 0 && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1 rounded w-full text-center">-{cell.late_hours}h Late</span>}
+                          {Number(cell.km_travelled) > 0 && <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1 rounded w-full text-center truncate">{cell.km_travelled} KM</span>}
+                          {Number(cell.bags_produced) > 0 && <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-1 rounded w-full text-center truncate">{cell.bags_produced} Bags</span>}
+                          
                           {/* Hover edit button for details (OT, Bags, etc) */}
                           <button 
                             onClick={() => setDetailCell({empId: emp.id, dateStr, empName: emp.name})}
