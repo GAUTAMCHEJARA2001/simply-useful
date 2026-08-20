@@ -1,9 +1,49 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, ChevronsUpDown } from 'lucide-react';
 import { useHREmployees, useHREmployeeMutations, useHRDepartments, useHRDesignations } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
 import { DataTable } from '@/components/DataTable';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+
+const SearchableSelect = ({ options, value, onChange, placeholder }: { options: {label: string, value: any}[], value: any, onChange: (v: any) => void, placeholder: string }) => {
+  const [open, setOpen] = useState(false);
+  // Find label, value might be number or string so use loose equality if needed, but best strict
+  const selectedLabel = options.find((opt) => String(opt.value) === String(value))?.label;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal text-sm px-3 py-2 h-auto text-left">
+          <span className="truncate">{selectedLabel || placeholder}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[300px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`Search ${placeholder.toLowerCase()}...`} />
+          <CommandList>
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem onSelect={() => { onChange(""); setOpen(false); }}>
+                <Check className={cn("mr-2 h-4 w-4", !value ? "opacity-100" : "opacity-0")} />
+                - None -
+              </CommandItem>
+              {options.map((option) => (
+                <CommandItem key={option.value} value={option.label} onSelect={() => { onChange(option.value); setOpen(false); }}>
+                  <Check className={cn("mr-2 h-4 w-4", String(value) === String(option.value) ? "opacity-100" : "opacity-0")} />
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 export const EmployeeMasterTab: React.FC = () => {
   const { data: employees = [], isLoading, error, refetch } = useHREmployees();
@@ -120,29 +160,33 @@ export const EmployeeMasterTab: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Department</label>
-                <select className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={formData.department || ''} onChange={e => setFormData({...formData, department: e.target.value})}>
-                  <option value="">- Select -</option>
-                  {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                </select>
+                <SearchableSelect 
+                  placeholder="- Select Department -"
+                  value={formData.department || ''}
+                  onChange={(val) => setFormData({...formData, department: val})}
+                  options={departments.map((d: any) => ({ label: d.name, value: d.name }))}
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Post (Designation)</label>
-                <select className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={formData.designation || ''} onChange={e => setFormData({...formData, designation: e.target.value})}>
-                  <option value="">- Select -</option>
-                  {designations.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                </select>
+                <SearchableSelect 
+                  placeholder="- Select Post -"
+                  value={formData.designation || ''}
+                  onChange={(val) => setFormData({...formData, designation: val})}
+                  options={designations.map((d: any) => ({ label: d.name, value: d.name }))}
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Reports To (Manager)</label>
-                <select className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={formData.reports_to || ''} onChange={e => setFormData({...formData, reports_to: e.target.value})}>
-                  <option value="">- None -</option>
-                  {employees.filter((e: any) => e.id !== formData.id).map((e: any) => (
-                    <option key={e.id} value={e.id}>{e.name} ({e.designation || e.department || 'No Post'})</option>
-                  ))}
-                </select>
+                <SearchableSelect 
+                  placeholder="- None -"
+                  value={formData.reports_to || ''}
+                  onChange={(val) => setFormData({...formData, reports_to: val})}
+                  options={employees.filter((e: any) => e.id !== formData.id).map((e: any) => ({ 
+                    label: `${e.name} (${e.designation || e.department || 'No Post'})`, 
+                    value: e.id 
+                  }))}
+                />
               </div>
             </div>
 
