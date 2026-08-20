@@ -91,7 +91,19 @@ def hr_employees(request):
                 'is_ot_eligible': l.is_ot_eligible,
                 'is_late_deduction_eligible': l.is_late_deduction_eligible,
                 'is_km_eligible': l.is_km_eligible,
-                'is_bag_eligible': l.is_bag_eligible
+                'is_bag_eligible': l.is_bag_eligible,
+                'user_id': l.user_id,
+                'employee_id': l.employee_id,
+                'doj': l.doj.isoformat() if l.doj else None,
+                'aadhar_number': l.aadhar_number,
+                'pan_number': l.pan_number,
+                'bank_name': l.bank_name,
+                'bank_account_number': l.bank_account_number,
+                'bank_ifsc': l.bank_ifsc,
+                'employee_photo': l.employee_photo.url if l.employee_photo else None,
+                'aadhar_photo': l.aadhar_photo.url if l.aadhar_photo else None,
+                'pan_photo': l.pan_photo.url if l.pan_photo else None,
+                'bank_proof_photo': l.bank_proof_photo.url if l.bank_proof_photo else None
             })
         return send_success(employees, 'Employees fetched')
 
@@ -118,10 +130,25 @@ def hr_employees(request):
             designation=data.get('designation'),
             reports_to_id=data.get('reports_to') or None,
             is_ot_eligible=bool(data.get('is_ot_eligible')),
-            is_late_deduction_eligible=bool(data.get('is_late_deduction_eligible')),
-            is_km_eligible=bool(data.get('is_km_eligible')),
-            is_bag_eligible=bool(data.get('is_bag_eligible'))
+            is_late_deduction_eligible=data.get('is_late_deduction_eligible') == 'true' or data.get('is_late_deduction_eligible') is True,
+            is_km_eligible=data.get('is_km_eligible') == 'true' or data.get('is_km_eligible') is True,
+            is_bag_eligible=data.get('is_bag_eligible') == 'true' or data.get('is_bag_eligible') is True,
+            user_id=data.get('user_id') or None,
+            doj=data.get('doj') or None,
+            aadhar_number=data.get('aadhar_number', ''),
+            pan_number=data.get('pan_number', ''),
+            bank_name=data.get('bank_name', ''),
+            bank_account_number=data.get('bank_account_number', ''),
+            bank_ifsc=data.get('bank_ifsc', '')
         )
+        
+        # Handle file uploads
+        if 'employee_photo' in request.FILES: emp.employee_photo = request.FILES['employee_photo']
+        if 'aadhar_photo' in request.FILES: emp.aadhar_photo = request.FILES['aadhar_photo']
+        if 'pan_photo' in request.FILES: emp.pan_photo = request.FILES['pan_photo']
+        if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
+        emp.save()
+        
         return send_success({'id': emp.id, **data}, 'Employee created')
 
 @api_view(['PUT', 'DELETE'])
@@ -150,13 +177,29 @@ def hr_employees_detail(request, pk):
         reports_to_val = data.get('reports_to', emp.reports_to_id)
         emp.reports_to_id = None if reports_to_val == '' else reports_to_val
         
-        if 'is_ot_eligible' in data: emp.is_ot_eligible = bool(data.get('is_ot_eligible'))
-        if 'is_late_deduction_eligible' in data: emp.is_late_deduction_eligible = bool(data.get('is_late_deduction_eligible'))
-        if 'is_km_eligible' in data: emp.is_km_eligible = bool(data.get('is_km_eligible'))
-        if 'is_bag_eligible' in data: emp.is_bag_eligible = bool(data.get('is_bag_eligible'))
+        if 'is_ot_eligible' in data: emp.is_ot_eligible = data.get('is_ot_eligible') == 'true' or data.get('is_ot_eligible') is True
+        if 'is_late_deduction_eligible' in data: emp.is_late_deduction_eligible = data.get('is_late_deduction_eligible') == 'true' or data.get('is_late_deduction_eligible') is True
+        if 'is_km_eligible' in data: emp.is_km_eligible = data.get('is_km_eligible') == 'true' or data.get('is_km_eligible') is True
+        if 'is_bag_eligible' in data: emp.is_bag_eligible = data.get('is_bag_eligible') == 'true' or data.get('is_bag_eligible') is True
         
         if data.get('warehouseid'):
             emp.warehouseid_id = data.get('warehouseid')
+            
+        if 'user_id' in data:
+            emp.user_id = data.get('user_id') or None
+        if 'doj' in data:
+            emp.doj = data.get('doj') or None
+        if 'aadhar_number' in data: emp.aadhar_number = data.get('aadhar_number')
+        if 'pan_number' in data: emp.pan_number = data.get('pan_number')
+        if 'bank_name' in data: emp.bank_name = data.get('bank_name')
+        if 'bank_account_number' in data: emp.bank_account_number = data.get('bank_account_number')
+        if 'bank_ifsc' in data: emp.bank_ifsc = data.get('bank_ifsc')
+
+        if 'employee_photo' in request.FILES: emp.employee_photo = request.FILES['employee_photo']
+        if 'aadhar_photo' in request.FILES: emp.aadhar_photo = request.FILES['aadhar_photo']
+        if 'pan_photo' in request.FILES: emp.pan_photo = request.FILES['pan_photo']
+        if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
+
         emp.save()
         return send_success({'id': emp.id, **data}, 'Employee updated')
 

@@ -12,6 +12,16 @@ export const useHREmployees = () => {
   });
 };
 
+export const useHRUsers = () => {
+  return useQuery({
+    queryKey: ['hr_users'],
+    queryFn: async () => {
+      const res = await api.get('/users');
+      return (res.data?.data || res.data || []) as any[];
+    },
+  });
+};
+
 export const useHRAttendance = (month: string) => {
   return useQuery({
     queryKey: ['hr_attendance', month],
@@ -39,9 +49,12 @@ export const useHREmployeeMutations = () => {
   const { toast } = useToast();
 
   const saveMutation = useMutation({
-    mutationFn: (emp: any) => emp.id 
-      ? api.put(`/hr/employees/${emp.id}`, emp)
-      : api.post('/hr/employees', emp),
+    mutationFn: (emp: any) => {
+      const id = emp instanceof FormData ? emp.get('id') : emp.id;
+      return id 
+        ? api.put(`/hr/employees/${id}`, emp)
+        : api.post('/hr/employees', emp);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hr_employees'] });
       toast({ title: 'Success', description: 'Employee saved successfully' });

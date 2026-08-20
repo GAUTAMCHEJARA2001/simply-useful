@@ -180,6 +180,26 @@ class Labour(models.Model):
     active = models.BooleanField(default=True)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
     
+    # Linked App User
+    user = models.OneToOneField('core.User', models.SET_NULL, blank=True, null=True, related_name='employee_profile', db_constraint=False)
+    
+    # Advanced HR Fields
+    employee_id = models.CharField(max_length=50, blank=True, null=True, unique=True)
+    doj = models.DateField(blank=True, null=True, verbose_name="Date of Joining")
+    
+    # KYC & Documents
+    aadhar_number = models.CharField(max_length=20, blank=True, null=True)
+    aadhar_photo = models.FileField(upload_to='hr/documents/', blank=True, null=True)
+    pan_number = models.CharField(max_length=20, blank=True, null=True)
+    pan_photo = models.FileField(upload_to='hr/documents/', blank=True, null=True)
+    employee_photo = models.FileField(upload_to='hr/photos/', blank=True, null=True)
+    
+    # Bank Details
+    bank_name = models.CharField(max_length=100, blank=True, null=True)
+    bank_account_number = models.CharField(max_length=50, blank=True, null=True)
+    bank_ifsc = models.CharField(max_length=20, blank=True, null=True)
+    bank_proof_photo = models.FileField(upload_to='hr/documents/', blank=True, null=True)
+    
     # Advanced HR Fields
     employee_type = models.CharField(max_length=20, choices=EMPLOYEE_TYPES, default='VARIABLE')
     base_salary_monthly = models.FloatField(default=0.0)
@@ -208,6 +228,14 @@ class Labour(models.Model):
     class Meta:
         db_table = 'Labour'
         unique_together = (('name', 'companyid'),)
+
+    def save(self, *args, **kwargs):
+        if not self.employee_id:
+            # Auto-generate employee ID
+            last_emp = Labour.objects.filter(companyid=self.companyid).order_by('-id').first()
+            next_num = (last_emp.id + 1) if last_emp else 1
+            self.employee_id = f"EMP-{next_num:04d}"
+        super().save(*args, **kwargs)
 
 class LeaveType(models.Model):
     name = models.CharField(max_length=100) # e.g. "Sick Leave", "Privilege Leave"

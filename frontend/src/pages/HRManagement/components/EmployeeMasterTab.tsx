@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Edit2, Trash2, Check, ChevronsUpDown } from 'lucide-react';
-import { useHREmployees, useHREmployeeMutations, useHRDepartments, useHRDesignations } from '@/hooks/hr/useHR';
+import { Plus, Edit2, Trash2, Check, ChevronsUpDown, Upload } from 'lucide-react';
+import { useHREmployees, useHREmployeeMutations, useHRDepartments, useHRDesignations, useHRUsers } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
 import { DataTable } from '@/components/DataTable';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -49,6 +49,7 @@ export const EmployeeMasterTab: React.FC = () => {
   const { data: employees = [], isLoading, error, refetch } = useHREmployees();
   const { data: departments = [] } = useHRDepartments();
   const { data: designations = [] } = useHRDesignations();
+  const { data: users = [] } = useHRUsers();
   const { saveEmployee, deleteEmployee } = useHREmployeeMutations();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -75,6 +76,13 @@ export const EmployeeMasterTab: React.FC = () => {
       department: '',
       designation: '',
       reports_to: '',
+      user_id: '',
+      doj: '',
+      aadhar_number: '',
+      pan_number: '',
+      bank_name: '',
+      bank_account_number: '',
+      bank_ifsc: '',
       is_ot_eligible: false,
       is_late_deduction_eligible: false,
       is_km_eligible: false,
@@ -83,9 +91,19 @@ export const EmployeeMasterTab: React.FC = () => {
     setIsEditing(true);
   };
 
+  const handleFileChange = (field: string, file: File | null) => {
+    if (file) setFormData({ ...formData, [field]: file });
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    await saveEmployee(formData);
+    const submitData = new FormData();
+    Object.keys(formData).forEach(key => {
+      if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
+        submitData.append(key, formData[key]);
+      }
+    });
+    await saveEmployee(submitData);
     setIsEditing(false);
   };
 
@@ -94,20 +112,51 @@ export const EmployeeMasterTab: React.FC = () => {
       <div className="bg-card border border-border rounded-xl p-6 shadow-sm max-w-3xl">
         <h2 className="text-lg font-bold mb-6">{formData.id ? 'Edit Employee' : 'New Employee'}</h2>
         <form onSubmit={handleSave} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Name</label>
-              <input required type="text" className="w-full border rounded-lg px-3 py-2 text-sm"
-                value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+          <div className="pt-2">
+            <h3 className="text-md font-semibold mb-4 text-primary">Personal Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Name</label>
+                <input required type="text" className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Employee ID</label>
+                <input type="text" disabled className="w-full border rounded-lg px-3 py-2 text-sm bg-muted/50 text-muted-foreground"
+                  value={formData.employee_id || 'Auto-generated on Save'} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Contact Info</label>
+                <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.contactinfo || ''} onChange={e => setFormData({...formData, contactinfo: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Date of Joining</label>
+                <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.doj || ''} onChange={e => setFormData({...formData, doj: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Employee Photo</label>
+                <div className="flex items-center gap-2">
+                  <input type="file" accept="image/*" className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                    onChange={e => handleFileChange('employee_photo', e.target.files?.[0] || null)} />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Employee Type</label>
-              <select className="w-full border rounded-lg px-3 py-2 text-sm"
-                value={formData.employee_type} onChange={e => setFormData({...formData, employee_type: e.target.value})}>
-                <option value="VARIABLE">Variable / Daily Wage</option>
-                <option value="FIXED">Fixed / Monthly Salary</option>
-              </select>
-            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <h3 className="text-md font-semibold mb-4 text-primary">Salary Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Employee Type</label>
+                <select className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.employee_type} onChange={e => setFormData({...formData, employee_type: e.target.value})}>
+                  <option value="VARIABLE">Variable / Daily Wage</option>
+                  <option value="FIXED">Fixed / Monthly Salary</option>
+                </select>
+              </div>
+              <div></div>
             
             {formData.employee_type === 'FIXED' ? (
               <div className="space-y-2">
@@ -153,11 +202,70 @@ export const EmployeeMasterTab: React.FC = () => {
               <input type="number" min="0" step="0.01" className="w-full border rounded-lg px-3 py-2 text-sm"
                 value={formData.bag_incentive_rate} onChange={e => setFormData({...formData, bag_incentive_rate: Number(e.target.value)})} />
             </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <h3 className="text-md font-semibold mb-4 text-primary">KYC & Banking</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Aadhar Number</label>
+                <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.aadhar_number || ''} onChange={e => setFormData({...formData, aadhar_number: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Aadhar Photo</label>
+                <input type="file" accept="image/*,.pdf" className="text-sm w-full"
+                  onChange={e => handleFileChange('aadhar_photo', e.target.files?.[0] || null)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">PAN Number</label>
+                <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.pan_number || ''} onChange={e => setFormData({...formData, pan_number: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">PAN Photo</label>
+                <input type="file" accept="image/*,.pdf" className="text-sm w-full"
+                  onChange={e => handleFileChange('pan_photo', e.target.files?.[0] || null)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Bank Name</label>
+                <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.bank_name || ''} onChange={e => setFormData({...formData, bank_name: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Account Number</label>
+                <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.bank_account_number || ''} onChange={e => setFormData({...formData, bank_account_number: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">IFSC Code</label>
+                <input type="text" className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={formData.bank_ifsc || ''} onChange={e => setFormData({...formData, bank_ifsc: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Bank Proof (Passbook/Cheque)</label>
+                <input type="file" accept="image/*,.pdf" className="text-sm w-full"
+                  onChange={e => handleFileChange('bank_proof_photo', e.target.files?.[0] || null)} />
+              </div>
+            </div>
           </div>
 
           <div className="pt-4 border-t border-border">
             <h3 className="text-md font-semibold mb-4 text-primary">Hierarchy & Eligibility</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Linked App User</label>
+                <SearchableSelect 
+                  placeholder="- Map to System User -"
+                  value={formData.user_id || ''}
+                  onChange={(val) => setFormData({...formData, user_id: val})}
+                  options={users.map((u: any) => ({ 
+                    label: `${u.first_name || u.email} (${u.role})`, 
+                    value: u.id 
+                  }))}
+                />
+              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Department</label>
                 <SearchableSelect 
