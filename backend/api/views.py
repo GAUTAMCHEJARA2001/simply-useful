@@ -1224,7 +1224,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         qs = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
-        if user_role == 'SALES' and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__contains=[user_email])
         return qs
 
@@ -1236,7 +1236,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         qs = Dealer.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
-        if user_role == 'SALES' and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__contains=[user_email])
 
         search = request.query_params.get('search', '').strip()
@@ -1347,7 +1347,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         qs = Distributor.objects.filter(companyid_id=company_id) if company_id else Distributor.objects.all()
-        if user_role == 'SALES' and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__contains=[user_email])
         return qs
 
@@ -1359,7 +1359,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         qs = Distributor.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
-        if user_role == 'SALES' and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__contains=[user_email])
 
         search = request.query_params.get('search', '').strip()
@@ -1686,8 +1686,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                 ).aggregate(total=Sum('qty'))
                 stock += float(sales_ret['total'] or 0)
                 
+                # IMPORTANT: Exclude SALE and DISPATCH type transactions because they duplicate
+                # what is already counted via Orderitem(status='Completed'/'Dispatched') above.
+                # Only include production, consumed, adjustment and other non-sales stock movements.
                 st_aggs = Stocktransaction.objects.exclude(
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
+                ).exclude(
+                    transactiontype__in=['SALE', 'DISPATCH']
                 ).filter(productid_id=p_id).aggregate(total=Sum('quantity'))
                 stock += float(st_aggs['total'] or 0)
                 
@@ -2390,7 +2395,6 @@ def transaction_purchases(request):
     if request.method == 'GET':
         from api.models import Userwarehouseaccess, Purchase, Product
         user_id = request.user.id
-        company_id = getattr(request.user, 'companyid_id', None) or 'cmo75yliq0000wesurjpett1n'
         has_wh_assignments = Userwarehouseaccess.objects.filter(userid_id=user_id).exists()
         assigned_wh_ids = []
         if has_wh_assignments and request.user.role in ('INVENTORY', 'PRODUCTION'):
@@ -2409,7 +2413,6 @@ def transaction_purchases(request):
         company = Company.objects.filter(id=company_id).first()
         company_gst = getattr(company, 'gst_number', '') or ''
         
-        data = []
         for p in all_purchases:
             items_data = []
             supplier_gst = getattr(p.supplierid, 'gst_number', '') if p.supplierid else ''
@@ -2452,7 +2455,7 @@ def transaction_purchases(request):
     elif request.method == 'POST':
         data = request.data.copy()
         now = timezone.now()
-        company_id = getattr(request.user, 'companyid_id', None) or 'cmo75yliq0000wesurjpett1n'
+        company_id = getattr(request.user, 'companyId', None) or 'cmo75yliq0000wesurjpett1n'
         if not Company.objects.filter(id=company_id).exists():
             fallback_company = Company.objects.first()
             if not fallback_company:
@@ -2535,6 +2538,8 @@ def transaction_purchases(request):
                         except Product.DoesNotExist:
                             pass
                     Purchaseitem.objects.create(id=item_id, purchaseid=purchase_obj, productname=product_name, qty=qty, rate=rate, total=item_total)
+                    if prod_id:
+                        pass
                     items_data.append({'id': item_id, 'productName': product_name, 'productId': prod_id, 'qty': qty, 'quantity': qty, 'rate': rate, 'total': item_total, 'tax_percent': tax_p})
         except IntegrityError:
             return send_error('Purchase could not be recorded because related data is out of sync. Please refresh and try again.', 409)

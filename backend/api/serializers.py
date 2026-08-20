@@ -347,11 +347,15 @@ class ProductSerializer(serializers.ModelSerializer):
                 total += float(sal_ret_total)
 
                 # 3. StockTransactions (production, consumed, adjustments, etc.)
-                #    Exclude pending/rejected entries — they haven't taken effect yet
+                #    IMPORTANT: Exclude SALE and DISPATCH types because those duplicate
+                #    what is already counted via Orderitem(status='Completed') above.
+                #    Also exclude pending/rejected entries.
                 st_total = Stocktransaction.objects.filter(
                     productid_id=local_product.id
                 ).exclude(
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
+                ).exclude(
+                    transactiontype__in=['SALE', 'DISPATCH']
                 ).aggregate(s=Sum('quantity'))['s'] or 0
                 total += float(st_total)
 
