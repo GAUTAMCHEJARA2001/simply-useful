@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useHRPayroll } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
-import { Printer, Download, Search } from 'lucide-react';
+import { Printer, Download, Search, FileText } from 'lucide-react';
 
 const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
