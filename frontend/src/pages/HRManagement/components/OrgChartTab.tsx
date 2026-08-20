@@ -32,8 +32,11 @@ export const OrgChartTab: React.FC = () => {
           <div className="w-10 h-10 bg-primary/10 text-primary rounded-full flex items-center justify-center">
             <User className="w-5 h-5" />
           </div>
-          <div>
+          <div className="w-full">
             <div className="font-bold text-sm truncate w-full">{emp.name}</div>
+            <div className="text-xs text-primary truncate w-full font-medium my-0.5">
+              {emp.designation || 'No Designation'}
+            </div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
               {emp.department || 'No Dept'}
             </div>
