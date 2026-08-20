@@ -200,6 +200,19 @@ export const AdvancedAttendanceTab: React.FC = () => {
                               }}
                             />
                           )}
+
+                          {emp.is_bag_eligible && (
+                            <input 
+                              type="number" 
+                              min="0"
+                              step="1"
+                              placeholder="Bags"
+                              title="Bags Produced"
+                              className="w-full text-[10px] border border-transparent hover:border-border focus:border-primary rounded px-1 py-0.5 text-center mt-0.5 bg-transparent focus:bg-background transition-colors"
+                              value={cell.bags_produced || ''}
+                              onChange={e => handleFieldChange(emp.id, dateStr, 'bags_produced', Number(e.target.value))}
+                            />
+                          )}
                           
                           {/* Details edit button just in case they need to set Bags or override vehicle type */}
                           <button 
