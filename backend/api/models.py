@@ -171,7 +171,8 @@ class Labour(models.Model):
     dailywage = models.FloatField(db_column='dailyWage', default=0.0)
     overtime_hourly_rate = models.FloatField(default=0.0)
     late_deduction_rate = models.FloatField(default=0.0)
-    travel_allowance_per_km = models.FloatField(default=0.0)
+    bike_allowance_per_km = models.FloatField(default=0.0)
+    car_allowance_per_km = models.FloatField(default=0.0)
     sales_incentive_pct = models.FloatField(default=0.0)
     bag_incentive_rate = models.FloatField(default=0.0)
     
@@ -236,7 +237,12 @@ class DailyAttendance(models.Model):
     status = models.CharField(max_length=20, default='PRESENT') # PRESENT, HALF_DAY, ABSENT, WEEKLY_OFF
     ot_hours = models.FloatField(default=0.0)
     late_hours = models.FloatField(default=0.0)
+    
+    # Travel
+    travel_vehicle = models.CharField(max_length=20, blank=True, null=True) # BIKE, CAR, OTHER
     km_travelled = models.FloatField(default=0.0)
+    actual_travel_amount = models.FloatField(default=0.0)
+    
     bags_produced = models.FloatField(default=0.0)
     sales_achieved = models.FloatField(default=0.0)
     daily_advance = models.FloatField(default=0.0)

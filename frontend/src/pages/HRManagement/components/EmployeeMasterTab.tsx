@@ -25,7 +25,8 @@ export const EmployeeMasterTab: React.FC = () => {
       dailywage: 0,
       overtime_hourly_rate: 0,
       late_deduction_rate: 0,
-      travel_allowance_per_km: 0,
+      bike_allowance_per_km: 0,
+      car_allowance_per_km: 0,
       sales_incentive_pct: 0,
       bag_incentive_rate: 0,
       contactinfo: '',
@@ -90,9 +91,14 @@ export const EmployeeMasterTab: React.FC = () => {
                 value={formData.late_deduction_rate} onChange={e => setFormData({...formData, late_deduction_rate: Number(e.target.value)})} />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Travel Allowance (₹/km)</label>
+              <label className="text-sm font-medium">Bike Allowance (₹/km)</label>
               <input type="number" min="0" step="0.01" className="w-full border rounded-lg px-3 py-2 text-sm"
-                value={formData.travel_allowance_per_km} onChange={e => setFormData({...formData, travel_allowance_per_km: Number(e.target.value)})} />
+                value={formData.bike_allowance_per_km} onChange={e => setFormData({...formData, bike_allowance_per_km: Number(e.target.value)})} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Car Allowance (₹/km)</label>
+              <input type="number" min="0" step="0.01" className="w-full border rounded-lg px-3 py-2 text-sm"
+                value={formData.car_allowance_per_km} onChange={e => setFormData({...formData, car_allowance_per_km: Number(e.target.value)})} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Sales Incentive (%)</label>
@@ -155,7 +161,7 @@ export const EmployeeMasterTab: React.FC = () => {
     );
   }
 
-  const columns = ['Name', 'Department', 'Type', 'Base Pay', 'OT Rate', 'Travel Rate'];
+  const columns = ['Name', 'Department', 'Type', 'Base Pay', 'OT Rate', 'Bike/Car Rate'];
   
   const rows = employees.map((emp: any) => [
     emp.name,
@@ -163,7 +169,7 @@ export const EmployeeMasterTab: React.FC = () => {
     emp.employee_type === 'FIXED' ? 'Fixed (Monthly)' : 'Variable (Daily)',
     emp.employee_type === 'FIXED' ? `₹${emp.base_salary_monthly}/mo` : `₹${emp.dailywage}/day`,
     emp.is_ot_eligible ? `₹${emp.overtime_hourly_rate}/hr` : 'N/A',
-    emp.is_km_eligible ? `₹${emp.travel_allowance_per_km}/km` : 'N/A'
+    emp.is_km_eligible ? `₹${emp.bike_allowance_per_km} / ₹${emp.car_allowance_per_km}` : 'N/A'
   ]);
 
   return (

@@ -203,11 +203,34 @@ export const AdvancedAttendanceTab: React.FC = () => {
                     </div>
                   )}
                   {currentEmp?.is_km_eligible && (
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">KM Travelled</label>
-                      <input type="number" min="0" step="1" className="w-full border rounded-lg px-3 py-2 text-sm"
-                        value={row.km_travelled || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'km_travelled', Number(e.target.value))} />
-                    </div>
+                    <>
+                      <div className="space-y-2 col-span-2 md:col-span-1">
+                        <label className="text-sm font-medium">Vehicle Used</label>
+                        <select className="w-full border rounded-lg px-3 py-2 text-sm"
+                          value={row.travel_vehicle || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'travel_vehicle', e.target.value)}>
+                          <option value="">- None -</option>
+                          <option value="BIKE">Bike</option>
+                          <option value="CAR">Car</option>
+                          <option value="OTHER">Other</option>
+                        </select>
+                      </div>
+                      
+                      {(row.travel_vehicle === 'BIKE' || row.travel_vehicle === 'CAR') && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">KM Travelled</label>
+                          <input type="number" min="0" step="1" className="w-full border rounded-lg px-3 py-2 text-sm"
+                            value={row.km_travelled || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'km_travelled', Number(e.target.value))} />
+                        </div>
+                      )}
+                      
+                      {row.travel_vehicle === 'OTHER' && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Actual Amount (₹)</label>
+                          <input type="number" min="0" step="0.01" className="w-full border rounded-lg px-3 py-2 text-sm"
+                            value={row.actual_travel_amount || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'actual_travel_amount', Number(e.target.value))} />
+                        </div>
+                      )}
+                    </>
                   )}
                   {currentEmp?.is_bag_eligible && (
                     <div className="space-y-2">

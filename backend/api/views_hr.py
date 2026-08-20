@@ -31,7 +31,8 @@ def hr_employees(request):
                 'dailywage': l.dailywage,
                 'overtime_hourly_rate': l.overtime_hourly_rate,
                 'late_deduction_rate': l.late_deduction_rate,
-                'travel_allowance_per_km': l.travel_allowance_per_km,
+                'bike_allowance_per_km': l.bike_allowance_per_km,
+                'car_allowance_per_km': l.car_allowance_per_km,
                 'sales_incentive_pct': l.sales_incentive_pct,
                 'bag_incentive_rate': l.bag_incentive_rate,
                 'contactinfo': l.contactinfo,
@@ -58,7 +59,8 @@ def hr_employees(request):
             dailywage=float(data.get('dailywage') or 0.0),
             overtime_hourly_rate=float(data.get('overtime_hourly_rate') or 0.0),
             late_deduction_rate=float(data.get('late_deduction_rate') or 0.0),
-            travel_allowance_per_km=float(data.get('travel_allowance_per_km') or 0.0),
+            bike_allowance_per_km=float(data.get('bike_allowance_per_km') or 0.0),
+            car_allowance_per_km=float(data.get('car_allowance_per_km') or 0.0),
             sales_incentive_pct=float(data.get('sales_incentive_pct') or 0.0),
             bag_incentive_rate=float(data.get('bag_incentive_rate') or 0.0),
             contactinfo=data.get('contactinfo', ''),
@@ -87,7 +89,8 @@ def hr_employees_detail(request, pk):
         emp.dailywage = float(data.get('dailywage') or emp.dailywage)
         emp.overtime_hourly_rate = float(data.get('overtime_hourly_rate') or emp.overtime_hourly_rate)
         emp.late_deduction_rate = float(data.get('late_deduction_rate') or emp.late_deduction_rate)
-        emp.travel_allowance_per_km = float(data.get('travel_allowance_per_km') or emp.travel_allowance_per_km)
+        emp.bike_allowance_per_km = float(data.get('bike_allowance_per_km') or emp.bike_allowance_per_km)
+        emp.car_allowance_per_km = float(data.get('car_allowance_per_km') or emp.car_allowance_per_km)
         emp.sales_incentive_pct = float(data.get('sales_incentive_pct') or emp.sales_incentive_pct)
         emp.bag_incentive_rate = float(data.get('bag_incentive_rate') or emp.bag_incentive_rate)
         emp.contactinfo = data.get('contactinfo', emp.contactinfo)
@@ -127,9 +130,10 @@ def hr_attendance(request):
                 'status': a.status,
                 'ot_hours': a.ot_hours,
                 'late_hours': a.late_hours,
-                'ot_hours': a.ot_hours,
                 'late_hours': a.late_hours,
+                'travel_vehicle': a.travel_vehicle,
                 'km_travelled': a.km_travelled,
+                'actual_travel_amount': a.actual_travel_amount,
                 'bags_produced': a.bags_produced,
                 'sales_achieved': a.sales_achieved,
                 'daily_advance': a.daily_advance,
@@ -155,7 +159,9 @@ def hr_attendance(request):
                     'status': r.get('status', 'PRESENT'),
                     'ot_hours': float(r.get('ot_hours') or 0.0),
                     'late_hours': float(r.get('late_hours') or 0.0),
+                    'travel_vehicle': r.get('travel_vehicle') or '',
                     'km_travelled': float(r.get('km_travelled') or 0.0),
+                    'actual_travel_amount': float(r.get('actual_travel_amount') or 0.0),
                     'bags_produced': float(r.get('bags_produced') or 0.0),
                     'sales_achieved': float(r.get('sales_achieved') or 0.0),
                     'daily_advance': float(r.get('daily_advance') or 0.0),
@@ -214,9 +220,20 @@ def hr_generate_payroll(request):
             hra = 0.0
             other_allowances = 0.0
             
+        
         # Additions
         ot_pay = total_ot_hours * emp.overtime_hourly_rate
-        travel_pay = total_km * emp.travel_allowance_per_km
+        
+        # Calculate dynamic travel pay based on each day
+        travel_pay = 0.0
+        for att in attendance:
+            if att.travel_vehicle == 'BIKE':
+                travel_pay += (att.km_travelled * emp.bike_allowance_per_km)
+            elif att.travel_vehicle == 'CAR':
+                travel_pay += (att.km_travelled * emp.car_allowance_per_km)
+            elif att.travel_vehicle == 'OTHER':
+                travel_pay += att.actual_travel_amount
+                
         incentives = (total_bags * emp.bag_incentive_rate) + (total_sales * emp.sales_incentive_pct)
         
         gross_pay = basic_pay + hra + other_allowances + ot_pay + travel_pay + incentives
