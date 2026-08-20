@@ -10,6 +10,7 @@ const EMPTY_ARRAY: any[] = [];
 export const AdvancedAttendanceTab: React.FC = () => {
   const currentMonthStr = new Date().toISOString().slice(0, 7);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const { data: employees = EMPTY_ARRAY, isLoading: empLoading } = useHREmployees();
   const { data: attendance = EMPTY_ARRAY, isLoading: attLoading, refetch } = useHRAttendance(selectedMonth);
@@ -32,6 +33,15 @@ export const AdvancedAttendanceTab: React.FC = () => {
     const day = i + 1;
     return `${selectedMonth}-${day.toString().padStart(2, '0')}`;
   });
+
+  const filteredEmployees = useMemo(() => {
+    if (!searchQuery) return employees;
+    const lowerQ = searchQuery.toLowerCase();
+    return employees.filter((emp: any) => 
+      emp.name.toLowerCase().includes(lowerQ) || 
+      (emp.department && emp.department.toLowerCase().includes(lowerQ))
+    );
+  }, [employees, searchQuery]);
 
   useEffect(() => {
     if (!employees.length) return;
@@ -90,7 +100,14 @@ export const AdvancedAttendanceTab: React.FC = () => {
           <h2 className="text-xl font-bold">Monthly Attendance Grid</h2>
           <p className="text-sm text-muted-foreground mt-1">Mark attendance and daily advances across the entire month.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
+          <input 
+            type="text" 
+            placeholder="Search employee..." 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm bg-background min-w-[200px]"
+          />
           <input 
             type="month" 
             value={selectedMonth} 
@@ -115,7 +132,7 @@ export const AdvancedAttendanceTab: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {employees.map((emp: any) => (
+              {filteredEmployees.map((emp: any) => (
                 <tr key={emp.id} className="hover:bg-muted/10 border-b border-border">
                   <td className="p-3 font-medium sticky left-0 bg-card z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                     <div className="flex flex-col">
