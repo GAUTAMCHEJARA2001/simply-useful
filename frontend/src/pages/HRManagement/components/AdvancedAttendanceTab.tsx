@@ -99,7 +99,7 @@ export const AdvancedAttendanceTab: React.FC = () => {
         </div>
       </div>
 
-      <SafeDataView isLoading={isLoading} data={employees} onRetry={refetch}>
+      <SafeDataView isLoading={isLoading} error={null} data={employees} onRetry={refetch}>
         <div className="bg-card rounded-xl border border-border overflow-x-auto">
           <table className="w-full text-sm text-left border-collapse">
             <thead className="bg-muted/50 text-muted-foreground">

@@ -28,7 +28,7 @@ export const HRConfigTab = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <SafeDataView isLoading={loadingDepts} data={depts} onRetry={refetchDepts}>
+      <SafeDataView isLoading={loadingDepts} error={null} data={depts} onRetry={refetchDepts}>
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Departments</h3>
           <div className="flex gap-2 mb-6">
@@ -58,7 +58,7 @@ export const HRConfigTab = () => {
         </Card>
       </SafeDataView>
 
-      <SafeDataView isLoading={loadingDesigs} data={desigs} onRetry={refetchDesigs}>
+      <SafeDataView isLoading={loadingDesigs} error={null} data={desigs} onRetry={refetchDesigs}>
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Positions (Designations)</h3>
           <div className="flex gap-2 mb-6">

@@ -145,7 +145,6 @@ export const EmployeeMasterTab: React.FC = () => {
                 </select>
               </div>
             </div>
-            </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
               <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-2 rounded">
