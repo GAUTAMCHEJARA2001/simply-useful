@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 interface Option {
   value: string;
   label: string;
+  subtitle?: string;
 }
 
 interface SearchableSelectProps {
@@ -136,8 +137,11 @@ export function SearchableSelect({ options, value, onChange, placeholder = "Sele
                   }}
                   onMouseEnter={() => setActiveIndex(idx)}
                 >
-                  <span className="flex-1 truncate">{opt.label}</span>
-                  {value === opt.value && <Check className="w-4 h-4 ml-2" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">{opt.label}</div>
+                    {opt.subtitle && <div className="text-[11px] text-muted-foreground truncate">{opt.subtitle}</div>}
+                  </div>
+                  {value === opt.value && <Check className="w-4 h-4 ml-2 flex-shrink-0" />}
                 </li>
               ))
             )}
