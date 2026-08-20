@@ -155,8 +155,8 @@ export const AdvancedAttendanceTab: React.FC = () => {
                             {cell.daily_advance ? `₹${cell.daily_advance}` : 'Adv ₹'}
                           </button>
                           
-                          {Number(cell.ot_hours) > 0 && <span className="text-[9px] font-bold bg-green-100 text-green-700 px-1 rounded w-full text-center">+{cell.ot_hours}h OT</span>}
-                          {Number(cell.late_hours) > 0 && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1 rounded w-full text-center">-{cell.late_hours}h Late</span>}
+                          {Number(cell.ot_hours) > 0 && <span className="text-[9px] font-bold bg-green-100 text-green-700 px-1 rounded w-full text-center truncate">+{cell.ot_hours}h OT (₹{(Number(cell.ot_hours) * (emp.overtime_hourly_rate || 0)).toFixed(0)})</span>}
+                          {Number(cell.late_hours) > 0 && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1 rounded w-full text-center truncate">-{cell.late_hours}h Late (₹{(Number(cell.late_hours) * (emp.late_deduction_rate || 0)).toFixed(0)})</span>}
                           {Number(cell.km_travelled) > 0 && <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1 rounded w-full text-center truncate">{cell.km_travelled} KM</span>}
                           {Number(cell.bags_produced) > 0 && <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-1 rounded w-full text-center truncate">{cell.bags_produced} Bags</span>}
                           
@@ -195,14 +195,20 @@ export const AdvancedAttendanceTab: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   {currentEmp?.is_ot_eligible && (
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">OT Hours</label>
+                      <label className="text-sm font-medium flex justify-between">
+                        <span>OT Hours</span>
+                        {Number(row.ot_hours) > 0 && <span className="text-green-600 font-bold">₹{(Number(row.ot_hours) * (currentEmp.overtime_hourly_rate || 0)).toFixed(2)}</span>}
+                      </label>
                       <input type="number" min="0" step="0.5" className="w-full border rounded-lg px-3 py-2 text-sm"
                         value={row.ot_hours || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'ot_hours', Number(e.target.value))} />
                     </div>
                   )}
                   {currentEmp?.is_late_deduction_eligible && (
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Late Hours</label>
+                      <label className="text-sm font-medium flex justify-between">
+                        <span>Late Hours</span>
+                        {Number(row.late_hours) > 0 && <span className="text-red-600 font-bold">-₹{(Number(row.late_hours) * (currentEmp.late_deduction_rate || 0)).toFixed(2)}</span>}
+                      </label>
                       <input type="number" min="0" step="0.5" className="w-full border rounded-lg px-3 py-2 text-sm"
                         value={row.late_hours || ''} onChange={e => handleFieldChange(detailCell.empId, detailCell.dateStr, 'late_hours', Number(e.target.value))} />
                     </div>
