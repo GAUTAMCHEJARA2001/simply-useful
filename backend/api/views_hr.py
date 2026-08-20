@@ -276,7 +276,7 @@ def hr_generate_payroll(request):
     if not month:
         return send_error('Month parameter (YYYY-MM) is required', 400)
     
-    employees = Labour.objects.filter(active=True)
+    employees = Labour.objects.filter(active=True).exclude(employee_type='NONE')
     payroll_data = []
 
     for emp in employees:

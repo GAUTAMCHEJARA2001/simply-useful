@@ -174,6 +174,7 @@ class Labour(models.Model):
     EMPLOYEE_TYPES = [
         ('FIXED', 'Fixed / Monthly'),
         ('VARIABLE', 'Variable / Daily'),
+        ('NONE', 'No Salary (Org Chart Only)'),
     ]
 
     name = models.TextField()

@@ -154,6 +154,7 @@ export const EmployeeMasterTab: React.FC = () => {
                   value={formData.employee_type} onChange={e => setFormData({...formData, employee_type: e.target.value})}>
                   <option value="VARIABLE">Variable / Daily Wage</option>
                   <option value="FIXED">Fixed / Monthly Salary</option>
+                  <option value="NONE">No Salary (Org Chart Only)</option>
                 </select>
               </div>
               <div></div>
@@ -164,11 +165,16 @@ export const EmployeeMasterTab: React.FC = () => {
                 <input required type="number" min="0" step="0.01" className="w-full border rounded-lg px-3 py-2 text-sm"
                   value={formData.base_salary_monthly} onChange={e => setFormData({...formData, base_salary_monthly: Number(e.target.value)})} />
               </div>
-            ) : (
+            ) : formData.employee_type === 'VARIABLE' ? (
               <div className="space-y-2">
                 <label className="text-sm font-medium text-primary">Daily Base Wage (₹)</label>
                 <input required type="number" min="0" step="0.01" className="w-full border rounded-lg px-3 py-2 text-sm"
                   value={formData.dailywage} onChange={e => setFormData({...formData, dailywage: Number(e.target.value)})} />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">Salary Configuration</label>
+                <div className="w-full border rounded-lg px-3 py-2 text-sm bg-muted/50 text-muted-foreground">Not Applicable</div>
               </div>
             )}
 
@@ -333,8 +339,8 @@ export const EmployeeMasterTab: React.FC = () => {
     emp.name,
     emp.department || '-',
     emp.designation || '-',
-    emp.employee_type === 'FIXED' ? 'Fixed (Monthly)' : 'Variable (Daily)',
-    emp.employee_type === 'FIXED' ? `₹${emp.base_salary_monthly}/mo` : `₹${emp.dailywage}/day`,
+    emp.employee_type === 'NONE' ? 'N/A (Org Only)' : emp.employee_type === 'FIXED' ? 'Fixed (Monthly)' : 'Variable (Daily)',
+    emp.employee_type === 'NONE' ? 'N/A' : emp.employee_type === 'FIXED' ? `₹${emp.base_salary_monthly}/mo` : `₹${emp.dailywage}/day`,
     emp.is_ot_eligible ? `${emp.overtime_hourly_rate || 0}x` : 'N/A',
     emp.is_km_eligible ? `₹${emp.bike_allowance_per_km} / ₹${emp.car_allowance_per_km}` : 'N/A'
   ]);

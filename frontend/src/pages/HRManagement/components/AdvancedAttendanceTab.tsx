@@ -35,12 +35,16 @@ export const AdvancedAttendanceTab: React.FC = () => {
   });
 
   const filteredEmployees = useMemo(() => {
-    if (!searchQuery) return employees;
-    const lowerQ = searchQuery.toLowerCase();
-    return employees.filter((emp: any) => 
-      emp.name.toLowerCase().includes(lowerQ) || 
-      (emp.department && emp.department.toLowerCase().includes(lowerQ))
-    );
+    let result = employees.filter((emp: any) => emp.employee_type !== 'NONE');
+    
+    if (searchQuery) {
+      const lowerQ = searchQuery.toLowerCase();
+      result = result.filter((emp: any) => 
+        emp.name.toLowerCase().includes(lowerQ) || 
+        (emp.department && emp.department.toLowerCase().includes(lowerQ))
+      );
+    }
+    return result;
   }, [employees, searchQuery]);
 
   useEffect(() => {
