@@ -233,9 +233,14 @@ class Labour(models.Model):
     def save(self, *args, **kwargs):
         if not self.employee_id:
             # Auto-generate employee ID
-            last_emp = Labour.objects.filter(companyid=self.companyid).order_by('-id').first()
+            last_emp = Labour.objects.order_by('-id').first()
             next_num = (last_emp.id + 1) if last_emp else 1
-            self.employee_id = f"EMP-{next_num:04d}"
+            while True:
+                candidate = f"EMP-{next_num:04d}"
+                if not Labour.objects.filter(employee_id=candidate).exists():
+                    self.employee_id = candidate
+                    break
+                next_num += 1
         super().save(*args, **kwargs)
 
 class LeaveType(models.Model):
