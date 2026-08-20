@@ -151,29 +151,61 @@ export const AdvancedAttendanceTab: React.FC = () => {
                           
                           <button 
                             onClick={() => setAdvanceCell({empId: emp.id, dateStr, empName: emp.name})}
-                            className={`w-full text-[10px] border rounded px-1 py-0.5 text-center transition-colors
+                            className={`w-full text-[10px] border rounded px-1 py-0.5 text-center transition-colors mt-0.5
                               ${cell.daily_advance ? 'border-primary bg-primary/10 text-primary font-bold' : 'border-transparent hover:border-border text-muted-foreground bg-transparent'}`}
                           >
                             {cell.daily_advance ? `₹${cell.daily_advance}` : 'Adv ₹'}
                           </button>
+
+                          {emp.is_ot_eligible && (
+                            <input 
+                              type="number" 
+                              min="0"
+                              step="0.5"
+                              placeholder="OT (hrs)"
+                              title="OT Hours"
+                              className="w-full text-[10px] border border-transparent hover:border-border focus:border-primary rounded px-1 py-0.5 text-center mt-0.5 bg-transparent focus:bg-background transition-colors"
+                              value={cell.ot_hours || ''}
+                              onChange={e => handleFieldChange(emp.id, dateStr, 'ot_hours', Number(e.target.value))}
+                            />
+                          )}
                           
-                          {(() => {
-                            const hourlyRate = emp.employee_type === 'FIXED' ? (emp.base_salary_monthly / 30 / 8) : (emp.dailywage / 8);
-                            return (
-                              <>
-                                {Number(cell.ot_hours) > 0 && <span className="text-[9px] font-bold bg-green-100 text-green-700 px-1 rounded w-full text-center truncate">+{cell.ot_hours}h OT (₹{(Number(cell.ot_hours) * hourlyRate * (emp.overtime_hourly_rate || 0)).toFixed(0)})</span>}
-                                {Number(cell.late_hours) > 0 && <span className="text-[9px] font-bold bg-red-100 text-red-700 px-1 rounded w-full text-center truncate">-{cell.late_hours}h Late (₹{(Number(cell.late_hours) * hourlyRate * (emp.late_deduction_rate || 0)).toFixed(0)})</span>}
-                              </>
-                            );
-                          })()}
-                          {Number(cell.km_travelled) > 0 && <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1 rounded w-full text-center truncate">{cell.km_travelled} KM</span>}
-                          {Number(cell.bags_produced) > 0 && <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-1 rounded w-full text-center truncate">{cell.bags_produced} Bags</span>}
+                          {emp.is_late_deduction_eligible && (
+                            <input 
+                              type="number" 
+                              min="0"
+                              step="0.5"
+                              placeholder="Late (hrs)"
+                              title="Late Deduction Hours"
+                              className="w-full text-[10px] border border-transparent hover:border-border focus:border-primary rounded px-1 py-0.5 text-center mt-0.5 bg-transparent focus:bg-background transition-colors"
+                              value={cell.late_hours || ''}
+                              onChange={e => handleFieldChange(emp.id, dateStr, 'late_hours', Number(e.target.value))}
+                            />
+                          )}
+
+                          {emp.is_km_eligible && (
+                            <input 
+                              type="number" 
+                              min="0"
+                              step="1"
+                              placeholder="KM"
+                              title="KM Travelled (Bike/Car)"
+                              className="w-full text-[10px] border border-transparent hover:border-border focus:border-primary rounded px-1 py-0.5 text-center mt-0.5 bg-transparent focus:bg-background transition-colors"
+                              value={cell.km_travelled || ''}
+                              onChange={e => {
+                                handleFieldChange(emp.id, dateStr, 'km_travelled', Number(e.target.value));
+                                if (!cell.travel_vehicle && Number(e.target.value) > 0) {
+                                  handleFieldChange(emp.id, dateStr, 'travel_vehicle', 'BIKE'); // Default to bike if not set
+                                }
+                              }}
+                            />
+                          )}
                           
-                          {/* Hover edit button for details (OT, Bags, etc) */}
+                          {/* Details edit button just in case they need to set Bags or override vehicle type */}
                           <button 
                             onClick={() => setDetailCell({empId: emp.id, dateStr, empName: emp.name})}
                             className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 bg-white shadow-sm border border-border p-0.5 rounded text-muted-foreground hover:text-primary transition-opacity"
-                            title="Edit details (OT, KM, Bags)"
+                            title="More details (Bags, Vehicle Type, etc)"
                           >
                             <Edit className="w-3 h-3" />
                           </button>
