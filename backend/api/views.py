@@ -1224,7 +1224,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         qs = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
-        if user_role == 'SALES' and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__icontains=user_email)
         return qs
 
@@ -1236,7 +1236,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         qs = Dealer.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
-        if user_role == 'SALES' and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__icontains=user_email)
 
         search = request.query_params.get('search', '').strip()
@@ -1350,7 +1350,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         qs = Distributor.objects.filter(companyid_id=company_id) if company_id else Distributor.objects.all()
-        if user_role == 'SALES' and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__icontains=user_email)
         return qs
 
@@ -1362,7 +1362,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         qs = Distributor.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
-        if user_role == 'SALES' and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__icontains=user_email)
 
         search = request.query_params.get('search', '').strip()

@@ -88,7 +88,10 @@ const SOMapping: React.FC = () => {
   }
 
   const salesUsers = useMemo(
-    () => users.filter(u => (u.role === 'SALES' || u.role === 'SALES_OFFICER') && u.active),
+    () => users.filter(u => {
+      const r = (u.role || '').toUpperCase();
+      return (r === 'SALES' || r === 'SALES_OFFICER' || r === 'SALES OFFICER' || r === 'SALES_EXECUTIVE' || r === 'SALES EXECUTIVE') && u.active;
+    }),
     [users]
   );
 
