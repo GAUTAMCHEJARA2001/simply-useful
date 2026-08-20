@@ -5,12 +5,14 @@ import { SafeDataView } from '@/components/SafeDataView';
 import { Save, Edit } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
+const EMPTY_ARRAY: any[] = [];
+
 export const AdvancedAttendanceTab: React.FC = () => {
   const currentMonthStr = new Date().toISOString().slice(0, 7);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
   
-  const { data: employees = [], isLoading: empLoading } = useHREmployees();
-  const { data: attendance = [], isLoading: attLoading, refetch } = useHRAttendance(selectedMonth);
+  const { data: employees = EMPTY_ARRAY, isLoading: empLoading } = useHREmployees();
+  const { data: attendance = EMPTY_ARRAY, isLoading: attLoading, refetch } = useHRAttendance(selectedMonth);
   const { saveAttendance } = useHRAttendanceMutations();
 
   // state format: formData[empId][YYYY-MM-DD] = { status, daily_advance, ot_hours, ... }
