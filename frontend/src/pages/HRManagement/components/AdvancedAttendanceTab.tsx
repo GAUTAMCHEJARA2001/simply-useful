@@ -186,8 +186,8 @@ export const AdvancedAttendanceTab: React.FC = () => {
                               placeholder="OT (hrs)"
                               title="OT Hours"
                               className="w-full text-[10px] border border-transparent hover:border-border focus:border-primary rounded px-1 py-0.5 text-center mt-0.5 bg-transparent focus:bg-background transition-colors"
-                              value={cell.ot_hours || ''}
-                              onChange={e => handleFieldChange(emp.id, dateStr, 'ot_hours', Number(e.target.value))}
+                              value={cell.ot_hours !== undefined ? cell.ot_hours : ''}
+                              onChange={e => handleFieldChange(emp.id, dateStr, 'ot_hours', e.target.value)}
                             />
                           )}
                           
@@ -199,8 +199,8 @@ export const AdvancedAttendanceTab: React.FC = () => {
                               placeholder="Late (hrs)"
                               title="Late Deduction Hours"
                               className="w-full text-[10px] border border-transparent hover:border-border focus:border-primary rounded px-1 py-0.5 text-center mt-0.5 bg-transparent focus:bg-background transition-colors"
-                              value={cell.late_hours || ''}
-                              onChange={e => handleFieldChange(emp.id, dateStr, 'late_hours', Number(e.target.value))}
+                              value={cell.late_hours !== undefined ? cell.late_hours : ''}
+                              onChange={e => handleFieldChange(emp.id, dateStr, 'late_hours', e.target.value)}
                             />
                           )}
 
@@ -212,9 +212,9 @@ export const AdvancedAttendanceTab: React.FC = () => {
                               placeholder="KM"
                               title="KM Travelled (Bike/Car)"
                               className="w-full text-[10px] border border-transparent hover:border-border focus:border-primary rounded px-1 py-0.5 text-center mt-0.5 bg-transparent focus:bg-background transition-colors"
-                              value={cell.km_travelled || ''}
+                              value={cell.km_travelled !== undefined ? cell.km_travelled : ''}
                               onChange={e => {
-                                handleFieldChange(emp.id, dateStr, 'km_travelled', Number(e.target.value));
+                                handleFieldChange(emp.id, dateStr, 'km_travelled', e.target.value);
                                 if (!cell.travel_vehicle && Number(e.target.value) > 0) {
                                   handleFieldChange(emp.id, dateStr, 'travel_vehicle', 'BIKE'); // Default to bike if not set
                                 }
@@ -230,8 +230,8 @@ export const AdvancedAttendanceTab: React.FC = () => {
                               placeholder="Bags"
                               title="Bags Produced"
                               className="w-full text-[10px] border border-transparent hover:border-border focus:border-primary rounded px-1 py-0.5 text-center mt-0.5 bg-transparent focus:bg-background transition-colors"
-                              value={cell.bags_produced || ''}
-                              onChange={e => handleFieldChange(emp.id, dateStr, 'bags_produced', Number(e.target.value))}
+                              value={cell.bags_produced !== undefined ? cell.bags_produced : ''}
+                              onChange={e => handleFieldChange(emp.id, dateStr, 'bags_produced', e.target.value)}
                             />
                           )}
                           
