@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useHRPayroll } from '@/hooks/hr/useHR';
+import { useHRPayroll, useLedgerMutations } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Printer, Download, Search, FileText, Calculator } from 'lucide-react';
 
@@ -15,10 +15,38 @@ export const PayrollTab: React.FC = () => {
 
   const [selectedSlip, setSelectedSlip] = useState<any>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [overrides, setOverrides] = useState<Record<number, number>>({});
+  
+  const { finalizePayroll } = useLedgerMutations();
 
   const handleGenerate = () => {
     setFetchMonth(selectedMonth);
     setSelectedSlip(null);
+    setOverrides({});
+  };
+
+  const handleFinalize = async () => {
+    if (!confirm('Are you sure you want to finalize payroll for this month? This will post salary and advance deductions to the employee ledgers.')) return;
+    
+    const slipsToFinalize = payroll.filter((p: any) => !p.is_finalized).map((p: any) => {
+      const manualAdv = overrides[p.labour_id];
+      const actualAdv = manualAdv !== undefined ? manualAdv : p.deductions.advance;
+      const netPay = p.earnings.gross - p.deductions.late - actualAdv;
+      
+      return {
+        ...p,
+        manual_advance_override: manualAdv,
+        net_pay: netPay,
+        deductions: {
+          ...p.deductions,
+          advance: actualAdv
+        }
+      };
+    });
+    
+    if (slipsToFinalize.length === 0) return;
+    
+    await finalizePayroll({ month: fetchMonth, slips: slipsToFinalize });
   };
 
   const handlePrint = () => {
@@ -109,6 +137,11 @@ export const PayrollTab: React.FC = () => {
             onChange={e => setSelectedMonth(e.target.value)}
             className="border rounded-lg px-3 py-2 text-sm bg-background"
           />
+          {payroll.some((p: any) => !p.is_finalized) && (
+            <Button onClick={handleFinalize} variant="default" className="gap-2 bg-green-600 hover:bg-green-700 text-white">
+              Finalize Payroll
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setShowBreakdown(!showBreakdown)} className="gap-2">
             <Calculator className="w-4 h-4" /> {showBreakdown ? 'Hide Breakdown' : 'Show Breakdown'}
           </Button>
@@ -126,17 +159,43 @@ export const PayrollTab: React.FC = () => {
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase ${slip.employee_type === 'FIXED' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
                     {slip.employee_type}
                   </span>
+                  {slip.is_finalized && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase bg-green-100 text-green-700 ml-2">Finalized</span>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mb-4">
                   <div>Paid Days: <span className="font-medium text-foreground">{slip.stats.payable_days}</span></div>
                   <div>OT Hours: <span className="font-medium text-foreground">{slip.stats.ot_hours}</span></div>
                 </div>
                 
-                <div className="space-y-1 mb-4 text-sm">
+                <div className="space-y-2 mb-4 text-sm">
                   <div className="flex justify-between text-muted-foreground"><span>Gross:</span> <span>{Currency(slip.earnings.gross)}</span></div>
-                  <div className="flex justify-between text-red-500/80"><span>Deductions:</span> <span>-{Currency(slip.deductions.total_deductions)}</span></div>
-                  <div className="flex justify-between font-bold text-primary border-t border-border pt-1 mt-1">
-                    <span>Net Pay:</span> <span>{Currency(slip.net_pay)}</span>
+                  
+                  {/* Advance Override */}
+                  <div className="flex justify-between items-center text-red-500/80">
+                    <span>Adv/Loan Ded:</span> 
+                    {!slip.is_finalized ? (
+                      <input 
+                        type="number" 
+                        min="0"
+                        className="w-24 border border-red-200 rounded px-2 py-1 text-right text-xs bg-red-50"
+                        value={overrides[slip.labour_id] !== undefined ? overrides[slip.labour_id] : slip.deductions.advance}
+                        onChange={e => setOverrides(prev => ({ ...prev, [slip.labour_id]: Number(e.target.value) }))}
+                      />
+                    ) : (
+                      <span>-{Currency(slip.deductions.advance)}</span>
+                    )}
+                  </div>
+                  
+                  {slip.deductions.late > 0 && <div className="flex justify-between text-red-500/80"><span>Late Ded:</span> <span>-{Currency(slip.deductions.late)}</span></div>}
+                  
+                  <div className="flex justify-between font-bold text-primary border-t border-border pt-2 mt-2">
+                    <span>Net Pay:</span> 
+                    <span>
+                      {Currency(
+                        slip.earnings.gross - slip.deductions.late - (overrides[slip.labour_id] !== undefined ? overrides[slip.labour_id] : slip.deductions.advance)
+                      )}
+                    </span>
                   </div>
                 </div>
                 

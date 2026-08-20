@@ -9,7 +9,7 @@ from django.db.models import Sum
 from api.models import (
     Labour, LeaveType, EmployeeLeaveBalance, LeaveRecord,
     SalaryAdvance, DailyAttendance, SalarySlip, Company,
-    HRDepartment, HRDesignation
+    HRDepartment, HRDesignation, EmployeeLedger
 )
 from api.views import send_success, send_error, _get_company_id
 
@@ -384,10 +384,22 @@ def hr_generate_payroll(request):
             
         net_pay = gross_pay - late_deduction - advance_deduction - total_daily_advance
         
+        # Check if finalized
+        slip = SalarySlip.objects.filter(labourid=emp, month=month).first()
+        is_finalized = slip.is_finalized if slip else False
+        
+        if slip and slip.manual_advance_override is not None:
+            # Recompute net_pay based on override
+            old_adv = advance_deduction + total_daily_advance
+            advance_deduction = slip.manual_advance_override - total_daily_advance
+            if advance_deduction < 0: advance_deduction = 0
+            net_pay = gross_pay - late_deduction - slip.manual_advance_override
+        
         payroll_data.append({
             'labour_id': emp.id,
             'labour_name': emp.name,
             'employee_type': emp.employee_type,
+            'is_finalized': is_finalized,
             'stats': {
                 'present': present_count,
                 'half_day': half_day_count,
@@ -424,3 +436,102 @@ def hr_generate_payroll(request):
         })
 
     return send_success(payroll_data, 'Payroll generated successfully')
+@api_view(['POST'])
+def hr_finalize_payroll(request):
+    data = request.data
+    month = data.get('month')
+    slips = data.get('slips', [])
+    
+    if not month or not slips:
+        return send_error('Month and slips are required', 400)
+        
+    for slip_data in slips:
+        labour_id = slip_data.get('labour_id')
+        if not labour_id:
+            continue
+            
+        # Check if already finalized
+        slip = SalarySlip.objects.filter(labourid_id=labour_id, month=month).first()
+        if slip and slip.is_finalized:
+            continue
+            
+        if not slip:
+            slip = SalarySlip(labourid_id=labour_id, month=month)
+            
+        slip.basic_pay = slip_data['earnings'].get('basic', 0.0)
+        slip.hra = slip_data['earnings'].get('hra', 0.0)
+        slip.allowances = slip_data['earnings'].get('allowances', 0.0)
+        slip.ot_pay = slip_data['earnings'].get('ot_pay', 0.0)
+        slip.incentives = slip_data['earnings'].get('incentives', 0.0)
+        slip.gross_pay = slip_data['earnings'].get('gross', 0.0)
+        
+        slip.advance_deduction = slip_data['deductions'].get('advance', 0.0)
+        slip.late_deduction = slip_data['deductions'].get('late', 0.0)
+        slip.net_pay = slip_data.get('net_pay', 0.0)
+        
+        slip.manual_advance_override = slip_data.get('manual_advance_override')
+        slip.is_finalized = True
+        slip.save()
+        
+        # Post to ledger (Salary Payable)
+        EmployeeLedger.objects.create(
+            labourid_id=labour_id,
+            transaction_type='SALARY',
+            description=f'Salary for {month}',
+            amount=slip.net_pay,
+            reference_id=slip.id
+        )
+        
+        # Reduce Advance Balance if advance was deducted
+        if slip.advance_deduction > 0:
+            # We deduct from active advances
+            advances = SalaryAdvance.objects.filter(labourid_id=labour_id, remaining_balance__gt=0).order_by('createdat')
+            remaining_to_deduct = slip.advance_deduction
+            for adv in advances:
+                if remaining_to_deduct <= 0: break
+                deduct = min(adv.remaining_balance, remaining_to_deduct)
+                adv.remaining_balance -= deduct
+                adv.save()
+                remaining_to_deduct -= deduct
+                
+    return send_success(None, 'Payroll finalized and posted to ledgers')
+
+@api_view(['GET'])
+def hr_employee_ledger(request, labour_id):
+    ledger = EmployeeLedger.objects.filter(labourid_id=labour_id).order_by('date', 'created_at')
+    data = []
+    balance = 0.0
+    for entry in ledger:
+        balance += entry.amount
+        data.append({
+            'id': entry.id,
+            'date': entry.date.strftime('%Y-%m-%d'),
+            'type': entry.transaction_type,
+            'description': entry.description,
+            'amount': entry.amount,
+            'balance': balance,
+            'reference_id': entry.reference_id
+        })
+    return send_success({'ledger': data, 'current_balance': balance}, 'Ledger fetched')
+
+@api_view(['POST'])
+def hr_ledger_payment(request):
+    data = request.data
+    labour_id = data.get('labour_id')
+    amount = float(data.get('amount') or 0.0)
+    description = data.get('description', 'Salary Payment')
+    date_str = data.get('date', timezone.now().date().strftime('%Y-%m-%d'))
+    
+    if not labour_id or amount <= 0:
+        return send_error('Valid labour_id and amount > 0 required', 400)
+        
+    entry = EmployeeLedger.objects.create(
+        labourid_id=labour_id,
+        date=date_str,
+        transaction_type='PAYMENT',
+        description=description,
+        amount=-amount # Payment reduces the company's debt to employee
+    )
+    
+    return send_success({'id': entry.id}, 'Payment recorded successfully')
+

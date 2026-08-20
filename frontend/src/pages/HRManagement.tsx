@@ -8,12 +8,12 @@ import { AdvancedAttendanceTab } from './HRManagement/components/AdvancedAttenda
 import { PayrollTab } from './HRManagement/components/PayrollTab';
 import { OrgChartTab } from './HRManagement/components/OrgChartTab';
 import { HRConfigTab } from './HRManagement/components/HRConfigTab';
+import { EmployeeLedgerTab } from './HRManagement/components/EmployeeLedgerTab';
 
 // Remaining subcomponents
 const LeaveManagementTab = () => <div className="p-4">Leave Management Content</div>;
-const LoansAdvancesTab = () => <div className="p-4">Loans & Advances Content</div>;
 
-export type HRTab = 'employees' | 'attendance' | 'leaves' | 'loans' | 'payroll' | 'orgchart' | 'config';
+export type HRTab = 'employees' | 'attendance' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
 
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
@@ -27,7 +27,7 @@ const HRManagement: React.FC = () => {
     { id: 'orgchart', label: 'Organization Chart', icon: Users },
     { id: 'attendance', label: 'Daily Attendance', icon: Clock },
     { id: 'leaves', label: 'Leave Management', icon: CalendarCheck },
-    { id: 'loans', label: 'Loans & Advances', icon: Wallet },
+    { id: 'ledger', label: 'Employee Ledger', icon: Wallet },
     { id: 'payroll', label: 'Payroll & Slips', icon: FileBarChart },
     { id: 'config', label: 'HR Config', icon: FileText },
   ];
@@ -57,7 +57,15 @@ const HRManagement: React.FC = () => {
         {tab === 'orgchart' && <OrgChartTab />}
         {tab === 'attendance' && <AdvancedAttendanceTab />}
         {tab === 'leaves' && <LeaveManagementTab />}
-        { tab === 'loans' && <LoansAdvancesTab /> }
+        {tab === 'ledger' && <EmployeeLedgerTab />}
+        {tab === 'payroll' && <PayrollTab />}
+        {tab === 'config' && <HRConfigTab />}
+      </div>
+    </div>
+  );
+};
+
+export default HRManagement;
         { tab === 'payroll' && <PayrollTab /> }
         { tab === 'config' && <HRConfigTab /> }
       </div>

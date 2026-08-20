@@ -322,11 +322,30 @@ class SalarySlip(models.Model):
     
     net_pay = models.FloatField(default=0.0)
     
+    is_finalized = models.BooleanField(default=False)
+    manual_advance_override = models.FloatField(blank=True, null=True)
+    
     createdat = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = 'SalarySlip'
         unique_together = (('labourid', 'month'),)
+
+class EmployeeLedger(models.Model):
+    TRANSACTION_TYPES = (
+        ('SALARY', 'Salary Payable'),
+        ('ADVANCE', 'Salary Advance Given'),
+        ('PAYMENT', 'Salary Payment Made'),
+        ('ADJUSTMENT', 'Manual Adjustment')
+    )
+    labourid = models.ForeignKey(Labour, models.DO_NOTHING, db_column='labourId', db_constraint=False)
+    date = models.DateField(default=timezone.now)
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
+    description = models.CharField(max_length=255)
+    amount = models.FloatField() # Positive = Company Owes Employee (Credit), Negative = Employee Owes Company (Debit)
+    reference_id = models.IntegerField(null=True, blank=True) # E.g. SalarySlip ID or Advance ID
+    created_at = models.DateTimeField(auto_now_add=True)
+
 
 
 class Market(models.Model):

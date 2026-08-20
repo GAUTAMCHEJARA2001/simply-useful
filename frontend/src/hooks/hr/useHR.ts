@@ -155,3 +155,41 @@ export const useHRMasterMutations = () => {
     deleteDesignation: deleteDesignation.mutateAsync
   };
 };
+
+export const useEmployeeLedger = (labourId: number | string) => {
+  return useQuery({
+    queryKey: ['hr_ledger', labourId],
+    queryFn: async () => {
+      if (!labourId) return null;
+      const res = await api.get('/hr/ledger/' + labourId);
+      return res.data?.data;
+    },
+    enabled: !!labourId
+  });
+};
+
+export const useLedgerMutations = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const finalizePayroll = useMutation({
+    mutationFn: (data: { month: string, slips: any[] }) => api.post('/hr/payroll/finalize', data),
+    onSuccess: () => {
+      toast({ title: 'Success', description: 'Payroll finalized successfully' });
+      queryClient.invalidateQueries({ queryKey: ['hr_payroll'] });
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' })
+  });
+
+  const recordPayment = useMutation({
+    mutationFn: (data: { labour_id: number, amount: number, description?: string, date?: string }) => api.post('/hr/ledger/payment', data),
+    onSuccess: (_, variables) => {
+      toast({ title: 'Success', description: 'Payment recorded successfully' });
+      queryClient.invalidateQueries({ queryKey: ['hr_ledger', variables.labour_id] });
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' })
+  });
+
+  return { finalizePayroll: finalizePayroll.mutateAsync, recordPayment: recordPayment.mutateAsync };
+};
+
