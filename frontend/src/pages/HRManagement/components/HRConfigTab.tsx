@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Trash2 } from 'lucide-react';
 import { useHRDepartments, useHRDesignations, useHRMasterMutations } from '@/hooks/hr/useHR';
-import { SafeDataView } from '@/components/SafeDataView';
 
 export const HRConfigTab = () => {
   const { data: depts, isLoading: loadingDepts, refetch: refetchDepts } = useHRDepartments();
@@ -28,8 +27,7 @@ export const HRConfigTab = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <SafeDataView isLoading={loadingDepts} error={null} data={depts} onRetry={refetchDepts}>
-        <Card className="p-6">
+      <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Departments</h3>
           <div className="flex gap-2 mb-6">
             <Input 
@@ -56,10 +54,8 @@ export const HRConfigTab = () => {
             )}
           </div>
         </Card>
-      </SafeDataView>
 
-      <SafeDataView isLoading={loadingDesigs} error={null} data={desigs} onRetry={refetchDesigs}>
-        <Card className="p-6">
+      <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Positions (Designations)</h3>
           <div className="flex gap-2 mb-6">
             <Input 
@@ -86,7 +82,6 @@ export const HRConfigTab = () => {
             )}
           </div>
         </Card>
-      </SafeDataView>
     </div>
   );
 };
