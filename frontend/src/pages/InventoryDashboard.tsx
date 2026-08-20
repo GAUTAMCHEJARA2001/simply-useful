@@ -5,7 +5,7 @@ import apiClient, { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Package, CheckCircle, AlertTriangle, Truck, ShoppingBag, XCircle, Users, Star, Warehouse } from 'lucide-react';
+import { Package, CheckCircle, AlertTriangle, Truck, ShoppingBag, XCircle, Users, Star, Warehouse, Search } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
@@ -75,6 +75,7 @@ const InventoryDashboard: React.FC = () => {
 
   const [boms, setBoms] = useState<any[]>([]);
   const [loadingBoms, setLoadingBoms] = useState<boolean>(true);
+  const [orderSearchTerm, setOrderSearchTerm] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -606,16 +607,35 @@ const InventoryDashboard: React.FC = () => {
         {/* Orders Queue with Actions */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              Orders to Pack & Send
-              {approvedOrders.length > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{approvedOrders.length} ready</span>}
-            </CardTitle>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                Orders to Pack & Send
+                {approvedOrders.length > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{approvedOrders.length} ready</span>}
+              </CardTitle>
+              <div className="relative w-full sm:w-auto">
+                <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+                <input 
+                  type="text" 
+                  placeholder="Search orders, party, email..." 
+                  value={orderSearchTerm}
+                  onChange={(e) => setOrderSearchTerm(e.target.value)}
+                  className="pl-8 h-8 w-full sm:w-[250px] rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {pendingOrders.length === 0 && dispatchedOrders.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">No orders to fulfill</p>
             )}
-            {[...pendingOrders, ...dispatchedOrders].map(o => {
+            {[...pendingOrders, ...dispatchedOrders].filter(o => {
+              if (!orderSearchTerm.trim()) return true;
+              const term = orderSearchTerm.toLowerCase();
+              const oId = (o.orderId || (o as any).order_id || o.id || '').toLowerCase();
+              const pName = (o.partyName || (o as any).party_name || '').toLowerCase();
+              const sEmail = (o.soEmail || (o as any).so_email || '').toLowerCase();
+              return oId.includes(term) || pName.includes(term) || sEmail.includes(term);
+            }).map(o => {
               const action = actionLabel(o);
               const orderId = o.orderId || (o as any).order_id || o.id || 'Unknown ID';
               const partyName = o.partyName || (o as any).party_name || 'Party';
