@@ -2413,6 +2413,7 @@ def transaction_purchases(request):
             all_purchases = [p for p in all_purchases if p.warehouseid_id in assigned_wh_ids]
         from api.utils_gst import calculate_gst_split
         
+        company_id = _get_company_id(request)
         company = Company.objects.filter(id=company_id).first()
         company_gst = getattr(company, 'gst_number', '') or ''
         
