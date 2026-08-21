@@ -2417,6 +2417,7 @@ def transaction_purchases(request):
         company = Company.objects.filter(id=company_id).first()
         company_gst = getattr(company, 'gst_number', '') or ''
         
+        data = []
         for p in all_purchases:
             items_data = []
             supplier_gst = getattr(p.supplierid, 'gst_number', '') if p.supplierid else ''
