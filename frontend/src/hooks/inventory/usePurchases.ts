@@ -29,7 +29,8 @@ export const usePurchaseMutations = () => {
       toast({ title: 'Success', description: 'Purchase recorded' });
     },
     onError: (error: any) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      const msg = error?.response?.data?.message || error?.response?.data?.error || error.message || 'Failed to save purchase';
+      toast({ title: 'Error saving purchase', description: msg, variant: 'destructive' });
     }
   });
 

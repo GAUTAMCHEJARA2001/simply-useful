@@ -1225,7 +1225,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         user_email = getattr(self.request.user, 'email', None)
         qs = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
         if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
-            qs = qs.filter(assignedsoemails__contains=[user_email])
+            qs = qs.filter(assignedsoemails__icontains=user_email)
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -1237,7 +1237,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
-            qs = qs.filter(assignedsoemails__contains=[user_email])
+            qs = qs.filter(assignedsoemails__icontains=user_email)
 
         search = request.query_params.get('search', '').strip()
         if search:
@@ -1247,6 +1247,7 @@ class DealerViewSet(viewsets.ModelViewSet):
                 Q(dealercode__icontains=search) |
                 Q(city__icontains=search) |
                 Q(territory__icontains=search) |
+                Q(assignedsoemails__icontains=search) |
                 Q(distributorname__icontains=search)
             )
 
@@ -1314,7 +1315,9 @@ class DealerViewSet(viewsets.ModelViewSet):
                 attempts += 1
         serializer = DealerSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        instance = serializer.save()
+        validated = serializer.validated_data
+        instance = Dealer(**validated)
+        instance.save()
         return send_success(DealerSerializer(instance).data, 'Dealer created successfully', 201)
 
     def update(self, request, *args, **kwargs):
@@ -1348,7 +1351,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         user_email = getattr(self.request.user, 'email', None)
         qs = Distributor.objects.filter(companyid_id=company_id) if company_id else Distributor.objects.all()
         if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
-            qs = qs.filter(assignedsoemails__contains=[user_email])
+            qs = qs.filter(assignedsoemails__icontains=user_email)
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -1360,7 +1363,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
-            qs = qs.filter(assignedsoemails__contains=[user_email])
+            qs = qs.filter(assignedsoemails__icontains=user_email)
 
         search = request.query_params.get('search', '').strip()
         if search:
@@ -1368,7 +1371,8 @@ class DistributorViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 Q(distributorname__icontains=search) |
                 Q(area__icontains=search) |
-                Q(territory__icontains=search)
+                Q(territory__icontains=search) |
+                Q(assignedsoemails__icontains=search)
             )
 
         page = request.query_params.get('page')
@@ -1423,7 +1427,9 @@ class DistributorViewSet(viewsets.ModelViewSet):
             data['id'] = 'c' + uuid.uuid4().hex[:23]
         serializer = DistributorSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        instance = serializer.save()
+        validated = serializer.validated_data
+        instance = Distributor(**validated)
+        instance.save()
         return send_success(DistributorSerializer(instance).data, 'Distributor created successfully', 201)
 
     def update(self, request, *args, **kwargs):
@@ -1686,13 +1692,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                 ).aggregate(total=Sum('qty'))
                 stock += float(sales_ret['total'] or 0)
                 
-                # IMPORTANT: Exclude SALE and DISPATCH type transactions because they duplicate
-                # what is already counted via Orderitem(status='Completed'/'Dispatched') above.
-                # Only include production, consumed, adjustment and other non-sales stock movements.
                 st_aggs = Stocktransaction.objects.exclude(
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
-                ).exclude(
-                    transactiontype__in=['SALE', 'DISPATCH']
                 ).filter(productid_id=p_id).aggregate(total=Sum('quantity'))
                 stock += float(st_aggs['total'] or 0)
                 
@@ -2455,7 +2456,7 @@ def transaction_purchases(request):
     elif request.method == 'POST':
         data = request.data.copy()
         now = timezone.now()
-        company_id = getattr(request.user, 'companyid_id', None) or _get_company_id(request)
+        company_id = _get_company_id(request)  # Handles JWT (.companyId) and Django model (.companyid_id)
         if not Company.objects.filter(id=company_id).exists():
             fallback_company = Company.objects.first()
             if not fallback_company:
@@ -2541,8 +2542,13 @@ def transaction_purchases(request):
                     if prod_id:
                         pass
                     items_data.append({'id': item_id, 'productName': product_name, 'productId': prod_id, 'qty': qty, 'quantity': qty, 'rate': rate, 'total': item_total, 'tax_percent': tax_p})
-        except IntegrityError:
+        except IntegrityError as e:
+            print(f'[PURCHASE CREATE] IntegrityError: {e}')
             return send_error('Purchase could not be recorded because related data is out of sync. Please refresh and try again.', 409)
+        except Exception as e:
+            import traceback
+            print(f'[PURCHASE CREATE] Unexpected error: {traceback.format_exc()}')
+            return send_error(f'Purchase save failed: {str(e)}', 500)
         if purchase_order:
             try:
                 ordered_qty = sum((item.quantity for item in purchase_order.purchaseorderitem_set.all()))
@@ -3763,7 +3769,7 @@ def transaction_purchase_orders(request):
         wh = resolve_warehouse(wh_id)
         if not wh:
             return send_error('Invalid warehouse', 400)
-        company_id = getattr(request.user, 'companyId', None) or 'cmo75yliq0000wesurjpett1n'
+        company_id = _get_company_id(request)  # Handles JWT (.companyId) and Django model (.companyid_id)
         data['companyId'] = company_id
         po_count = Purchaseorder.objects.count() + 1
         po_num = f'PO-{now.year}-{po_count:05d}'
@@ -4023,7 +4029,7 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        company_id = getattr(user, 'companyId', None) or getattr(user, 'companyid_id', None)
+        company_id = _get_company_id(self.request)
         if getattr(user, 'role', '') == 'SUPERADMIN':
             return Company.objects.all().order_by('-createdat')
         if company_id:
