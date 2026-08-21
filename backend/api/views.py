@@ -2455,7 +2455,7 @@ def transaction_purchases(request):
     elif request.method == 'POST':
         data = request.data.copy()
         now = timezone.now()
-        company_id = getattr(request.user, 'companyId', None) or 'cmo75yliq0000wesurjpett1n'
+        company_id = getattr(request.user, 'companyid_id', None) or _get_company_id(request)
         if not Company.objects.filter(id=company_id).exists():
             fallback_company = Company.objects.first()
             if not fallback_company:
