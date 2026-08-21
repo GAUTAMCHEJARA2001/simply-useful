@@ -347,11 +347,15 @@ class ProductSerializer(serializers.ModelSerializer):
                 total += float(sal_ret_total)
 
                 # 3. StockTransactions (production, consumed, adjustments, etc.)
-                #    Exclude pending/rejected entries — they haven't taken effect yet
+                #    IMPORTANT: Exclude SALE and DISPATCH types because those duplicate
+                #    what is already counted via Orderitem(status='Completed') above.
+                #    Also exclude pending/rejected entries.
                 st_total = Stocktransaction.objects.filter(
                     productid_id=local_product.id
                 ).exclude(
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
+                ).exclude(
+                    transactiontype__in=['SALE', 'DISPATCH']
                 ).aggregate(s=Sum('quantity'))['s'] or 0
                 total += float(st_total)
 
@@ -382,7 +386,7 @@ class DealerSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    gst = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    gst = serializers.CharField(source='gst_number', required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Dealer
@@ -404,15 +408,6 @@ class DealerSerializer(serializers.ModelSerializer):
             ret['assignedSoEmails'] = []
         return ret
 
-    def create(self, validated_data):
-        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
-            validated_data.pop(key, None)
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
-            validated_data.pop(key, None)
-        return super().update(instance, validated_data)
 
 
 class DistributorSerializer(serializers.ModelSerializer):
@@ -433,7 +428,7 @@ class DistributorSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    gst = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    gst = serializers.CharField(source='gst_number', required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Distributor
@@ -455,15 +450,7 @@ class DistributorSerializer(serializers.ModelSerializer):
             ret['assignedSoEmails'] = []
         return ret
 
-    def create(self, validated_data):
-        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
-            validated_data.pop(key, None)
-        return super().create(validated_data)
 
-    def update(self, instance, validated_data):
-        for key in ['phone', 'email', 'address', 'gst', 'contact_person']:
-            validated_data.pop(key, None)
-        return super().update(instance, validated_data)
 
 
 class OrderitemSerializer(serializers.ModelSerializer):

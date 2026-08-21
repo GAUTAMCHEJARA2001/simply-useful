@@ -1694,6 +1694,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                 
                 st_aggs = Stocktransaction.objects.exclude(
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
+                ).exclude(
+                    transactiontype__in=['SALE', 'DISPATCH']
                 ).filter(productid_id=p_id).aggregate(total=Sum('quantity'))
                 stock += float(st_aggs['total'] or 0)
                 
@@ -2411,6 +2413,7 @@ def transaction_purchases(request):
             all_purchases = [p for p in all_purchases if p.warehouseid_id in assigned_wh_ids]
         from api.utils_gst import calculate_gst_split
         
+        company_id = _get_company_id(request)
         company = Company.objects.filter(id=company_id).first()
         company_gst = getattr(company, 'gst_number', '') or ''
         
@@ -2456,7 +2459,7 @@ def transaction_purchases(request):
     elif request.method == 'POST':
         data = request.data.copy()
         now = timezone.now()
-        company_id = getattr(request.user, 'companyId', None) or 'cmo75yliq0000wesurjpett1n'
+        company_id = _get_company_id(request)  # Handles JWT (.companyId) and Django model (.companyid_id)
         if not Company.objects.filter(id=company_id).exists():
             fallback_company = Company.objects.first()
             if not fallback_company:
@@ -2542,8 +2545,13 @@ def transaction_purchases(request):
                     if prod_id:
                         pass
                     items_data.append({'id': item_id, 'productName': product_name, 'productId': prod_id, 'qty': qty, 'quantity': qty, 'rate': rate, 'total': item_total, 'tax_percent': tax_p})
-        except IntegrityError:
+        except IntegrityError as e:
+            print(f'[PURCHASE CREATE] IntegrityError: {e}')
             return send_error('Purchase could not be recorded because related data is out of sync. Please refresh and try again.', 409)
+        except Exception as e:
+            import traceback
+            print(f'[PURCHASE CREATE] Unexpected error: {traceback.format_exc()}')
+            return send_error(f'Purchase save failed: {str(e)}', 500)
         if purchase_order:
             try:
                 ordered_qty = sum((item.quantity for item in purchase_order.purchaseorderitem_set.all()))
@@ -3173,6 +3181,8 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
         
     st_aggs = Stocktransaction.objects.exclude(
         reason__in=['PENDING_APPROVAL', 'REJECTED']
+    ).exclude(
+        transactiontype__in=['SALE', 'DISPATCH']
     ).filter(productid_id__in=pids).values('productid_id').annotate(total=Sum('quantity'))
     for row in st_aggs:
         pid = row['productid_id']
@@ -3764,7 +3774,7 @@ def transaction_purchase_orders(request):
         wh = resolve_warehouse(wh_id)
         if not wh:
             return send_error('Invalid warehouse', 400)
-        company_id = getattr(request.user, 'companyId', None) or 'cmo75yliq0000wesurjpett1n'
+        company_id = _get_company_id(request)  # Handles JWT (.companyId) and Django model (.companyid_id)
         data['companyId'] = company_id
         po_count = Purchaseorder.objects.count() + 1
         po_num = f'PO-{now.year}-{po_count:05d}'
@@ -4024,7 +4034,7 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        company_id = getattr(user, 'companyId', None) or getattr(user, 'companyid_id', None)
+        company_id = _get_company_id(self.request)
         if getattr(user, 'role', '') == 'SUPERADMIN':
             return Company.objects.all().order_by('-createdat')
         if company_id:
