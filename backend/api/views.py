@@ -1694,6 +1694,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                 
                 st_aggs = Stocktransaction.objects.exclude(
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
+                ).exclude(
+                    transactiontype__in=['SALE', 'DISPATCH']
                 ).filter(productid_id=p_id).aggregate(total=Sum('quantity'))
                 stock += float(st_aggs['total'] or 0)
                 
@@ -3178,6 +3180,8 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
         
     st_aggs = Stocktransaction.objects.exclude(
         reason__in=['PENDING_APPROVAL', 'REJECTED']
+    ).exclude(
+        transactiontype__in=['SALE', 'DISPATCH']
     ).filter(productid_id__in=pids).values('productid_id').annotate(total=Sum('quantity'))
     for row in st_aggs:
         pid = row['productid_id']
