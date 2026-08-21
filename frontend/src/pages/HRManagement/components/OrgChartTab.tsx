@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
 import { useHREmployees } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
-import { User } from 'lucide-react';
+import { User, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { Button } from '@/components/ui/button';
 
 export const OrgChartTab: React.FC = () => {
   const { data: employees = [], isLoading, error, refetch } = useHREmployees();
@@ -76,16 +78,34 @@ export const OrgChartTab: React.FC = () => {
       </div>
       
       <SafeDataView isLoading={isLoading} error={error} data={employees} onRetry={refetch}>
-        <div className="bg-muted/30 border border-border rounded-xl p-8 overflow-auto min-h-[500px] flex justify-center">
-          <div className="flex gap-16">
-            {rootNodes.map(renderNode)}
-            {rootNodes.length === 0 && employees.length > 0 && (
-              <div className="text-muted-foreground italic">No root employees found (everyone reports to someone).</div>
+        <div className="bg-muted/30 border border-border rounded-xl overflow-hidden min-h-[500px] relative">
+          <TransformWrapper
+            initialScale={1}
+            minScale={0.2}
+            maxScale={4}
+            centerOnInit={true}
+          >
+            {({ zoomIn, zoomOut, resetTransform, ...rest }) => (
+              <>
+                <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 bg-background p-2 rounded-lg border shadow-sm">
+                  <Button variant="outline" size="icon" onClick={() => zoomIn()} title="Zoom In"><ZoomIn className="w-4 h-4" /></Button>
+                  <Button variant="outline" size="icon" onClick={() => zoomOut()} title="Zoom Out"><ZoomOut className="w-4 h-4" /></Button>
+                  <Button variant="outline" size="icon" onClick={() => resetTransform()} title="Reset View"><Maximize className="w-4 h-4" /></Button>
+                </div>
+                <TransformComponent wrapperStyle={{ width: '100%', height: '500px' }}>
+                  <div className="flex gap-16 p-8 min-w-max min-h-max justify-center items-center">
+                    {rootNodes.map(renderNode)}
+                    {rootNodes.length === 0 && employees.length > 0 && (
+                      <div className="text-muted-foreground italic">No root employees found (everyone reports to someone).</div>
+                    )}
+                    {employees.length === 0 && (
+                      <div className="text-muted-foreground italic">No employees found.</div>
+                    )}
+                  </div>
+                </TransformComponent>
+              </>
             )}
-            {employees.length === 0 && (
-              <div className="text-muted-foreground italic">No employees found.</div>
-            )}
-          </div>
+          </TransformWrapper>
         </div>
       </SafeDataView>
     </div>

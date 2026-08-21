@@ -68,8 +68,11 @@ from api.views_hr import (
     hr_employees, hr_employees_detail,
     hr_attendance, hr_generate_payroll, hr_finalize_payroll, hr_employee_ledger, hr_ledger_payment,
     hr_departments, hr_departments_detail,
-    hr_designations, hr_designations_detail
+    hr_designations, hr_designations_detail,
+    hr_leave_types, hr_leave_types_detail,
+    hr_leave_balances, hr_leave_records
 )
+from api.leave_views import hr_leave_policies, hr_leave_policies_detail, hr_leave_allocate
 
 urlpatterns = [
     # Auth
@@ -147,6 +150,15 @@ urlpatterns = [
     path('hr/payroll/finalize', hr_finalize_payroll, name='hr-payroll-finalize'),
     path('hr/ledger/<str:labour_id>', hr_employee_ledger, name='hr-employee-ledger'),
     path('hr/ledger/payment', hr_ledger_payment, name='hr-ledger-payment'),
+    
+    # Leave Management
+    path('hr/leave-types', hr_leave_types, name='hr-leave-types'),
+    path('hr/leave-types/<str:pk>', hr_leave_types_detail, name='hr-leave-types-detail'),
+    path('hr/leave-balances', hr_leave_balances, name='hr-leave-balances'),
+    path('hr/leave-records', hr_leave_records, name='hr-leave-records'),
+    path('hr/leave-policies', hr_leave_policies, name='hr-leave-policies'),
+    path('hr/leave-policies/<str:pk>', hr_leave_policies_detail, name='hr-leave-policies-detail'),
+    path('hr/leaves/allocate', hr_leave_allocate, name='hr-leave-allocate'),
 
     path('transactions/adjustments', transaction_adjustments, name='tx-adjustments'),
     path('transactions/adjustments/<str:pk>', transaction_adjustments_detail, name='tx-adjustment-detail'),

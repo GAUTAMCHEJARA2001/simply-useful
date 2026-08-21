@@ -11,7 +11,8 @@ from api.models import (
     SalaryAdvance, DailyAttendance, SalarySlip, Company,
     HRDepartment, HRDesignation, EmployeeLedger
 )
-from api.views import send_success, send_error, _get_company_id
+from django.db.models import Sum, Case, When, FloatField
+from api.views import send_success, send_error, _get_company_id, load_settings
 
 # --- MASTERS ---
 @api_view(['GET', 'POST'])
@@ -43,13 +44,14 @@ def hr_designations(request):
     if not company_id: return send_error('No company ID', 400)
     
     if request.method == 'GET':
-        qs = HRDesignation.objects.filter(companyid_id=company_id)
-        return send_success([{'id': q.id, 'name': q.name} for q in qs], 'Designations fetched')
+        qs = HRDesignation.objects.filter(companyid_id=company_id).select_related('department')
+        return send_success([{'id': q.id, 'name': q.name, 'department_id': q.department_id, 'department_name': q.department.name if q.department else None} for q in qs], 'Designations fetched')
     
     elif request.method == 'POST':
         name = request.data.get('name')
+        department_id = request.data.get('department_id')
         if not name: return send_error('Name required', 400)
-        obj, created = HRDesignation.objects.get_or_create(companyid_id=company_id, name=name)
+        obj, created = HRDesignation.objects.get_or_create(companyid_id=company_id, name=name, department_id=department_id)
         return send_success({'id': obj.id, 'name': obj.name}, 'Designation created')
 
 @api_view(['DELETE'])
@@ -278,7 +280,13 @@ def hr_generate_payroll(request):
     
     employees = Labour.objects.filter(active=True).exclude(employee_type='NONE')
     payroll_data = []
-
+    # Load salary component settings
+    settings_data = load_settings()
+    hr_salary_components = settings_data.get('hr_salary_components', {})
+    basic_pct = float(hr_salary_components.get('basic', 50)) / 100.0
+    hra_pct = float(hr_salary_components.get('hra', 30)) / 100.0
+    allowance_pct = float(hr_salary_components.get('allowances', 20)) / 100.0
+    
     for emp in employees:
         # Fetch attendance for this month
         attendance = DailyAttendance.objects.filter(labourid=emp, date__startswith=month)
@@ -298,6 +306,24 @@ def hr_generate_payroll(request):
 
         # Calculate Payable Days
         payable_days = present_count + (half_day_count * 0.5)
+        
+        # Add Paid Leaves
+        paid_leave_count = LeaveRecord.objects.filter(
+            labourid=emp, 
+            date__startswith=month, 
+            is_paid=True
+        ).aggregate(
+            total=Sum(
+                Case(
+                    When(status='FULL_DAY', then=1.0),
+                    When(status='HALF_DAY', then=0.5),
+                    default=1.0,
+                    output_field=FloatField()
+                )
+            )
+        )['total'] or 0.0
+        payable_days += paid_leave_count
+
         if emp.employee_type == 'FIXED':
             payable_days += wo_count # Weekly offs are paid for Fixed
 
@@ -308,10 +334,10 @@ def hr_generate_payroll(request):
             # Indian Norm: Split Base Salary Monthly into Basic(50%) and HRA(30%) and Allowances(20%)
             daily_rate = emp.base_salary_monthly / 30.0 # Standardize to 30 days
             gross_base = daily_rate * payable_days
-            basic_pay = gross_base * 0.50
-            hra = gross_base * 0.30
-            other_allowances = gross_base * 0.20
-            basic_calc = f"(₹{emp.base_salary_monthly}/30) * {payable_days} days * 50% = ₹{basic_pay:.2f}"
+            basic_pay = gross_base * basic_pct
+            hra = gross_base * hra_pct
+            other_allowances = gross_base * allowance_pct
+            basic_calc = f"(₹{emp.base_salary_monthly}/30) * {payable_days} days * {int(basic_pct * 100)}% = ₹{basic_pay:.2f}"
         else:
             # Variable / Daily
             gross_base = emp.dailywage * payable_days
@@ -372,13 +398,25 @@ def hr_generate_payroll(request):
         advances = SalaryAdvance.objects.filter(labourid=emp, remaining_balance__gt=0)
         advance_deduction = 0.0
         advance_calc_parts = []
+        
+        # Calculate maximum possible EMI deduction without going negative
+        max_emi_possible = gross_pay - late_deduction - total_daily_advance
+        if max_emi_possible < 0:
+            max_emi_possible = 0.0
+            
         for adv in advances:
+            if advance_deduction >= max_emi_possible:
+                break
             deduct = min(adv.deduction_per_month, adv.remaining_balance)
-            advance_deduction += deduct
-            advance_calc_parts.append(f"₹{deduct} (Monthly EMI)")
+            # Cap the deduction to the remaining possible net pay
+            if advance_deduction + deduct > max_emi_possible:
+                deduct = max_emi_possible - advance_deduction
+            if deduct > 0:
+                advance_deduction += deduct
+                advance_calc_parts.append(f"₹{deduct:.2f} (Monthly EMI)")
             
         if total_daily_advance > 0:
-            advance_calc_parts.append(f"₹{total_daily_advance} (Daily Advances)")
+            advance_calc_parts.append(f"₹{total_daily_advance:.2f} (Daily Advances)")
             
         advance_calc = " + ".join(advance_calc_parts) + f" = ₹{advance_deduction + total_daily_advance:.2f}" if advance_calc_parts else ""
             
@@ -414,7 +452,8 @@ def hr_generate_payroll(request):
             'earnings': {
                 'basic': round(basic_pay, 2),
                 'hra': round(hra, 2),
-                'allowances': round(other_allowances + travel_pay, 2),
+                'allowances': round(other_allowances, 2),
+                'travel': round(travel_pay, 2),
                 'ot_pay': round(ot_pay, 2),
                 'incentives': round(incentives, 2),
                 'gross': round(gross_pay, 2)
@@ -535,3 +574,101 @@ def hr_ledger_payment(request):
     
     return send_success({'id': entry.id}, 'Payment recorded successfully')
 
+
+
+@api_view(['GET', 'POST'])
+def hr_leave_types(request):
+    company_id = _get_company_id(request)
+    if request.method == 'GET':
+        types = LeaveType.objects.filter(companyid_id=company_id).values()
+        return send_success(list(types))
+    else:
+        name = request.data.get('name')
+        if not name: return send_error('Name required')
+        LeaveType.objects.create(name=name, companyid_id=company_id)
+        return send_success({}, 'Leave Type created')
+
+@api_view(['DELETE'])
+def hr_leave_types_detail(request, pk):
+    LeaveType.objects.filter(id=pk).delete()
+    return send_success({}, 'Deleted')
+
+@api_view(['GET', 'POST'])
+def hr_leave_balances(request):
+    if request.method == 'GET':
+        balances = EmployeeLeaveBalance.objects.select_related('labourid', 'leavetypeid').all()
+        data = []
+        for b in balances:
+            data.append({
+                'id': b.id,
+                'labour_id': b.labourid_id,
+                'labour_name': b.labourid.name if b.labourid else '',
+                'leave_type_id': b.leavetypeid_id,
+                'leave_type_name': b.leavetypeid.name if b.leavetypeid else '',
+                'allocated_days': b.allocated_days,
+                'used_days': b.used_days
+            })
+        return send_success(data)
+    else:
+        # Update or create balance
+        labour_id = request.data.get('labour_id')
+        leave_type_id = request.data.get('leave_type_id')
+        allocated = float(request.data.get('allocated_days', 0))
+        
+        balance, _ = EmployeeLeaveBalance.objects.get_or_create(
+            labourid_id=labour_id,
+            leavetypeid_id=leave_type_id,
+            defaults={'allocated_days': allocated}
+        )
+        if not _:
+            balance.allocated_days = allocated
+            balance.save()
+        return send_success({}, 'Balance updated')
+
+@api_view(['GET', 'POST'])
+def hr_leave_records(request):
+    if request.method == 'GET':
+        records = LeaveRecord.objects.select_related('labourid', 'leavetypeid').order_by('-date')[:100]
+        data = []
+        for r in records:
+            data.append({
+                'id': r.id,
+                'labour_id': r.labourid_id,
+                'labour_name': r.labourid.name if r.labourid else '',
+                'leave_type_id': r.leavetypeid_id,
+                'leave_type_name': r.leavetypeid.name if r.leavetypeid else 'Unpaid/Other',
+                'date': r.date,
+                'is_paid': r.is_paid,
+                'status': r.status,
+                'createdat': r.createdat
+            })
+        return send_success(data)
+    else:
+        labour_id = request.data.get('labour_id')
+        leave_type_id = request.data.get('leave_type_id') or None
+        date_str = request.data.get('date')
+        is_paid = request.data.get('is_paid', False)
+        status = request.data.get('status', 'FULL_DAY')
+        
+        if not labour_id or not date_str:
+            return send_error('Labour ID and Date required')
+            
+        record = LeaveRecord.objects.create(
+            labourid_id=labour_id,
+            leavetypeid_id=leave_type_id,
+            date=date_str,
+            is_paid=is_paid,
+            status=status
+        )
+        
+        # Deduct from balance if paid
+        if is_paid and leave_type_id:
+            try:
+                balance = EmployeeLeaveBalance.objects.get(labourid_id=labour_id, leavetypeid_id=leave_type_id)
+                deduction = 1.0 if status == 'FULL_DAY' else 0.5
+                balance.used_days += deduction
+                balance.save()
+            except EmployeeLeaveBalance.DoesNotExist:
+                pass
+                
+        return send_success({}, 'Leave recorded')

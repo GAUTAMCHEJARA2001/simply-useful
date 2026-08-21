@@ -5,13 +5,13 @@ import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart } from 'luc
 
 import { EmployeeMasterTab } from './HRManagement/components/EmployeeMasterTab';
 import { AdvancedAttendanceTab } from './HRManagement/components/AdvancedAttendanceTab';
-import { PayrollTab } from './HRManagement/components/PayrollTab';
+import { MonthlyAttendanceTab } from './HRManagement/components/MonthlyAttendanceTab';
 import { OrgChartTab } from './HRManagement/components/OrgChartTab';
 import { HRConfigTab } from './HRManagement/components/HRConfigTab';
 import { EmployeeLedgerTab } from './HRManagement/components/EmployeeLedgerTab';
+import { LeaveManagementTab } from './HRManagement/components/LeaveManagementTab';
 
-// Remaining subcomponents
-const LeaveManagementTab = () => <div className="p-4">Leave Management Content</div>;
+
 
 export type HRTab = 'employees' | 'attendance' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
 
@@ -58,16 +58,8 @@ const HRManagement: React.FC = () => {
         {tab === 'attendance' && <AdvancedAttendanceTab />}
         {tab === 'leaves' && <LeaveManagementTab />}
         {tab === 'ledger' && <EmployeeLedgerTab />}
-        {tab === 'payroll' && <PayrollTab />}
+        {tab === 'payroll' && <MonthlyAttendanceTab />}
         {tab === 'config' && <HRConfigTab />}
-      </div>
-    </div>
-  );
-};
-
-export default HRManagement;
-        { tab === 'payroll' && <PayrollTab /> }
-        { tab === 'config' && <HRConfigTab /> }
       </div>
     </div>
   );

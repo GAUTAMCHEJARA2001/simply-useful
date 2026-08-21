@@ -165,10 +165,11 @@ class HRDepartment(models.Model):
 class HRDesignation(models.Model):
     name = models.CharField(max_length=100)
     companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    department = models.ForeignKey(HRDepartment, models.DO_NOTHING, db_column='departmentId', db_constraint=False, null=True, blank=True)
 
     class Meta:
         db_table = 'HRDesignation'
-        unique_together = (('name', 'companyid'),)
+        unique_together = (('name', 'companyid', 'department'),)
 
 class Labour(models.Model):
     EMPLOYEE_TYPES = [
@@ -960,3 +961,36 @@ class EstimateItem(models.Model):
         indexes = [
             models.Index(fields=['estimateid', 'productid'], name='idx_estitem_est_prod'),
         ]
+
+
+class LeavePolicy(models.Model):
+    FREQUENCY_CHOICES = (
+        ('YEARLY', 'Yearly'),
+        ('HALF_YEARLY', 'Half Yearly'),
+        ('QUARTERLY', 'Quarterly'),
+        ('BI_MONTHLY', 'Bi-Monthly'),
+        ('MONTHLY', 'Monthly'),
+    )
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False, null=True, blank=True)
+    leavetype = models.ForeignKey(LeaveType, models.DO_NOTHING, db_column='leaveTypeId', db_constraint=False)
+    department = models.ForeignKey(HRDepartment, models.DO_NOTHING, db_column='departmentId', db_constraint=False, null=True, blank=True)
+    designation = models.ForeignKey(HRDesignation, models.DO_NOTHING, db_column='designationId', db_constraint=False, null=True, blank=True)
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default='YEARLY')
+    days_to_allocate = models.FloatField(default=0.0)
+    is_active = models.BooleanField(default=True)
+    createdat = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'LeavePolicy'
+
+
+class LeaveAllocationLog(models.Model):
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False, null=True, blank=True)
+    policy = models.ForeignKey(LeavePolicy, models.DO_NOTHING, db_column='policyId', db_constraint=False)
+    allocation_date = models.DateField()
+    period_identifier = models.CharField(max_length=50) # e.g. '2023-01' or '2023-YEAR'
+    createdat = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'LeaveAllocationLog'
+        unique_together = (('policy', 'period_identifier'),)

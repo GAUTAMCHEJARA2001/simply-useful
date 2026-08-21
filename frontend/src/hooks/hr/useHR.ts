@@ -137,7 +137,7 @@ export const useHRMasterMutations = () => {
   });
 
   const addDesignation = useMutation({
-    mutationFn: (name: string) => api.post('/hr/designations', { name }),
+    mutationFn: (data: { name: string, department_id?: number }) => api.post('/hr/designations', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hr_designations'] });
       toast({ title: 'Success', description: 'Designation added' });
@@ -193,3 +193,119 @@ export const useLedgerMutations = () => {
   return { finalizePayroll: finalizePayroll.mutateAsync, recordPayment: recordPayment.mutateAsync };
 };
 
+
+
+// --- LEAVE MANAGEMENT ---
+export const useLeaveTypes = () => {
+  return useQuery({
+    queryKey: ['hr', 'leaveTypes'],
+    queryFn: async () => {
+      const res = await api.get('/hr/leave-types');
+      return res.data.data;
+    }
+  });
+};
+
+export const useLeaveBalances = () => {
+  return useQuery({
+    queryKey: ['hr', 'leaveBalances'],
+    queryFn: async () => {
+      const res = await api.get('/hr/leave-balances');
+      return res.data.data;
+    }
+  });
+};
+
+export const useLeaveRecords = () => {
+  return useQuery({
+    queryKey: ['hr', 'leaveRecords'],
+    queryFn: async () => {
+      const res = await api.get('/hr/leave-records');
+      return res.data.data;
+    }
+  });
+};
+
+export const useLeaveMutations = () => {
+  const queryClient = useQueryClient();
+
+  const createLeaveType = useMutation({
+    mutationFn: async (data: any) => await api.post('/hr/leave-types', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveTypes'] });
+      toast.success('Leave Type created');
+    },
+    onError: () => toast.error('Failed to create Leave Type')
+  });
+
+  const updateLeaveBalance = useMutation({
+    mutationFn: async (data: any) => await api.post('/hr/leave-balances', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveBalances'] });
+      toast.success('Leave Balance updated');
+    },
+    onError: () => toast.error('Failed to update balance')
+  });
+
+  const recordLeave = useMutation({
+    mutationFn: async (data: any) => await api.post('/hr/leave-records', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveRecords'] });
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveBalances'] });
+      toast.success('Leave recorded successfully');
+    },
+    onError: () => toast.error('Failed to record leave')
+  });
+
+  return { createLeaveType, updateLeaveBalance, recordLeave };
+};
+
+export const useLeavePolicies = () => {
+  return useQuery({
+    queryKey: ['hr', 'leavePolicies'],
+    queryFn: async () => {
+      const res = await api.get('/hr/leave-policies');
+      return res.data;
+    }
+  });
+};
+
+export const useLeavePolicyMutations = () => {
+  const queryClient = useQueryClient();
+  const createPolicy = useMutation({
+    mutationFn: async (data: any) => await api.post('/hr/leave-policies', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leavePolicies'] });
+      toast.success('Leave Policy created');
+    }
+  });
+
+  const updatePolicy = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => await api.put(`/hr/leave-policies/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leavePolicies'] });
+      toast.success('Leave Policy updated');
+    }
+  });
+
+  const deletePolicy = useMutation({
+    mutationFn: async (id: number) => await api.delete(`/hr/leave-policies/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leavePolicies'] });
+      toast.success('Leave Policy deleted');
+    }
+  });
+
+  const allocateLeaves = useMutation({
+    mutationFn: async () => await api.post('/hr/leaves/allocate', {}),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveBalances'] });
+      toast.success(data.message || 'Leaves allocated successfully');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to allocate leaves');
+    }
+  });
+
+  return { createPolicy, updatePolicy, deletePolicy, allocateLeaves };
+};

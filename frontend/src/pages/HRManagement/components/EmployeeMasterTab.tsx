@@ -287,7 +287,9 @@ export const EmployeeMasterTab: React.FC = () => {
                   placeholder="- Select Post -"
                   value={formData.designation || ''}
                   onChange={(val) => setFormData({...formData, designation: val})}
-                  options={designations.map((d: any) => ({ label: d.name, value: d.name }))}
+                  options={designations
+                    .filter((d: any) => !formData.department || d.department_name === formData.department || !d.department_name)
+                    .map((d: any) => ({ label: d.name, value: d.name }))}
                 />
               </div>
               <div className="space-y-2">
