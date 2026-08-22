@@ -16,6 +16,8 @@ export const EmployeeLedgerTab: React.FC = () => {
   const [payAmount, setPayAmount] = useState<number>(0);
   const [payDesc, setPayDesc] = useState('Salary Payment');
   
+  const [detailsModal, setDetailsModal] = useState<any>(null);
+  
   const handlePayment = async () => {
     if (!selectedEmp) return;
     if (payAmount <= 0) return alert('Amount must be > 0');
@@ -98,7 +100,7 @@ export const EmployeeLedgerTab: React.FC = () => {
                       <tr><td colSpan={6} className="text-center p-4 text-muted-foreground">No transactions found</td></tr>
                     ) : (
                       ledgerData?.ledger?.map((tx: any) => (
-                        <tr key={tx.id} className="border-b border-border hover:bg-accent/50">
+                        <tr key={tx.id} className="border-b border-border hover:bg-accent/50 cursor-pointer" onClick={() => setDetailsModal(tx)}>
                           <td className="p-3 whitespace-nowrap">{tx.date}</td>
                           <td className="p-3"><span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs">{tx.type}</span></td>
                           <td className="p-3">{tx.description}</td>
@@ -111,6 +113,20 @@ export const EmployeeLedgerTab: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+
+              {/* Transaction Details Modal */}
+              <Dialog open={!!detailsModal} onOpenChange={(open) => !open && setDetailsModal(null)}>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Transaction Details</DialogTitle></DialogHeader>
+                  <div className="space-y-4 py-4 text-sm">
+                    <div className="flex justify-between border-b border-border pb-2"><span className="font-medium text-muted-foreground">Date:</span> <span>{detailsModal?.date}</span></div>
+                    <div className="flex justify-between border-b border-border pb-2"><span className="font-medium text-muted-foreground">Type:</span> <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-medium">{detailsModal?.type}</span></div>
+                    <div className="flex flex-col border-b border-border pb-2"><span className="font-medium text-muted-foreground mb-1">Particulars:</span> <span className="text-foreground whitespace-pre-wrap">{detailsModal?.description}</span></div>
+                    <div className="flex justify-between border-b border-border pb-2"><span className="font-medium text-muted-foreground">Amount:</span> <span className={detailsModal?.amount < 0 ? 'text-red-600' : 'text-green-600'}>{detailsModal?.amount < 0 ? Currency(Math.abs(detailsModal?.amount)) + ' (Debit)' : Currency(detailsModal?.amount) + ' (Credit)'}</span></div>
+                    <div className="flex justify-between"><span className="font-medium text-muted-foreground">Running Balance:</span> <span className="font-bold">{Currency(detailsModal?.balance)}</span></div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           )}
         </div>

@@ -14,12 +14,18 @@ export const MonthlyAttendanceTab = () => {
   });
 
   const { data: payrollList = [], isLoading, error, refetch } = useHRPayroll(month);
-  const { finalizePayroll } = useLedgerMutations();
+  const { finalizePayroll, markSlipPaid } = useLedgerMutations();
   const { toast } = useToast();
 
   const [selectedEmp, setSelectedEmp] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [advanceOverride, setAdvanceOverride] = useState<string>('');
+
+  const [paymentModalEmp, setPaymentModalEmp] = useState<any>(null);
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [paymentMode, setPaymentMode] = useState('CASH');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [paymentRemark, setPaymentRemark] = useState('');
 
   const handleOpenFinalize = (emp: any) => {
     setSelectedEmp(emp);
@@ -48,6 +54,33 @@ export const MonthlyAttendanceTab = () => {
     }
   };
 
+  const handleOpenPayment = (emp: any) => {
+    setPaymentModalEmp(emp);
+    setPaymentDate(new Date().toISOString().split('T')[0]);
+    setPaymentMode('CASH');
+    setPaymentRef('');
+    setPaymentRemark(`Salary Payment for ${month}`);
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!paymentModalEmp) return;
+    try {
+      await markSlipPaid({
+        labour_id: paymentModalEmp.labour_id,
+        month,
+        amount: paymentModalEmp.net_pay,
+        date: paymentDate,
+        payment_mode: paymentMode,
+        payment_reference: paymentRef,
+        remark: paymentRemark
+      });
+      toast({ title: 'Success', description: 'Salary marked as paid' });
+      setPaymentModalEmp(null);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-card p-4 rounded-xl border border-border shadow-sm">
@@ -69,15 +102,24 @@ export const MonthlyAttendanceTab = () => {
 
       <SafeDataView data={payrollList} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
+          <div className="overflow-x-auto pb-4">
+            <table className="w-full text-sm text-left min-w-max">
               <thead className="bg-muted text-muted-foreground border-b border-border">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Employee</th>
                   <th className="px-4 py-3 font-semibold">Attendance</th>
-                  <th className="px-4 py-3 font-semibold">OT (hrs)</th>
-                  <th className="px-4 py-3 font-semibold">Late (hrs)</th>
-                  <th className="px-4 py-3 font-semibold">Travel (km)</th>
+                  <th className="px-4 py-3 font-semibold bg-blue-50/50 text-blue-800">Bike (km)</th>
+                  <th className="px-4 py-3 font-semibold bg-blue-50/50 text-blue-800">Bike Rate</th>
+                  <th className="px-4 py-3 font-semibold bg-blue-50/50 text-blue-800">Bike Amt</th>
+                  <th className="px-4 py-3 font-semibold bg-indigo-50/50 text-indigo-800">Car (km)</th>
+                  <th className="px-4 py-3 font-semibold bg-indigo-50/50 text-indigo-800">Car Rate</th>
+                  <th className="px-4 py-3 font-semibold bg-indigo-50/50 text-indigo-800">Car Amt</th>
+                  <th className="px-4 py-3 font-semibold bg-purple-50/50 text-purple-800">OT (hrs)</th>
+                  <th className="px-4 py-3 font-semibold bg-purple-50/50 text-purple-800">OT Rate</th>
+                  <th className="px-4 py-3 font-semibold bg-purple-50/50 text-purple-800">OT Amt</th>
+                  <th className="px-4 py-3 font-semibold bg-red-50/50 text-red-800">Late (hrs)</th>
+                  <th className="px-4 py-3 font-semibold bg-red-50/50 text-red-800">Late Rate</th>
+                  <th className="px-4 py-3 font-semibold bg-red-50/50 text-red-800">Late Amt</th>
                   <th className="px-4 py-3 font-semibold">Other (₹)</th>
                   <th className="px-4 py-3 font-semibold">Payable Days</th>
                   <th className="px-4 py-3 font-semibold text-right">Gross Pay</th>
@@ -89,7 +131,7 @@ export const MonthlyAttendanceTab = () => {
               </thead>
               <tbody className="divide-y divide-border">
                 {payrollList.length === 0 ? (
-                  <tr><td colSpan={12} className="px-4 py-8 text-center text-muted-foreground">No employees found</td></tr>
+                  <tr><td colSpan={21} className="px-4 py-8 text-center text-muted-foreground">No employees found</td></tr>
                 ) : (
                   payrollList.map((emp: any) => (
                     <tr key={emp.labour_id} className="hover:bg-accent/10 transition-colors">
@@ -107,9 +149,18 @@ export const MonthlyAttendanceTab = () => {
                           {emp.stats.wo > 0 && <span className="text-blue-600 bg-blue-50 px-1.5 rounded" title="Weekly Off">{emp.stats.wo}WO</span>}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{emp.stats.ot_hours || 0}</td>
-                      <td className="px-4 py-3 text-red-500/80">{emp.stats.late_hours || 0}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{emp.stats.km_travelled || 0}</td>
+                      <td className="px-4 py-3 text-muted-foreground bg-blue-50/20">{emp.breakdown_data?.bike_km || 0}</td>
+                      <td className="px-4 py-3 text-muted-foreground bg-blue-50/20">₹{emp.breakdown_data?.bike_rate?.toFixed(2) || '0.00'}</td>
+                      <td className="px-4 py-3 text-blue-700 font-medium bg-blue-50/20">₹{((emp.breakdown_data?.bike_km || 0) * (emp.breakdown_data?.bike_rate || 0)).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-muted-foreground bg-indigo-50/20">{emp.breakdown_data?.car_km || 0}</td>
+                      <td className="px-4 py-3 text-muted-foreground bg-indigo-50/20">₹{emp.breakdown_data?.car_rate?.toFixed(2) || '0.00'}</td>
+                      <td className="px-4 py-3 text-indigo-700 font-medium bg-indigo-50/20">₹{((emp.breakdown_data?.car_km || 0) * (emp.breakdown_data?.car_rate || 0)).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-muted-foreground bg-purple-50/20">{emp.stats.ot_hours || 0}</td>
+                      <td className="px-4 py-3 text-muted-foreground bg-purple-50/20">₹{emp.breakdown_data?.ot_rate?.toFixed(2) || '0.00'}</td>
+                      <td className="px-4 py-3 text-purple-700 font-medium bg-purple-50/20">₹{emp.earnings.ot_pay?.toFixed(2) || '0.00'}</td>
+                      <td className="px-4 py-3 text-red-500/80 bg-red-50/20">{emp.stats.late_hours || 0}</td>
+                      <td className="px-4 py-3 text-red-500/80 bg-red-50/20">₹{emp.breakdown_data?.late_rate?.toFixed(2) || '0.00'}</td>
+                      <td className="px-4 py-3 text-red-600 font-medium bg-red-50/20">-₹{emp.deductions.late?.toFixed(2) || '0.00'}</td>
                       <td className="px-4 py-3 text-green-600/80">{(emp.earnings.incentives + emp.earnings.allowances).toFixed(2)}</td>
                       <td className="px-4 py-3 font-bold">{emp.stats.payable_days}</td>
                       <td className="px-4 py-3 text-right">
@@ -135,12 +186,16 @@ export const MonthlyAttendanceTab = () => {
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-primary text-base">₹{emp.net_pay.toFixed(2)}</td>
                       <td className="px-4 py-3 text-center">
-                        {emp.is_finalized ? (
-                          <span className="inline-flex items-center text-green-700 bg-green-100 text-xs px-2 py-0.5 rounded-full font-semibold">
+                        {emp.is_paid ? (
+                          <span className="inline-flex items-center text-emerald-700 bg-emerald-100 text-xs px-2 py-0.5 rounded-full font-semibold border border-emerald-200 shadow-sm">
+                            <CheckCircle className="w-3 h-3 mr-1" /> Paid
+                          </span>
+                        ) : emp.is_finalized ? (
+                          <span className="inline-flex items-center text-blue-700 bg-blue-100 text-xs px-2 py-0.5 rounded-full font-semibold border border-blue-200">
                             <CheckCircle className="w-3 h-3 mr-1" /> Finalized
                           </span>
                         ) : (
-                          <span className="inline-flex items-center text-yellow-700 bg-yellow-100 text-xs px-2 py-0.5 rounded-full font-semibold">
+                          <span className="inline-flex items-center text-yellow-700 bg-yellow-100 text-xs px-2 py-0.5 rounded-full font-semibold border border-yellow-200">
                             <AlertTriangle className="w-3 h-3 mr-1" /> Pending
                           </span>
                         )}
@@ -155,6 +210,21 @@ export const MonthlyAttendanceTab = () => {
                           >
                             {emp.is_finalized ? 'View Slip' : 'Finalize'}
                           </Button>
+                          
+                          {emp.is_finalized && (
+                            emp.is_paid ? (
+                              <span className="inline-flex items-center justify-center px-2 h-7 text-xs font-semibold text-green-700 bg-green-100 rounded-md border border-green-200">Paid</span>
+                            ) : (
+                              <Button 
+                                size="sm" 
+                                variant="default" 
+                                className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white" 
+                                onClick={() => handleOpenPayment(emp)}
+                              >
+                                Pay Now
+                              </Button>
+                            )
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -240,6 +310,45 @@ export const MonthlyAttendanceTab = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal isOpen={!!paymentModalEmp} onClose={() => setPaymentModalEmp(null)} title="Record Salary Payment">
+        <div className="space-y-4">
+          <div className="bg-muted p-3 rounded text-sm">
+            Paying <strong>{paymentModalEmp?.labour_name}</strong> for <strong>{month}</strong><br/>
+            Net Pay: <strong>₹{paymentModalEmp?.net_pay.toFixed(2)}</strong>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Payment Date</label>
+            <input type="date" className="w-full border p-2 rounded" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Payment Mode</label>
+            <select className="w-full border p-2 rounded" value={paymentMode} onChange={e => setPaymentMode(e.target.value)}>
+              <option value="CASH">Cash</option>
+              <option value="BANK_TRANSFER">Bank Transfer</option>
+              <option value="CHEQUE">Cheque</option>
+              <option value="UPI">UPI</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Payment Ref / Txn ID</label>
+            <input type="text" className="w-full border p-2 rounded" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} placeholder="e.g. UTR Number (Optional)" />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Remark</label>
+            <input type="text" className="w-full border p-2 rounded" value={paymentRemark} onChange={e => setPaymentRemark(e.target.value)} />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setPaymentModalEmp(null)}>Cancel</Button>
+            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleConfirmPayment}>Confirm Payment</Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

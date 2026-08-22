@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart } from 'lucide-react';
 
 import { EmployeeMasterTab } from './HRManagement/components/EmployeeMasterTab';
@@ -17,7 +17,9 @@ export type HRTab = 'employees' | 'attendance' | 'leaves' | 'ledger' | 'payroll'
 
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
-  const [tab, setTab] = useState<HRTab>('employees');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = (searchParams.get('tab') as HRTab) || 'employees';
+  const setTab = (newTab: HRTab) => setSearchParams({ tab: newTab });
 
   // We reuse inventory permission or introduce a new 'view_hr_dashboard'
   if (!can('view_inventory_dashboard')) return <Navigate to="/" replace />;

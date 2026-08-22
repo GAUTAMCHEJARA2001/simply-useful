@@ -288,6 +288,17 @@ def hr_generate_payroll(request):
     allowance_pct = float(hr_salary_components.get('allowances', 20)) / 100.0
     
     for emp in employees:
+        # Check if already finalized and freeze past data
+        slip = SalarySlip.objects.filter(labourid=emp, month=month).first()
+        if slip and slip.is_finalized and slip.slip_data:
+            # Reconstruct exact past payload to avoid dynamic recalculation
+            stored_data = slip.slip_data.copy()
+            # Ensure dynamic UI flags are updated
+            stored_data['is_finalized'] = True
+            stored_data['is_paid'] = slip.is_paid
+            payroll_data.append(stored_data)
+            continue
+            
         # Fetch attendance for this month
         attendance = DailyAttendance.objects.filter(labourid=emp, date__startswith=month)
         
@@ -425,6 +436,7 @@ def hr_generate_payroll(request):
         # Check if finalized
         slip = SalarySlip.objects.filter(labourid=emp, month=month).first()
         is_finalized = slip.is_finalized if slip else False
+        is_paid = slip.is_paid if slip else False
         
         if slip and slip.manual_advance_override is not None:
             # Recompute net_pay based on override
@@ -438,6 +450,7 @@ def hr_generate_payroll(request):
             'labour_name': emp.name,
             'employee_type': emp.employee_type,
             'is_finalized': is_finalized,
+            'is_paid': is_paid,
             'stats': {
                 'present': present_count,
                 'half_day': half_day_count,
@@ -471,6 +484,14 @@ def hr_generate_payroll(request):
                 'late': late_calc,
                 'incentive': incentive_calc,
                 'advance': advance_calc
+            },
+            'breakdown_data': {
+                'bike_km': bike_km_total,
+                'bike_rate': emp.bike_allowance_per_km,
+                'car_km': car_km_total,
+                'car_rate': emp.car_allowance_per_km,
+                'ot_rate': base_hourly_rate * emp.overtime_hourly_rate,
+                'late_rate': base_hourly_rate * emp.late_deduction_rate
             }
         })
 
@@ -497,6 +518,9 @@ def hr_finalize_payroll(request):
         if not slip:
             slip = SalarySlip(labourid_id=labour_id, month=month)
             
+        # Freeze the exact payload
+        slip.slip_data = slip_data
+        slip.is_finalized = True
         slip.basic_pay = slip_data['earnings'].get('basic', 0.0)
         slip.hra = slip_data['earnings'].get('hra', 0.0)
         slip.allowances = slip_data['earnings'].get('allowances', 0.0)
@@ -672,3 +696,38 @@ def hr_leave_records(request):
                 pass
                 
         return send_success({}, 'Leave recorded')
+
+@api_view(['POST'])
+def hr_mark_slip_paid(request):
+    data = request.data
+    month = data.get('month')
+    labour_id = data.get('labour_id')
+    amount = data.get('amount')
+    date_val = data.get('date', timezone.now().date().strftime('%Y-%m-%d'))
+    payment_mode = data.get('payment_mode', 'CASH')
+    payment_reference = data.get('payment_reference', '')
+    remark = data.get('remark', f'Salary Payment for {month}')
+    
+    slip = SalarySlip.objects.filter(labourid_id=labour_id, month=month).first()
+    if not slip:
+        return send_error('Salary slip not found for this month', 404)
+        
+    if slip.is_paid:
+        return send_success(None, 'Already marked as paid')
+        
+    # Mark paid
+    slip.is_paid = True
+    slip.save()
+    
+    # Record payment in ledger
+    EmployeeLedger.objects.create(
+        labourid_id=labour_id,
+        date=date_val,
+        transaction_type='PAYMENT',
+        description=remark,
+        amount=-float(amount),
+        payment_mode=payment_mode,
+        payment_reference=payment_reference
+    )
+    
+    return send_success(None, 'Payment recorded and slip marked as paid')

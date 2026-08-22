@@ -324,7 +324,10 @@ class SalarySlip(models.Model):
     net_pay = models.FloatField(default=0.0)
     
     is_finalized = models.BooleanField(default=False)
+    is_paid = models.BooleanField(default=False)
     manual_advance_override = models.FloatField(blank=True, null=True)
+    
+    slip_data = models.JSONField(null=True, blank=True)
     
     createdat = models.DateTimeField(default=timezone.now)
 
@@ -345,6 +348,8 @@ class EmployeeLedger(models.Model):
     description = models.CharField(max_length=255)
     amount = models.FloatField() # Positive = Company Owes Employee (Credit), Negative = Employee Owes Company (Debit)
     reference_id = models.IntegerField(null=True, blank=True) # E.g. SalarySlip ID or Advance ID
+    payment_mode = models.CharField(max_length=50, null=True, blank=True)
+    payment_reference = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
