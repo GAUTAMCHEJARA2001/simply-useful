@@ -25,6 +25,7 @@ def get_tenant_model_cross_db(ModelClass, pk, prefetch=None):
         if hasattr(ModelClass, 'orderid'): fallback_field = 'orderid'
         elif hasattr(ModelClass, 'purchaseid'): fallback_field = 'purchaseid'
         elif hasattr(ModelClass, 'ponumber'): fallback_field = 'ponumber'
+        elif hasattr(ModelClass, 'referenceid'): fallback_field = 'referenceid'
         if fallback_field:
             return qs.get(**{fallback_field: pk})
         raise

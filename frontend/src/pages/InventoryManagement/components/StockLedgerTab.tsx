@@ -177,6 +177,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
             <span className={`font-medium ${parseFloat(s.currentStock) <= parseFloat(s.minimumStock) ? 'text-red-500 font-bold' : ''}`}>{formatDecimal(s.currentStock)}</span>,
             <Button size="sm" variant="link" onClick={() => setSelectedProduct(s)}>View Ledger</Button>
           ])}
+          onRowClick={(idx) => setSelectedProduct(filteredStock[idx])}
         />
       </SafeDataView>
 
@@ -264,7 +265,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                             let type = '';
                             const t = (l.transactionType || l.type || '').toUpperCase();
                             if (t.includes('PURCHASE')) type = 'purchase';
-                            else if (t.includes('SALE')) type = 'sale';
+                            else if (t.includes('SALE') || t.includes('DISPATCH')) type = 'sale';
                             else if (t.includes('PRODUCTION')) type = 'production';
                             else if (t.includes('RETURN')) type = 'return';
                             
