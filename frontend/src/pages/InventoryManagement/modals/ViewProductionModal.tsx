@@ -20,7 +20,7 @@ export const ViewProductionModal: React.FC<ViewProductionModalProps> = ({ isOpen
           <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
             <div>
               <p className="text-muted-foreground text-xs mb-1">Product</p>
-              <p className="font-semibold">{production.productName || production.productid?.name || '—'}</p>
+              <p className="font-semibold">{production.finishedProductName || production.productName || production.productid?.name || '—'}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs mb-1">Warehouse</p>
@@ -28,12 +28,12 @@ export const ViewProductionModal: React.FC<ViewProductionModalProps> = ({ isOpen
             </div>
             <div>
               <p className="text-muted-foreground text-xs mb-1">Quantity Produced</p>
-              <p className="font-bold text-lg text-green-600">+{production.quantity || 0}</p>
+              <p className="font-bold text-lg text-green-600">+{production.quantityProduced || production.quantity || 0}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs mb-1">Date</p>
               <p className="font-medium">
-                {production.createdat ? new Date(production.createdat).toLocaleDateString() : '—'}
+                {production.createdAt || production.createdat ? new Date(production.createdAt || production.createdat).toLocaleDateString() : '—'}
               </p>
             </div>
             {production.reason && (
