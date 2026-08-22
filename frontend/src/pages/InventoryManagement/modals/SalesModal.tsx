@@ -110,7 +110,8 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }],
         vehicleNumber: sale.vehicleNumber || sale.vehiclenumber || extractedDetails.vehicle || '',
         driverName: sale.driverName || sale.drivername || extractedDetails.driver || '',
-        driverMobile: sale.driverMobileNumber || sale.drivermobile || extractedDetails.mobile || ''
+        driverMobile: sale.driverMobileNumber || sale.drivermobile || extractedDetails.mobile || '',
+        dispatchDate: sale.dispatchDate || extractedDetails.dispatchDate || new Date().toISOString().split('T')[0]
       });
     } else {
       setForm({ lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }] });
@@ -300,6 +301,11 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
           </div>
           {isDispatchLog && (
             <>
+              <div>
+                <label className="text-[11px] font-semibold block mb-1">Dispatch Date</label>
+                <input type="date" value={form.dispatchDate || ''} onChange={e => setForm({ ...form, dispatchDate: e.target.value })}
+                  className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+              </div>
               <div>
                 <label className="text-[11px] font-semibold block mb-1">Vehicle Number</label>
                 <input value={form.vehicleNumber || ''} onChange={e => setForm({ ...form, vehicleNumber: e.target.value })}

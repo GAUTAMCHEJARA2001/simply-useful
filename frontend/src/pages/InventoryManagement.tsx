@@ -26,12 +26,14 @@ import { ReturnsTab } from './InventoryManagement/components/ReturnsTab';
 import { RecipesTab } from './InventoryManagement/components/RecipesTab';
 import { ProductionApprovalsTab } from './InventoryManagement/components/ProductionApprovalsTab';
 import { WageCalculatorTab } from './InventoryManagement/components/WageCalculatorTab';
+import { GlobalTransactionViewer } from './InventoryManagement/components/GlobalTransactionViewer';
 import { useInventoryManagement, Tab } from '@/hooks/inventory/useInventoryManagement';
 
 const InventoryManagement: React.FC = () => {
   const { can } = usePermissions();
   const { user } = useAuth();
   const { tab, setTab } = useInventoryManagement();
+  const [viewerTx, setViewerTx] = useState<{type: string, refId: string} | null>(null);
 
   if (!can('view_inventory_dashboard')) return <Navigate to="/" replace />;
 
@@ -134,7 +136,7 @@ const InventoryManagement: React.FC = () => {
         {tab === 'total_stock' && <TotalStockTab />}
         {tab === 'units' && <UnitsTab />}
         {tab === 'suppliers' && <SuppliersTab />}
-        {tab === 'stock_ledger' && <StockLedgerTab onViewTransaction={() => {}} />}
+        {tab === 'stock_ledger' && <StockLedgerTab onViewTransaction={(type, refId) => setViewerTx({ type, refId })} />}
         {tab === 'labour' && <LabourTab />}
         {tab === 'settings' && <SettingsTab />}
         {tab === 'purchase_orders' && <PurchaseOrdersTab />}
@@ -151,6 +153,12 @@ const InventoryManagement: React.FC = () => {
         {tab === 'sales_returns' && <ReturnsTab returnType="Sales Return" />}
         {tab === 'bom' && <RecipesTab onRefresh={() => {}} />}
       </div>
+
+      <GlobalTransactionViewer 
+        type={viewerTx?.type || null} 
+        referenceId={viewerTx?.refId || null} 
+        onClose={() => setViewerTx(null)} 
+      />
     </div>
   );
 };
