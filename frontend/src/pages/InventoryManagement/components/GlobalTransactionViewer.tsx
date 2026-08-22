@@ -29,8 +29,8 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
     t.purchaseid === referenceId || 
     t.referenceid === referenceId ||
     t.docNo === referenceId ||
-    referenceId.includes(t.id) ||
-    referenceId.includes(t.orderid || '')
+    (t.id && referenceId.includes(t.id)) ||
+    (t.orderid && referenceId.includes(t.orderid))
   );
 
   const sale = type === 'sale' ? findTx(sales) : null;
