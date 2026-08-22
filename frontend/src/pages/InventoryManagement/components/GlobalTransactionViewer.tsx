@@ -3,10 +3,12 @@ import { SalesModal } from '../modals/SalesModal';
 import { PurchaseModal } from '../modals/PurchaseModal';
 import { ReturnOrderModal } from '../modals/ReturnOrderModal';
 import { ViewProductionModal } from '../modals/ViewProductionModal';
+import { ViewAdjustmentModal } from '../modals/ViewAdjustmentModal';
 import { useSales } from '@/hooks/inventory/useSales';
 import { usePurchases } from '@/hooks/inventory/usePurchases';
 import { useProductions } from '@/hooks/inventory/useProductions';
 import { useReturns } from '@/hooks/inventory/useReturns';
+import { useAdjustments } from '@/hooks/inventory/useAdjustments';
 
 interface GlobalTransactionViewerProps {
   type: string | null;
@@ -19,6 +21,7 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
   const { data: purchases = [] } = usePurchases();
   const { data: productions = [] } = useProductions();
   const { data: returns = [] } = useReturns();
+  const { data: adjustments = [] } = useAdjustments();
 
   if (!type || !referenceId) return null;
 
@@ -37,6 +40,7 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
   const purchase = type === 'purchase' ? findTx(purchases) : null;
   const production = type === 'production' ? findTx(productions) : null;
   const ret = type === 'return' ? findTx(returns) : null;
+  const adjustment = type === 'adjustment' ? findTx(adjustments) : null;
 
   return (
     <>
@@ -69,6 +73,13 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
           isOpen={true} 
           onClose={onClose} 
           production={production || { id: referenceId, referenceid: referenceId }} 
+        />
+      )}
+      {type === 'adjustment' && (
+        <ViewAdjustmentModal 
+          isOpen={true} 
+          onClose={onClose} 
+          adjustment={adjustment || { id: referenceId, referenceid: referenceId }} 
         />
       )}
     </>
