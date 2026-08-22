@@ -45,6 +45,7 @@ const navItems: NavItem[] = [
   { label: 'Staff Dashboard', path: '/hr', icon: Users, feature: 'view_reports' },
   { label: 'Order and Dispatch Room', path: '/inventory', icon: Package, feature: 'view_inventory_dashboard' },
   { label: 'Manage Stock', path: '/inventory/manage', icon: Package, feature: 'view_inventory_dashboard' },
+  { label: 'HR Module', path: '/hr/manage', icon: Users, feature: 'view_inventory_dashboard' },
   { label: 'Returns', path: '/inventory/returns', icon: RefreshCw, feature: 'view_inventory_dashboard' },
   { label: 'Warehouse List', path: '/admin/warehouses', icon: Warehouse, feature: 'access_settings' },
   { label: 'Sales Reports', path: '/reports', icon: BarChart3, feature: 'view_reports' },

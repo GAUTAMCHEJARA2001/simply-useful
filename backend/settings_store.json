@@ -31,5 +31,10 @@
     "company_bank_name": "AXIS BANK",
     "company_bank_account": "925030009706188",
     "company_bank_ifsc": "UTIB0000047",
-    "company_bank_branch": "NAVSARI"
+    "company_bank_branch": "NAVSARI",
+    "hr_salary_components": {
+        "basic": 30,
+        "hra": 30,
+        "allowances": 40
+    }
 }

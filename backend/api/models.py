@@ -154,20 +154,204 @@ class Expense(models.Model):
     class Meta:
         db_table = 'Expense'
 
+class HRDepartment(models.Model):
+    name = models.CharField(max_length=100)
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+
+    class Meta:
+        db_table = 'HRDepartment'
+        unique_together = (('name', 'companyid'),)
+
+class HRDesignation(models.Model):
+    name = models.CharField(max_length=100)
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    department = models.ForeignKey(HRDepartment, models.DO_NOTHING, db_column='departmentId', db_constraint=False, null=True, blank=True)
+
+    class Meta:
+        db_table = 'HRDesignation'
+        unique_together = (('name', 'companyid', 'department'),)
 
 class Labour(models.Model):
+    EMPLOYEE_TYPES = [
+        ('FIXED', 'Fixed / Monthly'),
+        ('VARIABLE', 'Variable / Daily'),
+        ('NONE', 'No Salary (Org Chart Only)'),
+    ]
+
     name = models.TextField()
-    active = models.BooleanField()
-    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)  # Field name made lowercase.
+    active = models.BooleanField(default=True)
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    
+    # Linked App User
+    user = models.OneToOneField('core.User', models.SET_NULL, blank=True, null=True, related_name='employee_profile', db_constraint=False)
+    
+    # Advanced HR Fields
+    employee_id = models.CharField(max_length=50, blank=True, null=True, unique=True)
+    doj = models.DateField(blank=True, null=True, verbose_name="Date of Joining")
+    
+    # KYC & Documents
+    aadhar_number = models.CharField(max_length=20, blank=True, null=True)
+    aadhar_photo = models.FileField(upload_to='hr/documents/', blank=True, null=True)
+    pan_number = models.CharField(max_length=20, blank=True, null=True)
+    pan_photo = models.FileField(upload_to='hr/documents/', blank=True, null=True)
+    employee_photo = models.FileField(upload_to='hr/photos/', blank=True, null=True)
+    
+    # Bank Details
+    bank_name = models.CharField(max_length=100, blank=True, null=True)
+    bank_account_number = models.CharField(max_length=50, blank=True, null=True)
+    bank_ifsc = models.CharField(max_length=20, blank=True, null=True)
+    bank_proof_photo = models.FileField(upload_to='hr/documents/', blank=True, null=True)
+    
+    # Advanced HR Fields
+    employee_type = models.CharField(max_length=20, choices=EMPLOYEE_TYPES, default='VARIABLE')
+    base_salary_monthly = models.FloatField(default=0.0)
     dailywage = models.FloatField(db_column='dailyWage', default=0.0)
+    overtime_hourly_rate = models.FloatField(default=0.0)
+    late_deduction_rate = models.FloatField(default=0.0)
+    bike_allowance_per_km = models.FloatField(default=0.0)
+    car_allowance_per_km = models.FloatField(default=0.0)
+    sales_incentive_pct = models.FloatField(default=0.0)
+    bag_incentive_rate = models.FloatField(default=0.0)
+    
+    # Hierarchy & Eligibility Flags
+    department = models.CharField(max_length=100, blank=True, null=True)
+    designation = models.CharField(max_length=100, blank=True, null=True)
+    reports_to = models.ForeignKey('self', models.SET_NULL, blank=True, null=True, related_name='subordinates')
+    is_ot_eligible = models.BooleanField(default=False)
+    is_late_deduction_eligible = models.BooleanField(default=False)
+    is_km_eligible = models.BooleanField(default=False)
+    is_bag_eligible = models.BooleanField(default=False)
+    
     contactinfo = models.TextField(db_column='contactInfo', blank=True, null=True)
-    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
     warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'Labour'
         unique_together = (('name', 'companyid'),)
+
+    def save(self, *args, **kwargs):
+        if not self.employee_id:
+            # Auto-generate employee ID
+            last_emp = Labour.objects.order_by('-id').first()
+            next_num = (last_emp.id + 1) if last_emp else 1
+            while True:
+                candidate = f"EMP-{next_num:04d}"
+                if not Labour.objects.filter(employee_id=candidate).exists():
+                    self.employee_id = candidate
+                    break
+                next_num += 1
+        super().save(*args, **kwargs)
+
+class LeaveType(models.Model):
+    name = models.CharField(max_length=100) # e.g. "Sick Leave", "Privilege Leave"
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+
+    class Meta:
+        db_table = 'LeaveType'
+
+class EmployeeLeaveBalance(models.Model):
+    labourid = models.ForeignKey(Labour, models.DO_NOTHING, db_column='labourId', db_constraint=False)
+    leavetypeid = models.ForeignKey(LeaveType, models.DO_NOTHING, db_column='leaveTypeId', db_constraint=False)
+    allocated_days = models.FloatField(default=0.0)
+    used_days = models.FloatField(default=0.0)
+
+    class Meta:
+        db_table = 'EmployeeLeaveBalance'
+
+class LeaveRecord(models.Model):
+    labourid = models.ForeignKey(Labour, models.DO_NOTHING, db_column='labourId', db_constraint=False)
+    leavetypeid = models.ForeignKey(LeaveType, models.DO_NOTHING, db_column='leaveTypeId', db_constraint=False, null=True, blank=True)
+    date = models.DateField()
+    is_paid = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, default='LEAVE') # FULL_DAY, HALF_DAY
+    createdat = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'LeaveRecord'
+
+class SalaryAdvance(models.Model):
+    labourid = models.ForeignKey(Labour, models.DO_NOTHING, db_column='labourId', db_constraint=False)
+    amount = models.FloatField()
+    deduction_per_month = models.FloatField()
+    remaining_balance = models.FloatField()
+    date_issued = models.DateField()
+    createdat = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'SalaryAdvance'
+
+class DailyAttendance(models.Model):
+    labourid = models.ForeignKey(Labour, models.DO_NOTHING, db_column='labourId', db_constraint=False)
+    date = models.DateField()
+    status = models.CharField(max_length=20, default='PRESENT') # PRESENT, HALF_DAY, ABSENT, WEEKLY_OFF
+    ot_hours = models.FloatField(default=0.0)
+    late_hours = models.FloatField(default=0.0)
+    
+    # Travel
+    travel_vehicle = models.CharField(max_length=20, blank=True, null=True) # BIKE, CAR, OTHER
+    km_travelled = models.FloatField(default=0.0)
+    actual_travel_amount = models.FloatField(default=0.0)
+    
+    bags_produced = models.FloatField(default=0.0)
+    sales_achieved = models.FloatField(default=0.0)
+    daily_advance = models.FloatField(default=0.0)
+    advance_slip_no = models.CharField(max_length=100, blank=True, null=True)
+    advance_medium = models.CharField(max_length=50, blank=True, null=True) # CASH, UPI, BANK
+    advance_note = models.TextField(blank=True, null=True)
+    createdat = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'DailyAttendance'
+        unique_together = (('labourid', 'date'),)
+
+class SalarySlip(models.Model):
+    labourid = models.ForeignKey(Labour, models.DO_NOTHING, db_column='labourId', db_constraint=False)
+    month = models.CharField(max_length=7) # YYYY-MM
+    basic_pay = models.FloatField(default=0.0)
+    hra = models.FloatField(default=0.0)
+    allowances = models.FloatField(default=0.0)
+    ot_pay = models.FloatField(default=0.0)
+    incentives = models.FloatField(default=0.0)
+    gross_pay = models.FloatField(default=0.0)
+    
+    advance_deduction = models.FloatField(default=0.0)
+    late_deduction = models.FloatField(default=0.0)
+    unpaid_leave_deduction = models.FloatField(default=0.0)
+    other_deductions = models.FloatField(default=0.0)
+    
+    net_pay = models.FloatField(default=0.0)
+    
+    is_finalized = models.BooleanField(default=False)
+    is_paid = models.BooleanField(default=False)
+    manual_advance_override = models.FloatField(blank=True, null=True)
+    
+    slip_data = models.JSONField(null=True, blank=True)
+    
+    createdat = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'SalarySlip'
+        unique_together = (('labourid', 'month'),)
+
+class EmployeeLedger(models.Model):
+    TRANSACTION_TYPES = (
+        ('SALARY', 'Salary Payable'),
+        ('ADVANCE', 'Salary Advance Given'),
+        ('PAYMENT', 'Salary Payment Made'),
+        ('ADJUSTMENT', 'Manual Adjustment')
+    )
+    labourid = models.ForeignKey(Labour, models.DO_NOTHING, db_column='labourId', db_constraint=False)
+    date = models.DateField(default=timezone.now)
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
+    description = models.CharField(max_length=255)
+    amount = models.FloatField() # Positive = Company Owes Employee (Credit), Negative = Employee Owes Company (Debit)
+    reference_id = models.IntegerField(null=True, blank=True) # E.g. SalarySlip ID or Advance ID
+    payment_mode = models.CharField(max_length=50, null=True, blank=True)
+    payment_reference = models.CharField(max_length=100, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
 
 
 class Market(models.Model):
@@ -782,3 +966,36 @@ class EstimateItem(models.Model):
         indexes = [
             models.Index(fields=['estimateid', 'productid'], name='idx_estitem_est_prod'),
         ]
+
+
+class LeavePolicy(models.Model):
+    FREQUENCY_CHOICES = (
+        ('YEARLY', 'Yearly'),
+        ('HALF_YEARLY', 'Half Yearly'),
+        ('QUARTERLY', 'Quarterly'),
+        ('BI_MONTHLY', 'Bi-Monthly'),
+        ('MONTHLY', 'Monthly'),
+    )
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False, null=True, blank=True)
+    leavetype = models.ForeignKey(LeaveType, models.DO_NOTHING, db_column='leaveTypeId', db_constraint=False)
+    department = models.ForeignKey(HRDepartment, models.DO_NOTHING, db_column='departmentId', db_constraint=False, null=True, blank=True)
+    designation = models.ForeignKey(HRDesignation, models.DO_NOTHING, db_column='designationId', db_constraint=False, null=True, blank=True)
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default='YEARLY')
+    days_to_allocate = models.FloatField(default=0.0)
+    is_active = models.BooleanField(default=True)
+    createdat = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'LeavePolicy'
+
+
+class LeaveAllocationLog(models.Model):
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False, null=True, blank=True)
+    policy = models.ForeignKey(LeavePolicy, models.DO_NOTHING, db_column='policyId', db_constraint=False)
+    allocation_date = models.DateField()
+    period_identifier = models.CharField(max_length=50) # e.g. '2023-01' or '2023-YEAR'
+    createdat = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'LeaveAllocationLog'
+        unique_together = (('policy', 'period_identifier'),)

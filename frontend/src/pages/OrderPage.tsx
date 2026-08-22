@@ -87,7 +87,8 @@ const OrderPage: React.FC = () => {
   const { can } = usePermissions();
 
   const userEmail = (user?.email || '').toLowerCase();
-  const isSales = user?.role === 'SALES' || user?.role === 'SALES_OFFICER';
+  const rawRole = (user?.role || '').toUpperCase();
+  const isSales = rawRole === 'SALES' || rawRole === 'SALES_OFFICER' || rawRole === 'SALES OFFICER' || rawRole === 'SALES_EXECUTIVE' || rawRole === 'SALES EXECUTIVE';
 
   // For Sales users, only show active dealers/distributors assigned to them.
   const myDealers = isSales 

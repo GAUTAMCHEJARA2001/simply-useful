@@ -82,74 +82,21 @@ class ProductViewSet(viewsets.ModelViewSet):
                 name_to_sku[p.name] = p.productcode
 
         target_wh_ids = _get_request_warehouse_ids(request)
-        sku_qty_map = {}
-        for p in all_products:
-            if p.productcode:
-                p_wh_id = getattr(p, 'warehouseid_id', None)
-                if not target_wh_ids or (p_wh_id and p_wh_id in target_wh_ids):
-                    sku_qty_map[p.productcode] = float(p.openingstock or 0)
-                else:
-                    sku_qty_map[p.productcode] = 0.0
-
-        page_product_ids = list(id_to_sku.keys())
-        page_product_names = list(name_to_sku.keys())
-
+        
         try:
-            pur_qs = Purchaseitem.objects.filter(
-                purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED'],
-                productname__in=page_product_names
-            )
-            if target_wh_ids:
-                pur_qs = pur_qs.filter(purchaseid__warehouseid_id__in=target_wh_ids)
-            purchases = pur_qs.values('productname').annotate(total=Sum('qty'))
-            for row in purchases:
-                sku = name_to_sku.get(row['productname'])
-                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+            from api.views import _compute_all_product_stocks
+            user_id = self.request.user.id
+            from api.models import User
+            real_user = User.objects.filter(id=user_id).first()
+            company_id = real_user.companyid_id if real_user else getattr(self.request.user, 'companyId', None)
 
-            pur_ret_qs = Purchaseitem.objects.filter(
-                purchaseid__status='Returned',
-                productname__in=page_product_names
-            )
-            if target_wh_ids:
-                pur_ret_qs = pur_ret_qs.filter(purchaseid__warehouseid_id__in=target_wh_ids)
-            purchase_ret = pur_ret_qs.values('productname').annotate(total=Sum('qty'))
-            for row in purchase_ret:
-                sku = name_to_sku.get(row['productname'])
-                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-
-            sales_qs = Orderitem.objects.filter(
-                orderid__status='Completed',
-                productid_id__in=page_product_ids
-            )
-            if target_wh_ids:
-                sales_qs = sales_qs.filter(orderid__warehouseid_id__in=target_wh_ids)
-            sales = sales_qs.values('productid_id').annotate(total=Sum('qty'))
-            for row in sales:
-                sku = id_to_sku.get(row['productid_id'])
-                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) - float(row['total'] or 0)
-
-            sales_ret_qs = Orderitem.objects.filter(
-                orderid__status='Returned',
-                productid_id__in=page_product_ids
-            )
-            if target_wh_ids:
-                sales_ret_qs = sales_ret_qs.filter(orderid__warehouseid_id__in=target_wh_ids)
-            sales_ret = sales_ret_qs.values('productid_id').annotate(total=Sum('qty'))
-            for row in sales_ret:
-                sku = id_to_sku.get(row['productid_id'])
-                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
-
-            st_qs = Stocktransaction.objects.filter(
-                productid_id__in=page_product_ids
-            ).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED'])
-            if target_wh_ids:
-                st_qs = st_qs.filter(warehouseid_id__in=target_wh_ids)
-            st_aggs = st_qs.values('productid_id').annotate(total=Sum('quantity'))
-            for row in st_aggs:
-                sku = id_to_sku.get(row['productid_id'])
-                if sku: sku_qty_map[sku] = sku_qty_map.get(sku, 0) + float(row['total'] or 0)
+            stock_list = _compute_all_product_stocks(company_id=company_id, request=request, target_wh_ids=target_wh_ids)
+            sku_qty_map = {}
+            for item in stock_list:
+                if 'sku' in item and item['sku']:
+                    sku_qty_map[item['sku']] = item['currentStock']
         except Exception:
-            pass
+            sku_qty_map = {}
 
         is_global = request.query_params.get('global', '').lower() == 'true' or request.query_params.get('all', '').lower() == 'true'
         if target_wh_ids and not is_global:
@@ -185,7 +132,20 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = ProductSerializer(instance)
+        target_wh_ids = _get_request_warehouse_ids(request)
+        try:
+            from api.views import _compute_all_product_stocks
+            user_id = self.request.user.id
+            from api.models import User
+            real_user = User.objects.filter(id=user_id).first()
+            company_id = real_user.companyid_id if real_user else getattr(self.request.user, 'companyId', None)
+
+            stock_list = _compute_all_product_stocks(company_id=company_id, request=request, target_wh_ids=target_wh_ids)
+            sku_qty_map = {item['sku']: item['currentStock'] for item in stock_list if 'sku' in item}
+        except Exception:
+            sku_qty_map = {}
+            
+        serializer = ProductSerializer(instance, context={'request': request, 'sku_qty_map': sku_qty_map})
         return send_success(serializer.data, 'Product fetched successfully')
 
     @action(detail=False, methods=['post'], url_path='suggest-sku')

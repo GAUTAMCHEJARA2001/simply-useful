@@ -47,7 +47,10 @@ const DistributorManagement: React.FC = () => {
 
   const { data: brands = [] } = useBrands();
 
-  const salesUsers = users.filter(u => u.role === 'SALES' && u.active);
+  const salesUsers = users.filter(u => {
+    const r = (u.role || '').toUpperCase().replace('_', ' ');
+    return (r === 'SALES' || r === 'SALES OFFICER' || r === 'SALES EXECUTIVE') && u.active;
+  });
 
   const fetchPage = useCallback(async (p: number, searchTerm: string, append: boolean) => {
     setLoading(true);
