@@ -267,6 +267,7 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                             if (t.includes('PURCHASE')) type = 'purchase';
                             else if (t.includes('SALE') || t.includes('DISPATCH')) type = 'sale';
                             else if (t.includes('PRODUCTION')) type = 'production';
+                            else if (t.includes('ADJUSTMENT')) type = 'adjustment';
                             else if (t.includes('RETURN')) type = 'return';
                             
                             if (type) onViewTransaction(type, l.referenceId);
