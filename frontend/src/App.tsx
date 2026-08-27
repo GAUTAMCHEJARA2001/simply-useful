@@ -241,10 +241,10 @@ const App = () => {
                       <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
                       {/* HR */}
-                      <Route path="/hr" element={<ProtectedRoute><HRDashboard /></ProtectedRoute>} />
+                      <Route path="/hr" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR']}><HRDashboard /></ProtectedRoute>} />
 
                       {/* HR Module */}
-                      <Route path="/hr/manage" element={<ProtectedRoute><HRManagement /></ProtectedRoute>} />
+                      <Route path="/hr/manage" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR']}><HRManagement /></ProtectedRoute>} />
 
                       {/* Inventory */}
                       <Route path="/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />
