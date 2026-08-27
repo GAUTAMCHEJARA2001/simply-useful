@@ -267,10 +267,19 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                             if (t.includes('PURCHASE')) type = 'purchase';
                             else if (t.includes('SALE') || t.includes('DISPATCH')) type = 'sale';
                             else if (t.includes('PRODUCTION')) type = 'production';
+                            else if (t.includes('CONSUMED')) type = 'production';
                             else if (t.includes('ADJUSTMENT')) type = 'adjustment';
                             else if (t.includes('RETURN')) type = 'return';
-                            
-                            if (type) onViewTransaction(type, l.referenceId);
+                            if (type) {
+                               let ref = l.referenceId;
+                               if (type === 'production' && l.referenceId === 'PROD') ref = l.id;
+                               if (type === 'adjustment' && (!l.referenceId || l.referenceId === '-')) ref = l.id;
+                               if (type === 'adjustment' && l.referenceId && l.referenceId.startsWith('REV-')) {
+                                   type = 'production';
+                                   ref = l.referenceId.replace('REV-', '');
+                               }
+                               onViewTransaction(type, ref);
+                            }
                           }}
                         >
                           <td className="p-2">{l.date ? (isNaN(new Date(l.date).getTime()) ? l.date : new Date(l.date).toLocaleDateString('en-IN')) : '—'}</td>

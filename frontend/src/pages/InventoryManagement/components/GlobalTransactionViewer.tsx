@@ -32,6 +32,7 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
     t.purchaseid === referenceId || 
     t.referenceid === referenceId ||
     t.docNo === referenceId ||
+    t.originalBillNumber === referenceId ||
     (t.id && referenceId.includes(t.id)) ||
     (t.orderid && referenceId.includes(t.orderid))
   );
