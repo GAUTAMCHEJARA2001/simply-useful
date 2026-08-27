@@ -2317,7 +2317,7 @@ def _compute_all_product_stocks(company_id=None, request=None, target_wh_ids=Non
 
         st_qs = Stocktransaction.objects.exclude(
             reason__in=['PENDING_APPROVAL', 'REJECTED']
-        )
+        ).exclude(is_deleted=True)
         if target_wh_ids:
             st_qs = st_qs.filter(warehouseid_id__in=target_wh_ids)
         stock_tx_data = st_qs.values('productid_id', 'transactiontype').annotate(total=Sum('quantity'))
@@ -3182,7 +3182,7 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
         
     st_aggs = Stocktransaction.objects.exclude(
         reason__in=['PENDING_APPROVAL', 'REJECTED']
-    ).exclude(
+    ).exclude(is_deleted=True).exclude(
         transactiontype__in=['SALE', 'DISPATCH']
     ).filter(productid_id__in=pids).values('productid_id').annotate(total=Sum('quantity'))
     for row in st_aggs:
@@ -3443,41 +3443,10 @@ def transaction_productions_detail(request, pk):
             product_ids = set(sts.values_list('productid_id', flat=True))
             with transaction.atomic():
                 sts.update(is_deleted=True, deleted_by_id=request.user.id, delete_reason=reason)
-                # Instead of physical delete, reverse the quantities
-                for st in sts:
-                    # In a typical soft-delete we might reverse quantities or just exclude is_deleted=True from current stock calculations
-                    # Since current stock sum relies on ALL Stocktransactions, we should either:
-                    # 1. Reverse the quantity by creating a balancing transaction
-                    # 2. Set the quantity to 0 on these soft-deleted entries
-                    # Let's set quantity to 0 so they don't affect stock, but keep original info in reference or reason if needed. 
-                    # Wait, if we set quantity to 0, we lose what the original quantity was in the UI unless we store it.
-                    # A better way is to update the stock aggregation queries to exclude is_deleted=True!
-                    # However, since I can't safely change all stock aggregations without risk, 
-                    # it's safer to just set quantity=0 and store the old quantity in the reason string if needed, 
-                    # or add an original_quantity field.
-                    # Since we are adding fields, we can just exclude is_deleted=True in the GET endpoints, but we MUST exclude it in current_stock!
-                    pass
                 
-                # Best approach without touching all stock logic:
-                # Keep quantity as is, but create reversing transactions!
-                for st in sts:
-                    # Create a reverse transaction
-                    rev_id = 'st_' + uuid.uuid4().hex[:20]
-                    Stocktransaction.objects.create(
-                        id=rev_id,
-                        productid_id=st.productid_id,
-                        warehouseid_id=st.warehouseid_id,
-                        transactiontype='ADJUSTMENT',
-                        quantity=-st.quantity,
-                        referenceid=f"REV-{st.id}",
-                        reason=f"Reversal for deleted production: {reason}",
-                        createdat=timezone.now(),
-                        created_by_id=request.user.id
-                    )
-                    
-                for p_id in product_ids:
-                    if p_id:
-                        pass
+            for p_id in product_ids:
+                if p_id:
+                    pass
         return send_success(None, 'Production run deleted successfully')
 
 @api_view(['GET', 'POST'])
