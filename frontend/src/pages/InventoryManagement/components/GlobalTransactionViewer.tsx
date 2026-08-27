@@ -34,8 +34,10 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
     t.referenceid === referenceId ||
     t.docNo === referenceId ||
     t.originalBillNumber === referenceId ||
+    t.originalOrderId === referenceId ||
     (t.id && referenceId.includes(t.id)) ||
-    (t.orderid && referenceId.includes(t.orderid))
+    (t.orderid && referenceId.includes(t.orderid)) ||
+    (t.originalOrderId && referenceId.includes(t.originalOrderId))
   );
 
   const sale = type === 'sale' ? findTx(sales) : null;
