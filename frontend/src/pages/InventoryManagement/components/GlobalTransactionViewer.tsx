@@ -30,6 +30,7 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
     t.id === referenceId || 
     t.orderid === referenceId || 
     t.purchaseid === referenceId || 
+    t.purchaseId === referenceId ||
     t.referenceid === referenceId ||
     t.docNo === referenceId ||
     t.originalBillNumber === referenceId ||

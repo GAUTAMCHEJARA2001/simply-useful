@@ -788,7 +788,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
                           <span className="text-[10px] text-muted-foreground">{item.unit || 'KG'}</span>
                           <span className="text-[10px] text-muted-foreground/30">|</span>
                           <span className="text-[10px] text-muted-foreground">
-                            Avail: <span className={`font-semibold ${isAvailable ? 'text-green-600' : 'text-red-500'}`}>{available}</span>
+                            Avail: <span className={`font-semibold ${isAvailable ? 'text-green-600' : 'text-red-500'}`}>{formatDecimal(available)}</span>
                           </span>
                           <span className="text-[10px] text-muted-foreground/30">|</span>
                           <span className={`text-[9px] px-1 py-0.2 rounded font-bold uppercase tracking-wider ${

@@ -12,6 +12,7 @@ interface PurchaseModalProps {
   isOpen: boolean;
   onClose: () => void;
   purchase?: any;
+  readOnly?: boolean;
 }
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
@@ -31,7 +32,7 @@ const toNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, purchase }) => {
+export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, purchase, readOnly = false }) => {
   const { data: products = [] } = useProducts();
   const { data: warehouses = [] } = useWarehouses();
   const { data: suppliers = [] } = useSuppliers();
@@ -113,7 +114,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
   );
 
   return (
-    <Modal isOpen={isOpen} title={purchase?.id ? 'Edit Purchase' : 'New Purchase Registration'} onClose={onClose}>
+    <Modal isOpen={isOpen} title={readOnly ? "View Purchase" : purchase ? "Edit Purchase" : "Record New Purchase"} onClose={onClose} size="3xl">
       <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
         
         {/* Link Purchase Order Option */}
@@ -132,6 +133,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
             )}
           </div>
           <select 
+            disabled={readOnly}
             value={form.purchase_order_id || ''} 
             onChange={e => {
               const poId = e.target.value;
@@ -160,7 +162,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
                 });
               }
             }}
-            className="w-full border border-primary/20 rounded-lg px-3 py-1.5 bg-background text-xs text-primary font-medium"
+            className="w-full border border-primary/20 rounded-lg px-3 py-1.5 bg-background text-xs text-primary font-medium disabled:opacity-70"
           >
             <option value="">-- Select PO to Autofill Items & Supplier --</option>
             {purchaseOrders
@@ -183,41 +185,44 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
           </p>
         </div>
 
-        {/* Supplier & Warehouse */}
         <div className="grid grid-cols-6 gap-4 p-5 bg-card border border-border/60 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300">
           <div className="col-span-6 md:col-span-2">
             <label className="text-[10px] font-bold text-foreground/70 uppercase tracking-wider block mb-1.5">Purchase Date</label>
             <input 
+              disabled={readOnly}
               type="date" 
               value={form.date || ''} 
               onChange={e => setForm({ ...form, date: e.target.value })}
-              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" 
+              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-70" 
             />
           </div>
           <div className="col-span-6 md:col-span-2">
             <label className="text-[10px] font-bold text-foreground/70 uppercase tracking-wider block mb-1.5">Challan Number</label>
             <input 
+              disabled={readOnly}
               value={form.challanNumber || ''} 
               onChange={e => setForm({ ...form, challanNumber: e.target.value })}
               placeholder="E.g., CH-4589" 
-              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" 
+              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-70" 
             />
           </div>
           <div className="col-span-6 md:col-span-2">
             <label className="text-[10px] font-bold text-foreground/70 uppercase tracking-wider block mb-1.5">Vehicle Number</label>
             <input 
+              disabled={readOnly}
               value={form.vehicle_number || ''} 
               onChange={e => setForm({ ...form, vehicle_number: e.target.value.toUpperCase() })}
               placeholder="HR-55-A-1234" 
-              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" 
+              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-70" 
             />
           </div>
           <div className="col-span-6 md:col-span-3">
             <label className="text-[10px] font-bold text-foreground/70 uppercase tracking-wider block mb-1.5">Supplier</label>
             <select 
+              disabled={readOnly}
               value={form.supplier_id || ''} 
               onChange={e => setForm({ ...form, supplier_id: e.target.value })}
-              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
+              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer disabled:opacity-70"
             >
               <option value="">-- Choose Supplier --</option>
               {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -226,9 +231,10 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
           <div className="col-span-6 md:col-span-3">
             <label className="text-[10px] font-bold text-foreground/70 uppercase tracking-wider block mb-1.5">Warehouse</label>
             <select 
+              disabled={readOnly}
               value={form.warehouse_id || ''} 
               onChange={e => setForm({ ...form, warehouse_id: e.target.value })}
-              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
+              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer disabled:opacity-70"
             >
               <option value="">-- Choose Warehouse --</option>
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -240,9 +246,11 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
         <div className="space-y-3">
           <div className="flex items-center justify-between pb-1">
             <p className="text-xs font-bold uppercase tracking-wider text-foreground/80">Line Items</p>
-            <Button size="sm" variant="outline" onClick={addLineItem} className="h-8 text-xs font-semibold rounded-xl hover:bg-primary/5 border-primary/20 text-primary transition-all duration-200 active:scale-95">
-              <Plus className="w-3.5 h-3.5 mr-1" /> Add Row
-            </Button>
+            {!readOnly && (
+              <Button size="sm" variant="outline" onClick={addLineItem} className="h-8 text-xs font-semibold rounded-xl hover:bg-primary/5 border-primary/20 text-primary transition-all duration-200 active:scale-95">
+                <Plus className="w-3.5 h-3.5 mr-1" /> Add Row
+              </Button>
+            )}
           </div>
           
           <div className="space-y-3">
@@ -252,9 +260,10 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
                   <div className="col-span-2">
                     <label className="text-[10px] font-bold text-foreground/60 uppercase tracking-wider block mb-1.5">Product</label>
                     <select 
+                      disabled={readOnly}
                       value={item.productId} 
                       onChange={e => updateLineItem(i, 'productId', e.target.value)}
-                      className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
+                      className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer disabled:opacity-70"
                     >
                       <option value="">-- Product --</option>
                       {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -263,39 +272,44 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
                   <div>
                     <label className="text-[10px] font-bold text-foreground/60 uppercase tracking-wider block mb-1.5">Qty</label>
                     <input 
+                      disabled={readOnly}
                       type="number" 
                       value={numberInputValue(item.quantity)} 
                       onChange={e => updateLineItem(i, 'quantity', parseNumberInput(e.target.value))}
-                      className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" 
+                      className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-70" 
                     />
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-foreground/60 uppercase tracking-wider block mb-1.5">Rate</label>
                     <input 
+                      disabled={readOnly}
                       type="number" 
                       value={numberInputValue(item.rate)} 
                       onChange={e => updateLineItem(i, 'rate', parseNumberInput(e.target.value))}
-                      className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" 
+                      className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-70" 
                     />
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-foreground/60 uppercase tracking-wider block mb-1.5">Tax %</label>
                     <input 
+                      disabled={readOnly}
                       type="number" 
                       value={numberInputValue(item.tax_percent)} 
                       onChange={e => updateLineItem(i, 'tax_percent', parseNumberInput(e.target.value))}
-                      className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" 
+                      className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-70" 
                     />
                   </div>
-                  <div className="flex justify-center pb-1">
-                    <button 
-                      onClick={() => removeLineItem(i)} 
-                      className="text-destructive hover:bg-destructive/10 p-2 rounded-xl transition-all active:scale-90"
-                      title="Remove Row"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {!readOnly && (
+                    <div className="flex justify-center pb-1">
+                      <button 
+                        onClick={() => removeLineItem(i)} 
+                        className="text-destructive hover:bg-destructive/10 p-2 rounded-xl transition-all active:scale-90"
+                        title="Remove Row"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -308,8 +322,14 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
         </div>
  
         <div className="flex justify-end gap-3 pt-6 border-t border-border/50">
-          <Button variant="outline" onClick={onClose} className="rounded-xl h-11 px-5 text-xs font-bold tracking-wider uppercase border-border/70 hover:bg-muted active:scale-95 transition-all duration-200">Cancel</Button>
-          <Button onClick={handleSave} className="rounded-xl h-11 px-6 text-xs font-bold tracking-wider uppercase bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/15 active:scale-95 transition-all duration-200">Save Purchase</Button>
+          <Button variant="outline" onClick={onClose} className="rounded-xl h-11 px-5 text-xs font-bold tracking-wider uppercase border-border/70 hover:bg-muted active:scale-95 transition-all duration-200">
+            {readOnly ? 'Close' : 'Cancel'}
+          </Button>
+          {!readOnly && (
+            <Button onClick={handleSave} className="rounded-xl h-11 px-6 text-xs font-bold tracking-wider uppercase bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/15 active:scale-95 transition-all duration-200">
+              Save Purchase
+            </Button>
+          )}
         </div>
       </div>
     </Modal>
