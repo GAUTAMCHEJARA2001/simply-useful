@@ -209,7 +209,7 @@ def report_stock_ledger(request, pk):
 
     # 4. Fetch Purchaseitem entries
     purchase_items_qs = Purchaseitem.objects.filter(
-        Q(productname=product.name) | Q(productid_id=product.id) | Q(productid__productcode=product.productcode)
+        productname=product.name
     ).filter(
         purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']
     )
