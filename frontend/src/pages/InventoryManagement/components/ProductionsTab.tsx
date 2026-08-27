@@ -364,6 +364,44 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
     });
   }, [products, rawCatFilter, ingSearch]);
 
+  useEffect(() => {
+    const editId = localStorage.getItem('edit_production_id');
+    if (editId && filteredProductions.length > 0 && products.length > 0) {
+      const idx = filteredProductions.findIndex((p: any) => p.id === editId || p.referenceid === editId);
+      if (idx !== -1) {
+        localStorage.removeItem('edit_production_id');
+        const p = filteredProductions[idx];
+        (async () => {
+          try {
+            const matRes = await apiClient<any[]>(`/inv/transactions/productions/${p.id}/materials`);
+            const mats = matRes && matRes.data ? matRes.data : (Array.isArray(matRes) ? matRes : []);
+            
+            setForm({
+              id: p.id,
+              productId: p.productId,
+              productName: p.finishedProductName,
+              batches: p.batches || 1,
+              quantity: p.quantityProduced,
+              warehouseId: p.warehouseId,
+              date: p.createdAt ? p.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]
+            });
+            if (mats.length > 0) {
+              setBatchItems(mats);
+              setSelectedRecipe({ items: [] });
+            } else {
+              const recipe = recipesByProduct.get(p.productCode) || recipesByProduct.get(p.finishedProductName);
+              setSelectedRecipe(recipe || null);
+            }
+            setIsReadOnly(false);
+            setModal(true);
+          } catch (e: any) {
+            toast({ title: 'Error', description: 'Failed to load production run details.', variant: 'destructive' });
+          }
+        })();
+      }
+    }
+  }, [filteredProductions, products, recipesByProduct]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

@@ -29,6 +29,7 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
   const findTx = (list: any[]) => list.find(t => 
     t.id === referenceId || 
     t.orderid === referenceId || 
+    t.orderId === referenceId ||
     t.purchaseid === referenceId || 
     t.purchaseId === referenceId ||
     t.referenceid === referenceId ||
@@ -37,6 +38,7 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
     t.originalOrderId === referenceId ||
     (t.id && referenceId.includes(t.id)) ||
     (t.orderid && referenceId.includes(t.orderid)) ||
+    (t.orderId && referenceId.includes(t.orderId)) ||
     (t.originalOrderId && referenceId.includes(t.originalOrderId))
   );
 

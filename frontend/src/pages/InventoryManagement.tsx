@@ -136,7 +136,14 @@ const InventoryManagement: React.FC = () => {
         {tab === 'total_stock' && <TotalStockTab />}
         {tab === 'units' && <UnitsTab />}
         {tab === 'suppliers' && <SuppliersTab />}
-        {tab === 'stock_ledger' && <StockLedgerTab onViewTransaction={(type, refId) => setViewerTx({ type, refId })} />}
+        {tab === 'stock_ledger' && <StockLedgerTab onViewTransaction={(type, refId) => {
+          if (type === 'production') {
+            localStorage.setItem('edit_production_id', refId);
+            setTab('productions');
+          } else {
+            setViewerTx({ type, refId });
+          }
+        }} />}
         {tab === 'labour' && <LabourTab />}
         {tab === 'settings' && <SettingsTab />}
         {tab === 'purchase_orders' && <PurchaseOrdersTab />}
