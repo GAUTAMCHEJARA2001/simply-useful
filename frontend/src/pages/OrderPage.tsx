@@ -45,6 +45,7 @@ const OrderPage: React.FC = () => {
   const [highlightedParty, setHighlightedParty] = useState('');
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [openProducts, setOpenProducts] = useState<Record<number, boolean>>({});
+  const [orderDate, setOrderDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     if (!id && user?.email) {
@@ -71,6 +72,7 @@ const OrderPage: React.FC = () => {
           itemRemark: item.itemRemark ?? item.item_remark ?? item.remark ?? '',
         })));
         setNarration(existing.narration || '');
+        setOrderDate(existing.date ? existing.date.split('T')[0] : (existing.createdAt ? existing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]));
         setIsInitialized(true);
       }
     }
@@ -257,6 +259,7 @@ const OrderPage: React.FC = () => {
       distributor: selectedDistInfo?.distributorName || selectedParty,
       assignedWarehouse: Number(warehouseId) || null,
       soEmail,
+      date: orderDate,
     };
 
     try {
@@ -265,7 +268,7 @@ const OrderPage: React.FC = () => {
         toast({ title: 'Order Updated Successfully!', description: `Order ${id} has been modified.` });
       } else {
         const newOrder = {
-          date: new Date().toISOString().split('T')[0],
+          date: orderDate,
           orderId: `ORD-${Date.now().toString().slice(-6)}`,
           soEmail: soEmail || user?.email || '',
           partyType,
@@ -453,6 +456,15 @@ const OrderPage: React.FC = () => {
                 </Select>
               </div>
             )}
+            <div className="space-y-2">
+              <Label>Order Placed Date</Label>
+              <Input 
+                type="date" 
+                value={orderDate} 
+                onChange={(e) => setOrderDate(e.target.value)} 
+                className="h-12 w-full"
+              />
+            </div>
           </div>
           {selectedParty && selectedDistInfo && (
             <div className="bg-secondary rounded-lg p-3 text-sm">

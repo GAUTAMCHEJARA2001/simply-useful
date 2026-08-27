@@ -2,7 +2,7 @@ import React from 'react';
 import { SalesModal } from '../modals/SalesModal';
 import { PurchaseModal } from '../modals/PurchaseModal';
 import { ReturnOrderModal } from '../modals/ReturnOrderModal';
-import { ViewProductionModal } from '../modals/ViewProductionModal';
+import { ProductionsTab } from './ProductionsTab';
 import { ViewAdjustmentModal } from '../modals/ViewAdjustmentModal';
 import { useSales } from '@/hooks/inventory/useSales';
 import { usePurchases } from '@/hooks/inventory/usePurchases';
@@ -75,10 +75,10 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
         />
       )}
       {type === 'production' && (
-        <ViewProductionModal 
-          isOpen={true} 
-          onClose={onClose} 
-          production={production || { id: referenceId, referenceid: referenceId }} 
+        <ProductionsTab 
+          mode="modal_only" 
+          editProductionId={referenceId} 
+          onModalClose={onClose} 
         />
       )}
       {type === 'adjustment' && (

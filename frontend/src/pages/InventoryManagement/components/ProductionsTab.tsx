@@ -26,7 +26,7 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
   </div>
 );
 
-export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({ onTabChange }) => {
+export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?: 'full' | 'modal_only', editProductionId?: string, onModalClose?: () => void }> = ({ onTabChange, mode = 'full', editProductionId, onModalClose }) => {
   const { toast } = useToast();
   const { data: productions = [], isLoading, error, refetch } = useProductions();
   const { saveProduction } = useProductionMutations();
@@ -365,11 +365,11 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   }, [products, rawCatFilter, ingSearch]);
 
   useEffect(() => {
-    const editId = localStorage.getItem('edit_production_id');
+    const editId = editProductionId || localStorage.getItem('edit_production_id');
     if (editId && filteredProductions.length > 0 && products.length > 0) {
       const idx = filteredProductions.findIndex((p: any) => p.id === editId || p.referenceid === editId);
       if (idx !== -1) {
-        localStorage.removeItem('edit_production_id');
+        if (!editProductionId) localStorage.removeItem('edit_production_id');
         const p = filteredProductions[idx];
         (async () => {
           try {
@@ -403,8 +403,10 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
   }, [filteredProductions, products, recipesByProduct]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <>
+      {mode !== 'modal_only' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-xl font-bold">Production Log</h1>
         
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -534,6 +536,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
           }}
         />
       </SafeDataView>
+        </div>
+      )}
 
       {modal && (
         <Modal title={form.id ? "Edit Production Run" : "Record New Production Run"} onClose={() => { 
@@ -551,6 +555,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
           }); 
           setSelectedRecipe(null); 
           setBatchItems([]); 
+          if (onModalClose) onModalClose();
         }}>
           <div className="space-y-4">
             {(() => {
@@ -1029,6 +1034,6 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void }> = ({
           </div>
         </Modal>
       )}
-    </div>
+    </>
   );
 };

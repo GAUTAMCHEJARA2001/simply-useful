@@ -111,7 +111,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         vehicleNumber: sale.vehicleNumber || sale.vehiclenumber || extractedDetails.vehicle || '',
         driverName: sale.driverName || sale.drivername || extractedDetails.driver || '',
         driverMobile: sale.driverMobileNumber || sale.drivermobile || extractedDetails.mobile || '',
-        dispatchDate: sale.dispatchDate || extractedDetails.dispatchDate || new Date().toISOString().split('T')[0]
+        dispatchDate: sale.dispatchDate || extractedDetails.dispatchDate || '',
       });
     } else {
       setForm({ lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }] });
@@ -193,7 +193,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
       warehouse_id: form.warehouse_id || '',
       invoiceNumber: form.challanNumber || '',
       dispatchWarehouse: selectedWh ? selectedWh.name : '',
-      dispatchDate: form.dispatchDate || sale?.dispatchDate || new Date().toISOString().split('T')[0],
+      dispatchDate: form.dispatchDate || sale?.dispatchDate || '',
       items: (form.lineItems || []).map((it: any) => ({
         productId: it.productId,
         qty: it.quantity,
