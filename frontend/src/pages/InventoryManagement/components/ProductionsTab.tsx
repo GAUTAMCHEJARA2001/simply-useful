@@ -366,8 +366,10 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
 
   useEffect(() => {
     const editId = editProductionId || localStorage.getItem('edit_production_id');
+    console.log('[DEBUG ProductionsTab] editId=', editId, ' filteredProductions.length=', filteredProductions.length);
     if (editId && filteredProductions.length > 0 && products.length > 0) {
       const idx = filteredProductions.findIndex((p: any) => p.id === editId || p.referenceid === editId);
+      console.log('[DEBUG ProductionsTab] idx found=', idx);
       if (idx !== -1) {
         if (!editProductionId) localStorage.removeItem('edit_production_id');
         const p = filteredProductions[idx];
@@ -394,13 +396,18 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
             }
             setIsReadOnly(false);
             setModal(true);
+            console.log('[DEBUG ProductionsTab] setModal(true) called!');
           } catch (e: any) {
+            console.error('[DEBUG ProductionsTab] error loading details:', e);
             toast({ title: 'Error', description: 'Failed to load production run details.', variant: 'destructive' });
           }
         })();
+      } else {
+        console.warn('[DEBUG ProductionsTab] Production not found!', editId);
+        toast({ title: 'Not Found', description: `Production run ${editId} not found in the current view.`, variant: 'destructive' });
       }
     }
-  }, [filteredProductions, products, recipesByProduct]);
+  }, [filteredProductions, products, recipesByProduct, editProductionId, toast]);
 
   return (
     <>
