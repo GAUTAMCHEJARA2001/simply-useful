@@ -2317,7 +2317,7 @@ def _compute_all_product_stocks(company_id=None, request=None, target_wh_ids=Non
 
         st_qs = Stocktransaction.objects.exclude(
             reason__in=['PENDING_APPROVAL', 'REJECTED']
-        ).exclude(is_deleted=True)
+        )
         if target_wh_ids:
             st_qs = st_qs.filter(warehouseid_id__in=target_wh_ids)
         stock_tx_data = st_qs.values('productid_id', 'transactiontype').annotate(total=Sum('quantity'))
@@ -3492,7 +3492,7 @@ def transaction_adjustments(request):
     if has_wh_assignments and request.user.role == 'INVENTORY':
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
     if request.method == 'GET':
-        qs = Stocktransaction.objects.filter(transactiontype='ADJUSTMENT').select_related('productid', 'warehouseid').order_by('-createdat')
+        qs = Stocktransaction.objects.filter(transactiontype='ADJUSTMENT').exclude(referenceid__startswith='REV-').select_related('productid', 'warehouseid').order_by('-createdat')
         if assigned_wh_ids:
             qs = qs.filter(warehouseid_id__in=assigned_wh_ids)
         rows = []

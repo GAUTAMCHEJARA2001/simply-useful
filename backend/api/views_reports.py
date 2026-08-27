@@ -175,8 +175,6 @@ def report_stock_ledger(request, pk):
     st_qs = Stocktransaction.objects.filter(
         Q(productid_id=product.id) | Q(productid__productcode=product.productcode)
     ).exclude(
-        is_deleted=True
-    ).exclude(
         reason__in=['PENDING_APPROVAL', 'REJECTED']
     )
     if company_id:
@@ -187,7 +185,7 @@ def report_stock_ledger(request, pk):
     st_txs = list(st_qs.select_related('warehouseid', 'productid'))
 
     # 2. Fetch Dispatchlogitem entries
-    from api.models import Dispatchlogitem, Returnlogitem
+    from api.models import Dispatchlogitem, Returnlogitem, Purchaseitem
     dispatch_items_qs = Dispatchlogitem.objects.filter(
         Q(productid_id=product.id) | Q(productid__productcode=product.productcode)
     )
@@ -208,6 +206,19 @@ def report_stock_ledger(request, pk):
         return_items_qs = return_items_qs.filter(returnlogid__orderid__warehouseid_id__in=target_wh_ids)
     
     return_items = list(return_items_qs.select_related('returnlogid__orderid', 'returnlogid__orderid__warehouseid'))
+
+    # 4. Fetch Purchaseitem entries
+    purchase_items_qs = Purchaseitem.objects.filter(
+        Q(productname=product.name) | Q(productid_id=product.id) | Q(productid__productcode=product.productcode)
+    ).filter(
+        purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']
+    )
+    if company_id:
+        purchase_items_qs = purchase_items_qs.filter(purchaseid__companyid_id=company_id)
+    if target_wh_ids:
+        purchase_items_qs = purchase_items_qs.filter(purchaseid__warehouseid_id__in=target_wh_ids)
+    
+    purchase_items = list(purchase_items_qs.select_related('purchaseid', 'purchaseid__warehouseid'))
 
     # Track doc numbers from Stocktransaction to prevent duplicates
     st_ref_ids = {str(t.referenceid) for t in st_txs if t.referenceid}
@@ -306,6 +317,47 @@ def report_stock_ledger(request, pk):
                 'debit': 0.0,
                 'remarks': f"Sales Return ({rl.remarks or '-'})"
             })
+
+    for pi in purchase_items:
+        p = pi.purchaseid
+        if not p:
+            continue
+        is_return = p.status == 'Returned'
+        dt = p.date if p.date else p.createdat
+        wh = p.warehouseid
+        wh_name = wh.name if (wh and hasattr(wh, 'name')) else 'Main Warehouse'
+        qty = float(pi.qty or 0)
+        if qty > 0:
+            if is_return:
+                events.append({
+                    'id': f"pur_ret_{pi.id}",
+                    'datetime': dt,
+                    'createdat': p.createdat,
+                    'date_str': dt.strftime('%Y-%m-%d %H:%M') if dt else '',
+                    'type': 'RETURN_OUT',
+                    'docNo': str(p.purchaseid or '-'),
+                    'party': p.vendorname or '-',
+                    'inQty': 0.0,
+                    'outQty': qty,
+                    'credit': 0.0,
+                    'debit': qty,
+                    'remarks': f"Purchase Return ({p.challannumber or '-'})"
+                })
+            else:
+                events.append({
+                    'id': f"pur_{pi.id}",
+                    'datetime': dt,
+                    'createdat': p.createdat,
+                    'date_str': dt.strftime('%Y-%m-%d %H:%M') if dt else '',
+                    'type': 'PURCHASE',
+                    'docNo': str(p.purchaseid or '-'),
+                    'party': p.vendorname or '-',
+                    'inQty': qty,
+                    'outQty': 0.0,
+                    'credit': qty,
+                    'debit': 0.0,
+                    'remarks': f"Purchase (Challan: {p.challannumber or '-'})"
+                })
 
     # Sort chronologically by (primary date, exact database insertion timestamp)
     events.sort(key=lambda x: (x['datetime'] or timezone.now(), x['createdat'] or timezone.now()))

@@ -67,6 +67,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (item.path === '/admin/payments') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/admin/onboarding') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/reports') return user.role === 'SUPERADMIN';
+    if (item.path === '/hr' || item.path === '/hr/manage') return ['SUPERADMIN', 'ADMIN', 'HR'].includes(user.role);
     return can(item.feature);
   });
 
