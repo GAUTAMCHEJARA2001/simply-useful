@@ -186,8 +186,11 @@ def report_stock_ledger(request, pk):
 
     # 2. Fetch Dispatchlogitem entries
     from api.models import Dispatchlogitem, Returnlogitem, Purchaseitem
+    valid_order_statuses = ['Completed', 'Returned', 'Delivered', 'Dispatched', 'Partially Dispatched', 'Partially Returned', 'Approved']
+    
     dispatch_items_qs = Dispatchlogitem.objects.filter(
-        Q(productid_id=product.id) | Q(productid__productcode=product.productcode)
+        Q(productid_id=product.id) | Q(productid__productcode=product.productcode),
+        dispatchlogid__orderid__status__in=valid_order_statuses
     )
     if company_id:
         dispatch_items_qs = dispatch_items_qs.filter(dispatchlogid__orderid__companyid_id=company_id)
@@ -198,7 +201,8 @@ def report_stock_ledger(request, pk):
 
     # 3. Fetch Returnlogitem entries
     return_items_qs = Returnlogitem.objects.filter(
-        Q(productid_id=product.id) | Q(productid__productcode=product.productcode)
+        Q(productid_id=product.id) | Q(productid__productcode=product.productcode),
+        returnlogid__orderid__status__in=valid_order_statuses
     )
     if company_id:
         return_items_qs = return_items_qs.filter(returnlogid__orderid__companyid_id=company_id)
