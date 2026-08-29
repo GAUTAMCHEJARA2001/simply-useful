@@ -143,7 +143,6 @@ const AdminDashboard: React.FC = () => {
   const kpis = [
     { label: 'Total Orders', value: fyOrders.length, icon: ShoppingCart, color: 'bg-primary/10 text-primary' },
     { label: 'Active Dealers', value: dashboardData?.activeDealersCount ?? totalDealers, icon: Users, color: 'bg-success/10 text-success' },
-    { label: 'Revenue', value: formattedRevenue, icon: TrendingUp, color: 'bg-accent/10 text-accent' },
     { label: 'Total Products', value: dashboardData?.activeProductsCount ?? products.length, icon: Warehouse, color: 'bg-purple-500/10 text-purple-600' },
   ];
 

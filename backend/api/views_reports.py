@@ -176,7 +176,7 @@ def report_stock_ledger(request, pk):
         Q(productid_id=product.id) | Q(productid__productcode=product.productcode)
     ).exclude(
         reason__in=['PENDING_APPROVAL', 'REJECTED']
-    ).exclude(is_deleted=True)
+    ).exclude(is_deleted=True).exclude(referenceid__startswith='REV-')
     if company_id:
         st_qs = st_qs.filter(productid__companyid_id=company_id)
     if target_wh_ids:
