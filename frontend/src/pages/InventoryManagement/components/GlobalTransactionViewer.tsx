@@ -79,6 +79,7 @@ export const GlobalTransactionViewer: React.FC<GlobalTransactionViewerProps> = (
           mode="modal_only" 
           editProductionId={referenceId} 
           onModalClose={onClose} 
+          readOnly={true}
         />
       )}
       {type === 'adjustment' && (

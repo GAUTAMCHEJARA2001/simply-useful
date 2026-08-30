@@ -26,7 +26,7 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
   </div>
 );
 
-export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?: 'full' | 'modal_only', editProductionId?: string, onModalClose?: () => void }> = ({ onTabChange, mode = 'full', editProductionId, onModalClose }) => {
+export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?: 'full' | 'modal_only', editProductionId?: string, onModalClose?: () => void, readOnly?: boolean }> = ({ onTabChange, mode = 'full', editProductionId, onModalClose, readOnly = false }) => {
   const { toast } = useToast();
   const { data: productions = [], isLoading, error, refetch } = useProductions();
   const { saveProduction } = useProductionMutations();
@@ -34,7 +34,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
 
   const [modal, setModal] = useState<boolean>(false);
   const [deficitModal, setDeficitModal] = useState<boolean>(false);
-  const [isReadOnly, setIsReadOnly] = useState<boolean>(false);
+  const [isReadOnly, setIsReadOnly] = useState<boolean>(readOnly);
   const [deficitItems, setDeficitItems] = useState<any[]>([]);
   const [form, setForm] = useState<any>({ 
     productId: '', 
@@ -391,13 +391,13 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
               setBatchItems(mats);
               setSelectedRecipe({ items: [] });
             } else {
-              const recipe = recipesByProduct.get(p.productCode) || recipesByProduct.get(p.finishedProductName);
-              setSelectedRecipe(recipe || null);
-            }
-            setIsReadOnly(false);
-            setModal(true);
-            console.log('[DEBUG ProductionsTab] setModal(true) called!');
-          } catch (e: any) {
+                const recipe = recipesByProduct.get(p.productCode) || recipesByProduct.get(p.finishedProductName);
+                setSelectedRecipe(recipe || null);
+              }
+              setIsReadOnly(readOnly);
+              setModal(true);
+              console.log('[DEBUG ProductionsTab] setModal(true) called!');
+            } catch (e: any) {
             console.error('[DEBUG ProductionsTab] error loading details:', e);
             toast({ title: 'Error', description: 'Failed to load production run details.', variant: 'destructive' });
           }
@@ -547,7 +547,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
       )}
 
       {modal && (
-        <Modal title={form.id ? "Edit Production Run" : "Record New Production Run"} onClose={() => { 
+        <Modal title={isReadOnly ? "View Production Run" : (form.id ? "Edit Production Run" : "Record New Production Run")} onClose={() => { 
           setModal(false); 
           setForm((prev: any) => {
             const lastWh = localStorage.getItem('prod_modal_last_wh');
