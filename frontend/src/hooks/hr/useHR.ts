@@ -269,7 +269,16 @@ export const useLeaveMutations = () => {
     onError: () => toast({ title: 'Error', description: 'Failed to record leave', variant: 'destructive' })
   });
 
-  return { createLeaveType, updateLeaveBalance, recordLeave };
+  const autoFetchLeaves = useMutation({
+    mutationFn: async () => await api.post('/hr/leaves/auto-fetch'),
+    onSuccess: (res: any) => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveRecords'] });
+      toast({ title: 'Auto Fetch Complete', description: res?.data?.message || 'Leave records synchronized with attendance.' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to auto fetch leaves', variant: 'destructive' })
+  });
+
+  return { createLeaveType, updateLeaveBalance, recordLeave, autoFetchLeaves };
 };
 
 export const useLeavePolicies = () => {

@@ -211,7 +211,7 @@ const LeaveRecords = () => {
   const { data: employees = [] } = useHREmployees();
   const { data: leaveTypes = [] } = useLeaveTypes();
   const { data: records = [], isLoading } = useLeaveRecords();
-  const { recordLeave } = useLeaveMutations();
+  const { recordLeave, autoFetchLeaves } = useLeaveMutations();
 
   const [empId, setEmpId] = useState<number | ''>('');
   const [typeId, setTypeId] = useState<number | ''>('');
@@ -312,7 +312,19 @@ const LeaveRecords = () => {
       </div>
 
       <div className="overflow-x-auto mt-6">
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">Recent Leave Records</h4>
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="text-sm font-semibold text-gray-700">Recent Leave Records</h4>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => autoFetchLeaves.mutate()} 
+            disabled={autoFetchLeaves.isPending}
+            className="flex items-center gap-1.5"
+          >
+            {autoFetchLeaves.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarCheck className="w-3.5 h-3.5" />}
+            Auto Fetch Leaves
+          </Button>
+        </div>
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-100 text-gray-700 text-xs uppercase tracking-wider">

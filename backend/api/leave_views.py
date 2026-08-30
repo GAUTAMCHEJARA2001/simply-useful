@@ -100,8 +100,24 @@ def hr_leave_records(request):
                 
         return send_success({}, 'Leave recorded')
 
-from api.models import LeavePolicy, LeaveAllocationLog, HRDepartment, HRDesignation, Labour, Company
+from api.models import LeavePolicy, LeaveAllocationLog, HRDepartment, HRDesignation, Labour, Company, DailyAttendance
 from django.utils import timezone
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def hr_leave_auto_fetch(request):
+    absences = DailyAttendance.objects.filter(status='ABSENT')
+    count = 0
+    for a in absences:
+        if not LeaveRecord.objects.filter(labourid=a.labourid, date=a.date).exists():
+            LeaveRecord.objects.create(
+                labourid=a.labourid,
+                date=a.date,
+                is_paid=False,
+                status='FULL_DAY'
+            )
+            count += 1
+    return send_success({'count': count}, f'Auto-fetched {count} leave records from absent attendances')
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])

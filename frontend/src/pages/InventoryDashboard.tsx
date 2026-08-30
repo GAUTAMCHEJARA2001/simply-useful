@@ -154,16 +154,33 @@ const InventoryDashboard: React.FC = () => {
       targetWhId = String(activeWarehouseId);
     }
 
-    if (targetWhId && stocksByWarehouse && Object.keys(stocksByWarehouse).length > 0) {
-      const whMap = stocksByWarehouse[targetWhId] || (orderWh ? stocksByWarehouse[String(orderWh)] : null);
-      if (whMap) {
-        const pId = prod?.id || prodId;
-        const pName = prod?.name || prod?.productName || prodName;
-        const pSku = prod?.productCode || prod?.sku;
-        if (pId && whMap[pId] !== undefined) return whMap[pId];
-        if (pSku && whMap[pSku] !== undefined) return whMap[pSku];
-        if (pName && whMap[pName] !== undefined) return whMap[pName];
-        return 0;
+    const pId = prod?.id || prodId;
+    const pName = prod?.name || prod?.productName || prodName;
+    const pSku = prod?.productCode || prod?.sku;
+
+    if (stocksByWarehouse && Object.keys(stocksByWarehouse).length > 0) {
+      if (targetWhId) {
+        const whMap = stocksByWarehouse[targetWhId] || (orderWh ? stocksByWarehouse[String(orderWh)] : null);
+        if (whMap) {
+          if (pId && whMap[pId] !== undefined) return whMap[pId];
+          if (pSku && whMap[pSku] !== undefined) return whMap[pSku];
+          if (pName && whMap[pName] !== undefined) return whMap[pName];
+          return 0;
+        }
+      } else {
+        // Global stock: sum across all warehouses
+        let total = 0;
+        for (const whId in stocksByWarehouse) {
+          const whMap = stocksByWarehouse[whId];
+          if (pId && whMap[pId] !== undefined) {
+            total += whMap[pId];
+          } else if (pSku && whMap[pSku] !== undefined) {
+            total += whMap[pSku];
+          } else if (pName && whMap[pName] !== undefined) {
+            total += whMap[pName];
+          }
+        }
+        return total;
       }
     }
 
@@ -374,8 +391,16 @@ const InventoryDashboard: React.FC = () => {
     }, [] as { product: string; qty: number; orders: number }[])
     .sort((a, b) => b.qty - a.qty);
 
+  const enrichedProductDemand = productDemand.map(p => {
+    const pObj = products.find((pr: any) => pr.name === p.product || pr.productName === p.product || pr.productCode === p.product);
+    const pId = pObj?.id;
+    const readyQty = getWhAvailableStock(pObj, pId, p.product, activeWarehouseId);
+    const deficit = Math.max(0, p.qty - readyQty);
+    return { ...p, readyQty, deficit };
+  });
+
   // Debug log as requested by user
-  console.log('Product Demand Data:', productDemand);
+  console.log('Product Demand Data:', enrichedProductDemand);
 
   const setFormConfirmField = (field: string, value: any) => {
     if (!confirmOrder) return;
@@ -587,18 +612,22 @@ const InventoryDashboard: React.FC = () => {
                   <tr className="border-b border-border bg-muted/30 text-[10px] text-muted-foreground font-semibold">
                     <th className="text-left px-3 py-2 font-semibold">Product</th>
                     <th className="text-right px-3 py-2 font-semibold">Qty Needed</th>
+                    <th className="text-right px-3 py-2 font-semibold text-green-700">Ready Qty</th>
+                    <th className="text-right px-3 py-2 font-semibold text-red-600">Deficit</th>
                     <th className="text-right px-3 py-2 font-semibold">Orders</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {productDemand.map((p, index) => (
+                  {enrichedProductDemand.map((p, index) => (
                      <tr key={`${p.product || 'unknown-product'}-${index}`} className="border-b border-border/50 hover:bg-accent/5 transition-colors">
                       <td className="px-3 py-2 font-medium">{p.product}</td>
-                      <td className="px-3 py-2 text-right font-bold text-primary">{p.qty}</td>
+                      <td className="px-3 py-2 text-right font-bold text-primary">{p.qty.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right text-green-700 font-semibold">{p.readyQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className={`px-3 py-2 text-right font-bold ${p.deficit > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>{p.deficit > 0 ? p.deficit.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
                       <td className="px-3 py-2 text-right">{p.orders}</td>
                     </tr>
                   ))}
-                  {productDemand.length === 0 && <tr><td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">No active orders</td></tr>}
+                  {enrichedProductDemand.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">No active orders</td></tr>}
                 </tbody>
               </table>
             </div>
