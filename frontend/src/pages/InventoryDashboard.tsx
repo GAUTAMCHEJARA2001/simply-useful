@@ -5,7 +5,7 @@ import apiClient, { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Package, CheckCircle, AlertTriangle, Truck, ShoppingBag, XCircle, Users, Star, Warehouse, Search } from 'lucide-react';
+import { Package, CheckCircle, AlertTriangle, Truck, ShoppingBag, XCircle, Users, Star, Warehouse, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
@@ -76,6 +76,7 @@ const InventoryDashboard: React.FC = () => {
   const [boms, setBoms] = useState<any[]>([]);
   const [loadingBoms, setLoadingBoms] = useState<boolean>(true);
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let active = true;
@@ -605,26 +606,24 @@ const InventoryDashboard: React.FC = () => {
         </Card>
 
         {/* Orders Queue with Actions */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                Orders to Pack & Send
-                {approvedOrders.length > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{approvedOrders.length} ready</span>}
-              </CardTitle>
-              <div className="relative w-full sm:w-auto">
-                <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-                <input 
-                  type="text" 
-                  placeholder="Search orders, party, email..." 
-                  value={orderSearchTerm}
-                  onChange={(e) => setOrderSearchTerm(e.target.value)}
-                  className="pl-8 h-8 w-full sm:w-[250px] rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-              </div>
+        <Card className="shadow-sm border-border flex flex-col">
+          <CardHeader className="p-4 border-b bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 space-y-0">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              Orders to Pack & Send
+              {approvedOrders.length > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold uppercase tracking-wider">{approvedOrders.length} ready</span>}
+            </CardTitle>
+            <div className="relative w-full sm:w-auto">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <input 
+                type="text" 
+                placeholder="Search orders, party..." 
+                value={orderSearchTerm}
+                onChange={(e) => setOrderSearchTerm(e.target.value)}
+                className="pl-8 pr-3 h-8 w-full sm:w-[220px] rounded-md border border-input bg-background text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              />
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="p-3 overflow-y-auto max-h-[600px] space-y-3 bg-muted/5">
             {pendingOrders.length === 0 && dispatchedOrders.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">No orders to fulfill</p>
             )}
@@ -656,35 +655,151 @@ const InventoryDashboard: React.FC = () => {
                 Unavailable: 'Stock Shortage',
               };
 
+              const isExpanded = expandedOrders.has(orderId);
+              const toggleExpand = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                setExpandedOrders(prev => {
+                  const next = new Set(prev);
+                  if (next.has(orderId)) next.delete(orderId);
+                  else next.add(orderId);
+                  return next;
+                });
+              };
+
               return (
-                <div key={orderId} className="group flex flex-col bg-card hover:bg-accent/5 transition-colors border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md">
-                  {/* Clickable Order Details Area */}
+                <div key={orderId} className="group flex flex-col bg-card hover:bg-accent/5 transition-colors border border-border/60 rounded-lg overflow-hidden shadow-sm hover:shadow-md">
+                  {/* Accordion Header */}
                   <div 
-                    className="p-3.5 cursor-pointer"
-                    onClick={() => setViewOrder(o)}
+                    className="p-3 flex items-center justify-between cursor-pointer select-none"
+                    onClick={toggleExpand}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-foreground text-xs tracking-tight">{orderId}</span>
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${statusStyles[displayStatus]}`}>{displayStatus}</span>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <button className="p-0.5 hover:bg-muted rounded-full transition-colors">
+                        {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                      </button>
+                      <span className="font-bold text-foreground text-xs tracking-tight">{partyName}</span>
+                      <span className="text-muted-foreground text-[10px] ml-1">({orderId})</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ml-1 ${statusStyles[displayStatus]}`}>{displayStatus}</span>
+                    </div>
+                    <div className="flex items-center gap-2 sm:gap-4 ml-2">
+                      {/* Admin Quick Approvals */}
+                      {(o.status === 'Pending' || o.status === 'Approved') && (user?.role === 'SUPERADMIN' || user?.role === 'ADMIN') && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {o.status === 'Pending' && (
+                            <Button 
+                              size="icon"
+                              title="Approve"
+                              className="bg-green-600 hover:bg-green-700 text-white h-6 w-6 rounded-full shadow-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmOrder({
+                                  id: orderId,
+                                  action: 'Approved',
+                                  action_date: new Date().toISOString().split('T')[0],
+                                  reason: ''
+                                });
+                              }}
+                            >
+                              <CheckCircle className="w-3 h-3" />
+                            </Button>
+                          )}
+                          <Button 
+                            size="icon"
+                            title={o.status === 'Approved' ? 'Cancel' : 'Reject'}
+                            variant="destructive"
+                            className="h-6 w-6 rounded-full shadow-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmOrder({
+                                id: orderId,
+                                action: 'Cancelled',
+                                subAction: o.status === 'Approved' ? 'Cancel' : 'Reject',
+                                action_date: new Date().toISOString().split('T')[0],
+                                reason: ''
+                              });
+                            }}
+                          >
+                            <XCircle className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Inventory Quick Actions */}
+                      {isInventory && action && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {action.map((a: any) => (
+                            <Button
+                              key={a.next}
+                              size="icon"
+                              title={a.label}
+                              className={`h-6 w-6 rounded-full shadow-sm ${a.color}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (a.next === 'Dispatched') {
+                                  navigate(`/inventory/dispatch/${orderId}`);
+                                  return;
+                                }
+
+                                const now = new Date();
+                                setConfirmOrder({ 
+                                  id: orderId, 
+                                  action: a.next, 
+                                  action_date: now.toISOString().split('T')[0],
+                                  action_time: now.toTimeString().split(' ')[0].slice(0, 5),
+                                  invoiceDetails: '',
+                                  warehouseDetails: warehouses[0]?.name || '',
+                                  vehicleDetails: '',
+                                  driverName: '',
+                                  driverMobile: '',
+                                  reason: ''
+                                });
+
+                                if (a.next === 'Returned') {
+                                  const initialQtys: Record<string, number> = {};
+                                  (o.items || []).forEach((item: any) => {
+                                    const pId = item.productId || item.productid_id || (typeof item.product === 'object' ? item.product?.id : item.product);
+                                    if (pId) {
+                                      const dispatched = item.sentQty || item.qty || 0;
+                                      const alreadyReturned = item.returnedQty || 0;
+                                      const returnable = dispatched - alreadyReturned;
+                                      initialQtys[pId] = returnable > 0 ? returnable : 0;
+                                    }
+                                  });
+                                  setReturnItems(initialQtys);
+                                }
+                              }}
+                            >
+                              <a.icon className="w-3 h-3" />
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+
                       {user?.role !== 'INVENTORY' && (
-                        <span className="font-bold text-primary text-sm">₹{grandTotal.toLocaleString()}</span>
+                        <span className="font-bold text-primary text-sm whitespace-nowrap">₹{grandTotal.toLocaleString()}</span>
                       )}
                     </div>
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-x-2.5 gap-y-2 text-xs text-muted-foreground mb-2">
-                      <div>
-                        <p className="text-[9px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Party Name</p>
-                        <p className="font-medium text-foreground truncate" title={partyName}>{partyName}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] uppercase tracking-wider font-semibold opacity-70 mb-0.5">Sales Officer / Date</p>
-                        <p className="font-medium text-foreground truncate text-[10px]" title={`${soEmail} · ${o.date}`}>{soEmail} · {o.date}</p>
-                      </div>
-                    </div>
+                  {/* Expandable Content Area */}
+                  {isExpanded && (
+                    <div className="border-t border-border/40">
+                      {/* Clickable Order Details Area */}
+                      <div 
+                        className="p-3 cursor-pointer hover:bg-muted/10"
+                        onClick={() => setViewOrder(o)}
+                      >
 
-                    <p className="text-[10px] text-muted-foreground truncate mb-2" title={o.items.map(i => {
+                        <div className="flex justify-between items-start text-xs text-muted-foreground mb-1.5">
+                          <div className="flex-1">
+                             <p className="font-medium text-foreground text-[10px] uppercase" title={`${soEmail} · ${o.date}`}>Rep: {soEmail} · {o.date}</p>
+                          </div>
+                          <div className="text-right">
+                             <span className="text-[10px] text-primary hover:underline">Click for full details →</span>
+                          </div>
+                        </div>
+
+                    <p className="text-[10px] text-muted-foreground truncate mb-1" title={o.items.map(i => {
                       const iAny = i as any;
                       const itemProductId = iAny.productId || iAny.productid_id || (typeof iAny.product === 'object' ? iAny.product?.id : iAny.product);
                       const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
@@ -776,7 +891,7 @@ const InventoryDashboard: React.FC = () => {
                   </div>
 
                   {/* Action Bar */}
-                  <div className="bg-secondary/30 p-2.5 border-t border-border flex flex-col gap-2.5 mt-auto">
+                  <div className="bg-secondary/30 p-2 border-t border-border/50 flex flex-col gap-2 mt-auto">
                     <div className="flex flex-col gap-2 w-full sm:flex-row sm:items-center sm:justify-between">
                       {/* Warehouse Assignment */}
                       <div className="flex items-center gap-1.5">
@@ -901,6 +1016,9 @@ const InventoryDashboard: React.FC = () => {
                       )}
                     </div>
                   </div>
+                  {/* End Expandable Content Area */}
+                  </div>
+                  )}
                 </div>
               );
             })}
