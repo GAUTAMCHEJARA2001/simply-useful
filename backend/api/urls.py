@@ -70,9 +70,9 @@ from api.views_hr import (
     hr_departments, hr_departments_detail,
     hr_designations, hr_designations_detail,
     hr_leave_types, hr_leave_types_detail,
-    hr_leave_balances, hr_leave_records, hr_leave_auto_fetch
+    hr_leave_balances, hr_leave_records
 )
-from api.leave_views import hr_leave_policies, hr_leave_policies_detail, hr_leave_allocate
+from api.leave_views import hr_leave_policies, hr_leave_policies_detail, hr_leave_allocate, hr_leave_auto_fetch
 
 urlpatterns = [
     # Auth
