@@ -15,6 +15,17 @@ def setup_local_tenant():
     print("1. Running database migrations to create/verify public schema tables & indexes...")
     call_command('migrate', '--noinput')
 
+    print("1.5 Resetting database sequences to avoid UniqueViolation errors...")
+    from io import StringIO
+    from django.db import connection
+    out = StringIO()
+    call_command('sqlsequencereset', 'api', 'core', stdout=out)
+    sql = out.getvalue()
+    with connection.cursor() as cursor:
+        for s in sql.split(';'):
+            if s.strip():
+                cursor.execute(s)
+
     print("\n2. Creating Company (Tenant)...")
     company_id = "cmo75yliq0000wesurjpett1n"
     company, created = Company.objects.get_or_create(
