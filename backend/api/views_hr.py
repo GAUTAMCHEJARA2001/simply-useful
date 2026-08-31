@@ -341,6 +341,7 @@ def hr_generate_payroll(request):
         # Base Pay
         basic_pay = 0.0
         basic_calc = ""
+        daily_rate = 0.0
         if emp.employee_type == 'FIXED':
             # Indian Norm: Split Base Salary Monthly into Basic(50%) and HRA(30%) and Allowances(20%)
             daily_rate = emp.base_salary_monthly / 30.0 # Standardize to 30 days
@@ -351,6 +352,7 @@ def hr_generate_payroll(request):
             basic_calc = f"(₹{emp.base_salary_monthly}/30) * {payable_days} days * {int(basic_pct * 100)}% = ₹{basic_pay:.2f}"
         else:
             # Variable / Daily
+            daily_rate = emp.dailywage
             gross_base = emp.dailywage * payable_days
             basic_pay = gross_base
             hra = 0.0
@@ -457,10 +459,12 @@ def hr_generate_payroll(request):
                 'absent': absent_count,
                 'wo': wo_count,
                 'payable_days': payable_days,
+                'paid_leave_count': paid_leave_count,
                 'ot_hours': total_ot_hours,
                 'late_hours': total_late_hours,
                 'km_travelled': total_km,
-                'bags': total_bags
+                'bags': total_bags,
+                'daily_rate': daily_rate
             },
             'earnings': {
                 'basic': round(basic_pay, 2),

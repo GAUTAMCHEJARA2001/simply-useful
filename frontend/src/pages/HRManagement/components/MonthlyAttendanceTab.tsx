@@ -108,6 +108,12 @@ export const MonthlyAttendanceTab = () => {
                 <tr>
                   <th className="px-4 py-3 font-semibold">Employee</th>
                   <th className="px-4 py-3 font-semibold">Attendance</th>
+                  <th className="px-4 py-3 font-semibold bg-emerald-50/50 text-emerald-800">Present Days</th>
+                  <th className="px-4 py-3 font-semibold bg-emerald-50/50 text-emerald-800">Daily Wage</th>
+                  <th className="px-4 py-3 font-semibold bg-emerald-50/50 text-emerald-800">Present Wages</th>
+                  <th className="px-4 py-3 font-semibold bg-orange-50/50 text-orange-800">Half Day</th>
+                  <th className="px-4 py-3 font-semibold bg-orange-50/50 text-orange-800">HD Wage (Rate)</th>
+                  <th className="px-4 py-3 font-semibold bg-orange-50/50 text-orange-800">HD Wages Total</th>
                   <th className="px-4 py-3 font-semibold bg-blue-50/50 text-blue-800">Bike (km)</th>
                   <th className="px-4 py-3 font-semibold bg-blue-50/50 text-blue-800">Bike Rate</th>
                   <th className="px-4 py-3 font-semibold bg-blue-50/50 text-blue-800">Bike Amt</th>
@@ -131,7 +137,7 @@ export const MonthlyAttendanceTab = () => {
               </thead>
               <tbody className="divide-y divide-border">
                 {payrollList.length === 0 ? (
-                  <tr><td colSpan={21} className="px-4 py-8 text-center text-muted-foreground">No employees found</td></tr>
+                  <tr><td colSpan={27} className="px-4 py-8 text-center text-muted-foreground">No employees found</td></tr>
                 ) : (
                   payrollList.map((emp: any) => (
                     <tr key={emp.labour_id} className="hover:bg-accent/10 transition-colors">
@@ -149,6 +155,12 @@ export const MonthlyAttendanceTab = () => {
                           {emp.stats.wo > 0 && <span className="text-blue-600 bg-blue-50 px-1.5 rounded" title="Weekly Off">{emp.stats.wo}WO</span>}
                         </div>
                       </td>
+                      <td className="px-4 py-3 bg-emerald-50/20 text-emerald-700">{emp.stats.present}</td>
+                      <td className="px-4 py-3 bg-emerald-50/20 text-muted-foreground">₹{(emp.stats.daily_rate || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 bg-emerald-50/20 text-emerald-800 font-medium">₹{((emp.stats.present || 0) * (emp.stats.daily_rate || 0)).toFixed(2)}</td>
+                      <td className="px-4 py-3 bg-orange-50/20 text-orange-700">{emp.stats.half_day}</td>
+                      <td className="px-4 py-3 bg-orange-50/20 text-muted-foreground">₹{((emp.stats.daily_rate || 0) / 2).toFixed(2)}</td>
+                      <td className="px-4 py-3 bg-orange-50/20 text-orange-800 font-medium">₹{((emp.stats.half_day || 0) * ((emp.stats.daily_rate || 0) / 2)).toFixed(2)}</td>
                       <td className="px-4 py-3 text-muted-foreground bg-blue-50/20">{emp.breakdown_data?.bike_km || 0}</td>
                       <td className="px-4 py-3 text-muted-foreground bg-blue-50/20">₹{emp.breakdown_data?.bike_rate?.toFixed(2) || '0.00'}</td>
                       <td className="px-4 py-3 text-blue-700 font-medium bg-blue-50/20">₹{((emp.breakdown_data?.bike_km || 0) * (emp.breakdown_data?.bike_rate || 0)).toFixed(2)}</td>
