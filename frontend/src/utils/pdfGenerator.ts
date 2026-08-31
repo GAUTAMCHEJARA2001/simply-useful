@@ -1,89 +1,76 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { PartyOnboardingRequest } from '@/types';
-import { format } from 'date-fns';
 
-export const generateDealerFormPDF = async (request: PartyOnboardingRequest) => {
-  // Load the flattened template from the public folder
-  const url = '/dealer_form_final.pdf';
-  const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer());
-  const pdfDoc = await PDFDocument.load(existingPdfBytes);
+export interface RTGSData {
+  beneficiaryName: string;
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  amount: number;
+}
 
-  // Embed the font
-  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const pages = pdfDoc.getPages();
-  const firstPage = pages[0];
+export const generateRTGSSlip = async (data: RTGSData) => {
+  try {
+    // 1. Fetch the PDF template from the public folder
+    const url = '/rtgs-neft-request.pdf';
+    const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer());
 
-  // We are guessing coordinates here (Option A) based on a typical A4 PDF.
-  // The user will need to adjust these coordinates based on the actual visual layout.
-  // Origin (0,0) is bottom-left of the page. Y increases upwards.
-  // Page height is usually ~841 for A4.
+    // 2. Load a PDFDocument from the existing PDF bytes
+    const pdfDoc = await PDFDocument.load(existingPdfBytes);
 
-  const drawField = (text: string, x: number, y: number, size = 11) => {
-    if (!text) return;
-    firstPage.drawText(text, {
-      x,
-      y,
-      size,
-      font: helveticaFont,
-      color: rgb(0, 0, 0),
-    });
-  };
+    // 3. Keep only the first page if there are multiple pages
+    const pageCount = pdfDoc.getPageCount();
+    for (let i = pageCount - 1; i > 0; i--) {
+      pdfDoc.removePage(i);
+    }
 
-  // Example mappings (User will need to fine-tune these x,y coordinates)
-  drawField(request.partyName, 100, 750); // Firm Name
-  drawField(request.contactPerson, 100, 720); // Contact Person
-  drawField(request.address, 100, 690); // Address
-  drawField(request.cityOrArea, 100, 660); // City
-  drawField(request.phone, 350, 660); // Phone
-  drawField(request.email || '', 100, 630); // Email
-  drawField(request.gstNumber || '', 350, 630); // GST
+    // 4. Get the first page
+    const page = pdfDoc.getPage(0);
+    const { width, height } = page.getSize();
+    
+    // Embed the standard font
+    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontSize = 11;
+    const color = rgb(0, 0, 0);
 
-  // Serialize the PDFDocument to bytes (a Uint8Array)
-  const pdfBytes = await pdfDoc.save();
+    // 5. Draw text fields onto the PDF
+    // IMPORTANT: These X, Y coordinates are estimated. 
+    // In pdf-lib, (0,0) is the BOTTOM-LEFT corner of the page.
+    
+    // Example format: Y decreases as you go down the page from the top.
+    // If standard A4 height is ~841 (at 72 dpi) and width is ~595
 
-  // Trigger the browser to download the PDF document
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-  const blobUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = blobUrl;
-  link.download = `Dealer_Form_${request.partyName}.pdf`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
+    // Helper to draw text
+    const draw = (text: string, x: number, y: number) => {
+      if (!text) return;
+      page.drawText(text, { x, y, size: fontSize, font, color });
+    };
 
-export const generateChequeSubmissionPDF = async (request: PartyOnboardingRequest) => {
-  const url = '/cheque_submission_request.pdf';
-  const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer());
-  const pdfDoc = await PDFDocument.load(existingPdfBytes);
+    // --- ESTIMATED COORDINATES (adjust these after first test print) ---
+    // Top section: Branch / Date / Amount
+    draw(new Date().toLocaleDateString('en-IN'), 400, height - 120); // Date
+    draw(data.amount.toFixed(2), 200, height - 190); // Amount in figures
+    
+    // Beneficiary Details Section
+    draw(data.beneficiaryName, 200, height - 280); // Beneficiary Name
+    draw(data.bankName, 200, height - 310); // Bank Name
+    draw(data.ifscCode, 200, height - 340); // IFSC Code
+    draw(data.accountNumber, 200, height - 370); // Account No
+    draw(data.accountNumber, 200, height - 400); // Confirm Account No
 
-  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const pages = pdfDoc.getPages();
-  const firstPage = pages[0];
+    // 6. Serialize the PDFDocument to bytes (a Uint8Array)
+    const pdfBytes = await pdfDoc.save();
 
-  const drawField = (text: string, x: number, y: number, size = 11) => {
-    if (!text) return;
-    firstPage.drawText(text, {
-      x,
-      y,
-      size,
-      font: helveticaFont,
-      color: rgb(0, 0, 0),
-    });
-  };
-
-  // Guessed coordinates
-  drawField(request.partyName, 100, 700);
-  drawField(format(new Date(), 'dd/MM/yyyy'), 450, 700);
-  drawField(request.cityOrArea, 100, 670);
-
-  const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-  const blobUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = blobUrl;
-  link.download = `Cheque_Submission_${request.partyName}.pdf`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+    // 7. Trigger the browser to download the PDF document
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `RTGS_${data.beneficiaryName.replace(/\s+/g, '_')}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+  } catch (error) {
+    console.error('Error generating RTGS PDF:', error);
+    throw new Error('Failed to generate RTGS PDF. Ensure the template exists at public/rtgs-neft-request.pdf');
+  }
 };

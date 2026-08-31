@@ -460,6 +460,11 @@ def hr_generate_payroll(request):
             'employee_type': emp.employee_type,
             'is_finalized': is_finalized,
             'is_paid': is_paid,
+            'bank_details': {
+                'bank_name': emp.bank_name,
+                'account_no': emp.bank_account_number,
+                'ifsc': emp.bank_ifsc
+            },
             'stats': {
                 'present': present_count,
                 'half_day': half_day_count,

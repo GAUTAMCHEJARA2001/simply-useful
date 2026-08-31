@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
-import { CheckCircle, AlertTriangle, FileText } from 'lucide-react';
+import { CheckCircle, AlertTriangle, FileText, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { generateRTGSSlip } from '@/utils/pdfGenerator';
 
 export const MonthlyAttendanceTab = () => {
   const [month, setMonth] = useState(() => {
@@ -72,6 +73,21 @@ export const MonthlyAttendanceTab = () => {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
   };
+
+    const handlePrintRTGS = async (emp: any) => {
+      try {
+        await generateRTGSSlip({
+          beneficiaryName: emp.labour_name,
+          bankName: emp.bank_details?.bank_name || '',
+          accountNumber: emp.bank_details?.account_no || '',
+          ifscCode: emp.bank_details?.ifsc || '',
+          amount: emp.net_pay
+        });
+        toast({ title: 'Success', description: 'RTGS slip generated' });
+      } catch (e: any) {
+        toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      }
+    };
 
   const handleOpenPayment = (emp: any) => {
     setPaymentModalEmp(emp);
@@ -268,29 +284,40 @@ export const MonthlyAttendanceTab = () => {
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
                           <Button 
                             size="sm" 
                             variant={emp.is_finalized ? "outline" : "default"} 
-                            className="h-7 text-xs"
+                            className="h-7 text-xs px-2"
                             onClick={() => handleOpenFinalize(emp)}
                           >
                             {emp.is_finalized ? 'View Slip' : 'Finalize'}
                           </Button>
                           
                           {emp.is_finalized && (
-                            emp.is_paid ? (
-                              <span className="inline-flex items-center justify-center px-2 h-7 text-xs font-semibold text-green-700 bg-green-100 rounded-md border border-green-200">Paid</span>
-                            ) : (
-                              <Button 
-                                size="sm" 
-                                variant="default" 
-                                className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white" 
-                                onClick={() => handleOpenPayment(emp)}
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700"
+                                title="Download RTGS Slip"
+                                onClick={() => handlePrintRTGS(emp)}
                               >
-                                Pay Now
+                                <Download className="w-4 h-4" />
                               </Button>
-                            )
+                              {emp.is_paid ? (
+                                <span className="inline-flex items-center justify-center px-2 h-7 text-xs font-semibold text-green-700 bg-green-100 rounded-md border border-green-200">Paid</span>
+                              ) : (
+                                <Button 
+                                  size="sm" 
+                                  variant="default" 
+                                  className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white px-2" 
+                                  onClick={() => handleOpenPayment(emp)}
+                                >
+                                  Pay Now
+                                </Button>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>
