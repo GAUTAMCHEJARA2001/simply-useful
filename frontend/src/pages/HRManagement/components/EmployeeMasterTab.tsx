@@ -6,6 +6,10 @@ import { SafeDataView } from '@/components/SafeDataView';
 import { DataTable } from '@/components/DataTable';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { useToast } from '@/hooks/use-toast';
+import { PromotionDemotionModal } from './PromotionDemotionModal';
+import { generatePromotionLetter } from '@/utils/promotionPdfGenerator';
+import { useData } from '@/contexts/DataContext';
 import { cn } from "@/lib/utils";
 
 const SearchableSelect = ({ options, value, onChange, placeholder }: { options: {label: string, value: any}[], value: any, onChange: (v: any) => void, placeholder: string }) => {
@@ -50,16 +54,52 @@ export const EmployeeMasterTab: React.FC = () => {
   const { data: departments = [] } = useHRDepartments();
   const { data: designations = [] } = useHRDesignations();
   const { data: users = [] } = useHRUsers();
-  const { saveEmployee, deleteEmployee } = useHREmployeeMutations();
+  const { saveEmployee, deleteEmployee, changeStatus } = useHREmployeeMutations();
+  const { toast } = useToast();
+  const { settings } = useData();
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('ALL');
+  const [promoModalOpen, setPromoModalOpen] = useState(false);
+  const [promoEmployee, setPromoEmployee] = useState<any>(null);
 
   const handleEdit = (emp: any) => {
     setFormData(emp);
     setIsEditing(true);
+  };
+
+  const handlePromoteDemote = (emp: any) => {
+    setPromoEmployee(emp);
+    setPromoModalOpen(true);
+  };
+
+  const handlePromoSubmit = async (data: any) => {
+    if (!promoEmployee) return;
+    try {
+      await changeStatus({ id: promoEmployee.id, data });
+      
+      // Generate letter
+      await generatePromotionLetter({
+        employeeName: promoEmployee.name,
+        action: data.action,
+        oldType: promoEmployee.employee_type,
+        newType: data.employee_type,
+        oldSalary: promoEmployee.fixed_salary,
+        newSalary: data.fixed_salary,
+        oldWage: promoEmployee.daily_wage,
+        newWage: data.daily_wage,
+        reason: data.reason,
+        effectiveDate: data.effectiveDate,
+        companyName: settings.company_name || 'Simply Useful',
+      });
+      
+      toast({ title: 'Success', description: `${data.action} applied and letter generated` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message || `Failed to apply ${data.action}`, variant: 'destructive' });
+      throw e;
+    }
   };
 
   const handleAddNew = () => {
@@ -398,6 +438,16 @@ export const EmployeeMasterTab: React.FC = () => {
           onDelete={(idx) => {
             if(confirm('Deactivate employee?')) deleteEmployee(filteredEmployees[idx].id);
           }}
+          customActions={(idx) => (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8 text-xs text-blue-600 hover:text-blue-700 bg-blue-50/50 hover:bg-blue-50 border-blue-200"
+              onClick={(e) => { e.stopPropagation(); handlePromoteDemote(filteredEmployees[idx]); }}
+            >
+              Promote / Demote
+            </Button>
+          )}
         />
       </SafeDataView>
     </div>

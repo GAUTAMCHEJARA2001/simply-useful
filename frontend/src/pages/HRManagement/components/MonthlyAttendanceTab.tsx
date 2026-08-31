@@ -7,6 +7,7 @@ import { Modal } from '@/components/Modal';
 import { CheckCircle, AlertTriangle, FileText, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateRTGSSlip } from '@/utils/pdfGenerator';
+import { useData } from '@/contexts/DataContext';
 
 export const MonthlyAttendanceTab = () => {
   const [month, setMonth] = useState(() => {
@@ -17,6 +18,7 @@ export const MonthlyAttendanceTab = () => {
   const { data: payrollList = [], isLoading, error, refetch } = useHRPayroll(month);
   const { finalizePayroll, markSlipPaid } = useLedgerMutations();
   const { toast } = useToast();
+  const { settings } = useData();
 
   const [selectedEmp, setSelectedEmp] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -81,7 +83,11 @@ export const MonthlyAttendanceTab = () => {
           bankName: emp.bank_details?.bank_name || '',
           accountNumber: emp.bank_details?.account_no || '',
           ifscCode: emp.bank_details?.ifsc || '',
-          amount: emp.net_pay
+          amount: emp.net_pay,
+          companyName: settings.company_name || 'Simply Useful',
+          companyAccount: settings.company_bank_account || '',
+          companyBank: settings.company_bank_name || '',
+          companyIfsc: settings.company_bank_ifsc || ''
         });
         toast({ title: 'Success', description: 'RTGS slip generated' });
       } catch (e: any) {

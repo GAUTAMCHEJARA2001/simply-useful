@@ -69,16 +69,28 @@ export const useHREmployeeMutations = () => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/hr/employees/${id}`),
+    mutationFn: async (id: string) => {
+      await api.delete(`/hr/employees/${id}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hr_employees'] });
-      toast({ title: 'Success', description: 'Employee deactivated' });
+    }
+  });
+
+  const changeStatusMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string, data: any }) => {
+      const res = await api.post(`/hr/employees/${id}/change-status`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr_employees'] });
     }
   });
 
   return {
     saveEmployee: saveMutation.mutateAsync,
     deleteEmployee: deleteMutation.mutateAsync,
+    changeStatus: changeStatusMutation.mutateAsync,
   };
 };
 

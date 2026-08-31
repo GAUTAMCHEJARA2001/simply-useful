@@ -211,6 +211,37 @@ def hr_employees_detail(request, pk):
         emp.save()
         return send_success(None, 'Employee deactivated')
 
+@api_view(['POST'])
+def hr_employee_change_status(request, pk):
+    try:
+        emp = Labour.objects.get(id=pk)
+    except Labour.DoesNotExist:
+        return send_error('Employee not found', status_code=404)
+        
+    data = request.data
+    action = data.get('action') # 'Promotion' or 'Demotion'
+    new_type = data.get('employee_type')
+    new_salary = data.get('fixed_salary')
+    new_wage = data.get('daily_wage')
+    reason = data.get('reason', '')
+    
+    if new_type:
+        emp.employee_type = new_type
+    if new_salary is not None:
+        emp.fixed_salary = new_salary
+    if new_wage is not None:
+        emp.daily_wage = new_wage
+        
+    emp.save()
+    
+    return send_success({
+        'id': emp.id,
+        'name': emp.name,
+        'employee_type': emp.employee_type,
+        'fixed_salary': emp.fixed_salary,
+        'daily_wage': emp.daily_wage
+    }, message=f"Employee {action} applied successfully")
+
 # --- ATTENDANCE ---
 @api_view(['GET', 'POST'])
 def hr_attendance(request):

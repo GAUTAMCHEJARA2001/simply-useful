@@ -8,6 +8,7 @@ interface DataTableProps {
   onEdit?: (idx: number) => void;
   onView?: (idx: number) => void;
   onRowClick?: (idx: number) => void;
+  customActions?: (idx: number) => React.ReactNode;
   columnWidths?: string[];
 }
 
@@ -27,7 +28,16 @@ const getCellValue = (cell: any): string | number => {
   return String(cell);
 };
 
-export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, onEdit, onView, onRowClick, columnWidths }) => {
+export const DataTable: React.FC<DataTableProps> = ({ 
+  columns, 
+  rows, 
+  onDelete, 
+  onEdit, 
+  onView, 
+  onRowClick,
+  customActions,
+  columnWidths 
+}) => {
   const storageKey = useMemo(() => {
     return `datatable_sort_${columns.join('_').replace(/[^a-zA-Z0-9]/g, '_')}`;
   }, [columns]);
@@ -136,13 +146,13 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
                   </th>
                 );
               })}
-              {(onView || onDelete || onEdit) && <th className="px-4 py-3 text-right text-muted-foreground font-medium">Action</th>}
+              {(onView || onDelete || onEdit || customActions) && <th className="px-4 py-3 text-right text-muted-foreground font-medium">Action</th>}
             </tr>
           </thead>
           <tbody>
             {sortedMappedRows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + (onDelete || onEdit ? 1 : 0)} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={columns.length + (onDelete || onEdit || customActions ? 1 : 0)} className="px-4 py-8 text-center text-muted-foreground">
                   No records found
                 </td>
               </tr>
@@ -164,8 +174,9 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
                       <div className={columnWidths?.[j] ? 'truncate' : ''}>{cell ?? '—'}</div>
                     </td>
                   ))}
-                  {(onView || onDelete || onEdit) && (
+                  {(onView || onDelete || onEdit || customActions) && (
                     <td className="px-4 py-3 text-right flex justify-end gap-1">
+                      {customActions && customActions(index)}
                       {onView && (
                         <button onClick={(e) => { e.stopPropagation(); onView(index); }} className="p-1.5 rounded-lg hover:bg-blue-500/10 text-blue-500 transition-colors" title="View details">
                           <Eye className="w-3.5 h-3.5" />
@@ -211,8 +222,9 @@ export const DataTable: React.FC<DataTableProps> = ({ columns, rows, onDelete, o
                   </div>
                 ))}
               </div>
-              {(onView || onDelete || onEdit) && (
-                <div className="flex gap-2 pt-3 mt-2 border-t border-border/30">
+              {(onView || onDelete || onEdit || customActions) && (
+                <div className="flex flex-wrap gap-2 pt-3 mt-2 border-t border-border/30">
+                  {customActions && customActions(index)}
                   {onView && (
                     <button onClick={(e) => { e.stopPropagation(); onView(index); }} className="flex-1 flex items-center justify-center gap-2 py-2 rounded-md bg-blue-500/10 text-blue-600 font-semibold text-xs transition-colors hover:bg-blue-500/20">
                       <Eye className="w-3.5 h-3.5" /> View
