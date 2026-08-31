@@ -1,4 +1,5 @@
 import datetime
+import calendar
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -278,6 +279,12 @@ def hr_generate_payroll(request):
     if not month:
         return send_error('Month parameter (YYYY-MM) is required', 400)
     
+    try:
+        y_str, m_str = month.split('-')
+        days_in_month = calendar.monthrange(int(y_str), int(m_str))[1]
+    except Exception:
+        days_in_month = 30
+    
     employees = Labour.objects.filter(active=True).exclude(employee_type='NONE')
     payroll_data = []
     # Load salary component settings
@@ -344,12 +351,12 @@ def hr_generate_payroll(request):
         daily_rate = 0.0
         if emp.employee_type == 'FIXED':
             # Indian Norm: Split Base Salary Monthly into Basic(50%) and HRA(30%) and Allowances(20%)
-            daily_rate = emp.base_salary_monthly / 30.0 # Standardize to 30 days
+            daily_rate = emp.base_salary_monthly / days_in_month
             gross_base = daily_rate * payable_days
             basic_pay = gross_base * basic_pct
             hra = gross_base * hra_pct
             other_allowances = gross_base * allowance_pct
-            basic_calc = f"(₹{emp.base_salary_monthly}/30) * {payable_days} days * {int(basic_pct * 100)}% = ₹{basic_pay:.2f}"
+            basic_calc = f"(₹{emp.base_salary_monthly}/{days_in_month}) * {payable_days} days * {int(basic_pct * 100)}% = ₹{basic_pay:.2f}"
         else:
             # Variable / Daily
             daily_rate = emp.dailywage
@@ -362,7 +369,7 @@ def hr_generate_payroll(request):
         
         # Additions
         if emp.employee_type == 'FIXED':
-            base_hourly_rate = (emp.base_salary_monthly / 30.0) / 8.0
+            base_hourly_rate = (emp.base_salary_monthly / days_in_month) / 8.0
         else:
             base_hourly_rate = emp.dailywage / 8.0
 
