@@ -114,6 +114,9 @@ export const MonthlyAttendanceTab = () => {
                   <th className="px-4 py-3 font-semibold bg-orange-50/50 text-orange-800">Half Day</th>
                   <th className="px-4 py-3 font-semibold bg-orange-50/50 text-orange-800">HD Wage (Rate)</th>
                   <th className="px-4 py-3 font-semibold bg-orange-50/50 text-orange-800">HD Wages Total</th>
+                  <th className="px-4 py-3 font-semibold bg-green-50/50 text-green-800">Paid Leave</th>
+                  <th className="px-4 py-3 font-semibold bg-green-50/50 text-green-800">PL Wage (Rate)</th>
+                  <th className="px-4 py-3 font-semibold bg-green-50/50 text-green-800">PL Wages Total</th>
                   <th className="px-4 py-3 font-semibold bg-blue-50/50 text-blue-800">Bike (km)</th>
                   <th className="px-4 py-3 font-semibold bg-blue-50/50 text-blue-800">Bike Rate</th>
                   <th className="px-4 py-3 font-semibold bg-blue-50/50 text-blue-800">Bike Amt</th>
@@ -126,7 +129,9 @@ export const MonthlyAttendanceTab = () => {
                   <th className="px-4 py-3 font-semibold bg-red-50/50 text-red-800">Late (hrs)</th>
                   <th className="px-4 py-3 font-semibold bg-red-50/50 text-red-800">Late Rate</th>
                   <th className="px-4 py-3 font-semibold bg-red-50/50 text-red-800">Late Amt</th>
-                  <th className="px-4 py-3 font-semibold">Other (₹)</th>
+                  <th className="px-4 py-3 font-semibold bg-yellow-50/50 text-yellow-800">Bags</th>
+                  <th className="px-4 py-3 font-semibold bg-yellow-50/50 text-yellow-800">Bag Rate</th>
+                  <th className="px-4 py-3 font-semibold bg-yellow-50/50 text-yellow-800">Bag Amt</th>
                   <th className="px-4 py-3 font-semibold">Payable Days</th>
                   <th className="px-4 py-3 font-semibold text-right">Gross Pay</th>
                   <th className="px-4 py-3 font-semibold text-right">Deductions</th>
@@ -161,6 +166,9 @@ export const MonthlyAttendanceTab = () => {
                       <td className="px-4 py-3 bg-orange-50/20 text-orange-700">{emp.stats.half_day}</td>
                       <td className="px-4 py-3 bg-orange-50/20 text-muted-foreground">₹{((emp.stats.daily_rate || 0) / 2).toFixed(2)}</td>
                       <td className="px-4 py-3 bg-orange-50/20 text-orange-800 font-medium">₹{((emp.stats.half_day || 0) * ((emp.stats.daily_rate || 0) / 2)).toFixed(2)}</td>
+                      <td className="px-4 py-3 bg-green-50/20 text-green-700">{emp.stats.paid_leave_count || 0}</td>
+                      <td className="px-4 py-3 bg-green-50/20 text-muted-foreground">₹{(emp.stats.daily_rate || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 bg-green-50/20 text-green-800 font-medium">₹{((emp.stats.paid_leave_count || 0) * (emp.stats.daily_rate || 0)).toFixed(2)}</td>
                       <td className="px-4 py-3 text-muted-foreground bg-blue-50/20">{emp.breakdown_data?.bike_km || 0}</td>
                       <td className="px-4 py-3 text-muted-foreground bg-blue-50/20">₹{emp.breakdown_data?.bike_rate?.toFixed(2) || '0.00'}</td>
                       <td className="px-4 py-3 text-blue-700 font-medium bg-blue-50/20">₹{((emp.breakdown_data?.bike_km || 0) * (emp.breakdown_data?.bike_rate || 0)).toFixed(2)}</td>
@@ -173,7 +181,9 @@ export const MonthlyAttendanceTab = () => {
                       <td className="px-4 py-3 text-red-500/80 bg-red-50/20">{emp.stats.late_hours || 0}</td>
                       <td className="px-4 py-3 text-red-500/80 bg-red-50/20">₹{emp.breakdown_data?.late_rate?.toFixed(2) || '0.00'}</td>
                       <td className="px-4 py-3 text-red-600 font-medium bg-red-50/20">-₹{emp.deductions.late?.toFixed(2) || '0.00'}</td>
-                      <td className="px-4 py-3 text-green-600/80">{(emp.earnings.incentives + emp.earnings.allowances).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-muted-foreground bg-yellow-50/20">{emp.stats.bags || 0}</td>
+                      <td className="px-4 py-3 text-muted-foreground bg-yellow-50/20">₹{emp.breakdown_data?.bag_rate?.toFixed(2) || '0.00'}</td>
+                      <td className="px-4 py-3 text-yellow-700 font-medium bg-yellow-50/20">₹{((emp.stats.bags || 0) * (emp.breakdown_data?.bag_rate || 0)).toFixed(2)}</td>
                       <td className="px-4 py-3 font-bold">{emp.stats.payable_days}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col gap-0.5 text-xs w-32 ml-auto">

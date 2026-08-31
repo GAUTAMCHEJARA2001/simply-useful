@@ -495,7 +495,8 @@ def hr_generate_payroll(request):
                 'car_km': car_km_total,
                 'car_rate': emp.car_allowance_per_km,
                 'ot_rate': base_hourly_rate * emp.overtime_hourly_rate,
-                'late_rate': base_hourly_rate * emp.late_deduction_rate
+                'late_rate': base_hourly_rate * emp.late_deduction_rate,
+                'bag_rate': emp.bag_incentive_rate
             }
         })
 
