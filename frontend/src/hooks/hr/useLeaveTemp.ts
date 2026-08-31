@@ -6,7 +6,8 @@ export const useLeaveTypes = () => {
     queryFn: async () => {
       const res = await api.get('/hr/leave-types');
       return res.data.data;
-    }
+    },
+    refetchInterval: 10000
   });
 };
 
@@ -16,7 +17,8 @@ export const useLeaveBalances = () => {
     queryFn: async () => {
       const res = await api.get('/hr/leave-balances');
       return res.data.data;
-    }
+    },
+    refetchInterval: 10000
   });
 };
 
@@ -26,7 +28,8 @@ export const useLeaveRecords = () => {
     queryFn: async () => {
       const res = await api.get('/hr/leave-records');
       return res.data.data;
-    }
+    },
+    refetchInterval: 10000
   });
 };
 

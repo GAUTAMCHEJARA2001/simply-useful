@@ -102,9 +102,9 @@ export const MonthlyAttendanceTab = () => {
 
       <SafeDataView data={payrollList} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <Card>
-          <div className="overflow-x-auto pb-4">
+          <div className="overflow-auto max-h-[calc(100vh-250px)] pb-4">
             <table className="w-full text-sm text-left min-w-max">
-              <thead className="bg-muted text-muted-foreground border-b border-border">
+              <thead className="bg-muted text-muted-foreground border-b border-border sticky top-0 z-10 shadow-sm">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Employee</th>
                   <th className="px-4 py-3 font-semibold">Attendance</th>

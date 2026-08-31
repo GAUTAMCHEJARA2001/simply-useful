@@ -123,9 +123,9 @@ export const AdvancedAttendanceTab: React.FC = () => {
       </div>
 
       <SafeDataView isLoading={isLoading} error={null} data={employees} onRetry={refetch}>
-        <div className="bg-card rounded-xl border border-border overflow-x-auto">
+        <div className="bg-card rounded-xl border border-border overflow-auto max-h-[calc(100vh-250px)]">
           <table className="w-full text-sm text-left border-collapse">
-            <thead className="bg-muted/50 text-muted-foreground">
+            <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10 shadow-sm backdrop-blur-sm">
               <tr>
                 <th className="p-3 font-medium sticky left-0 bg-muted/95 backdrop-blur z-10 border-r border-border min-w-[200px]">Employee</th>
                 {daysArray.map((dateStr, i) => (

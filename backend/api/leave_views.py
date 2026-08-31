@@ -15,6 +15,50 @@ def hr_leave_types(request):
         LeaveType.objects.create(name=name, companyid_id=company_id)
         return send_success({}, 'Leave Type created')
 
+@api_view(['PUT', 'DELETE'])
+def hr_leave_records_detail(request, pk):
+    try:
+        record = LeaveRecord.objects.get(pk=pk)
+    except LeaveRecord.DoesNotExist:
+        return send_error('Leave record not found')
+
+    if request.method == 'DELETE':
+        # Revert balance if it was paid
+        if record.is_paid and record.leavetypeid_id:
+            try:
+                balance = EmployeeLeaveBalance.objects.get(labourid_id=record.labourid_id, leavetypeid_id=record.leavetypeid_id)
+                deduction = 1.0 if record.status == 'FULL_DAY' else 0.5
+                balance.used_days -= deduction
+                balance.save()
+            except EmployeeLeaveBalance.DoesNotExist:
+                pass
+        record.delete()
+        return send_success({}, 'Leave record deleted')
+    
+    elif request.method == 'PUT':
+        # Simple toggle or update for is_paid and status
+        # For now, let's just support changing is_paid
+        old_is_paid = record.is_paid
+        new_is_paid = request.data.get('is_paid', old_is_paid)
+        
+        if old_is_paid != new_is_paid and record.leavetypeid_id:
+            try:
+                balance = EmployeeLeaveBalance.objects.get(labourid_id=record.labourid_id, leavetypeid_id=record.leavetypeid_id)
+                deduction = 1.0 if record.status == 'FULL_DAY' else 0.5
+                if new_is_paid:
+                    balance.used_days += deduction # became paid, deduct balance
+                else:
+                    balance.used_days -= deduction # became unpaid, restore balance
+                balance.save()
+            except EmployeeLeaveBalance.DoesNotExist:
+                pass
+        
+        record.is_paid = new_is_paid
+        if 'status' in request.data:
+            record.status = request.data.get('status')
+        record.save()
+        return send_success({}, 'Leave record updated')
+
 @api_view(['DELETE'])
 def hr_leave_types_detail(request, pk):
     LeaveType.objects.filter(id=pk).delete()

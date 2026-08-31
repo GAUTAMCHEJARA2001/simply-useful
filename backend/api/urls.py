@@ -72,7 +72,7 @@ from api.views_hr import (
     hr_leave_types, hr_leave_types_detail,
     hr_leave_balances, hr_leave_records
 )
-from api.leave_views import hr_leave_policies, hr_leave_policies_detail, hr_leave_allocate, hr_leave_auto_fetch
+from api.leave_views import hr_leave_policies, hr_leave_policies_detail, hr_leave_allocate, hr_leave_auto_fetch, hr_leave_records_detail
 
 urlpatterns = [
     # Auth
@@ -157,6 +157,7 @@ urlpatterns = [
     path('hr/leave-types/<str:pk>', hr_leave_types_detail, name='hr-leave-types-detail'),
     path('hr/leave-balances', hr_leave_balances, name='hr-leave-balances'),
     path('hr/leave-records', hr_leave_records, name='hr-leave-records'),
+    path('hr/leave-records/<str:pk>', hr_leave_records_detail, name='hr-leave-records-detail'),
     path('hr/leaves/auto-fetch', hr_leave_auto_fetch, name='hr-leave-auto-fetch'),
     path('hr/leave-policies', hr_leave_policies, name='hr-leave-policies'),
     path('hr/leave-policies/<str:pk>', hr_leave_policies_detail, name='hr-leave-policies-detail'),

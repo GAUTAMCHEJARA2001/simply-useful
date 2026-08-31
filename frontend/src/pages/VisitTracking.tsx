@@ -82,7 +82,11 @@ const VisitTracking: React.FC = () => {
           setGpsStatus(`📍 Signal ±${Math.round(pos.coords.accuracy)}m (Refining...)`);
         }
       },
-      () => {}, { enableHighAccuracy: false, timeout: 2000 }
+      (err) => {
+        if (err.code === 1) setGpsStatus('⚠️ Location Permission Denied');
+        else if (err.code === 2) setGpsStatus('⚠️ Please turn on your GPS / Location');
+      }, 
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
     );
 
     watchId.current = navigator.geolocation.watchPosition(
@@ -94,21 +98,15 @@ const VisitTracking: React.FC = () => {
         });
         setGpsStatus(`🎯 ±${Math.round(accuracy)}m`);
       },
-      (err) => console.warn('GPS Watcher:', err.message),
+      (err) => {
+        console.warn('GPS Watcher:', err.message);
+        if (!gps) {
+          if (err.code === 1) setGpsStatus('⚠️ Location Permission Denied');
+          else if (err.code === 2) setGpsStatus('⚠️ Please turn on your GPS / Location');
+        }
+      },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
-
-    setTimeout(async () => {
-      if (!gps) {
-        try {
-          const data = await externalApi.getIpLocation();
-          if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
-            setGps({ lat: data.latitude, lng: data.longitude, accuracy: 5000, source: 'IP Fallback' });
-            setGpsStatus('📍 Network location');
-          }
-        } catch { console.error('IP Fallback failed'); }
-      }
-    }, 3500);
   }, [gps]);
 
   const stopGpsWatcher = () => {
@@ -161,16 +159,26 @@ const VisitTracking: React.FC = () => {
 
   const handleCapture = async () => {
     if (!videoRef.current || videoRef.current.readyState < 2) return;
+    
+    if (!gps) {
+      toast({ title: 'GPS Required', description: 'Please turn on your GPS and allow location permissions before capturing the photo.', variant: 'destructive' });
+      return;
+    }
+    
     setSavingLoading(true);
 
     let cityState = 'Location verified';
     if (gps) {
-      try {
-        const data = await externalApi.getReverseGeocode(gps.lat, gps.lng);
-        const city = data.city || data.locality || 'Area Verified';
-        const state = data.principalSubdivision || '';
-        cityState = state ? `${city}, ${state}` : city;
-      } catch { cityState = 'Check-in Location'; }
+      if (gps.accuracy >= 5000) {
+        cityState = 'Rough Network Location';
+      } else {
+        try {
+          const data = await externalApi.getReverseGeocode(gps.lat, gps.lng);
+          const city = data.city || data.locality || 'Area Verified';
+          const state = data.principalSubdivision || '';
+          cityState = state ? `${city}, ${state}` : city;
+        } catch { cityState = 'Check-in Location'; }
+      }
     }
 
     const video = videoRef.current;
@@ -293,7 +301,7 @@ const VisitTracking: React.FC = () => {
 
   // ── Data ────────────────────────────────────────────────────  // 📦 Data 📦
   const userEmail = (user?.email || '').toLowerCase();
-  const isSalesOnly = user?.role === 'SALES' || user?.role === 'SALES_OFFICER';
+  const isSalesOnly = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER'].includes(user?.role?.toUpperCase() || '');
   const myDealers = isSalesOnly
     ? dealers.filter(d => d.active && (d.assignedSoEmails || []).some(e => e.toLowerCase() === userEmail))
     : dealers.filter(d => d.active);

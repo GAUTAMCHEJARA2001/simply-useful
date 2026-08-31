@@ -52,6 +52,9 @@ const HRDashboard: React.FC = () => {
   const [flagReason, setFlagReason] = useState<string>('');
   const [visitZoom, setVisitZoom] = useState(1);
   const [visitRotate, setVisitRotate] = useState(0);
+  const [visitPan, setVisitPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   // Lightbox Media States
   const [zoom, setZoom] = useState(1);
@@ -648,7 +651,7 @@ const HRDashboard: React.FC = () => {
                           <td className="px-4 py-3">
                             {v.photo ? (
                               <button
-                                onClick={() => { setSelectedVisit(v); setVisitZoom(1); setVisitRotate(0); }}
+                                onClick={() => { setSelectedVisit(v); setVisitZoom(1); setVisitRotate(0); setVisitPan({ x: 0, y: 0 }); }}
                                 className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
                               >
                                 <Image className="w-3.5 h-3.5" /> View Photo
@@ -1202,7 +1205,20 @@ const HRDashboard: React.FC = () => {
               {selectedVisit.photo && (
                 <div className="space-y-2">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">GPS-Sealed Visit Photo</span>
-                  <div className="border border-border/50 rounded-xl overflow-hidden w-full aspect-video relative bg-slate-950 flex items-center justify-center p-1 group shadow-inner">
+                  <div 
+                    className="border border-border/50 rounded-xl overflow-hidden w-full aspect-video relative bg-slate-950 flex items-center justify-center p-1 group shadow-inner cursor-grab active:cursor-grabbing"
+                    onMouseDown={(e) => {
+                      setIsDragging(true);
+                      setDragStart({ x: e.clientX - visitPan.x, y: e.clientY - visitPan.y });
+                    }}
+                    onMouseMove={(e) => {
+                      if (isDragging) {
+                        setVisitPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+                      }
+                    }}
+                    onMouseUp={() => setIsDragging(false)}
+                    onMouseLeave={() => setIsDragging(false)}
+                  >
                     
                     {/* Immersive Viewfinder Corners */}
                     <div className="absolute top-3 left-3 w-3 h-3 border-t-2 border-l-2 border-primary/40 pointer-events-none rounded-tl-sm" />
@@ -1215,7 +1231,7 @@ const HRDashboard: React.FC = () => {
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-white/15 text-white rounded-md transition-colors" onClick={() => setVisitZoom(z => Math.max(0.5, z - 0.25))} title="Zoom Out">
                         <ZoomOut className="w-3.5 h-3.5"/>
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-white/15 text-white font-mono text-xs rounded-md transition-colors" onClick={() => setVisitZoom(1)} title="Reset">
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-white/15 text-white font-mono text-xs rounded-md transition-colors" onClick={() => { setVisitZoom(1); setVisitPan({ x: 0, y: 0 }); setVisitRotate(0); }} title="Reset">
                         1x
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-white/15 text-white rounded-md transition-colors" onClick={() => setVisitZoom(z => Math.min(3, z + 0.25))} title="Zoom In">
@@ -1238,7 +1254,7 @@ const HRDashboard: React.FC = () => {
                       src={selectedVisit.photo}
                       alt="Visit Proof"
                       className="max-h-full max-w-full object-contain transition-transform duration-200"
-                      style={{ transform: `scale(${visitZoom}) rotate(${visitRotate}deg)` }}
+                      style={{ transform: `translate(${visitPan.x}px, ${visitPan.y}px) scale(${visitZoom}) rotate(${visitRotate}deg)` }}
                     />
                   </div>
                 </div>

@@ -32,7 +32,7 @@ const SalesDashboard: React.FC = () => {
     );
   }
 
-  const isSalesOnly = user?.role === 'SALES';
+  const isSalesOnly = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER'].includes(user?.role?.toUpperCase() || '');
   const currentOfficer = users.find(u => u.email?.toLowerCase() === user?.email?.toLowerCase());
 
   // Filter ALL orders by FY first, then scope to this user if SALES

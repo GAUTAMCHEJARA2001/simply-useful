@@ -9,6 +9,7 @@ export const useAttendance = () => {
       const res = await api.get('/transactions/attendance');
       return (res.data?.data || res.data || []) as any[];
     },
+    refetchInterval: 10000,
   });
 };
 

@@ -9,6 +9,7 @@ export const useHREmployees = () => {
       const res = await api.get('/hr/employees');
       return (res.data?.data || res.data || []) as any[];
     },
+    refetchInterval: 10000,
   });
 };
 
@@ -19,6 +20,7 @@ export const useHRUsers = () => {
       const res = await api.get('/users');
       return (res.data?.data || res.data || []) as any[];
     },
+    refetchInterval: 10000,
   });
 };
 
@@ -29,6 +31,7 @@ export const useHRAttendance = (month: string) => {
       const res = await api.get(`/hr/attendance?month=${month}`);
       return (res.data?.data || res.data || []) as any[];
     },
+    refetchInterval: 10000,
     enabled: !!month
   });
 };
@@ -40,6 +43,7 @@ export const useHRPayroll = (month: string) => {
       const res = await api.get(`/hr/payroll/generate?month=${month}`);
       return (res.data?.data || res.data || []) as any[];
     },
+    refetchInterval: 10000,
     enabled: !!month
   });
 };
@@ -106,7 +110,8 @@ export const useHRDepartments = () => {
     queryFn: async () => {
       const res = await api.get('/hr/departments');
       return (res.data?.data || []) as any[];
-    }
+    },
+    refetchInterval: 10000
   });
 };
 
@@ -116,7 +121,8 @@ export const useHRDesignations = () => {
     queryFn: async () => {
       const res = await api.get('/hr/designations');
       return (res.data?.data || []) as any[];
-    }
+    },
+    refetchInterval: 10000
   });
 };
 
@@ -164,6 +170,7 @@ export const useEmployeeLedger = (labourId: number | string) => {
       const res = await api.get('/hr/ledger/' + labourId);
       return res.data?.data;
     },
+    refetchInterval: 10000,
     enabled: !!labourId
   });
 };
@@ -213,7 +220,8 @@ export const useLeaveTypes = () => {
     queryFn: async () => {
       const res = await api.get('/hr/leave-types');
       return res.data.data;
-    }
+    },
+    refetchInterval: 10000
   });
 };
 
@@ -223,7 +231,8 @@ export const useLeaveBalances = () => {
     queryFn: async () => {
       const res = await api.get('/hr/leave-balances');
       return res.data.data;
-    }
+    },
+    refetchInterval: 10000
   });
 };
 
@@ -233,7 +242,8 @@ export const useLeaveRecords = () => {
     queryFn: async () => {
       const res = await api.get('/hr/leave-records');
       return res.data.data;
-    }
+    },
+    refetchInterval: 10000
   });
 };
 
@@ -269,6 +279,26 @@ export const useLeaveMutations = () => {
     onError: () => toast({ title: 'Error', description: 'Failed to record leave', variant: 'destructive' })
   });
 
+  const updateLeaveRecord = useMutation({
+    mutationFn: async ({ id, ...data }: any) => await api.put(`/hr/leave-records/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveRecords'] });
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveBalances'] });
+      toast({ title: 'Success', description: 'Leave record updated' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to update leave record', variant: 'destructive' })
+  });
+
+  const deleteLeaveRecord = useMutation({
+    mutationFn: async (id: string | number) => await api.delete(`/hr/leave-records/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveRecords'] });
+      queryClient.invalidateQueries({ queryKey: ['hr', 'leaveBalances'] });
+      toast({ title: 'Success', description: 'Leave record deleted' });
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to delete leave record', variant: 'destructive' })
+  });
+
   const autoFetchLeaves = useMutation({
     mutationFn: async () => await api.post('/hr/leaves/auto-fetch'),
     onSuccess: (res: any) => {
@@ -278,7 +308,7 @@ export const useLeaveMutations = () => {
     onError: () => toast({ title: 'Error', description: 'Failed to auto fetch leaves', variant: 'destructive' })
   });
 
-  return { createLeaveType, updateLeaveBalance, recordLeave, autoFetchLeaves };
+  return { createLeaveType, updateLeaveBalance, recordLeave, updateLeaveRecord, deleteLeaveRecord, autoFetchLeaves };
 };
 
 export const useLeavePolicies = () => {
@@ -287,7 +317,8 @@ export const useLeavePolicies = () => {
     queryFn: async () => {
       const res = await api.get('/hr/leave-policies');
       return res.data?.data || [];
-    }
+    },
+    refetchInterval: 10000
   });
 };
 

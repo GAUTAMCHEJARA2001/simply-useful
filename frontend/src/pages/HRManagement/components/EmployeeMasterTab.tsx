@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Edit2, Trash2, Check, ChevronsUpDown, Upload } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, ChevronsUpDown, Upload, Search, Filter } from 'lucide-react';
 import { useHREmployees, useHREmployeeMutations, useHRDepartments, useHRDesignations, useHRUsers } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
 import { DataTable } from '@/components/DataTable';
@@ -54,6 +54,8 @@ export const EmployeeMasterTab: React.FC = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('ALL');
 
   const handleEdit = (emp: any) => {
     setFormData(emp);
@@ -337,7 +339,15 @@ export const EmployeeMasterTab: React.FC = () => {
 
   const columns = ['Name', 'Department', 'Post', 'Type', 'Base Pay', 'OT Multiplier', 'Bike/Car Rate'];
   
-  const rows = employees.map((emp: any) => [
+  const filteredEmployees = employees.filter((emp: any) => {
+    const matchesSearch = emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          emp.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          emp.designation?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filterType === 'ALL' || emp.employee_type === filterType;
+    return matchesSearch && matchesFilter;
+  });
+
+  const rows = filteredEmployees.map((emp: any) => [
     emp.name,
     emp.department || '-',
     emp.designation || '-',
@@ -353,13 +363,40 @@ export const EmployeeMasterTab: React.FC = () => {
         <h2 className="text-xl font-bold">Employee Master</h2>
         <Button onClick={handleAddNew} className="gap-2"><Plus className="w-4 h-4" /> Add Employee</Button>
       </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search by name, department, or post..."
+            className="pl-9 w-full border rounded-lg px-3 py-2 text-sm bg-card"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-muted-foreground" />
+          <select 
+            className="border rounded-lg px-3 py-2 text-sm bg-card min-w-[150px]"
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+          >
+            <option value="ALL">All Types</option>
+            <option value="FIXED">Fixed (Monthly)</option>
+            <option value="VARIABLE">Variable (Daily)</option>
+            <option value="NONE">Org Only (No Salary)</option>
+          </select>
+        </div>
+      </div>
+
       <SafeDataView isLoading={isLoading} error={error} data={employees} onRetry={refetch}>
         <DataTable 
           columns={columns} 
           rows={rows} 
-          onEdit={(idx) => handleEdit(employees[idx])}
+          onEdit={(idx) => handleEdit(filteredEmployees[idx])}
           onDelete={(idx) => {
-            if(confirm('Deactivate employee?')) deleteEmployee(employees[idx].id);
+            if(confirm('Deactivate employee?')) deleteEmployee(filteredEmployees[idx].id);
           }}
         />
       </SafeDataView>

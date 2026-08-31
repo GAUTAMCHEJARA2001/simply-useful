@@ -173,7 +173,7 @@ const LeaveBalances = () => {
         </Button>
       </div>
 
-      <div className="overflow-x-auto mt-6">
+      <div className="overflow-auto mt-6 max-h-[calc(100vh-250px)] border rounded-xl">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-100 text-gray-700 text-xs uppercase tracking-wider">
@@ -211,7 +211,7 @@ const LeaveRecords = () => {
   const { data: employees = [] } = useHREmployees();
   const { data: leaveTypes = [] } = useLeaveTypes();
   const { data: records = [], isLoading } = useLeaveRecords();
-  const { recordLeave, autoFetchLeaves } = useLeaveMutations();
+  const { recordLeave, autoFetchLeaves, updateLeaveRecord, deleteLeaveRecord } = useLeaveMutations();
 
   const [empId, setEmpId] = useState<number | ''>('');
   const [typeId, setTypeId] = useState<number | ''>('');
@@ -311,8 +311,8 @@ const LeaveRecords = () => {
         </div>
       </div>
 
-      <div className="overflow-x-auto mt-6">
-        <div className="flex justify-between items-center mb-3">
+      <div className="mt-6 border rounded-xl overflow-hidden flex flex-col max-h-[calc(100vh-250px)]">
+        <div className="flex justify-between items-center p-3 bg-white border-b sticky top-0 z-10 shrink-0">
           <h4 className="text-sm font-semibold text-gray-700">Recent Leave Records</h4>
           <Button 
             variant="outline" 
@@ -332,7 +332,8 @@ const LeaveRecords = () => {
               <th className="p-3 font-semibold">Employee</th>
               <th className="p-3 font-semibold">Leave Type</th>
               <th className="p-3 font-semibold">Duration</th>
-              <th className="p-3 font-semibold rounded-tr-lg">Pay Status</th>
+              <th className="p-3 font-semibold">Pay Status</th>
+              <th className="p-3 font-semibold text-right rounded-tr-lg">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -349,9 +350,33 @@ const LeaveRecords = () => {
                     <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">Unpaid Leave</span>
                   )}
                 </td>
+                <td className="p-3 text-right">
+                  <div className="flex justify-end gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 px-2 text-xs"
+                      onClick={() => updateLeaveRecord.mutate({ id: r.id, is_paid: !r.is_paid })}
+                    >
+                      {r.is_paid ? 'Mark Unpaid' : 'Mark Paid'}
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => {
+                        if (confirm('Are you sure you want to delete this leave record?')) {
+                          deleteLeaveRecord.mutate(r.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </td>
               </tr>
             )) : (
-              <tr><td colSpan={5} className="p-4 text-center text-sm text-gray-500">No leave records found.</td></tr>
+              <tr><td colSpan={6} className="p-4 text-center text-sm text-gray-500">No leave records found.</td></tr>
             )}
           </tbody>
         </table>
