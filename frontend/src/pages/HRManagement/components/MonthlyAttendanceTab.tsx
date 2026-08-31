@@ -27,6 +27,25 @@ export const MonthlyAttendanceTab = () => {
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentRemark, setPaymentRemark] = useState('');
 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('ALL');
+
+  const filteredData = React.useMemo(() => {
+    return payrollList.filter((emp: any) => {
+      const matchesSearch = emp.labour_name.toLowerCase().includes(searchTerm.toLowerCase());
+      if (!matchesSearch) return false;
+      
+      if (filterType === 'ALL') return true;
+      if (filterType === 'FIXED' && emp.employee_type !== 'FIXED') return false;
+      if (filterType === 'VARIABLE' && emp.employee_type !== 'VARIABLE') return false;
+      if (filterType === 'PENDING' && emp.is_finalized) return false;
+      if (filterType === 'FINALIZED' && (!emp.is_finalized || emp.is_paid)) return false;
+      if (filterType === 'PAID' && !emp.is_paid) return false;
+      
+      return true;
+    });
+  }, [payrollList, searchTerm, filterType]);
+
   const handleOpenFinalize = (emp: any) => {
     setSelectedEmp(emp);
     setAdvanceOverride(emp.deductions?.advance?.toString() || '0');
@@ -83,22 +102,48 @@ export const MonthlyAttendanceTab = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-card p-4 rounded-xl border border-border shadow-sm">
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-semibold">Select Month:</label>
-          <input
-            type="month"
-            value={month}
-            onChange={e => setMonth(e.target.value)}
-            className="border-input border rounded-md px-3 py-1.5 text-sm"
-          />
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-card border rounded-xl shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-muted-foreground whitespace-nowrap">Select Month:</label>
+              <input
+                type="month"
+                value={month}
+                onChange={e => setMonth(e.target.value)}
+                className="border-input border rounded-md px-3 py-1.5 text-sm"
+              />
+            </div>
+            
+            <div className="h-6 w-px bg-border hidden sm:block"></div>
+            
+            <div className="flex items-center gap-2">
+              <input 
+                type="text" 
+                placeholder="Search Employee..." 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="border-input border rounded-md px-3 py-1.5 text-sm w-48"
+              />
+              <select 
+                value={filterType} 
+                onChange={e => setFilterType(e.target.value)}
+                className="border-input border rounded-md px-3 py-1.5 text-sm bg-background"
+              >
+                <option value="ALL">All Types</option>
+                <option value="FIXED">Fixed</option>
+                <option value="VARIABLE">Variable</option>
+                <option value="PENDING">Pending Finalization</option>
+                <option value="FINALIZED">Finalized (Unpaid)</option>
+                <option value="PAID">Paid</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Refresh
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            Refresh
-          </Button>
-        </div>
-      </div>
 
       <SafeDataView data={payrollList} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <Card>
@@ -141,10 +186,10 @@ export const MonthlyAttendanceTab = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {payrollList.length === 0 ? (
+                {filteredData.length === 0 ? (
                   <tr><td colSpan={27} className="px-4 py-8 text-center text-muted-foreground">No employees found</td></tr>
                 ) : (
-                  payrollList.map((emp: any) => (
+                  filteredData.map((emp: any) => (
                     <tr key={emp.labour_id} className="hover:bg-accent/10 transition-colors">
                       <td className="px-4 py-3 font-medium">
                         <div className="flex flex-col">
