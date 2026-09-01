@@ -104,10 +104,10 @@ export const AdvancedAttendanceTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-4 rounded-xl border border-border">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-card p-3 sm:p-4 rounded-xl border border-border">
         <div>
-          <h2 className="text-xl font-bold">Monthly Attendance Grid</h2>
-          <p className="text-sm text-muted-foreground mt-1">Mark attendance and daily advances across the entire month.</p>
+          <h2 className="text-base sm:text-lg font-bold leading-tight">Monthly Attendance Grid</h2>
+          <p className="text-xs text-muted-foreground mt-0.5 hidden sm:block">Mark attendance and daily advances across the entire month.</p>
         </div>
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full md:w-auto items-stretch sm:items-center">
           <select

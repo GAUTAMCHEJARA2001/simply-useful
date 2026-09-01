@@ -38,9 +38,13 @@ const HRManagement: React.FC = () => {
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
       {/* Top Bar for HR */}
       <div className="w-full flex-none border-b border-border bg-card">
-        <div className="p-4 sm:px-6 sm:pt-6 sm:pb-4">
-          <h2 className="text-2xl font-bold text-foreground">HR & Payroll</h2>
-          <p className="text-sm text-muted-foreground mt-1 mb-4">Manage staff, attendance, and Indian norms payroll</p>
+        <div className="p-3 sm:px-4 sm:pt-4 sm:pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 sm:mb-3 gap-2">
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-foreground leading-tight">HR & Payroll</h2>
+              <p className="text-xs text-muted-foreground">Manage staff, attendance, and Indian norms payroll</p>
+            </div>
+          </div>
           
           <div className="flex overflow-x-auto p-1 bg-muted/50 rounded-lg shrink-0 gap-1 snap-x scrollbar-hide">
             {navItems.map(n => (
