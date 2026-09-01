@@ -9,9 +9,17 @@ const EMPTY_ARRAY: any[] = [];
 
 export const AdvancedAttendanceTab: React.FC = () => {
   const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const currentDayStr = new Date().toISOString().slice(0, 10);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
+  const [selectedMobileDate, setSelectedMobileDate] = useState<string>(currentDayStr);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL');
+  
+  useEffect(() => {
+    if (!selectedMobileDate.startsWith(selectedMonth)) {
+      setSelectedMobileDate(`${selectedMonth}-01`);
+    }
+  }, [selectedMonth]);
   
   const { data: employees = EMPTY_ARRAY, isLoading: empLoading } = useHREmployees();
   const { data: attendance = EMPTY_ARRAY, isLoading: attLoading, refetch } = useHRAttendance(selectedMonth);
@@ -138,6 +146,20 @@ export const AdvancedAttendanceTab: React.FC = () => {
         </div>
       </div>
 
+      {/* Mobile Date Selector */}
+      <div className="sm:hidden flex overflow-x-auto gap-2 pb-2 snap-x scrollbar-hide">
+        {daysArray.map((dateStr, i) => (
+          <button
+            key={dateStr}
+            onClick={() => setSelectedMobileDate(dateStr)}
+            className={`flex-none snap-center px-4 py-2 rounded-xl text-sm font-bold border transition-colors
+              ${selectedMobileDate === dateStr ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border'}`}
+          >
+            {i + 1}
+          </button>
+        ))}
+      </div>
+
       <SafeDataView isLoading={isLoading} error={null} data={employees} onRetry={refetch}>
         <div className="bg-card rounded-xl border border-border overflow-auto max-h-[calc(100vh-250px)]">
           <table className="w-full text-sm text-left border-collapse">
@@ -145,7 +167,7 @@ export const AdvancedAttendanceTab: React.FC = () => {
               <tr>
                 <th className="p-3 font-medium sticky left-0 bg-muted/95 backdrop-blur z-10 border-r border-border min-w-[200px]">Employee</th>
                 {daysArray.map((dateStr, i) => (
-                  <th key={dateStr} className="p-2 text-center font-bold border-b border-r border-border text-xs min-w-[80px]">
+                  <th key={dateStr} className={`p-2 text-center font-bold border-b border-r border-border text-xs min-w-[80px] ${selectedMobileDate !== dateStr ? 'hidden sm:table-cell' : ''}`}>
                     {i + 1}
                   </th>
                 ))}
@@ -165,7 +187,7 @@ export const AdvancedAttendanceTab: React.FC = () => {
                     const status = cell.status || 'PRESENT'; // default if empty conceptually
                     
                     return (
-                      <td key={dateStr} className="p-1 border-r border-border align-top relative group">
+                      <td key={dateStr} className={`p-1 border-r border-border align-top relative group ${selectedMobileDate !== dateStr ? 'hidden sm:table-cell' : ''}`}>
                         <div className="flex flex-col gap-1 h-full">
                           <select 
                             value={cell.status || ''} 
