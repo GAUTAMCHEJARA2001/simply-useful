@@ -35,21 +35,22 @@ const HRManagement: React.FC = () => {
   ];
 
   return (
-    <div className="flex-1 flex flex-col sm:flex-row h-full overflow-hidden bg-background">
-      {/* Sidebar for HR */}
-      <div className="w-full sm:w-64 flex-none border-b sm:border-b-0 sm:border-r border-border bg-card overflow-y-auto">
-        <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-bold text-foreground">HR & Payroll</h2>
-          <p className="text-xs text-muted-foreground mt-1">Manage staff, attendance, and Indian norms payroll</p>
-        </div>
-        <div className="p-3 space-y-1">
-          {navItems.map(n => (
-            <button key={n.id} onClick={() => setTab(n.id as HRTab)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${tab === n.id ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground hover:text-foreground'}`}>
-              <n.icon className="w-4 h-4 shrink-0" />
-              {n.label}
-            </button>
-          ))}
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
+      {/* Top Bar for HR */}
+      <div className="w-full flex-none border-b border-border bg-card">
+        <div className="p-4 sm:px-6 sm:pt-6 sm:pb-4">
+          <h2 className="text-2xl font-bold text-foreground">HR & Payroll</h2>
+          <p className="text-sm text-muted-foreground mt-1 mb-4">Manage staff, attendance, and Indian norms payroll</p>
+          
+          <div className="flex overflow-x-auto p-1 bg-muted/50 rounded-lg shrink-0 gap-1 snap-x scrollbar-hide">
+            {navItems.map(n => (
+              <button key={n.id} onClick={() => setTab(n.id as HRTab)}
+                className={`flex-none snap-start flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all ${tab === n.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-background/50'}`}>
+                <n.icon className="w-4 h-4" />
+                {n.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
