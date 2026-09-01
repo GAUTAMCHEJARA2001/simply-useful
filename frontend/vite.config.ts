@@ -23,6 +23,7 @@ export default defineConfig(({ mode }) => ({
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       workbox: {
         importScripts: ['notification-sw.js'],
+        maximumFileSizeToCacheInBytes: 5000000,
       },
       manifest: {
         name: 'Kamla OTS',
