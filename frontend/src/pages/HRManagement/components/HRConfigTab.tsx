@@ -18,6 +18,24 @@ export const HRConfigTab = () => {
   const [newDept, setNewDept] = useState('');
   const [newDesig, setNewDesig] = useState('');
   const [newDesigDeptId, setNewDesigDeptId] = useState<number | ''>('');
+  
+  const [searchDept, setSearchDept] = useState('');
+  const [searchDesig, setSearchDesig] = useState('');
+
+  const filteredDepts = React.useMemo(() => {
+    if (!depts) return [];
+    if (!searchDept) return depts;
+    return depts.filter((d: any) => d.name.toLowerCase().includes(searchDept.toLowerCase()));
+  }, [depts, searchDept]);
+
+  const filteredDesigs = React.useMemo(() => {
+    if (!desigs) return [];
+    if (!searchDesig) return desigs;
+    return desigs.filter((d: any) => 
+      d.name.toLowerCase().includes(searchDesig.toLowerCase()) || 
+      (d.department_name && d.department_name.toLowerCase().includes(searchDesig.toLowerCase()))
+    );
+  }, [desigs, searchDesig]);
 
   const { data: settingsData } = useSettings();
   const queryClient = useQueryClient();
@@ -79,7 +97,15 @@ export const HRConfigTab = () => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4">Departments</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold">Departments</h3>
+            <Input 
+              placeholder="Search..." 
+              value={searchDept}
+              onChange={e => setSearchDept(e.target.value)}
+              className="w-1/2 max-w-[150px] h-8 text-sm"
+            />
+          </div>
           <div className="flex gap-2 mb-6">
             <Input 
               placeholder="e.g. Sales, Production..." 
@@ -90,9 +116,9 @@ export const HRConfigTab = () => {
             <Button onClick={handleAddDept} disabled={loadingDepts}><Plus className="w-4 h-4" /></Button>
           </div>
           
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[300px] overflow-y-auto">
             {loadingDepts && <p className="text-sm text-muted-foreground text-center py-4">Loading departments...</p>}
-            {!loadingDepts && depts?.map((d: any) => (
+            {!loadingDepts && filteredDepts.map((d: any) => (
               <div key={d.id} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg border border-border">
                 <span className="font-medium text-sm">{d.name}</span>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" 
@@ -108,10 +134,18 @@ export const HRConfigTab = () => {
         </Card>
 
         <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4">Positions (Designations)</h3>
-          <div className="flex gap-2 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold">Positions (Designations)</h3>
+            <Input 
+              placeholder="Search..." 
+              value={searchDesig}
+              onChange={e => setSearchDesig(e.target.value)}
+              className="w-1/2 max-w-[150px] h-8 text-sm"
+            />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 mb-6">
             <select 
-              className="w-1/3 p-2 border border-border rounded-md text-sm bg-background"
+              className="w-full sm:w-1/3 p-2 border border-border rounded-md text-sm bg-background"
               value={newDesigDeptId}
               onChange={(e) => setNewDesigDeptId(e.target.value ? Number(e.target.value) : '')}
             >
@@ -120,19 +154,21 @@ export const HRConfigTab = () => {
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
-            <Input 
-              placeholder="e.g. Manager, Staff..." 
-              value={newDesig} 
-              onChange={e => setNewDesig(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAddDesig()}
-              className="flex-1"
-            />
-            <Button onClick={handleAddDesig} disabled={loadingDesigs}><Plus className="w-4 h-4" /></Button>
+            <div className="flex gap-2 flex-1 w-full">
+              <Input 
+                placeholder="e.g. Manager, Staff..." 
+                value={newDesig} 
+                onChange={e => setNewDesig(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddDesig()}
+                className="flex-1"
+              />
+              <Button onClick={handleAddDesig} disabled={loadingDesigs}><Plus className="w-4 h-4" /></Button>
+            </div>
           </div>
           
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[300px] overflow-y-auto">
             {loadingDesigs && <p className="text-sm text-muted-foreground text-center py-4">Loading positions...</p>}
-            {!loadingDesigs && desigs?.map((d: any) => (
+            {!loadingDesigs && filteredDesigs.map((d: any) => (
               <div key={d.id} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg border border-border">
                 <div className="flex flex-col">
                   <span className="font-medium text-sm">{d.name}</span>

@@ -107,6 +107,17 @@ const LeaveBalances = () => {
   const [selectedEmp, setSelectedEmp] = useState<number | ''>('');
   const [selectedType, setSelectedType] = useState<number | ''>('');
   const [allocated, setAllocated] = useState<number>(0);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<number | ''>('');
+
+  const filteredBalances = React.useMemo(() => {
+    return balances.filter((b: any) => {
+      const matchSearch = b.labour_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchType = filterType === '' || b.leave_type_id === filterType;
+      return matchSearch && matchType;
+    });
+  }, [balances, searchQuery, filterType]);
 
   const handleUpdate = () => {
     if (!selectedEmp || !selectedType) return;
@@ -173,7 +184,30 @@ const LeaveBalances = () => {
         </Button>
       </div>
 
-      <div className="overflow-auto mt-6 max-h-[calc(100vh-250px)] border rounded-xl">
+      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between mt-6">
+        <h4 className="text-sm font-semibold text-gray-700">Current Balances</h4>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <select 
+            className="p-2 border border-gray-300 rounded-lg text-sm bg-white"
+            value={filterType}
+            onChange={e => setFilterType(Number(e.target.value) || '')}
+          >
+            <option value="">All Leave Types</option>
+            {leaveTypes.map((t: any) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <input 
+            type="text"
+            className="w-full sm:w-64 p-2 border border-gray-300 rounded-lg text-sm"
+            placeholder="Search employee..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="overflow-auto max-h-[calc(100vh-250px)] border rounded-xl mt-2">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-100 text-gray-700 text-xs uppercase tracking-wider">
@@ -185,7 +219,7 @@ const LeaveBalances = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {balances.length > 0 ? balances.map((b: any) => (
+            {filteredBalances.length > 0 ? filteredBalances.map((b: any) => (
               <tr key={b.id} className="hover:bg-gray-50 text-sm">
                 <td className="p-3 font-medium text-gray-800">{b.labour_name}</td>
                 <td className="p-3 text-gray-600">
@@ -218,6 +252,17 @@ const LeaveRecords = () => {
   const [date, setDate] = useState('');
   const [isPaid, setIsPaid] = useState(true);
   const [status, setStatus] = useState('FULL_DAY');
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterPaid, setFilterPaid] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
+
+  const filteredRecords = React.useMemo(() => {
+    return records.filter((r: any) => {
+      const matchSearch = r.labour_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchPaid = filterPaid === 'ALL' || (filterPaid === 'PAID' ? r.is_paid : !r.is_paid);
+      return matchSearch && matchPaid;
+    });
+  }, [records, searchQuery, filterPaid]);
 
   const handleSubmit = () => {
     if (!empId || !date) return;
@@ -312,18 +357,36 @@ const LeaveRecords = () => {
       </div>
 
       <div className="mt-6 border rounded-xl overflow-hidden flex flex-col max-h-[calc(100vh-250px)]">
-        <div className="flex justify-between items-center p-3 bg-white border-b sticky top-0 z-10 shrink-0">
+        <div className="flex flex-col sm:flex-row justify-between items-center p-3 bg-white border-b sticky top-0 z-10 shrink-0 gap-3">
           <h4 className="text-sm font-semibold text-gray-700">Recent Leave Records</h4>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => autoFetchLeaves.mutate()} 
-            disabled={autoFetchLeaves.isPending}
-            className="flex items-center gap-1.5"
-          >
-            {autoFetchLeaves.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarCheck className="w-3.5 h-3.5" />}
-            Auto Fetch Leaves
-          </Button>
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+            <select
+              value={filterPaid}
+              onChange={(e: any) => setFilterPaid(e.target.value)}
+              className="p-2 border border-gray-300 rounded-lg text-sm bg-white"
+            >
+              <option value="ALL">All Status</option>
+              <option value="PAID">Paid Only</option>
+              <option value="UNPAID">Unpaid Only</option>
+            </select>
+            <input 
+              type="text"
+              placeholder="Search employee..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full sm:w-64 p-2 border border-gray-300 rounded-lg text-sm"
+            />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => autoFetchLeaves.mutate()} 
+              disabled={autoFetchLeaves.isPending}
+              className="flex items-center gap-1.5"
+            >
+              {autoFetchLeaves.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarCheck className="w-3.5 h-3.5" />}
+              Auto Fetch Leaves
+            </Button>
+          </div>
         </div>
         <table className="w-full text-left border-collapse">
           <thead>
@@ -337,7 +400,7 @@ const LeaveRecords = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {records.length > 0 ? records.map((r: any) => (
+            {filteredRecords.length > 0 ? filteredRecords.map((r: any) => (
               <tr key={r.id} className="hover:bg-gray-50 text-sm">
                 <td className="p-3 font-medium text-gray-800">{new Date(r.date).toLocaleDateString()}</td>
                 <td className="p-3 text-gray-700">{r.labour_name}</td>

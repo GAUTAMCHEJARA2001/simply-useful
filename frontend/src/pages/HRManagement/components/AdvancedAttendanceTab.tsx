@@ -11,6 +11,7 @@ export const AdvancedAttendanceTab: React.FC = () => {
   const currentMonthStr = new Date().toISOString().slice(0, 7);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('ALL');
   
   const { data: employees = EMPTY_ARRAY, isLoading: empLoading } = useHREmployees();
   const { data: attendance = EMPTY_ARRAY, isLoading: attLoading, refetch } = useHRAttendance(selectedMonth);
@@ -37,6 +38,10 @@ export const AdvancedAttendanceTab: React.FC = () => {
   const filteredEmployees = useMemo(() => {
     let result = employees.filter((emp: any) => emp.employee_type !== 'NONE');
     
+    if (filterType !== 'ALL') {
+      result = result.filter((emp: any) => emp.employee_type === filterType);
+    }
+    
     if (searchQuery) {
       const lowerQ = searchQuery.toLowerCase();
       result = result.filter((emp: any) => 
@@ -45,7 +50,7 @@ export const AdvancedAttendanceTab: React.FC = () => {
       );
     }
     return result;
-  }, [employees, searchQuery]);
+  }, [employees, searchQuery, filterType]);
 
   useEffect(() => {
     if (!employees.length) return;
@@ -99,26 +104,37 @@ export const AdvancedAttendanceTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-card p-4 rounded-xl border border-border">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-4 rounded-xl border border-border">
         <div>
           <h2 className="text-xl font-bold">Monthly Attendance Grid</h2>
           <p className="text-sm text-muted-foreground mt-1">Mark attendance and daily advances across the entire month.</p>
         </div>
-        <div className="flex gap-3 items-center">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full md:w-auto items-stretch sm:items-center">
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm bg-background w-full sm:w-auto"
+          >
+            <option value="ALL">All Types</option>
+            <option value="FIXED">Fixed Salary</option>
+            <option value="VARIABLE">Daily Wage</option>
+          </select>
           <input 
             type="text" 
             placeholder="Search employee..." 
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm bg-background min-w-[200px]"
+            className="border rounded-lg px-3 py-2 text-sm bg-background w-full sm:flex-1 min-w-[150px]"
           />
           <input 
             type="month" 
             value={selectedMonth} 
             onChange={e => setSelectedMonth(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm bg-background font-semibold"
+            className="border rounded-lg px-3 py-2 text-sm bg-background font-semibold w-full sm:w-auto"
           />
-          <Button onClick={handleSave} className="gap-2"><Save className="w-4 h-4" /> Save All</Button>
+          <Button onClick={handleSave} className="gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm w-full sm:w-auto">
+            <Save className="w-4 h-4" /> Save All
+          </Button>
         </div>
       </div>
 

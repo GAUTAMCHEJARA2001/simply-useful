@@ -9,6 +9,14 @@ const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { m
 export const EmployeeLedgerTab: React.FC = () => {
   const { data: employees = [] } = useHREmployees();
   const [selectedEmp, setSelectedEmp] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const filteredEmployees = React.useMemo(() => {
+    if (!searchQuery) return employees;
+    const q = searchQuery.toLowerCase();
+    return employees.filter((e: any) => e.name.toLowerCase().includes(q) || e.employee_id?.toLowerCase().includes(q));
+  }, [employees, searchQuery]);
+
   const { data: ledgerData, isLoading } = useEmployeeLedger(selectedEmp?.id);
   const { recordPayment } = useLedgerMutations();
   
@@ -32,11 +40,21 @@ export const EmployeeLedgerTab: React.FC = () => {
   
   return (
     <div className="space-y-4">
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row gap-4">
         {/* Sidebar Employee List */}
-        <div className="w-1/3 border-r border-border pr-4 space-y-2 max-h-[80vh] overflow-y-auto">
-          <h2 className="font-bold mb-4">Select Employee</h2>
-          {employees.map((emp: any) => (
+        <div className="w-full sm:w-1/3 sm:border-r border-border sm:pr-4 space-y-4 max-h-[80vh] overflow-y-auto">
+          <div className="sticky top-0 bg-background z-10 pb-2">
+            <h2 className="font-bold mb-2">Select Employee</h2>
+            <input
+              type="text"
+              placeholder="Search employee..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full p-2 border border-border rounded-lg text-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            {filteredEmployees.map((emp: any) => (
             <div 
               key={emp.id} 
               className={`p-3 rounded-lg cursor-pointer border ${selectedEmp?.id === emp.id ? 'bg-primary/10 border-primary' : 'bg-card border-border hover:bg-accent'}`}
@@ -45,11 +63,13 @@ export const EmployeeLedgerTab: React.FC = () => {
               <div className="font-medium">{emp.name}</div>
               <div className="text-xs text-muted-foreground">{emp.employee_type} | {emp.designation || 'No Role'}</div>
             </div>
-          ))}
+            ))}
+            {filteredEmployees.length === 0 && <div className="text-sm text-muted-foreground p-2">No employees found.</div>}
+          </div>
         </div>
         
         {/* Ledger View */}
-        <div className="w-2/3 pl-4">
+        <div className="w-full sm:w-2/3 sm:pl-4">
           {!selectedEmp ? (
             <div className="text-center text-muted-foreground py-12">Select an employee to view ledger</div>
           ) : (
