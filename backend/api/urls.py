@@ -66,7 +66,7 @@ router.register('estimates', EstimateViewSet, basename='estimates')
 
 from api.views_hr import (
     hr_employees, hr_employees_detail,
-    hr_attendance, hr_generate_payroll, hr_finalize_payroll, hr_mark_slip_paid, hr_employee_ledger, hr_employee_change_status,
+    hr_attendance, hr_generate_payroll, hr_finalize_payroll, hr_mark_slip_paid, hr_employee_ledger, hr_ledger_payment, hr_employee_change_status,
     hr_departments, hr_departments_detail,
     hr_designations, hr_designations_detail,
     hr_leave_types, hr_leave_types_detail,
