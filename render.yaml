@@ -1,8 +1,3 @@
-databases:
-  - name: simply-useful-db
-    plan: free
-    databaseName: simply_useful_db_uiha
-    databaseUser: simply_useful_db_uiha_user
 
 services:
   - type: web
@@ -20,4 +15,4 @@ services:
       - key: JWT_SECRET
         value: "simply-useful-secret-key-123-super-secure-key-2026"
       - key: DATABASE_URL
-        value: "postgresql://simply_useful_db_uiha_user:H5ZpuQs68VZwT1gLPaAsUoSt2XmNwH5B@dpg-d96ascm7r5hc7383u77g-a.singapore-postgres.render.com/simply_useful_db_uiha"
+        value: "postgresql://postgres:G%40ut%40m1306200@db.hjdvvajrjrpbgkglctbg.supabase.co:5432/postgres"
