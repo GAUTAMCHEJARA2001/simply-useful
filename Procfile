@@ -1,1 +1,1 @@
-web: cd backend && python manage.py migrate && python seed_kamla.py && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --preload
+web: cd backend && python manage.py collectstatic --noinput && python manage.py migrate && python seed_kamla.py && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --preload
