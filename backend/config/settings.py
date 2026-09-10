@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +21,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-$i4*@rc4@*ovcrer&7)*c^@!5qt0xm+c_e%0z1bcc0s_$=8cr8'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-$i4*@rc4@*ovcrer&7)*c^@!5qt0xm+c_e%0z1bcc0s_$=8cr8')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 't')
 
-ALLOWED_HOSTS = ['*']
+allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '*')
+if allowed_hosts_env == '*':
+    ALLOWED_HOSTS = ['*']
+else:
+    ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(',') if h.strip()]
 
 
 # Application definition
@@ -81,26 +86,37 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-import os
-from pathlib import Path
-
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote, parse_qs
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if DATABASE_URL:
-    from urllib.parse import urlparse, unquote
     url = urlparse(DATABASE_URL)
+    # Database name from path (strip leading slash and query parameters if any)
+    db_name = url.path.lstrip('/')
+    if '?' in db_name:
+        db_name = db_name.split('?')[0]
+
+    db_config = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': db_name or 'postgres',
+        'USER': url.username,
+        'PASSWORD': unquote(url.password) if url.password else None,
+        'HOST': url.hostname,
+        'PORT': url.port or 5432,
+        'CONN_MAX_AGE': 600,
+    }
+
+    # Pass SSL mode or other parameters if present
+    query_params = parse_qs(url.query)
+    options = {}
+    if 'sslmode' in query_params:
+        options['sslmode'] = query_params['sslmode'][0]
+    if options:
+        db_config['OPTIONS'] = options
+
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': url.path[1:],
-            'USER': url.username,
-            'PASSWORD': unquote(url.password) if url.password else None,
-            'HOST': url.hostname,
-            'PORT': url.port or 5432,
-            'CONN_MAX_AGE': 600,
-        }
+        'default': db_config
     }
 else:
     # Local PostgreSQL Implementation
@@ -194,7 +210,7 @@ REST_FRAMEWORK = {
     'URL_FORMAT_OVERRIDE': None,
 }
 
-JWT_SECRET = 'simply-useful-secret-key-123-super-secure-key-2026'
+JWT_SECRET = os.environ.get('JWT_SECRET', 'simply-useful-secret-key-123-super-secure-key-2026')
 
 # Cloudinary Configuration
 import cloudinary

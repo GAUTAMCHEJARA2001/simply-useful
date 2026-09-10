@@ -6,7 +6,8 @@
     "backend:dev": "cd backend && venv\\Scripts\\python manage.py runserver 4000",
     "dev": "npx concurrently \"npm run frontend:dev\" \"npm run backend:dev\"",
     "install:all": "npm install && cd frontend && npm install && cd .. && cd backend && venv\\Scripts\\pip install -r requirements.txt",
-    "build": "cd frontend && npm run build"
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && python manage.py migrate && python seed_kamla.py && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --preload"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
