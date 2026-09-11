@@ -205,6 +205,8 @@ if csrf_trusted_env:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in csrf_trusted_env.split(',') if o.strip()]
 else:
     CSRF_TRUSTED_ORIGINS = [
+        'https://erp.kamlaconchem.com',
+        'https://api.kamlaconchem.com',
         'https://erp.etac.in',
         'https://api.etac.in',
         'https://*.up.railway.app',
