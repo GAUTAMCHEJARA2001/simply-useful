@@ -1466,6 +1466,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         wh_header = self.request.headers.get('X-Warehouse-Id') or self.request.headers.get('X-Warehouse-ID') or self.request.headers.get('x-warehouse-id')
         if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
             qs = qs.filter(warehouseid_id=wh_header)
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
+        if user_role in SALES_ROLES and self.request.user.email:
+            qs = qs.filter(soemail=self.request.user.email)
         return qs
 
     def get_object(self):
@@ -1476,6 +1479,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         qs = Order.objects.all()
         if company_id and user_role != 'SUPERADMIN':
             qs = qs.filter(companyid_id=company_id)
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
+        if user_role in SALES_ROLES and self.request.user.email:
+            qs = qs.filter(soemail=self.request.user.email)
         try:
             return qs.get(id=pk)
         except Order.DoesNotExist:
@@ -1494,6 +1500,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
         if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
             qs = qs.filter(warehouseid_id=wh_header)
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
+        if user_role in SALES_ROLES and request.user.email:
+            qs = qs.filter(soemail=request.user.email)
         qs = _fy_date_filter(request, qs, date_field='date')
         serialized_data = OrderSerializer(qs.prefetch_related('orderitem_set'), many=True, context={'skip_stock': True}).data
         all_orders = list(serialized_data)

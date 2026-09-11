@@ -159,10 +159,20 @@ const MyOrders: React.FC = () => {
     Cancelled: 'bg-destructive/15 text-destructive',
   };
 
+  const isSalesOnly = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER'].includes(user?.role?.toUpperCase() || '');
+
   // Filtered dataset
+  const baseOrders = useMemo(() => {
+    if (isSalesOnly && user?.email) {
+      const userEmail = user.email.toLowerCase();
+      return (orders || []).filter(o => (o.soEmail || (o as any).so_email || '').toLowerCase() === userEmail);
+    }
+    return orders || [];
+  }, [orders, isSalesOnly, user?.email]);
+
   const fyFilteredOrders = showAllTime
-    ? (orders || [])
-    : filterBySelectedFY(orders || [], o => o.date || (o as any).createdAt);
+    ? baseOrders
+    : filterBySelectedFY(baseOrders, o => o.date || (o as any).createdAt);
   const totalPlacedCount = fyFilteredOrders.length;
   const filteredOrders = fyFilteredOrders.filter(order => {
     let matchesStatus = true;
