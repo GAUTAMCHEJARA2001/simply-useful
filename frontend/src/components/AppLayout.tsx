@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, ShoppingCart, Users, MapPin, Receipt,
   Package, BarChart3, Settings, LogOut, Menu, X, Building2,
-  ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store, BookOpen, Activity, FileText
+  ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store, BookOpen, Activity, FileText,
+  PanelLeftClose, PanelLeft, Maximize2, Minimize2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -54,9 +55,47 @@ const navItems: NavItem[] = [
 
 const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [hideTopBar, setHideTopBar] = useState(false);
   const { user, logout } = useAuth();
   const { can } = usePermissions();
   const navigate = useNavigate();
+
+  // Persist sidebar collapsed state
+  const toggleDesktopSidebar = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Keyboard shortcut Ctrl+B or Cmd+B to toggle sidebar, Esc to exit Zen Mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        if (window.innerWidth >= 1024) {
+          toggleDesktopSidebar();
+        } else {
+          setSidebarOpen(prev => !prev);
+        }
+      }
+      if (e.key === 'Escape' && hideTopBar) {
+        setHideTopBar(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hideTopBar]);
 
   if (!user) return null;
 
@@ -100,8 +139,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static top-0 left-0 z-50 h-full w-64 bg-sidebar flex flex-col transition-transform duration-300 lg:translate-x-0 shrink-0 print:hidden",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed lg:static top-0 left-0 z-50 h-full bg-sidebar flex flex-col transition-all duration-300 shrink-0 print:hidden border-r border-sidebar-border",
+          sidebarCollapsed ? "lg:w-0 lg:overflow-hidden lg:border-r-0" : "w-64",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Sidebar header */}
@@ -113,8 +153,17 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <h2 className="text-sm font-bold text-sidebar-foreground truncate">Kamla OTS</h2>
             <p className="text-[10px] text-sidebar-muted truncate">{user.role}</p>
           </div>
-          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-sidebar-foreground">
+          {/* Mobile close button */}
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-sidebar-foreground p-1 hover:bg-sidebar-accent rounded">
             <X className="w-5 h-5" />
+          </button>
+          {/* Desktop collapse button */}
+          <button
+            onClick={toggleDesktopSidebar}
+            title="Collapse sidebar (Ctrl+B)"
+            className="hidden lg:flex text-sidebar-muted hover:text-sidebar-foreground p-1 hover:bg-sidebar-accent rounded transition-colors"
+          >
+            <PanelLeftClose className="w-5 h-5" />
           </button>
         </div>
 
@@ -169,23 +218,67 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 print:block">
         {/* Top bar */}
-        <header className="flex-none h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 overflow-visible w-full z-30 print:hidden">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden mr-1.5 sm:mr-3 p-1 sm:p-1.5 rounded-lg hover:bg-muted transition-colors"
-          >
-            <Menu className="w-5 h-5 text-foreground" />
-          </button>
-          <div className="flex-1" />
-          <div className="flex items-center justify-end gap-1.5 sm:gap-3 min-w-0">
-            <WarehouseSwitcher />
-            <FYSelector />
-            <NotificationDropdown />
-            <span className="text-xs text-muted-foreground hidden sm:block">
-              {user.name} &middot; {user.role}
-            </span>
+        {!hideTopBar ? (
+          <header className="flex-none h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 overflow-visible w-full z-30 print:hidden transition-all duration-300">
+            {/* Toggle button: works on both mobile and desktop */}
+            <button
+              onClick={() => {
+                if (window.innerWidth >= 1024) {
+                  toggleDesktopSidebar();
+                } else {
+                  setSidebarOpen(true);
+                }
+              }}
+              title="Toggle navigation sidebar (Ctrl+B)"
+              className="mr-1.5 sm:mr-3 p-1.5 rounded-lg hover:bg-muted text-foreground transition-colors"
+            >
+              {sidebarCollapsed ? (
+                <PanelLeft className="w-5 h-5 text-primary" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
+            </button>
+            <div className="flex-1" />
+            <div className="flex items-center justify-end gap-1.5 sm:gap-3 min-w-0">
+              <WarehouseSwitcher />
+              <FYSelector />
+              <NotificationDropdown />
+              {/* Hide top bar button (Focus mode) */}
+              <button
+                onClick={() => setHideTopBar(true)}
+                title="Hide top bar (Focus mode)"
+                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+              <span className="text-xs text-muted-foreground hidden sm:block">
+                {user.name} &middot; {user.role}
+              </span>
+            </div>
+          </header>
+        ) : (
+          /* Floating restore pill when top bar is hidden */
+          <div className="fixed top-3 right-4 z-50 print:hidden flex items-center gap-2 animate-in fade-in duration-200">
+            {/* If sidebar is also collapsed, provide quick sidebar toggle too */}
+            {sidebarCollapsed && (
+              <button
+                onClick={toggleDesktopSidebar}
+                className="p-1.5 text-xs font-medium bg-card/90 hover:bg-card border border-border shadow-md rounded-full text-foreground backdrop-blur transition-all hover:scale-105"
+                title="Toggle Sidebar (Ctrl+B)"
+              >
+                <PanelLeft className="w-4 h-4 text-primary" />
+              </button>
+            )}
+            <button
+              onClick={() => setHideTopBar(false)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-card/90 hover:bg-card border border-border shadow-md rounded-full text-foreground backdrop-blur transition-all hover:scale-105"
+              title="Restore navigation bar (or press Esc)"
+            >
+              <Minimize2 className="w-3.5 h-3.5 text-primary" />
+              <span>Show Nav</span>
+            </button>
           </div>
-        </header>
+        )}
 
         {/* Page content */}
         <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden overflow-y-auto min-w-0 print:p-0 print:overflow-visible">
