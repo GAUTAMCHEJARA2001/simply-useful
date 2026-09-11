@@ -205,6 +205,7 @@ if csrf_trusted_env:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in csrf_trusted_env.split(',') if o.strip()]
 else:
     CSRF_TRUSTED_ORIGINS = [
+        'https://www.simply-useful.run.place',
         'https://simply-useful.run.place',
         'https://erp.kamlaconchem.com',
         'https://api.kamlaconchem.com',
@@ -214,6 +215,7 @@ else:
         'http://localhost:5173',
         'http://localhost:3000',
     ]
+
 
 
 
