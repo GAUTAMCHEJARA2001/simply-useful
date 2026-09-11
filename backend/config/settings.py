@@ -207,6 +207,7 @@ else:
     CSRF_TRUSTED_ORIGINS = [
         'https://www.simply-useful.run.place',
         'https://simply-useful.run.place',
+        'https://api.simply-useful.run.place',
         'https://erp.kamlaconchem.com',
         'https://api.kamlaconchem.com',
         'https://erp.etac.in',
@@ -215,6 +216,7 @@ else:
         'http://localhost:5173',
         'http://localhost:3000',
     ]
+
 
 
 
