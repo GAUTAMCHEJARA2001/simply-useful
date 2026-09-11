@@ -199,6 +199,20 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-warehouse-id',
 ]
 
+# CSRF Trusted Origins
+csrf_trusted_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+if csrf_trusted_env:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in csrf_trusted_env.split(',') if o.strip()]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        'https://erp.etac.in',
+        'https://api.etac.in',
+        'https://*.up.railway.app',
+        'http://localhost:5173',
+        'http://localhost:3000',
+    ]
+
+
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
