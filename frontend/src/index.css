@@ -97,13 +97,21 @@
     @apply border-border;
   }
 
-  /* ── GLOBAL OVERFLOW FIX ── */
+  /* ── GLOBAL OVERFLOW & MOBILE ZOOM FIX ── */
   html, body, #root {
     width: 100%;
     height: 100%;
     margin: 0;
     padding: 0;
     overflow: hidden;
+    touch-action: pan-x pan-y;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Prevent double-tap to zoom on interactive elements */
+  button, a, input, select, textarea, [role="button"], label {
+    touch-action: manipulation;
   }
 
   body {
