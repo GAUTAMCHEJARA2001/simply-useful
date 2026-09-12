@@ -4140,20 +4140,49 @@ from .models import Estimate, EstimateItem
 from .serializers import EstimateSerializer, EstimateItemSerializer
 
 class EstimateViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Estimate.objects.all().order_by('-createdat')
     serializer_class = EstimateSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        company_id = _get_company_id(self.request)
+        user_role = (getattr(user, 'role', '') or '').upper()
+        qs = Estimate.objects.all().order_by('-createdat')
+
+        # Company-level scoping for non-SUPERADMIN
+        if company_id and user_role != 'SUPERADMIN':
+            qs = qs.filter(companyid_id=company_id)
+
+        # Sales Officer role scoping: only see their own estimates
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
+        if user_role in SALES_ROLES:
+            user_email = getattr(user, 'email', None)
+            if user_email:
+                qs = qs.filter(soemail=user_email)
+            else:
+                qs = qs.none()
+
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        qs = self.get_queryset()
+        serializer = self.get_serializer(qs, many=True)
+        return Response({'success': True, 'data': serializer.data})
 
     def create(self, request, *args, **kwargs):
         try:
             data = request.data
             with transaction.atomic():
-                company_id = data.get('companyId')
+                company_id = data.get('companyId') or _get_company_id(request)
                 if not company_id:
                     company = Company.objects.first()
                 else:
                     company = Company.objects.get(id=company_id)
                 
-                estimate_id = data.get('estimateId', f'EST-{uuid.uuid4().hex[:6].upper()}')
+                estimate_id = data.get('estimateId') or f'EST-{uuid.uuid4().hex[:6].upper()}'
+                user_email = getattr(request.user, 'email', None) if (request.user and request.user.is_authenticated) else None
+                so_email = data.get('soEmail') or user_email
                 
                 est = Estimate.objects.create(
                     id=str(uuid.uuid4()),
@@ -4163,6 +4192,8 @@ class EstimateViewSet(viewsets.ModelViewSet):
                     gst=data.get('gst'),
                     contact=data.get('contact'),
                     email=data.get('email'),
+                    narration=data.get('narration'),
+                    soemail_id=so_email,
                     grandtotal=float(data.get('grandTotal', 0)),
                     companyid=company
                 )
@@ -4187,9 +4218,32 @@ class EstimateViewSet(viewsets.ModelViewSet):
             traceback.print_exc()
             return Response({'success': False, 'message': str(e)}, status=500)
 
-    def update(self, request, *args, **kwargs):
+    def retrieve(self, request, *args, **kwargs):
+        from django.http import Http404
+        from rest_framework.exceptions import NotFound
         try:
             instance = self.get_object()
+        except (Http404, NotFound):
+            return Response({'success': False, 'message': 'Estimate not found'}, status=404)
+        serializer = self.get_serializer(instance)
+        return Response({'success': True, 'data': serializer.data})
+
+    def update(self, request, *args, **kwargs):
+        from django.http import Http404
+        from rest_framework.exceptions import NotFound
+        try:
+            instance = self.get_object()
+        except (Http404, NotFound):
+            return Response({'success': False, 'message': 'Estimate not found'}, status=404)
+        except Exception as e:
+            return Response({'success': False, 'message': str(e)}, status=500)
+
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
+        if user_role in SALES_ROLES and instance.soemail_id != getattr(request.user, 'email', None):
+            return Response({'success': False, 'message': 'You cannot edit estimates created by another Sales Officer'}, status=403)
+
+        try:
             data = request.data
             with transaction.atomic():
                 instance.partyname = data.get('partyName', instance.partyname)
@@ -4197,6 +4251,7 @@ class EstimateViewSet(viewsets.ModelViewSet):
                 instance.gst = data.get('gst', instance.gst)
                 instance.contact = data.get('contact', instance.contact)
                 instance.email = data.get('email', instance.email)
+                instance.narration = data.get('narration', instance.narration)
                 instance.grandtotal = float(data.get('grandTotal', instance.grandtotal))
                 instance.save()
                 
@@ -4217,5 +4272,28 @@ class EstimateViewSet(viewsets.ModelViewSet):
                 
                 serializer = self.get_serializer(instance)
                 return Response({'success': True, 'data': serializer.data})
+        except Exception as e:
+            return Response({'success': False, 'message': str(e)}, status=500)
+
+    def destroy(self, request, *args, **kwargs):
+        from django.http import Http404
+        from rest_framework.exceptions import NotFound
+        try:
+            instance = self.get_object()
+        except (Http404, NotFound):
+            return Response({'success': False, 'message': 'Estimate not found'}, status=404)
+        except Exception as e:
+            return Response({'success': False, 'message': str(e)}, status=500)
+
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
+        if user_role in SALES_ROLES and instance.soemail_id != getattr(request.user, 'email', None):
+            return Response({'success': False, 'message': 'You cannot delete estimates created by another Sales Officer'}, status=403)
+
+        try:
+            with transaction.atomic():
+                EstimateItem.objects.filter(estimateid=instance).delete()
+                instance.delete()
+            return Response({'success': True, 'message': 'Estimate deleted successfully'})
         except Exception as e:
             return Response({'success': False, 'message': str(e)}, status=500)

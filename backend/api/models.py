@@ -948,6 +948,7 @@ class Estimate(models.Model):
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
     companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    soemail = models.ForeignKey('core.User', models.DO_NOTHING, db_column='soEmail', to_field='email', blank=True, null=True, db_constraint=False)
 
     class Meta:
         db_table = 'Estimate'

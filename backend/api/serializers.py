@@ -1300,6 +1300,7 @@ class EstimateSerializer(serializers.ModelSerializer):
     partyName = serializers.CharField(source='partyname', required=False, allow_blank=True, allow_null=True)
     grandTotal = serializers.FloatField(source='grandtotal', required=False, default=0.0)
     companyId = serializers.PrimaryKeyRelatedField(source='companyid', queryset=Company.objects.all(), required=False, allow_null=True)
+    soEmail = serializers.CharField(source='soemail_id', required=False, allow_null=True, allow_blank=True)
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
     items = EstimateItemSerializer(many=True, required=False)
@@ -1308,7 +1309,7 @@ class EstimateSerializer(serializers.ModelSerializer):
         model = Estimate
         fields = [
             'id', 'estimateId', 'date', 'partyName', 'address', 'gst', 'contact', 'email', 'narration', 'grandTotal',
-            'companyId', 'createdAt', 'updatedAt', 'items'
+            'companyId', 'soEmail', 'createdAt', 'updatedAt', 'items'
         ]
         
     def to_representation(self, instance):

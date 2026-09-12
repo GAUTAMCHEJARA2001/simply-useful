@@ -14,12 +14,14 @@ import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { Textarea } from '@/components/ui/textarea';
 import { apiService } from '@/api/apiService';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const EstimateGenerator: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { products } = useData();
+  const { user } = useAuth();
   
   const [partyName, setPartyName] = useState('');
   const [address, setAddress] = useState('');
@@ -154,6 +156,7 @@ const EstimateGenerator: React.FC = () => {
         contact,
         email,
         narration,
+        soEmail: user?.email,
         grandTotal,
         items: items.filter(i => i.product && (i.qty || 0) > 0).map(i => ({
           product: typeof i.product === 'object' ? (i.product as any)?.id : i.product,
