@@ -10,10 +10,7 @@ import { getRoleDashboard } from "@/contexts/AuthContext";
 import React from "react";
 
 import Login from "./features/auth/Login";
-import Signup from "./features/auth/Signup";
 import AppLayout from "./components/AppLayout";
-import { SpeedInsights } from "@vercel/speed-insights/react";
-import { Analytics } from "@vercel/analytics/react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { GlobalTableSorter } from "./components/GlobalTableSorter";
 
@@ -266,8 +263,6 @@ const App = () => {
         </TooltipProvider>
       </QueryClientProvider>
       <GlobalTableSorter />
-      <Analytics />
-      <SpeedInsights />
     </ErrorBoundary>
   );
 };

@@ -2298,6 +2298,7 @@ def _compute_all_product_stocks(company_id=None, request=None, target_wh_ids=Non
             'adjustment': 0.0,
             'currentStock': 0.0,
             'minimumStock': float(p.minimumstock or 0),
+            'minStock': float(p.minimumstock or 0),
         }
     
     try:

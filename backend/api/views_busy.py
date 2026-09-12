@@ -311,7 +311,7 @@ def import_busy_ledger(request):
             if dealer or dist:
                 max_code = BusyParty.objects.aggregate(Max('code'))['code__max'] or 1000
                 new_code = max_code + 1
-                name = dealer.dealerName if dealer else dist.distributorName
+                name = (getattr(dealer, 'dealername', None) or getattr(dist, 'distributorname', None) or party_code_str)
                 alias = f"{name}, {party_code_str.upper()}"
                 party = BusyParty.objects.create(
                     code=new_code,

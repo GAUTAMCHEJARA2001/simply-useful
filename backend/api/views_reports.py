@@ -91,7 +91,7 @@ def report_sales_summary(request):
         if not o.createdat:
             continue
         date_str = o.createdat.strftime('%Y-%m-%d')
-        amt = float(o.totalamount or 0)
+        amt = float(getattr(o, 'grandtotal', None) or getattr(o, 'totalamount', None) or 0.0)
         if date_str not in summary_map:
             summary_map[date_str] = {
                 'date': date_str,
@@ -102,7 +102,8 @@ def report_sales_summary(request):
             }
         summary_map[date_str]['totalSales'] += amt
         summary_map[date_str]['totalOrders'] += 1
-        if (o.paymentstatus or '').lower() == 'paid':
+        p_status = getattr(o, 'paymentstatus', None) or getattr(o, 'status', '') or ''
+        if str(p_status).lower() in ['paid', 'completed', 'delivered']:
             summary_map[date_str]['cashSales'] += amt
         else:
             summary_map[date_str]['creditSales'] += amt
@@ -121,7 +122,7 @@ def report_sales_summary(request):
 def report_low_stock(request):
     company_id = _get_company_id(request)
     all_stocks = _compute_all_product_stocks(company_id, request=request)
-    low_stock_list = [s for s in all_stocks if s['currentStock'] <= s['minStock']]
+    low_stock_list = [s for s in all_stocks if s.get('currentStock', 0) <= s.get('minimumStock', s.get('minStock', 0))]
     return send_success(low_stock_list, 'Low stock report fetched')
 
 @api_view(['GET'])
@@ -136,11 +137,14 @@ def report_daily(request):
 
     daily_data = []
     for o in orders:
+        party_name = getattr(o, 'partyname', None)
+        if not party_name and getattr(o, 'dealerid', None):
+            party_name = getattr(o.dealerid, 'dealername', None) or getattr(o.dealerid, 'name', None)
         daily_data.append({
-            'orderId': o.orderid,
-            'customer': o.dealerid.name if o.dealerid else 'Unknown',
-            'amount': o.totalamount or 0,
-            'status': o.status
+            'orderId': getattr(o, 'orderid', str(o.id)),
+            'customer': party_name or 'Unknown',
+            'amount': float(getattr(o, 'grandtotal', None) or getattr(o, 'totalamount', None) or 0.0),
+            'status': getattr(o, 'status', 'Pending')
         })
 
     return send_success(daily_data, 'Daily report fetched')
