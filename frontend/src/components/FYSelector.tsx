@@ -12,14 +12,14 @@ const FYSelector: React.FC = () => {
   const { selectedFY, setSelectedFY, availableFYs, fyLabel } = useFinancialYear();
 
   return (
-    <div className="relative flex items-center">
-      <div className="flex items-center gap-1.5 h-8 pl-2.5 pr-1.5 rounded-lg border border-border bg-background hover:bg-muted transition-colors shadow-sm cursor-pointer">
+    <div className="relative flex items-center shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 h-8 px-2 sm:pl-2.5 sm:pr-1.5 rounded-lg border border-border bg-background hover:bg-muted transition-colors shadow-sm cursor-pointer">
         <CalendarRange className="w-3.5 h-3.5 text-primary shrink-0" />
         <select
           id="fy-selector"
           value={selectedFY}
           onChange={e => setSelectedFY(e.target.value)}
-          className="appearance-none bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer pr-4"
+          className="appearance-none bg-transparent text-[11px] sm:text-xs font-semibold text-foreground focus:outline-none cursor-pointer pr-3 sm:pr-4"
           aria-label="Select Financial Year"
           title="Select Financial Year"
         >
@@ -29,7 +29,7 @@ const FYSelector: React.FC = () => {
             </option>
           ))}
         </select>
-        <ChevronDown className="w-3 h-3 text-muted-foreground pointer-events-none -ml-3" />
+        <ChevronDown className="w-3 h-3 text-muted-foreground pointer-events-none -ml-2.5 sm:-ml-3" />
       </div>
     </div>
   );

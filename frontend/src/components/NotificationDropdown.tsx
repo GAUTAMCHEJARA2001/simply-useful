@@ -579,7 +579,7 @@ export const NotificationDropdown: React.FC = () => {
           setIsOpen(open => !open);
         }}
         className={cn(
-          "relative p-2.5 rounded-xl border transition-all duration-300 outline-none flex items-center justify-center",
+          "relative p-2 sm:p-2.5 h-8 w-8 sm:h-10 sm:w-10 rounded-xl border transition-all duration-300 outline-none flex items-center justify-center",
           isOpen
             ? "bg-primary/10 border-primary text-primary shadow-sm"
             : "bg-card border-border hover:bg-muted/50 text-muted-foreground hover:text-foreground"
@@ -588,9 +588,9 @@ export const NotificationDropdown: React.FC = () => {
         aria-expanded={isOpen}
       >
         {activeNotifications.length > 0 ? (
-          <BellRing className="w-5 h-5 text-amber-500 animate-swing" />
+          <BellRing className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 animate-swing" />
         ) : (
-          <Bell className="w-5 h-5" />
+          <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
         )}
         {activeNotifications.length > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white font-black text-[9px] flex items-center justify-center shadow-lg border border-background">

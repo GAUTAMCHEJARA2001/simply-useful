@@ -97,6 +97,43 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [hideTopBar]);
 
+  // Touch swipe to open sidebar from left edge or swipe to close on mobile
+  useEffect(() => {
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchEndX = e.changedTouches[0].clientX;
+      const touchEndY = e.changedTouches[0].clientY;
+      const diffX = touchEndX - touchStartX;
+      const diffY = touchEndY - touchStartY;
+
+      // Only horizontal gestures (not vertical scrolling)
+      if (Math.abs(diffX) > Math.abs(diffY) * 1.5) {
+        // Swipe right from left edge (first 45px) opens sidebar
+        if (touchStartX < 45 && diffX > 50) {
+          setSidebarOpen(true);
+        }
+        // Swipe left when open closes sidebar
+        if (sidebarOpen && diffX < -50) {
+          setSidebarOpen(false);
+        }
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [sidebarOpen]);
+
   if (!user) return null;
 
   const filteredNav = navItems.filter(item => {
@@ -219,39 +256,43 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <div className="flex-1 flex flex-col min-w-0 print:block">
         {/* Top bar */}
         {!hideTopBar ? (
-          <header className="flex-none h-14 bg-card border-b border-border flex items-center px-3 sm:px-4 lg:px-6 overflow-visible w-full z-30 print:hidden transition-all duration-300">
-            {/* Toggle button: works on both mobile and desktop */}
-            <button
-              onClick={() => {
-                if (window.innerWidth >= 1024) {
-                  toggleDesktopSidebar();
-                } else {
-                  setSidebarOpen(true);
-                }
-              }}
-              title="Toggle navigation sidebar (Ctrl+B)"
-              className="mr-1.5 sm:mr-3 p-1.5 rounded-lg hover:bg-muted text-foreground transition-colors"
-            >
-              {sidebarCollapsed ? (
-                <PanelLeft className="w-5 h-5 text-primary" />
-              ) : (
-                <Menu className="w-5 h-5" />
-              )}
-            </button>
-            <div className="flex-1" />
-            <div className="flex items-center justify-end gap-1.5 sm:gap-3 min-w-0">
+          <header className="flex-none h-14 bg-card border-b border-border flex items-center justify-between px-2.5 sm:px-4 lg:px-6 w-full z-30 print:hidden transition-all duration-300">
+            {/* Left side: Hamburger Toggle Button (ALWAYS visible & accessible, never shrunk) */}
+            <div className="flex items-center shrink-0">
+              <button
+                onClick={() => {
+                  if (window.innerWidth >= 1024) {
+                    toggleDesktopSidebar();
+                  } else {
+                    setSidebarOpen(true);
+                  }
+                }}
+                title="Toggle navigation sidebar (Ctrl+B)"
+                aria-label="Toggle navigation sidebar"
+                className="shrink-0 p-2 rounded-lg bg-muted/50 sm:bg-transparent hover:bg-muted text-foreground transition-colors flex items-center justify-center h-9 w-9 border border-border/40 sm:border-transparent mr-2 shadow-xs sm:shadow-none"
+              >
+                {sidebarCollapsed ? (
+                  <PanelLeft className="w-5 h-5 text-primary" />
+                ) : (
+                  <Menu className="w-5 h-5" />
+                )}
+              </button>
+            </div>
+
+            {/* Right side controls (compact & responsive on mobile) */}
+            <div className="flex items-center justify-end gap-1.5 sm:gap-3 shrink-0 overflow-x-auto no-scrollbar min-w-0">
               <WarehouseSwitcher />
               <FYSelector />
               <NotificationDropdown />
-              {/* Hide top bar button (Focus mode) */}
+              {/* Hide top bar button (Focus mode on desktop/tablet) */}
               <button
                 onClick={() => setHideTopBar(true)}
                 title="Hide top bar (Focus mode)"
-                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                className="hidden md:flex p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Maximize2 className="w-4 h-4" />
               </button>
-              <span className="text-xs text-muted-foreground hidden sm:block">
+              <span className="text-xs text-muted-foreground hidden lg:block truncate max-w-[150px]">
                 {user.name} &middot; {user.role}
               </span>
             </div>
