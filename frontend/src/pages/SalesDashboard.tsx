@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Clock, Users, ArrowUpRight, ArrowDownRight, IndianRupee, Target, CalendarDays, TrendingUp, MapPin, Store, Building2, Scale } from 'lucide-react';
+import { ShoppingCart, Clock, Users, ArrowUpRight, ArrowDownRight, IndianRupee, Target, CalendarDays, TrendingUp, MapPin, Store, Building2, Scale, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,9 @@ const SalesDashboard: React.FC = () => {
   const { user } = useAuth();
   const { orders, products, dealers, distributors, visits, users, loading, error, refreshAll } = useData();
   const { filterBySelectedFY, fyLabel } = useFinancialYear();
+
+  // Period filter state: defaults to 'CURRENT_MONTH' so it resets every month!
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('CURRENT_MONTH');
 
   const { can } = usePermissions();
   const navigate = useNavigate();
@@ -42,29 +45,93 @@ const SalesDashboard: React.FC = () => {
     : fyOrders;
   const myDealers = isSalesOnly ? dealers.filter(d => (d.assignedSoEmail || '').toLowerCase() === (user?.email || '').toLowerCase() && d.active) : dealers.filter(d => d.active);
   const myDistributors = isSalesOnly ? distributors.filter(d => (d.assignedSoEmail || '').toLowerCase() === (user?.email || '').toLowerCase() && d.active) : distributors.filter(d => d.active);
-  const pendingOrders = myOrders.filter(o => o.status === 'Pending');
+
   const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonthName = now.toLocaleString('default', { month: 'short', year: 'numeric' });
+
+  // Generate available past months in this FY from orders
+  const availableMonths = useMemo(() => {
+    const monthMap = new Map<string, string>();
+    monthMap.set(currentMonthKey, `This Month (${currentMonthName})`);
+
+    myOrders.forEach(o => {
+      const dStr = o.date || (o as any).createdAt;
+      if (!dStr) return;
+      const d = new Date(dStr);
+      if (isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthMap.has(key)) {
+        const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+        monthMap.set(key, label);
+      }
+    });
+
+    return Array.from(monthMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [myOrders, currentMonthKey, currentMonthName]);
+
+  // Orders scoped to the selected period
+  const periodOrders = useMemo(() => {
+    if (selectedPeriod === 'ALL_FY') {
+      return myOrders;
+    }
+    const targetYM = selectedPeriod === 'CURRENT_MONTH' ? currentMonthKey : selectedPeriod;
+    return myOrders.filter(o => {
+      const dStr = o.date || (o as any).createdAt;
+      if (!dStr) return false;
+      const d = new Date(dStr);
+      if (isNaN(d.getTime())) return false;
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return ym === targetYM;
+    });
+  }, [myOrders, selectedPeriod, currentMonthKey]);
+
+  const isAllFY = selectedPeriod === 'ALL_FY';
   const monthlyTarget = Number(currentOfficer?.monthlyTarget ?? currentOfficer?.monthly_target) || 500000;
-  // For target progress: use FY completed and partially returned orders
-  const fyCompletedOrders = myOrders.filter(o => o.status === 'Completed' || o.status === 'Partially Returned');
-  const fyAchieved = fyCompletedOrders.reduce((sum, order) => {
+  const effectiveTarget = isAllFY ? monthlyTarget * 12 : monthlyTarget;
+
+  const periodLabel = useMemo(() => {
+    if (selectedPeriod === 'CURRENT_MONTH') return `This Month (${currentMonthName})`;
+    if (selectedPeriod === 'ALL_FY') return `Full ${fyLabel}`;
+    const found = availableMonths.find(([k]) => k === selectedPeriod);
+    return found ? found[1] : selectedPeriod;
+  }, [selectedPeriod, currentMonthName, fyLabel, availableMonths]);
+
+  const pendingOrders = periodOrders.filter(o => o.status === 'Pending');
+
+  // Completed orders in selected period
+  const periodCompletedOrders = periodOrders.filter(o => o.status === 'Completed' || o.status === 'Partially Returned');
+  const periodAchieved = periodCompletedOrders.reduce((sum, order) => {
     let orderValue = 0;
-    
     if (order.items && order.items.length > 0) {
-      // Calculate net value: (qty - returnedQty) * price
       orderValue = order.items.reduce((iSum: number, item: any) => {
         const netQty = Math.max(0, (Number(item.qty) || 0) - (Number(item.returnedQty) || Number(item.returnedqty) || 0));
         return iSum + (netQty * (Number(item.price) || 0));
       }, 0);
     } else {
-      // Fallback if no items array exists
       orderValue = Number(order.grandTotal) || Number(order.grand_total) || 0;
     }
-    
     return sum + orderValue;
   }, 0);
-  const targetProgress = monthlyTarget > 0 ? Math.min(100, Math.round((fyAchieved / monthlyTarget) * 100)) : 0;
-  const remainingTarget = Math.max(monthlyTarget - fyAchieved, 0);
+
+  // Full FY achieved (for background stat and comparative card)
+  const fyCompletedOrders = myOrders.filter(o => o.status === 'Completed' || o.status === 'Partially Returned');
+  const fyAchieved = fyCompletedOrders.reduce((sum, order) => {
+    let orderValue = 0;
+    if (order.items && order.items.length > 0) {
+      orderValue = order.items.reduce((iSum: number, item: any) => {
+        const netQty = Math.max(0, (Number(item.qty) || 0) - (Number(item.returnedQty) || Number(item.returnedqty) || 0));
+        return iSum + (netQty * (Number(item.price) || 0));
+      }, 0);
+    } else {
+      orderValue = Number(order.grandTotal) || Number(order.grand_total) || 0;
+    }
+    return sum + orderValue;
+  }, 0);
+
+  const targetProgress = effectiveTarget > 0 ? Math.min(100, Math.round((periodAchieved / effectiveTarget) * 100)) : 0;
+  const remainingTarget = Math.max(effectiveTarget - periodAchieved, 0);
+
   const upcomingMeetings = visits
     .filter(v => {
       const soEmail = (v.soEmail || v.so_email || '').toLowerCase();
@@ -77,71 +144,72 @@ const SalesDashboard: React.FC = () => {
     })
     .sort((a, b) => new Date(a.nextVisitTime || (a as any).next_visit_time || '').getTime() - new Date(b.nextVisitTime || (b as any).next_visit_time || '').getTime())
     .slice(0, 5);
-    const productCounts = new Map<string, number>();
-    myOrders.forEach(order => {
-      (order.items || []).forEach((item) => {
-        const productName = item.productName || 'Unknown';
-        const current = productCounts.get(productName) || 0;
-        productCounts.set(productName, current + (Number(item.qty) || 0));
-      });
+
+  const productCounts = new Map<string, number>();
+  periodOrders.forEach(order => {
+    (order.items || []).forEach((item) => {
+      const productName = item.productName || 'Unknown';
+      const current = productCounts.get(productName) || 0;
+      productCounts.set(productName, current + (Number(item.qty) || 0));
     });
+  });
 
-    const getOrderWeight = (order: any) => {
-      return (order.items || []).reduce((sum: number, item: any) => {
-        const prodId = typeof item.product === 'object' ? item.product?.id : (item.productId || item.product);
-        const prod = (products || []).find(p => 
-          p.id === prodId || 
-          p.productCode === prodId || 
-          p.product_code === prodId ||
-          p.productName === prodId ||
-          p.product_name === prodId ||
-          p.name === prodId
-        );
-        if (!prod) return sum;
-        const match = (prod.bagSize || prod.bag_size || '').match(/(\d+)/);
-        const weight = match ? parseInt(match[1]) : 0;
-        return sum + (weight * (item.qty || 0));
-      }, 0);
-    };
+  const getOrderWeight = (order: any) => {
+    return (order.items || []).reduce((sum: number, item: any) => {
+      const prodId = typeof item.product === 'object' ? item.product?.id : (item.productId || item.product);
+      const prod = (products || []).find(p => 
+        p.id === prodId || 
+        p.productCode === prodId || 
+        p.product_code === prodId ||
+        p.productName === prodId ||
+        p.product_name === prodId ||
+        p.name === prodId
+      );
+      if (!prod) return sum;
+      const match = (prod.bagSize || prod.bag_size || '').match(/(\d+)/);
+      const weight = match ? parseInt(match[1]) : 0;
+      return sum + (weight * (item.qty || 0));
+    }, 0);
+  };
 
-    const totalWeightSold = myOrders.reduce((sum, order) => sum + getOrderWeight(order), 0);
+  const totalWeightSold = periodOrders.reduce((sum, order) => sum + getOrderWeight(order), 0);
 
-    const kpis = [
-      {
-        label: `${fyLabel} Target`,
-        value: `₹${(monthlyTarget / 1000).toFixed(0)}K`,
-        subtext: `${targetProgress}% achieved`,
-        icon: Target,
-        trend: `₹${(remainingTarget / 1000).toFixed(0)}K left`,
-        trendUp: targetProgress >= 75,
-      },
-      {
-        label: `${fyLabel} Sales`,
-        value: `₹${(fyAchieved / 1000).toFixed(1)}K`,
-        subtext: `${fyCompletedOrders.length} completed orders`,
-        icon: TrendingUp,
-        trend: targetProgress >= 100 ? 'Done' : 'In progress',
-        trendUp: targetProgress >= 50,
-      },
-      {
-        label: 'KG Sold',
-        value: `${totalWeightSold.toLocaleString()} kg`,
-        subtext: 'Monthly sales',
-        icon: Scale,
-        trend: '+12.5%',
-        trendUp: true,
-      },
-      {
-        label: 'Number of Orders',
-        value: myOrders.length.toString(),
-        subtext: 'From all your shops',
-        icon: ShoppingCart,
-        trend: '+3',
-        trendUp: true,
-      },
-      { label: 'Waiting Orders', value: pendingOrders.length.toString(), subtext: 'Waiting for approval', icon: Clock, trend: pendingOrders.length > 2 ? 'High' : 'Normal', trendUp: false },
-      { label: 'Active Shops', value: myDealers.length.toString(), subtext: 'Shops assigned to you', icon: Users },
-    ];
+  const kpis = [
+    {
+      label: isAllFY ? `${fyLabel} Target` : 'Monthly Target',
+      value: `₹${(effectiveTarget / 1000).toFixed(0)}K`,
+      subtext: `${targetProgress}% achieved (${periodLabel})`,
+      icon: Target,
+      trend: `₹${(remainingTarget / 1000).toFixed(0)}K left`,
+      trendUp: targetProgress >= 75,
+    },
+    {
+      label: isAllFY ? `${fyLabel} Sales` : `${periodLabel} Sales`,
+      value: `₹${(periodAchieved / 1000).toFixed(1)}K`,
+      subtext: `${periodCompletedOrders.length} completed orders`,
+      icon: TrendingUp,
+      trend: targetProgress >= 100 ? 'Done' : `${targetProgress}% reached`,
+      trendUp: targetProgress >= 50,
+    },
+    {
+      label: 'KG Sold',
+      value: `${totalWeightSold.toLocaleString()} kg`,
+      subtext: isAllFY ? 'Total FY sales' : `${periodLabel} sales`,
+      icon: Scale,
+      trend: '+12.5%',
+      trendUp: true,
+    },
+    {
+      label: 'Number of Orders',
+      value: periodOrders.length.toString(),
+      subtext: isAllFY ? `All ${fyLabel} orders` : `${periodLabel} orders`,
+      icon: ShoppingCart,
+      trend: `+${periodOrders.length}`,
+      trendUp: true,
+    },
+    { label: 'Waiting Orders', value: pendingOrders.length.toString(), subtext: 'Waiting for approval', icon: Clock, trend: pendingOrders.length > 2 ? 'High' : 'Normal', trendUp: false },
+    { label: 'Active Shops', value: myDealers.length.toString(), subtext: 'Shops assigned to you', icon: Users },
+  ];
 
   const productMix = Array.from(productCounts.entries()).map(([name, value]) => ({ 
     name: name || 'Unknown', 
@@ -186,11 +254,36 @@ const SalesDashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="page-header">Sales Overview</h1>
-          <p className="page-subheader">Hello {user?.name || 'Sales Officer'}, welcome back! Showing data for <span className="font-semibold text-primary">{fyLabel}</span>.</p>
+          <p className="page-subheader">
+            Hello {user?.name || 'Sales Officer'}, welcome back! Showing data for <span className="font-semibold text-primary">{periodLabel}</span> · <span className="text-muted-foreground">{fyLabel}</span>.
+          </p>
         </div>
-        <Button onClick={() => navigate('/sales/order')} className="action-button">
-          <ShoppingCart className="w-5 h-5 mr-2" /> New Order
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Period / Past Months Selector */}
+          <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-1.5 shadow-sm">
+            <CalendarDays className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Period:</span>
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              className="bg-transparent text-xs sm:text-sm font-semibold text-foreground focus:outline-none cursor-pointer pr-1"
+            >
+              <option value="CURRENT_MONTH" className="bg-popover text-foreground font-medium">This Month ({currentMonthName})</option>
+              {availableMonths.filter(([k]) => k !== currentMonthKey).length > 0 && (
+                <optgroup label="Past Months in FY" className="bg-popover text-foreground font-semibold">
+                  {availableMonths.filter(([k]) => k !== currentMonthKey).map(([k, label]) => (
+                    <option key={k} value={k} className="bg-popover text-foreground font-normal">{label}</option>
+                  ))}
+                </optgroup>
+              )}
+              <option value="ALL_FY" className="bg-popover text-foreground font-medium">Full Financial Year ({fyLabel})</option>
+            </select>
+          </div>
+
+          <Button onClick={() => navigate('/sales/order')} className="action-button">
+            <ShoppingCart className="w-5 h-5 mr-2" /> New Order
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -216,27 +309,36 @@ const SalesDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Target className="w-4 h-4 text-primary" /> Monthly Target Progress
-            </CardTitle>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Target className="w-4 h-4 text-primary" /> {isAllFY ? `${fyLabel} Annual Target Progress` : `Monthly Target Progress (${periodLabel})`}
+              </CardTitle>
+              <Badge variant="outline" className="w-fit text-xs bg-primary/5 text-primary border-primary/20 font-medium">
+                {isAllFY ? 'Annual Cumulative' : 'Resets on 1st of month'}
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
               <div>
-                <p className="text-3xl font-extrabold text-foreground">₹{fyAchieved.toLocaleString('en-IN')}</p>
-                <p className="text-xs text-muted-foreground">of ₹{monthlyTarget.toLocaleString('en-IN')} target · {fyLabel}</p>
+                <p className="text-3xl font-extrabold text-foreground">₹{periodAchieved.toLocaleString('en-IN')}</p>
+                <p className="text-xs text-muted-foreground">of ₹{effectiveTarget.toLocaleString('en-IN')} target · {periodLabel}</p>
               </div>
               <div className="text-sm font-bold text-primary">{targetProgress}%</div>
             </div>
             <div className="h-3 rounded-full bg-muted overflow-hidden">
               <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${targetProgress}%` }} />
             </div>
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
               <div className="rounded-lg border border-border bg-muted/20 p-3">
-                <p className="text-muted-foreground">Remaining</p>
+                <p className="text-muted-foreground">Remaining Target</p>
                 <p className="font-bold text-foreground mt-1">₹{remainingTarget.toLocaleString('en-IN')}</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/20 p-3">
+                <p className="text-muted-foreground">FY Cumulative Sales</p>
+                <p className="font-bold text-foreground mt-1">₹{fyAchieved.toLocaleString('en-IN')}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3 col-span-2 sm:col-span-1">
                 <p className="text-muted-foreground">Active Shops</p>
                 <p className="font-bold text-foreground mt-1">{myDealers.length}</p>
               </div>
