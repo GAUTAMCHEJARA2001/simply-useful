@@ -43,8 +43,19 @@ const SalesDashboard: React.FC = () => {
   const myOrders = isSalesOnly
     ? fyOrders.filter(o => (o.soEmail || o.so_email || '').toLowerCase() === (user?.email || '').toLowerCase())
     : fyOrders;
-  const myDealers = isSalesOnly ? dealers.filter(d => (d.assignedSoEmail || '').toLowerCase() === (user?.email || '').toLowerCase() && d.active) : dealers.filter(d => d.active);
-  const myDistributors = isSalesOnly ? distributors.filter(d => (d.assignedSoEmail || '').toLowerCase() === (user?.email || '').toLowerCase() && d.active) : distributors.filter(d => d.active);
+  const userEmail = (user?.email || '').toLowerCase().trim();
+  const isPartyAssigned = (party: any) => {
+    if (!userEmail) return false;
+    const emails: string[] = [
+      ...(Array.isArray(party.assignedSoEmails) ? party.assignedSoEmails : []),
+      ...(Array.isArray(party.assignedsoemails) ? party.assignedsoemails : []),
+      party.assignedSoEmail,
+    ].filter(Boolean).map(e => String(e).toLowerCase().trim());
+    return emails.includes(userEmail);
+  };
+
+  const myDealers = isSalesOnly ? dealers.filter(d => isPartyAssigned(d) && d.active) : dealers.filter(d => d.active);
+  const myDistributors = isSalesOnly ? distributors.filter(d => isPartyAssigned(d) && d.active) : distributors.filter(d => d.active);
 
   const now = new Date();
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;

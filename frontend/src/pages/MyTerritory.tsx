@@ -15,25 +15,57 @@ import { motion } from 'framer-motion';
 
 const MyTerritory: React.FC = () => {
   const { user } = useAuth();
-  const { dealers, distributors, orders } = useData();
+  const { dealers, distributors, orders, users } = useData();
   const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'dealers' | 'distributors'>('dealers');
+  const [selectedSo, setSelectedSo] = useState<string>('all');
 
-  // Filter to only this SO's parties
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
+  const userEmail = (user?.email || '').toLowerCase().trim();
+
+  // Sales Officers for admin filtering
+  const salesOfficers = useMemo(() => {
+    return (users || []).filter(u => {
+      const role = (u.role || '').toUpperCase();
+      return role.includes('SALES');
+    });
+  }, [users]);
+
+  // Check if a party is assigned to the current user (or selected SO if admin)
+  const isPartyAssigned = (party: any) => {
+    const emails: string[] = [
+      ...(Array.isArray(party.assignedSoEmails) ? party.assignedSoEmails : []),
+      ...(Array.isArray(party.assignedsoemails) ? party.assignedsoemails : []),
+      party.assignedSoEmail,
+    ].filter(Boolean).map(e => String(e).toLowerCase().trim());
+
+    if (isAdmin) {
+      if (selectedSo === 'all') return true;
+      return emails.includes(selectedSo.toLowerCase().trim());
+    }
+
+    if (!userEmail) return false;
+    if (emails.includes(userEmail)) return true;
+
+    // Optional territory-based matching
+    if (user?.territory && party.territory && user.territory.trim().toLowerCase() === party.territory.trim().toLowerCase()) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Filter to this SO's (or selected) parties
   const myDealers = useMemo(
-    () => dealers.filter(
-      d => (d.assignedSoEmail || '').toLowerCase() === (user?.email || '').toLowerCase()
-    ),
-    [dealers, user]
+    () => dealers.filter(isPartyAssigned),
+    [dealers, user, isAdmin, selectedSo, userEmail]
   );
 
   const myDistributors = useMemo(
-    () => distributors.filter(
-      d => (d.assignedSoEmail || '').toLowerCase() === (user?.email || '').toLowerCase()
-    ),
-    [distributors, user]
+    () => distributors.filter(isPartyAssigned),
+    [distributors, user, isAdmin, selectedSo, userEmail]
   );
 
   // Order count per dealer (by partyName match)
@@ -123,18 +155,41 @@ const MyTerritory: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="page-header flex items-center gap-2">
-            <MapPin className="w-8 h-8 text-primary" /> My Territory
+            <MapPin className="w-8 h-8 text-primary" /> {isAdmin ? 'Territory Management' : 'My Territory'}
           </h1>
           <p className="page-subheader">
-            All dealers and distributors assigned to you, {user?.name || 'Sales Officer'}
+            {isAdmin 
+              ? (selectedSo === 'all' 
+                  ? 'Viewing all dealers and distributors across the organization' 
+                  : `Viewing parties assigned to ${salesOfficers.find(s => s.email.toLowerCase() === selectedSo.toLowerCase())?.name || selectedSo}`)
+              : `All dealers and distributors assigned to you, ${user?.name || 'Sales Officer'}`}
           </p>
         </div>
-        <Button
-          onClick={() => navigate('/sales/order')}
-          className="action-button"
-        >
-          <Package className="w-4 h-4 mr-2" /> New Order
-        </Button>
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Filter SO:</span>
+              <select
+                value={selectedSo}
+                onChange={e => setSelectedSo(e.target.value)}
+                className="text-xs border rounded-lg px-3 py-2 bg-background font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="all">All Sales Officers ({dealers.length} dealers)</option>
+                {salesOfficers.map(so => (
+                  <option key={so.id || so.email} value={so.email}>
+                    {so.name || so.email} ({so.territory || 'Sales'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <Button
+            onClick={() => navigate('/sales/order')}
+            className="action-button"
+          >
+            <Package className="w-4 h-4 mr-2" /> New Order
+          </Button>
+        </div>
       </div>
 
       {/* KPI Strip */}
@@ -434,7 +489,7 @@ const MyTerritory: React.FC = () => {
       {(filteredDealers.length > 0 || filteredDistributors.length > 0) && (
         <p className="text-xs text-muted-foreground text-center pb-2">
           Showing {activeTab === 'dealers' ? filteredDealers.length : filteredDistributors.length}{' '}
-          {activeTab} · filtered to your account ({user?.email})
+          {activeTab} · {isAdmin ? (selectedSo === 'all' ? 'All Organization Parties (Admin View)' : `Filtered to SO: ${selectedSo}`) : `Filtered to your account (${user?.email})`}
         </p>
       )}
     </div>

@@ -4050,13 +4050,35 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
 class PaymentReceiptViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentReceiptSerializer
+    pagination_class = None
 
     def get_queryset(self):
         user = self.request.user
-        company_id = getattr(user, 'companyId', None)
-        if user.role in ['ADMIN', 'SUPERADMIN']:
-            return PaymentReceipt.objects.filter(companyid_id=company_id).order_by('-created_at')
-        return PaymentReceipt.objects.filter(companyid_id=company_id, submitted_by_id=user.id).order_by('-created_at')
+        company_id = _get_company_id(self.request)
+        user_role = (getattr(user, 'role', '') or '').upper()
+
+        # Admin & Superadmin see all data across their company (or all if superadmin)
+        if user_role in ['ADMIN', 'SUPERADMIN']:
+            if user_role == 'SUPERADMIN' and not company_id:
+                return PaymentReceipt.objects.all().select_related('submitted_by', 'verified_by').order_by('-created_at')
+            if company_id:
+                return PaymentReceipt.objects.filter(companyid_id=company_id).select_related('submitted_by', 'verified_by').order_by('-created_at')
+            return PaymentReceipt.objects.all().select_related('submitted_by', 'verified_by').order_by('-created_at')
+
+        # Sales officers and other staff only see receipts submitted by them
+        user_id = getattr(user, 'id', None)
+        user_email = getattr(user, 'email', None)
+
+        user_filter = models.Q()
+        if user_id:
+            user_filter |= models.Q(submitted_by_id=user_id)
+        if user_email:
+            user_filter |= models.Q(submitted_by__email=user_email)
+
+        qs = PaymentReceipt.objects.filter(user_filter).select_related('submitted_by', 'verified_by')
+        if company_id:
+            qs = qs.filter(companyid_id=company_id)
+        return qs.order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
         # We override create to just call our custom upload_receipt method or handle it here
@@ -4090,6 +4112,7 @@ class PaymentReceiptViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 return send_error(f"Image upload failed: {str(e)}", 500)
                 
+        company_id = _get_company_id(request)
         receipt = PaymentReceipt.objects.create(
             id=f"pr_{uuid.uuid4().hex[:16]}",
             party_id=party_id,
@@ -4100,7 +4123,7 @@ class PaymentReceiptViewSet(viewsets.ModelViewSet):
             photo_url=photo_url,
             remarks=remarks,
             submitted_by_id=user.id,
-            companyid_id=getattr(user, 'companyId', None)
+            companyid_id=company_id
         )
         
         serializer = self.get_serializer(receipt)
@@ -4108,7 +4131,8 @@ class PaymentReceiptViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['patch'])
     def verify(self, request, pk=None):
-        if request.user.role not in ['ADMIN', 'SUPERADMIN']:
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        if user_role not in ['ADMIN', 'SUPERADMIN']:
             return send_error("Unauthorized", 403)
             
         receipt = self.get_object()

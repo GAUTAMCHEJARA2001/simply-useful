@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { paymentService } from '@/api/services/payment.service';
 import { useToast } from '@/hooks/use-toast';
@@ -17,8 +18,11 @@ import { format } from 'date-fns';
 import { PaymentReceipt } from '@/types';
 
 const SubmitPaymentPage: React.FC = () => {
+  const { user } = useAuth();
   const { dealers, distributors } = useData();
   const { toast } = useToast();
+
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
 
   const [payments, setPayments] = useState<PaymentReceipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -100,8 +104,15 @@ const SubmitPaymentPage: React.FC = () => {
 
   return (
     <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">My Payment Receipts</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold">{isAdmin ? 'Payment Receipts (All Submissions)' : 'My Payment Receipts'}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isAdmin 
+              ? 'Viewing all payment receipts submitted across the organization.' 
+              : `Viewing payment receipts submitted by you (${user?.email || 'Sales Officer'}).`}
+          </p>
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="flex items-center gap-2">
@@ -203,21 +214,29 @@ const SubmitPaymentPage: React.FC = () => {
                   <TableHead>Party Name</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Mode</TableHead>
+                  {isAdmin && <TableHead>Submitted By</TableHead>}
                   <TableHead>Photo</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading payments...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-muted-foreground">Loading payments...</TableCell></TableRow>
                 ) : payments.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No payments submitted yet.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={isAdmin ? 7 : 6} className="text-center py-8 text-muted-foreground">No payments submitted yet.</TableCell></TableRow>
                 ) : payments.map(payment => (
                   <TableRow key={payment.id}>
                     <TableCell>{payment.createdAt ? format(new Date(payment.createdAt), 'dd MMM yyyy') : '-'}</TableCell>
                     <TableCell>{payment.partyName} <span className="text-xs text-gray-500">({payment.partyType})</span></TableCell>
                     <TableCell className="font-medium">₹{payment.amount}</TableCell>
                     <TableCell>{payment.paymentMode}</TableCell>
+                    {isAdmin && (
+                      <TableCell>
+                        <span className="font-medium text-xs">
+                          {payment.submittedBy?.name || payment.submittedBy?.email || '—'}
+                        </span>
+                      </TableCell>
+                    )}
                     <TableCell>
                       {payment.photoUrl ? (
                         <a href={payment.photoUrl} target="_blank" rel="noopener noreferrer">
