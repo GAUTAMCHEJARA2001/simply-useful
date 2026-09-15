@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useProductions, useProductionMutations } from '@/hooks/inventory/useProductions';
 import { useProducts } from '@/hooks/inventory/useProducts';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
 
 export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?: 'full' | 'modal_only', editProductionId?: string, onModalClose?: () => void, readOnly?: boolean }> = ({ onTabChange, mode = 'full', editProductionId, onModalClose, readOnly = false }) => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: productions = [], isLoading, error, refetch } = useProductions();
   const { saveProduction } = useProductionMutations();
   const { user } = useAuth();
@@ -155,27 +157,6 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
     fetchMasters();
   }, []);
 
-  // Dynamically scale ingredient quantities based on recipe standard ratios and entered number of batches
-  useEffect(() => {
-    if (!selectedRecipe) {
-      setBatchItems([]);
-      return;
-    }
-    // Only scale if the recipe has standard items (preserves manually edited list during updates)
-    if (selectedRecipe.items && selectedRecipe.items.length > 0) {
-      const newItems = (selectedRecipe.items || []).map((item: any) => {
-        // Here we scale by number of batches instead of actual yield quantity
-        const standardQty = item.qty || item.quantity || 0;
-        return {
-          productId: item.productId,
-          productName: item.productName || item.materialName,
-          quantity: parseFloat((standardQty * (form.batches || 1)).toFixed(2)) || 0,
-          unit: item.unit
-        };
-      });
-      setBatchItems(newItems);
-    }
-  }, [form.batches, selectedRecipe]);
   const recipesByProduct = React.useMemo(() => {
     const map = new Map();
     for (const r of recipes) {
@@ -198,37 +179,120 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
     return map;
   }, [recipes]);
 
-  const productsById = React.useMemo(() => {
-    const map = new Map();
-    for (const p of products) map.set(String(p.id), p);
-    return map;
-  }, [products]);
+  const findRecipeForProduct = React.useCallback((prodId?: any, prodCode?: any, prodName?: any) => {
+    if (prodId && recipesByProduct.has(String(prodId))) {
+      return recipesByProduct.get(String(prodId));
+    }
+    if (prodCode) {
+      const r = recipesByProduct.get(prodCode) || recipesByProduct.get(String(prodCode).toLowerCase());
+      if (r) return r;
+    }
+    if (prodName) {
+      const r = recipesByProduct.get(prodName) || recipesByProduct.get(String(prodName).toLowerCase());
+      if (r) return r;
+    }
+    return null;
+  }, [recipesByProduct]);
+
+  // Dynamically scale ingredient quantities when the user changes number of batches
+  const handleBatchesChange = (newBatches: number) => {
+    const prevBatches = form.batches || 1;
+    setForm((prev: any) => ({
+      ...prev,
+      batches: newBatches,
+      expectedQuantity: (selectedRecipe?.outputQuantity || 1) * newBatches
+    }));
+
+    if (newBatches <= 0) return;
+
+    if (selectedRecipe && selectedRecipe.items && selectedRecipe.items.length > 0) {
+      // Recalculate from standard recipe ratios for the new batches
+      const newItems = selectedRecipe.items.map((item: any) => {
+        const standardQty = item.qty || item.quantity || 0;
+        return {
+          productId: item.productId,
+          productName: item.productName || item.materialName,
+          quantity: parseFloat((standardQty * newBatches).toFixed(2)) || 0,
+          unit: item.unit || 'KG'
+        };
+      });
+      setBatchItems(newItems);
+    } else if (batchItems.length > 0 && prevBatches > 0) {
+      // Scale custom raw materials proportionally
+      const ratio = newBatches / prevBatches;
+      setBatchItems((prev: any[]) =>
+        prev.map((item: any) => ({
+          ...item,
+          quantity: parseFloat(((item.quantity || 0) * ratio).toFixed(2)) || 0
+        }))
+      );
+    }
+  };
+
+  // Reset/sync batch items to standard recipe ratios for current batches
+  const resetToRecipe = () => {
+    if (!selectedRecipe || !selectedRecipe.items || selectedRecipe.items.length === 0) {
+      toast({
+        title: 'No Recipe Attached',
+        description: 'No standard recipe/BOM found for this product.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    const currentBatches = form.batches || 1;
+    const newItems = selectedRecipe.items.map((item: any) => {
+      const standardQty = item.qty || item.quantity || 0;
+      return {
+        productId: item.productId,
+        productName: item.productName || item.materialName,
+        quantity: parseFloat((standardQty * currentBatches).toFixed(2)) || 0,
+        unit: item.unit || 'KG'
+      };
+    });
+    setBatchItems(newItems);
+    toast({
+      title: 'Recipe Synchronized',
+      description: `Synchronized ${newItems.length} ingredients with recipe standard ratios for ${currentBatches} batch(es).`
+    });
+  };
 
   const selectFinishedProduct = (p: any) => {
-    // Locate the standard recipe/BOM mapping for this product
     const recipe =
-      recipesByProduct.get(p.productCode) ||
-      recipesByProduct.get(String(p.productCode || '').toLowerCase()) ||
-      recipesByProduct.get(p.name) ||
-      recipesByProduct.get(String(p.name || '').toLowerCase()) ||
+      findRecipeForProduct(p.id, p.productCode, p.name) ||
       recipesByProduct.get(p.sku) ||
-      recipesByProduct.get(String(p.sku || '').toLowerCase()) ||
-      recipesByProduct.get(String(p.id));
+      recipesByProduct.get(String(p.sku || '').toLowerCase());
     
-    setForm({ ...form, productId: p.id, productName: p.name });
+    const currentBatches = form.batches || 1;
+    setForm((prev: any) => ({
+      ...prev,
+      productId: p.id,
+      productName: p.name,
+      expectedQuantity: (recipe?.outputQuantity || 1) * currentBatches
+    }));
     setSelectedRecipe(recipe || null);
     setProductSearch('');
     setShowFinishedDropdown(false);
 
-    if (recipe) {
+    if (recipe && recipe.items && recipe.items.length > 0) {
+      const newItems = recipe.items.map((item: any) => {
+        const standardQty = item.qty || item.quantity || 0;
+        return {
+          productId: item.productId,
+          productName: item.productName || item.materialName,
+          quantity: parseFloat((standardQty * currentBatches).toFixed(2)) || 0,
+          unit: item.unit || 'KG'
+        };
+      });
+      setBatchItems(newItems);
       toast({
         title: 'Recipe Loaded',
-        description: `Successfully loaded recipe: "${recipe.name}" containing ${recipe.items?.length || 0} standard raw materials.`
+        description: `Loaded recipe: "${recipe.name}" with ${newItems.length} ingredients for ${currentBatches} batch(es).`
       });
     } else {
+      setBatchItems([]);
       toast({
-        title: 'No Recipe Found',
-        description: 'You can manually search and add raw materials to this batch below.',
+        title: recipe ? 'Empty Recipe' : 'No Recipe Found',
+        description: 'You can manually add raw materials to this batch run below.',
         variant: 'default'
       });
     }
@@ -305,7 +369,12 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
       setSelectedRecipe(null);
       setBatchItems([]);
       setProductSearch('');
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['productions'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      await refetch();
     } catch (e: any) {
       console.error("Save production error details:", e);
       const errData = e.response?.data || e.data;
@@ -378,22 +447,32 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
             const matRes = await apiClient<any[]>(`/inv/transactions/productions/${p.id}/materials`);
             const mats = matRes && matRes.data ? matRes.data : (Array.isArray(matRes) ? matRes : []);
             
+            const recipe = findRecipeForProduct(p.productId, p.productCode, p.finishedProductName);
+            setSelectedRecipe(recipe || null);
             setForm({
               id: p.id,
               productId: p.productId,
               productName: p.finishedProductName,
               batches: p.batches || 1,
+              expectedQuantity: p.expectedQuantity || ((recipe?.outputQuantity || 1) * (p.batches || 1)),
               quantity: p.quantityProduced,
               warehouseId: p.warehouseId,
               date: p.createdAt ? p.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]
             });
             if (mats.length > 0) {
               setBatchItems(mats);
-              setSelectedRecipe({ items: [] });
+            } else if (recipe && recipe.items && recipe.items.length > 0) {
+              const currentBatches = p.batches || 1;
+              const newItems = recipe.items.map((item: any) => ({
+                productId: item.productId,
+                productName: item.productName || item.materialName,
+                quantity: parseFloat(((item.qty || item.quantity || 0) * currentBatches).toFixed(2)) || 0,
+                unit: item.unit || 'KG'
+              }));
+              setBatchItems(newItems);
             } else {
-                const recipe = recipesByProduct.get(p.productCode) || recipesByProduct.get(p.finishedProductName);
-                setSelectedRecipe(recipe || null);
-              }
+              setBatchItems([]);
+            }
               setIsReadOnly(readOnly);
               setModal(true);
               console.log('[DEBUG ProductionsTab] setModal(true) called!');
@@ -485,18 +564,31 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
               const matRes = await apiClient<any[]>(`/inv/transactions/productions/${p.id}/materials`);
               const mats = matRes && matRes.data ? matRes.data : (Array.isArray(matRes) ? matRes : []);
               
+              const recipe = findRecipeForProduct(p.productId, p.productCode, p.finishedProductName);
+              setSelectedRecipe(recipe || null);
               setForm({
                 id: p.id,
                 productId: p.productId,
                 productName: p.finishedProductName,
                 batches: p.batches || 1,
+                expectedQuantity: p.expectedQuantity || ((recipe?.outputQuantity || 1) * (p.batches || 1)),
                 quantity: p.quantityProduced,
                 warehouseId: p.warehouseId,
                 date: p.createdAt ? p.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]
               });
               if (mats.length > 0) {
                 setBatchItems(mats);
-                setSelectedRecipe({ items: [] }); // Set non-null to bypass auto-scaling
+              } else if (recipe && recipe.items && recipe.items.length > 0) {
+                const currentBatches = p.batches || 1;
+                const newItems = recipe.items.map((item: any) => ({
+                  productId: item.productId,
+                  productName: item.productName || item.materialName,
+                  quantity: parseFloat(((item.qty || item.quantity || 0) * currentBatches).toFixed(2)) || 0,
+                  unit: item.unit || 'KG'
+                }));
+                setBatchItems(newItems);
+              } else {
+                setBatchItems([]);
               }
               setIsReadOnly(true);
               setModal(true);
@@ -510,27 +602,31 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
               const matRes = await apiClient<any[]>(`/inv/transactions/productions/${p.id}/materials`);
               const mats = matRes && matRes.data ? matRes.data : (Array.isArray(matRes) ? matRes : []);
               
+              const recipe = findRecipeForProduct(p.productId, p.productCode, p.finishedProductName);
+              setSelectedRecipe(recipe || null);
               setForm({
                 id: p.id,
                 productId: p.productId,
                 productName: p.finishedProductName,
                 batches: p.batches || 1,
+                expectedQuantity: p.expectedQuantity || ((recipe?.outputQuantity || 1) * (p.batches || 1)),
                 quantity: p.quantityProduced,
                 warehouseId: p.warehouseId,
                 date: p.createdAt ? p.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]
               });
               if (mats.length > 0) {
                 setBatchItems(mats);
-                setSelectedRecipe({ items: [] }); // Set non-null to bypass auto-scaling
+              } else if (recipe && recipe.items && recipe.items.length > 0) {
+                const currentBatches = p.batches || 1;
+                const newItems = recipe.items.map((item: any) => ({
+                  productId: item.productId,
+                  productName: item.productName || item.materialName,
+                  quantity: parseFloat(((item.qty || item.quantity || 0) * currentBatches).toFixed(2)) || 0,
+                  unit: item.unit || 'KG'
+                }));
+                setBatchItems(newItems);
               } else {
-                // Fall back: locate standard recipe/BOM for this product so they can still see/adjust ingredients
-                const recipe = recipesByProduct.get(p.productCode) || recipesByProduct.get(p.finishedProductName);
-                if (recipe) {
-                  setSelectedRecipe(recipe); // The auto-scaling useEffect will automatically run and populate batchItems based on recipe and quantity!
-                } else {
-                  setBatchItems([]);
-                  setSelectedRecipe(null);
-                }
+                setBatchItems([]);
               }
               setIsReadOnly(false);
               setModal(true);
@@ -612,14 +708,18 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
                   type="text"
                   disabled={isReadOnly}
                   placeholder="Search finished product..."
-                  value={form.productName || productSearch}
-                  onFocus={() => setShowFinishedDropdown(true)}
+                  value={form.productId ? form.productName : productSearch}
+                  onFocus={() => {
+                    if (!form.productId) setShowFinishedDropdown(true);
+                  }}
                   onChange={e => {
                     setProductSearch(e.target.value);
                     setShowFinishedDropdown(true);
                     setFinishedSelectedIndex(0);
-                    setForm({ ...form, productId: '', productName: '' });
-                    setSelectedRecipe(null);
+                    if (form.productId) {
+                      setForm((prev: any) => ({ ...prev, productId: '', productName: '' }));
+                      setSelectedRecipe(null);
+                    }
                   }}
                   onKeyDown={e => {
                     if (e.key === 'ArrowDown') {
@@ -635,8 +735,22 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
                       }
                     }
                   }}
-                  className="w-full border border-border rounded-lg pl-9 pr-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="w-full border border-border rounded-lg pl-9 pr-16 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
+                {form.productId && !isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm((prev: any) => ({ ...prev, productId: '', productName: '' }));
+                      setSelectedRecipe(null);
+                      setProductSearch('');
+                      setShowFinishedDropdown(true);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground font-semibold px-2 py-1 rounded bg-muted hover:bg-muted/80 transition-colors"
+                  >
+                    Change
+                  </button>
+                )}
               </div>
               {showFinishedDropdown && !form.productId && (
                 <div className="absolute z-20 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto">
@@ -711,7 +825,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
                   step="any"
                   disabled={isReadOnly}
                   value={form.batches || ''} 
-                  onChange={e => setForm({ ...form, batches: parseFloat(e.target.value) || 0 })}
+                  onChange={e => handleBatchesChange(parseFloat(e.target.value) || 0)}
                   className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g. 1"
                 />
@@ -733,10 +847,34 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
 
             {/* Custom Adjustable Raw Materials Section */}
             <div className="border-t border-border pt-4">
-              <h3 className="text-sm font-bold mb-3 flex items-center justify-between">
-                Consumed Raw Materials (Batch Adjustments)
-                <span className="text-[10px] font-normal text-muted-foreground">{batchItems.length} items to consume</span>
-              </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold">Consumed Raw Materials</h3>
+                  {selectedRecipe ? (
+                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-primary/10 text-primary font-medium border border-primary/20">
+                      Recipe: {selectedRecipe.name || 'BOM Linked'} ({selectedRecipe.outputQuantity || 1} units/batch)
+                    </span>
+                  ) : (
+                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">
+                      Custom Ingredients
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedRecipe && selectedRecipe.items && selectedRecipe.items.length > 0 && !isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={resetToRecipe}
+                      className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 bg-primary/5 hover:bg-primary/10 px-2.5 py-1 rounded-md border border-primary/20 transition-colors"
+                      title="Reset raw materials to exact recipe standard ratios for current batches"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Sync Recipe Ratios
+                    </button>
+                  )}
+                  <span className="text-[10px] font-normal text-muted-foreground">{batchItems.length} items to consume</span>
+                </div>
+              </div>
               
               {!isReadOnly && (
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">

@@ -3205,19 +3205,29 @@ def check_negative_raw_materials(prod_id, yield_qty, wh_id, custom_items=None, e
         consuming_qty = c['qty']
         current_stock = stock_map.get(pid, 0.0)
         
-        old_consumed = 0.0
+        # When editing an existing production, credit back consumption from this production
+        # that was previously deducted in stock_map (i.e. not deleted, not pending approval, not rejected)
+        old_consumed_credited = 0.0
         if existing_prod_id:
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute("\n                        SELECT quantity FROM StockTransaction \n                        WHERE referenceId = %s AND transactionType = 'CONSUMED' AND productId = %s\n                    ", (existing_prod_id, pid))
-                    row = cursor.fetchone()
-                    if row:
-                        old_consumed = row[0]
-            except Exception:
-                pass
-        new_stock = current_stock - old_consumed - consuming_qty
-        if new_stock < 0:
-            negatives.append({'productId': pid, 'name': name, 'currentStock': current_stock - old_consumed, 'consuming': consuming_qty, 'deficit': abs(new_stock)})
+            old_consumed_txs = Stocktransaction.objects.filter(
+                referenceid=existing_prod_id,
+                transactiontype='CONSUMED',
+                productid_id=pid,
+                is_deleted=False
+            ).exclude(reason__in=['PENDING_APPROVAL', 'REJECTED'])
+            old_qty_sum = old_consumed_txs.aggregate(total=Sum('quantity'))['total'] or 0.0
+            old_consumed_credited = abs(float(old_qty_sum))
+
+        effective_stock = current_stock + old_consumed_credited
+        new_stock = effective_stock - consuming_qty
+        if new_stock < -0.001:
+            negatives.append({
+                'productId': pid,
+                'name': name,
+                'currentStock': round(effective_stock, 2),
+                'consuming': round(consuming_qty, 2),
+                'deficit': round(abs(new_stock), 2)
+            })
     return negatives
 
 @api_view(['GET'])
@@ -3260,6 +3270,7 @@ def transaction_productions(request):
             rows.append({
                 'id': st.id,
                 'productId': st.productid.id if st.productid else None,
+                'productCode': st.productid.productcode if st.productid else None,
                 'finishedProductName': st.productid.name if st.productid else '—',
                 'warehouseId': wh_id,
                 'warehouseName': wh_name,
@@ -3398,17 +3409,29 @@ def transaction_productions_detail(request, pk):
         with transaction.atomic():
             sts = Stocktransaction.objects.filter(Q(id=pk) | Q(referenceid=pk))
             old_product_ids.update(sts.values_list('productid_id', flat=True))
-            try:
-                main_st = sts.get(id=pk)
-                main_st.productid = prod
-                main_st.warehouseid_id = wh.id
-                main_st.quantity = qty_produced
-                main_st.createdat = now_str
-                main_st.save()
-            except Stocktransaction.DoesNotExist:
-                pass
-            sts.filter(transactiontype='CONSUMED').delete()
+            
+            main_st = sts.filter(id=pk, transactiontype='PRODUCTION').first() or sts.filter(id=pk).first() or sts.filter(transactiontype='PRODUCTION').first()
+            if not main_st:
+                main_st = Stocktransaction.objects.filter(id=pk).first()
+            if not main_st:
+                return Response({'success': False, 'message': 'Production record not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            main_st.productid = prod
+            main_st.warehouseid_id = wh.id
+            main_st.quantity = qty_produced
+            main_st.batches = batches
+            main_st.expected_quantity = expected_quantity
+            main_st.createdat = now_str
+            main_st.save()
+
+            # Delete old consumed transactions for this production run
+            Stocktransaction.objects.filter(
+                Q(referenceid=main_st.id) | Q(referenceid=pk),
+                transactiontype='CONSUMED'
+            ).delete()
+
             custom_items = data.get('items')
+            st_reason = main_st.reason or 'PENDING_APPROVAL'
             if custom_items is not None and isinstance(custom_items, list):
                 for item in custom_items:
                     item_prod_id = item.get('productId') or item.get('product_id')
@@ -3419,7 +3442,16 @@ def transaction_productions_detail(request, pk):
                     if item_prod_id and item_qty > 0:
                         item_prod = resolve_product_for_db(item_prod_id)
                         if item_prod:
-                            Stocktransaction.objects.create(id='st_' + uuid.uuid4().hex[:20], productid=item_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-item_qty, referenceid=pk, reason=main_st.reason, createdat=now_str)
+                            Stocktransaction.objects.create(
+                                id='st_' + uuid.uuid4().hex[:20],
+                                productid=item_prod,
+                                warehouseid_id=wh.id,
+                                transactiontype='CONSUMED',
+                                quantity=-item_qty,
+                                referenceid=main_st.id,
+                                reason=st_reason,
+                                createdat=now_str
+                            )
                             new_product_ids.add(item_prod.id)
             else:
                 try:
@@ -3430,14 +3462,36 @@ def transaction_productions_detail(request, pk):
                         for b_item in Bomitem.objects.filter(bomid=bom):
                             m_prod = Product.objects.filter(name=b_item.materialname).first()
                             if m_prod:
-                                Stocktransaction.objects.create(id='st_' + uuid.uuid4().hex[:20], productid=m_prod, warehouseid_id=wh.id, transactiontype='CONSUMED', quantity=-(b_item.qty * qty_produced), referenceid=pk, reason=main_st.reason, createdat=now_str)
+                                Stocktransaction.objects.create(
+                                    id='st_' + uuid.uuid4().hex[:20],
+                                    productid=m_prod,
+                                    warehouseid_id=wh.id,
+                                    transactiontype='CONSUMED',
+                                    quantity=-(float(b_item.qty or 0) * batches),
+                                    referenceid=main_st.id,
+                                    reason=st_reason,
+                                    createdat=now_str
+                                )
                                 new_product_ids.add(m_prod.id)
                 except Exception as e:
                     print('Error updating BOM consumption:', e)
+
             for p_id in old_product_ids | new_product_ids:
                 if p_id:
                     pass
-        return send_success({'id': pk, **data}, 'Production updated')
+
+        return send_success({
+            'id': main_st.id,
+            'productId': prod.id,
+            'productCode': prod.productcode,
+            'finishedProductName': prod.name,
+            'warehouseId': wh.id,
+            'warehouseName': wh.name,
+            'quantityProduced': qty_produced,
+            'batches': batches,
+            'expectedQuantity': expected_quantity,
+            'date': custom_date
+        }, 'Production updated successfully')
     elif request.method == 'DELETE':
         from django.db.models import Q
         
