@@ -12,9 +12,19 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='estimate',
-            name='soemail',
-            field=models.ForeignKey(blank=True, db_column='soEmail', db_constraint=False, null=True, on_delete=django.db.models.deletion.DO_NOTHING, to='core.user', to_field='email'),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='estimate',
+                    name='soemail',
+                    field=models.ForeignKey(blank=True, db_column='soEmail', db_constraint=False, null=True, on_delete=django.db.models.deletion.DO_NOTHING, to='core.user', to_field='email'),
+                ),
+            ],
+            database_operations=[
+                migrations.RunSQL(
+                    sql='ALTER TABLE "Estimate" ADD COLUMN IF NOT EXISTS "soEmail" text;',
+                    reverse_sql='ALTER TABLE "Estimate" DROP COLUMN IF EXISTS "soEmail";',
+                ),
+            ],
         ),
     ]
