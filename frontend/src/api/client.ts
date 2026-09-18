@@ -13,7 +13,10 @@ export interface ApiResponse<T = any> {
 }
 
 const API_BASE_URL = (() => {
-  const envUrl = import.meta.env.VITE_API_URL;
+  let envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.includes('simply-useful-backend.onrender.com')) {
+    envUrl = 'https://api.simply-useful.run.place/api/v1';
+  }
   if (envUrl) {
     const trimmed = envUrl.replace(/\/+$/, '');
     return trimmed.endsWith('/api/v1') ? trimmed : `${trimmed}/api/v1`;
@@ -21,6 +24,9 @@ const API_BASE_URL = (() => {
   
   // Dynamically resolve to the host machine's IP/hostname running the backend
   const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  if (hostname.includes('vercel.app')) {
+    return 'https://api.simply-useful.run.place/api/v1';
+  }
   return `http://${hostname}:4000/api/v1`;
 })();
 
