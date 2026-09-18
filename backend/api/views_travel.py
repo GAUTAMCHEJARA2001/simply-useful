@@ -55,6 +55,50 @@ def _serialize_travel_log(log):
     }
 
 
+def _sync_travel_to_attendance(log, reset_km=False):
+    """Automatically sync punched or approved KM into DailyAttendance for the employee."""
+    try:
+        labour = None
+        # 1. Match by linked user_id
+        if log.user_id:
+            labour = Labour.objects.filter(companyid=log.companyid, user_id=log.user_id).first()
+
+        user_obj = getattr(log, 'user', None)
+        if not labour and user_obj:
+            # 2. Match by email in contactinfo
+            if user_obj.email:
+                labour = Labour.objects.filter(companyid=log.companyid, contactinfo__icontains=user_obj.email).first()
+            # 3. Match by name
+            if not labour and user_obj.name:
+                cleaned_name = user_obj.name.strip()
+                labour = Labour.objects.filter(companyid=log.companyid, name__iexact=cleaned_name).first()
+                if not labour:
+                    first_part = cleaned_name.split()[0]
+                    labour = Labour.objects.filter(companyid=log.companyid, name__icontains=first_part).first()
+
+        if labour:
+            att, _ = DailyAttendance.objects.get_or_create(
+                labourid=labour,
+                date=log.date,
+                defaults={'status': 'PRESENT', 'travel_vehicle': log.vehicle_type}
+            )
+            att.travel_vehicle = log.vehicle_type
+            if reset_km:
+                att.km_travelled = 0.0
+            else:
+                km_val = log.approved_km if (log.status == 'APPROVED' and log.approved_km is not None) else (log.total_km or 0.0)
+                att.km_travelled = float(km_val)
+
+            # Ensure marked PRESENT if punched travel
+            if att.status in ('ABSENT', ''):
+                att.status = 'PRESENT'
+            att.save()
+            return True
+    except Exception as e:
+        print(f"[TRAVEL_ATTENDANCE_SYNC] Error syncing to DailyAttendance: {e}")
+    return False
+
+
 @api_view(['GET'])
 def travel_today(request):
     """Fetch today's travel log for the authenticated user"""
@@ -120,6 +164,9 @@ def travel_start(request):
     log.status = 'PENDING'
     log.save()
 
+    # Automatically mark employee PRESENT in Daily Attendance for today
+    _sync_travel_to_attendance(log)
+
     return send_success(_serialize_travel_log(log), 'Day Trip started successfully')
 
 
@@ -162,7 +209,10 @@ def travel_end(request):
     log.status = 'PENDING'
     log.save()
 
-    return send_success(_serialize_travel_log(log), f"Day Trip ended! Total {log.total_km} KM recorded (Pending HR Approval)")
+    # Automatically enter punched KM into Daily Attendance immediately!
+    _sync_travel_to_attendance(log)
+
+    return send_success(_serialize_travel_log(log), f"Day Trip ended! Total {log.total_km} KM recorded (Synced to Daily Attendance, Pending HR Approval)")
 
 
 @api_view(['GET'])
@@ -271,25 +321,7 @@ def travel_hr_verify(request, pk):
         log.save()
 
         # Sync to DailyAttendance for Payroll
-        try:
-            labour = Labour.objects.filter(companyid=log.companyid, user=log.user).first()
-            if not labour and log.user:
-                if log.user.email:
-                    labour = Labour.objects.filter(companyid=log.companyid, contactinfo__icontains=log.user.email).first()
-                if not labour and log.user.name:
-                    labour = Labour.objects.filter(companyid=log.companyid, name__iexact=log.user.name).first()
-
-            if labour:
-                att, _ = DailyAttendance.objects.get_or_create(
-                    labourid=labour,
-                    date=log.date,
-                    defaults={'status': 'PRESENT', 'travel_vehicle': log.vehicle_type}
-                )
-                att.travel_vehicle = log.vehicle_type
-                att.km_travelled = log.approved_km
-                att.save()
-        except Exception as e:
-            print(f"[TRAVEL_VERIFY] Failed to sync DailyAttendance: {e}")
+        _sync_travel_to_attendance(log)
 
         return send_success(_serialize_travel_log(log), f"Travel log approved with {log.approved_km} KM and synced to payroll")
 
@@ -301,14 +333,6 @@ def travel_hr_verify(request, pk):
         log.save()
 
         # If rejected, reset km_travelled on DailyAttendance
-        try:
-            labour = Labour.objects.filter(companyid=log.companyid, user=log.user).first()
-            if labour:
-                att = DailyAttendance.objects.filter(labourid=labour, date=log.date).first()
-                if att:
-                    att.km_travelled = 0.0
-                    att.save()
-        except Exception as e:
-            print(f"[TRAVEL_VERIFY] Failed to reset DailyAttendance on reject: {e}")
+        _sync_travel_to_attendance(log, reset_km=True)
 
         return send_success(_serialize_travel_log(log), "Travel log rejected")
