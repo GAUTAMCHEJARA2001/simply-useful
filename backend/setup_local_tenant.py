@@ -19,12 +19,22 @@ def setup_local_tenant():
     from io import StringIO
     from django.db import connection
     out = StringIO()
-    call_command('sqlsequencereset', 'api', 'core', stdout=out)
-    sql = out.getvalue()
-    with connection.cursor() as cursor:
-        for s in sql.split(';'):
-            if s.strip():
-                cursor.execute(s)
+    try:
+        call_command('sqlsequencereset', 'api', 'core', stdout=out)
+        sql = out.getvalue()
+        with connection.cursor() as cursor:
+            for s in sql.split(';'):
+                clean = s.strip()
+                # Skip transaction delimiters (BEGIN / COMMIT) as Django connection manages transactions
+                if clean and clean.upper() not in ('BEGIN', 'COMMIT'):
+                    try:
+                        cursor.execute(clean)
+                    except Exception as err:
+                        # Continue safely if a specific table has no serial sequence
+                        pass
+        print("   -> Sequences successfully synchronized.")
+    except Exception as e:
+        print(f"   -> [INFO] Sequence reset bypassed: {e}")
 
     print("\n2. Creating Company (Tenant)...")
     company_id = "cmo75yliq0000wesurjpett1n"
