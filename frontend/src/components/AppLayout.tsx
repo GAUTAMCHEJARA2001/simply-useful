@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ShoppingCart, Users, MapPin, Receipt,
   Package, BarChart3, Settings, LogOut, Menu, X, Building2,
   ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store, BookOpen, Activity, FileText,
-  PanelLeftClose, PanelLeft, Maximize2, Minimize2
+  PanelLeftClose, PanelLeft, Maximize2, Minimize2, Gauge
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -28,6 +28,7 @@ const navItems: NavItem[] = [
   { label: 'Order List', path: '/sales/orders', icon: ClipboardList, feature: 'view_own_orders' },
   { label: 'My Ledger Requests', path: '/sales/ledger-requests', icon: FileText, feature: 'view_sales_dashboard' },
   { label: 'Customer Visits', path: '/sales/visits', icon: MapPin, feature: 'track_visits' },
+  { label: 'Daily Travel (KM)', path: '/sales/travel', icon: Gauge, feature: 'track_visits' },
   { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses' },
   { label: 'Submit Payment', path: '/sales/payments/new', icon: Receipt, feature: 'view_sales_dashboard' },
   { label: 'CRM Leads', path: '/sales/crm', icon: Users, feature: 'track_visits' },

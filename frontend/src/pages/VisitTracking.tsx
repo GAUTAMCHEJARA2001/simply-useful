@@ -9,7 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Calendar, Camera, Loader2, MapPin, X, CheckCircle2, Navigation, RefreshCw } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, Calendar, Camera, Loader2, MapPin, X, CheckCircle2, Navigation, RefreshCw, Gauge } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { externalApi } from '@/api/external.api';
@@ -332,14 +333,21 @@ const VisitTracking: React.FC = () => {
             GPS-sealed check-ins &middot; <span className="font-semibold text-primary">{fyLabel}</span> ({fyVisits.length} visits)
           </p>
         </div>
-        {/* Floating punch button – bottom-right on mobile */}
-        <Button
-          className="action-button group w-[calc(100%-2rem)] sm:w-auto fixed bottom-6 left-4 sm:left-auto right-4 z-40 sm:static rounded-full sm:rounded-lg shadow-2xl sm:shadow-sm px-5 sm:px-4 h-14 sm:h-10 text-base sm:text-sm"
-          onClick={() => { setDialogOpen(true); setPunchStep(1); }}
-        >
-          <Plus className="w-5 h-5 mr-2" />
-          <span className="sm:inline">Start Visit Punch</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link to="/sales/travel">
+            <Button variant="outline" className="h-10 text-xs sm:text-sm font-semibold gap-1.5 border-primary/40 hover:bg-primary/5 text-primary">
+              <Gauge className="w-4 h-4" /> Daily Travel (KM Punch)
+            </Button>
+          </Link>
+          {/* Floating punch button – bottom-right on mobile */}
+          <Button
+            className="action-button group w-[calc(100%-2rem)] sm:w-auto fixed bottom-6 left-4 sm:left-auto right-4 z-40 sm:static rounded-full sm:rounded-lg shadow-2xl sm:shadow-sm px-5 sm:px-4 h-14 sm:h-10 text-base sm:text-sm"
+            onClick={() => { setDialogOpen(true); setPunchStep(1); }}
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            <span className="sm:inline">Start Visit Punch</span>
+          </Button>
+        </div>
       </div>
 
       {/* ── Visit Cards Grid ─────────────────────────────────── */}

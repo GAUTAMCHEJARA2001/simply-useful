@@ -1000,3 +1000,36 @@ class LeaveAllocationLog(models.Model):
     class Meta:
         db_table = 'LeaveAllocationLog'
         unique_together = (('policy', 'period_identifier'),)
+
+
+class DailyTravelLog(models.Model):
+    id = models.TextField(primary_key=True)
+    user = models.ForeignKey(User, models.DO_NOTHING, db_column='userId', db_constraint=False)
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    date = models.DateField()
+    vehicle_type = models.CharField(max_length=20, default='BIKE')  # BIKE, CAR, OTHER
+    start_km = models.FloatField(default=0.0)
+    end_km = models.FloatField(null=True, blank=True)
+    total_km = models.FloatField(default=0.0)
+    start_photo = models.TextField(blank=True, null=True)
+    end_photo = models.TextField(blank=True, null=True)
+    start_time = models.DateTimeField(blank=True, null=True)
+    end_time = models.DateTimeField(blank=True, null=True)
+    start_location = models.TextField(blank=True, null=True)
+    end_location = models.TextField(blank=True, null=True)
+    so_notes = models.TextField(blank=True, null=True)
+
+    # HR Verification & Correction
+    status = models.CharField(max_length=20, default='PENDING')  # PENDING, APPROVED, REJECTED
+    approved_km = models.FloatField(null=True, blank=True)
+    hr_notes = models.TextField(blank=True, null=True)
+    verified_by = models.ForeignKey(User, models.DO_NOTHING, db_column='verifiedBy', db_constraint=False, null=True, blank=True, related_name='verified_travel_logs')
+    verified_at = models.DateTimeField(blank=True, null=True)
+
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'DailyTravelLog'
+        unique_together = (('user', 'date'),)
+

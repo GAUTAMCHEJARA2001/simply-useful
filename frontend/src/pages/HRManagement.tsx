@@ -1,7 +1,7 @@
 import React from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart } from 'lucide-react';
+import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart, Gauge } from 'lucide-react';
 
 import { EmployeeMasterTab } from './HRManagement/components/EmployeeMasterTab';
 import { AdvancedAttendanceTab } from './HRManagement/components/AdvancedAttendanceTab';
@@ -10,10 +10,11 @@ import { OrgChartTab } from './HRManagement/components/OrgChartTab';
 import { HRConfigTab } from './HRManagement/components/HRConfigTab';
 import { EmployeeLedgerTab } from './HRManagement/components/EmployeeLedgerTab';
 import { LeaveManagementTab } from './HRManagement/components/LeaveManagementTab';
+import { TravelApprovalsTab } from './HRManagement/components/TravelApprovalsTab';
 
 
 
-export type HRTab = 'employees' | 'attendance' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
+export type HRTab = 'employees' | 'attendance' | 'travel' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
 
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
@@ -28,6 +29,7 @@ const HRManagement: React.FC = () => {
     { id: 'employees', label: 'Employee Master', icon: Users },
     { id: 'orgchart', label: 'Organization Chart', icon: Users },
     { id: 'attendance', label: 'Daily Attendance', icon: Clock },
+    { id: 'travel', label: 'Travel & KM Approvals', icon: Gauge },
     { id: 'leaves', label: 'Leave Management', icon: CalendarCheck },
     { id: 'ledger', label: 'Employee Ledger', icon: Wallet },
     { id: 'payroll', label: 'Payroll & Slips', icon: FileBarChart },
@@ -78,6 +80,7 @@ const HRManagement: React.FC = () => {
         {tab === 'employees' && <EmployeeMasterTab />}
         {tab === 'orgchart' && <OrgChartTab />}
         {tab === 'attendance' && <AdvancedAttendanceTab />}
+        {tab === 'travel' && <TravelApprovalsTab />}
         {tab === 'leaves' && <LeaveManagementTab />}
         {tab === 'ledger' && <EmployeeLedgerTab />}
         {tab === 'payroll' && <MonthlyAttendanceTab />}

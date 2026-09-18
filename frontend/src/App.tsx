@@ -84,6 +84,7 @@ const AuditLogsPage = safeLazy(() => import("./pages/AuditLogsPage"), "AuditLogs
 const OnboardingRequestsPage = safeLazy(() => import("./pages/OnboardingRequestsPage"), "OnboardingRequestsPage");
 const AdminOnboardingPage = safeLazy(() => import("./pages/AdminOnboardingPage"), "AdminOnboardingPage");
 const PrintableOnboardingForm = safeLazy(() => import("./pages/PrintableOnboardingForm"), "PrintableOnboardingForm");
+const DailyTravelPage = safeLazy(() => import("./pages/DailyTravelPage"), "DailyTravelPage");
 
 
 
@@ -211,6 +212,8 @@ const App = () => {
                       <Route path="/sales/estimate/:id" element={<ProtectedRoute><EstimateGenerator /></ProtectedRoute>} />
                       <Route path="/sales/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
                       <Route path="/sales/visits" element={<ProtectedRoute><VisitTracking /></ProtectedRoute>} />
+                      <Route path="/sales/travel" element={<ProtectedRoute><DailyTravelPage /></ProtectedRoute>} />
+                      <Route path="/travel" element={<Navigate to="/sales/travel" replace />} />
                       <Route path="/sales/expenses" element={<ProtectedRoute><ExpenseEntry /></ProtectedRoute>} />
                       <Route path="/sales/crm" element={<ProtectedRoute><LeadsPage /></ProtectedRoute>} />
                       <Route path="/sales/territory" element={<ProtectedRoute><MyTerritory /></ProtectedRoute>} />
