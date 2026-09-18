@@ -10,6 +10,24 @@ from api.views import send_success, send_error, _get_company_id
 
 
 def _serialize_travel_log(log):
+    user_name = ''
+    user_email = ''
+    try:
+        if log.user:
+            user_name = log.user.name or log.user.email or ''
+            user_email = log.user.email or ''
+    except Exception:
+        pass
+
+    verified_by_name = None
+    verified_by_email = None
+    try:
+        if log.verified_by:
+            verified_by_name = log.verified_by.name or log.verified_by.email or None
+            verified_by_email = log.verified_by.email or None
+    except Exception:
+        pass
+
     return {
         'id': log.id,
         'date': log.date.strftime('%Y-%m-%d') if log.date else None,
@@ -27,12 +45,12 @@ def _serialize_travel_log(log):
         'status': log.status,
         'approved_km': log.approved_km,
         'hr_notes': log.hr_notes,
-        'verified_by': log.verified_by.name or log.verified_by.email if log.verified_by else None,
-        'verified_by_email': log.verified_by.email if log.verified_by else None,
+        'verified_by': verified_by_name,
+        'verified_by_email': verified_by_email,
         'verified_at': log.verified_at.isoformat() if log.verified_at else None,
         'user_id': log.user_id,
-        'user_name': log.user.name or log.user.email if log.user else '',
-        'user_email': log.user.email if log.user else '',
+        'user_name': user_name,
+        'user_email': user_email,
         'created_at': log.createdat.isoformat() if log.createdat else None,
     }
 
@@ -44,8 +62,9 @@ def travel_today(request):
     if not user or not getattr(user, 'is_authenticated', False):
         return send_error('Unauthorized', 401)
 
+    user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
     today = timezone.localdate()
-    log = DailyTravelLog.objects.filter(user=user, date=today).first()
+    log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
     if not log:
         return send_success(None, 'No travel punched today')
 
@@ -59,9 +78,13 @@ def travel_start(request):
     if not user or not getattr(user, 'is_authenticated', False):
         return send_error('Unauthorized', 401)
 
-    company_id = _get_company_id(request) or getattr(user, 'companyid_id', None)
+    company_id = _get_company_id(request) or getattr(user, 'companyid_id', None) or getattr(user, 'companyId', None)
     if not company_id:
         return send_error('Company ID not found', 400)
+
+    user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
+    if not user_id:
+        return send_error('User ID not found', 400)
 
     data = request.data or {}
     start_km_raw = data.get('start_km')
@@ -80,11 +103,11 @@ def travel_start(request):
         vehicle_type = 'BIKE'
 
     today = timezone.localdate()
-    log = DailyTravelLog.objects.filter(user=user, date=today).first()
+    log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
     if not log:
         log = DailyTravelLog(
             id=f"TRV-{uuid.uuid4().hex[:12].upper()}",
-            user=user,
+            user_id=user_id,
             companyid_id=company_id,
             date=today,
         )
@@ -107,8 +130,9 @@ def travel_end(request):
     if not user or not getattr(user, 'is_authenticated', False):
         return send_error('Unauthorized', 401)
 
+    user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
     today = timezone.localdate()
-    log = DailyTravelLog.objects.filter(user=user, date=today).first()
+    log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
     if not log or log.start_km is None:
         return send_error('Please start your day trip first before ending it', 400)
 
@@ -242,7 +266,7 @@ def travel_hr_verify(request, pk):
         log.status = 'APPROVED'
         log.approved_km = approved_km
         log.hr_notes = hr_notes
-        log.verified_by = user
+        log.verified_by_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
         log.verified_at = timezone.now()
         log.save()
 
@@ -272,7 +296,7 @@ def travel_hr_verify(request, pk):
     elif action == 'REJECT':
         log.status = 'REJECTED'
         log.hr_notes = hr_notes
-        log.verified_by = user
+        log.verified_by_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
         log.verified_at = timezone.now()
         log.save()
 
