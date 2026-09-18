@@ -199,12 +199,33 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-warehouse-id',
 ]
 
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https:\/\/.*\.vercel\.app$",
+    r"^https:\/\/.*\.up\.railway\.app$",
+    r"^https:\/\/.*\.onrender\.com$",
+]
+
+CORS_ALLOWED_ORIGINS = [
+    'https://simply-useful.vercel.app',
+    'https://www.simply-useful.run.place',
+    'https://simply-useful.run.place',
+    'https://api.simply-useful.run.place',
+    'https://erp.kamlaconchem.com',
+    'https://api.kamlaconchem.com',
+    'https://erp.etac.in',
+    'https://api.etac.in',
+    'http://localhost:5173',
+    'http://localhost:3000',
+]
+
 # CSRF Trusted Origins
 csrf_trusted_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
 if csrf_trusted_env:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in csrf_trusted_env.split(',') if o.strip()]
 else:
     CSRF_TRUSTED_ORIGINS = [
+        'https://simply-useful.vercel.app',
+        'https://*.vercel.app',
         'https://www.simply-useful.run.place',
         'https://simply-useful.run.place',
         'https://api.simply-useful.run.place',
@@ -213,6 +234,7 @@ else:
         'https://erp.etac.in',
         'https://api.etac.in',
         'https://*.up.railway.app',
+        'https://*.onrender.com',
         'http://localhost:5173',
         'http://localhost:3000',
     ]
