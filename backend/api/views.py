@@ -1463,25 +1463,26 @@ class OrderViewSet(viewsets.ModelViewSet):
         qs = Order.objects.all()
         if company_id and user_role != 'SUPERADMIN':
             qs = qs.filter(companyid_id=company_id)
-        wh_header = self.request.headers.get('X-Warehouse-Id') or self.request.headers.get('X-Warehouse-ID') or self.request.headers.get('x-warehouse-id')
-        if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
-            qs = qs.filter(warehouseid_id=wh_header)
+
+        # Warehouse scoping: Inventory/Production users see orders for their assigned warehouse(s)
+        wh_ids = _get_request_warehouse_ids(self.request)
+        if wh_ids is not None:
+            qs = qs.filter(warehouseid_id__in=wh_ids)
+        else:
+            wh_header = self.request.headers.get('X-Warehouse-Id') or self.request.headers.get('X-Warehouse-ID') or self.request.headers.get('x-warehouse-id')
+            if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
+                qs = qs.filter(warehouseid_id=wh_header)
+
+        # Sales Officers only see their own orders
         SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
-        if (user_role in SALES_ROLES or user_role not in ['SUPERADMIN', 'ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER', 'DISPATCH']) and getattr(self.request.user, 'email', None):
+        if user_role in SALES_ROLES and getattr(self.request.user, 'email', None):
             qs = qs.filter(soemail=self.request.user.email)
         return qs
 
     def get_object(self):
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         pk = self.kwargs[lookup_url_kwarg]
-        company_id = _get_company_id(self.request)
-        user_role = (getattr(self.request.user, 'role', '') or '').upper()
-        qs = Order.objects.all()
-        if company_id and user_role != 'SUPERADMIN':
-            qs = qs.filter(companyid_id=company_id)
-        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
-        if (user_role in SALES_ROLES or user_role not in ['SUPERADMIN', 'ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER', 'DISPATCH']) and getattr(self.request.user, 'email', None):
-            qs = qs.filter(soemail=self.request.user.email)
+        qs = self.get_queryset()
         try:
             return qs.get(id=pk)
         except Order.DoesNotExist:
@@ -1491,18 +1492,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 raise exceptions.NotFound('Order not found')
 
     def list(self, request, *args, **kwargs):
-        from api.models import Userwarehouseaccess
-        company_id = _get_company_id(self.request)
-        user_role = (getattr(self.request.user, 'role', '') or '').upper()
-        qs = Order.objects.all()
-        if company_id and user_role != 'SUPERADMIN':
-            qs = qs.filter(companyid_id=company_id)
-        wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
-        if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
-            qs = qs.filter(warehouseid_id=wh_header)
-        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
-        if (user_role in SALES_ROLES or user_role not in ['SUPERADMIN', 'ADMIN', 'MANAGER', 'WAREHOUSE_MANAGER', 'DISPATCH']) and getattr(request.user, 'email', None):
-            qs = qs.filter(soemail=request.user.email)
+        qs = self.get_queryset()
         qs = _fy_date_filter(request, qs, date_field='date')
         serialized_data = OrderSerializer(qs.prefetch_related('orderitem_set'), many=True, context={'skip_stock': True}).data
         all_orders = list(serialized_data)
@@ -1993,7 +1983,7 @@ class VisitViewSet(viewsets.ModelViewSet):
         qs = Visit.objects.filter(companyid_id=company_id) if company_id else Visit.objects.all()
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
-        if (user_role in SALES_ROLES or user_role not in ['SUPERADMIN', 'ADMIN', 'HR']) and getattr(self.request.user, 'email', None):
+        if user_role in SALES_ROLES and getattr(self.request.user, 'email', None):
             qs = qs.filter(soemail=self.request.user.email)
         return qs
 
@@ -2062,7 +2052,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         qs = Expense.objects.filter(companyid_id=company_id) if company_id else Expense.objects.all()
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
-        if (user_role in SALES_ROLES or user_role not in ['SUPERADMIN', 'ADMIN', 'HR']) and getattr(self.request.user, 'email', None):
+        if user_role in SALES_ROLES and getattr(self.request.user, 'email', None):
             qs = qs.filter(soemail=self.request.user.email)
         return qs
 
