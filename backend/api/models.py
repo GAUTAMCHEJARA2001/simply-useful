@@ -1018,6 +1018,9 @@ class DailyTravelLog(models.Model):
     start_location = models.TextField(blank=True, null=True)
     end_location = models.TextField(blank=True, null=True)
     so_notes = models.TextField(blank=True, null=True)
+    visit_summary = models.TextField(blank=True, null=True)
+    collection_summary = models.TextField(blank=True, null=True)
+    order_summary = models.TextField(blank=True, null=True)
 
     # HR Verification & Correction
     status = models.CharField(max_length=20, default='PENDING')  # PENDING, APPROVED, REJECTED

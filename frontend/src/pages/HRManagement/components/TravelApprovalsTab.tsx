@@ -21,7 +21,11 @@ import {
   ArrowRight, 
   AlertTriangle,
   Bike,
-  Car
+  Car,
+  Store,
+  IndianRupee,
+  ShoppingBag,
+  FileText
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -428,11 +432,50 @@ export const TravelApprovalsTab: React.FC = () => {
                 </div>
               </div>
 
-              {selectedLog.so_notes && (
-                <div className="p-2.5 rounded-lg bg-muted/30 border text-xs">
-                  <strong>SO Route Remark:</strong> {selectedLog.so_notes}
+              {/* Sales Officer 3 Activity Summaries */}
+              <div className="space-y-2.5 pt-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Sales Officer Activity Punch
+                </p>
+
+                <div className="space-y-2">
+                  <div className="p-2.5 rounded-lg border bg-blue-50/40 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/60 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300 mb-1">
+                      <Store className="w-3.5 h-3.5" />
+                      <span>Daily Visit Summary:</span>
+                    </div>
+                    <p className="text-xs whitespace-pre-wrap text-foreground/90 pl-5">
+                      {selectedLog.visit_summary || 'N/A'}
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg border bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/60 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300 mb-1">
+                      <IndianRupee className="w-3.5 h-3.5" />
+                      <span>Payment Collection:</span>
+                    </div>
+                    <p className="text-xs whitespace-pre-wrap text-foreground/90 pl-5">
+                      {selectedLog.collection_summary || 'Nil'}
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg border bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/60 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-purple-700 dark:text-purple-300 mb-1">
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>Order Summary:</span>
+                    </div>
+                    <p className="text-xs whitespace-pre-wrap text-foreground/90 pl-5">
+                      {selectedLog.order_summary || 'Nil'}
+                    </p>
+                  </div>
                 </div>
-              )}
+
+                {selectedLog.so_notes && (
+                  <div className="p-2 rounded-lg bg-muted/30 border text-xs">
+                    <span className="font-semibold text-muted-foreground">Route Notes / Remarks:</span> {selectedLog.so_notes}
+                  </div>
+                )}
+              </div>
 
               {/* Correction Input */}
               <div className="space-y-2 border-t pt-3">

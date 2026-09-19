@@ -14,6 +14,9 @@ export interface DailyTravelLogItem {
   start_location?: string | null;
   end_location?: string | null;
   so_notes?: string | null;
+  visit_summary?: string | null;
+  collection_summary?: string | null;
+  order_summary?: string | null;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   approved_km?: number | null;
   hr_notes?: string | null;
@@ -40,6 +43,9 @@ export const travelService = {
     end_km: number;
     end_photo?: string;
     end_location?: string;
+    visit_summary: string;
+    collection_summary: string;
+    order_summary: string;
     so_notes?: string;
   }) => api.post('/travel/end', data),
 

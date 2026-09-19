@@ -61,6 +61,14 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
 
   const { data: products = [] } = useProducts({ warehouseId: form.warehouseId || undefined });
 
+  const productsById = useMemo(() => {
+    const map = new Map<string, any>();
+    products.forEach((p: any) => {
+      if (p.id) map.set(String(p.id), p);
+    });
+    return map;
+  }, [products]);
+
   const availableCategories = useMemo(() => {
     const cats = new Set<string>();
     products.forEach(p => {

@@ -24,7 +24,11 @@ import {
   Bike,
   Car,
   Navigation,
-  Info
+  Info,
+  IndianRupee,
+  ShoppingBag,
+  Store,
+  FileText
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -46,13 +50,17 @@ export const DailyTravelPage: React.FC = () => {
   const [gpsLocation, setGpsLocation] = useState<string>('');
   const [gpsStatus, setGpsStatus] = useState<string>('Detecting GPS location...');
 
-  // Punch End Form
+  // Punch End Form - Compulsory Summaries
   const [endKm, setEndKm] = useState<string>('');
   const [endPhoto, setEndPhoto] = useState<string>('');
-  const [soNotes, setSoNotes] = useState<string>('');
+  const [visitSummary, setVisitSummary] = useState<string>('');
+  const [collectionSummary, setCollectionSummary] = useState<string>('');
+  const [orderSummary, setOrderSummary] = useState<string>('');
+  const [routeNotes, setRouteNotes] = useState<string>('');
 
-  // Lightbox for photos
+  // Lightbox for photos & log viewer
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [viewingHistoryLog, setViewingHistoryLog] = useState<DailyTravelLogItem | null>(null);
 
   // GPS auto-capture
   const fetchGps = useCallback(() => {
@@ -84,6 +92,9 @@ export const DailyTravelPage: React.FC = () => {
         if (log.start_km !== undefined) setStartKm(String(log.start_km));
         if (log.vehicle_type) setVehicleType(log.vehicle_type);
         if (log.end_km !== null && log.end_km !== undefined) setEndKm(String(log.end_km));
+        if (log.visit_summary) setVisitSummary(log.visit_summary);
+        if (log.collection_summary) setCollectionSummary(log.collection_summary);
+        if (log.order_summary) setOrderSummary(log.order_summary);
       }
     } catch (err) {
       console.error('Failed to load today travel log:', err);
@@ -155,13 +166,31 @@ export const DailyTravelPage: React.FC = () => {
       return;
     }
 
+    if (!visitSummary.trim()) {
+      toast({ title: 'Daily Visit Summary Required *', description: 'Please enter details of dealers/sites visited today before submitting.', variant: 'destructive' });
+      return;
+    }
+
+    if (!collectionSummary.trim()) {
+      toast({ title: 'Payment Collection Required *', description: 'Please enter payment collection details (or write "Nil" if none).', variant: 'destructive' });
+      return;
+    }
+
+    if (!orderSummary.trim()) {
+      toast({ title: 'Order Summary Required *', description: 'Please enter order booking details (or write "Nil" if none).', variant: 'destructive' });
+      return;
+    }
+
     try {
       setSubmitting(true);
       const res = await travelService.endTrip({
         end_km: Number(endKm),
         end_photo: endPhoto,
         end_location: gpsLocation || gpsStatus,
-        so_notes: soNotes,
+        visit_summary: visitSummary.trim(),
+        collection_summary: collectionSummary.trim(),
+        order_summary: orderSummary.trim(),
+        so_notes: routeNotes.trim(),
       });
       const data = res.data?.data;
       toast({ title: 'Day Trip Ended! 🏁', description: `Total ${data?.total_km || 0} KM submitted for HR verification` });
@@ -422,22 +451,149 @@ export const DailyTravelPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Remarks */}
-              <div className="space-y-2">
-                <Label htmlFor="soNotes" className="text-xs font-semibold">Day Summary / Route Notes (Optional)</Label>
-                <Textarea
-                  id="soNotes"
-                  placeholder="e.g. Visited 5 dealers across Industrial Area & North Market"
-                  rows={2}
-                  value={soNotes}
-                  onChange={(e) => setSoNotes(e.target.value)}
-                />
+              {/* 3 COMPULSORY ACTIVITY SUMMARIES */}
+              <div className="space-y-4 pt-3 border-t">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      Daily Activity & Closing Summaries
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      Fill all 3 compulsory boxes before submitting your day's travel to HR.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="bg-red-50 dark:bg-red-950/30 text-red-600 border-red-300 text-[10px] font-bold">
+                    * 3 Mandatory Fields
+                  </Badge>
+                </div>
+
+                {/* 1. Daily Visit Summary (Compulsory) */}
+                <div className={cn(
+                  "space-y-1.5 p-3 rounded-xl border transition-all",
+                  visitSummary.trim() ? "bg-muted/20 border-border" : "bg-red-50/20 border-red-200 dark:border-red-900/60"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="visitSummary" className="text-xs font-bold flex items-center gap-1.5 text-foreground">
+                      <Store className="w-4 h-4 text-blue-600" />
+                      <span>1. Daily Visit Summary</span>
+                      <span className="text-red-600 font-bold">*</span>
+                    </Label>
+                    {visitSummary.trim() ? (
+                      <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Filled
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-red-600 font-bold">Compulsory</span>
+                    )}
+                  </div>
+                  <Textarea
+                    id="visitSummary"
+                    placeholder="e.g. Visited 6 dealers across North Market: Sharma Hardware, Krishna Paints, Gupta Sanitary... (Mention dealer names & discussion points)"
+                    rows={3}
+                    value={visitSummary}
+                    onChange={(e) => setVisitSummary(e.target.value)}
+                    className="text-xs resize-y bg-background"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Required: list of all clients, dealers, or project sites visited today.
+                  </p>
+                </div>
+
+                {/* 2. Payment Collection Summary (Compulsory) */}
+                <div className={cn(
+                  "space-y-1.5 p-3 rounded-xl border transition-all",
+                  collectionSummary.trim() ? "bg-muted/20 border-border" : "bg-red-50/20 border-red-200 dark:border-red-900/60"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="collectionSummary" className="text-xs font-bold flex items-center gap-1.5 text-foreground">
+                      <IndianRupee className="w-4 h-4 text-emerald-600" />
+                      <span>2. Payment Collection Summary</span>
+                      <span className="text-red-600 font-bold">*</span>
+                    </Label>
+                    {collectionSummary.trim() ? (
+                      <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Filled
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-red-600 font-bold">Compulsory</span>
+                    )}
+                  </div>
+                  <Textarea
+                    id="collectionSummary"
+                    placeholder="e.g. Collected ₹45,000 via Cheque from Sharma H/W, ₹12,000 Cash from Krishna Paints. (Write 'Nil' if no payment was collected today)"
+                    rows={2}
+                    value={collectionSummary}
+                    onChange={(e) => setCollectionSummary(e.target.value)}
+                    className="text-xs resize-y bg-background"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Required: write amount, payment mode, and dealer. (Write "Nil" if no collection).
+                  </p>
+                </div>
+
+                {/* 3. Order Summary (Compulsory) */}
+                <div className={cn(
+                  "space-y-1.5 p-3 rounded-xl border transition-all",
+                  orderSummary.trim() ? "bg-muted/20 border-border" : "bg-red-50/20 border-red-200 dark:border-red-900/60"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="orderSummary" className="text-xs font-bold flex items-center gap-1.5 text-foreground">
+                      <ShoppingBag className="w-4 h-4 text-purple-600" />
+                      <span>3. Order Summary</span>
+                      <span className="text-red-600 font-bold">*</span>
+                    </Label>
+                    {orderSummary.trim() ? (
+                      <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Filled
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-red-600 font-bold">Compulsory</span>
+                    )}
+                  </div>
+                  <Textarea
+                    id="orderSummary"
+                    placeholder="e.g. Booked 3 orders: 50 bags Wall Putty for Om Traders, 20 buckets Primer for Krishna Paints. (Write 'Nil' if no orders booked today)"
+                    rows={2}
+                    value={orderSummary}
+                    onChange={(e) => setOrderSummary(e.target.value)}
+                    className="text-xs resize-y bg-background"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Required: write booked orders, items, and quantities. (Write "Nil" if no orders).
+                  </p>
+                </div>
+
+                {/* 4. Route Notes / Extra Remarks (Optional) */}
+                <div className="space-y-1.5 p-3 rounded-xl border bg-muted/10">
+                  <Label htmlFor="routeNotes" className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground">
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>4. Route Notes / Extra Remarks (Optional)</span>
+                  </Label>
+                  <Textarea
+                    id="routeNotes"
+                    placeholder="e.g. Traffic diversion via bypass road, weather conditions, or vehicle notes..."
+                    rows={2}
+                    value={routeNotes}
+                    onChange={(e) => setRouteNotes(e.target.value)}
+                    className="text-xs resize-y bg-background"
+                  />
+                </div>
               </div>
+
+              {/* Validation Warning if incomplete */}
+              {(!visitSummary.trim() || !collectionSummary.trim() || !orderSummary.trim()) && (
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span>
+                    Please fill <strong>Daily Visit Summary</strong>, <strong>Payment Collection</strong>, and <strong>Order Summary</strong> to enable submission.
+                  </span>
+                </div>
+              )}
 
               <Button 
                 onClick={handleEndTrip} 
-                disabled={submitting || !endKm || Number(endKm) < todayLog.start_km}
-                className="w-full py-6 text-base font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-lg"
+                disabled={submitting || !endKm || Number(endKm) < todayLog.start_km || !visitSummary.trim() || !collectionSummary.trim() || !orderSummary.trim()}
+                className="w-full py-6 text-base font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-lg transition-all"
               >
                 {submitting ? 'Submitting...' : '🏁 End Day Trip & Submit to HR'}
               </Button>
@@ -549,11 +705,53 @@ export const DailyTravelPage: React.FC = () => {
                 </div>
               </div>
 
-              {todayLog.so_notes && (
-                <div className="p-3 rounded-lg bg-muted/30 border text-xs">
-                  <span className="font-semibold text-muted-foreground">Route Notes:</span> {todayLog.so_notes}
+              {/* DAILY ACTIVITY SUMMARIES SUBMITTED */}
+              <div className="space-y-3 pt-3 border-t">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <span>Daily Activity Summaries Submitted</span>
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Visit Summary Card */}
+                  <div className="p-3 rounded-xl border bg-blue-50/40 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/60 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-300">
+                      <Store className="w-3.5 h-3.5" />
+                      <span>Daily Visit Summary</span>
+                    </div>
+                    <p className="text-xs whitespace-pre-wrap text-foreground/90 leading-relaxed font-normal">
+                      {todayLog.visit_summary || 'No visit summary recorded.'}
+                    </p>
+                  </div>
+
+                  {/* Payment Collection Card */}
+                  <div className="p-3 rounded-xl border bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/60 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                      <IndianRupee className="w-3.5 h-3.5" />
+                      <span>Payment Collection</span>
+                    </div>
+                    <p className="text-xs whitespace-pre-wrap text-foreground/90 leading-relaxed font-normal">
+                      {todayLog.collection_summary || 'Nil'}
+                    </p>
+                  </div>
+
+                  {/* Order Summary Card */}
+                  <div className="p-3 rounded-xl border bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/60 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-300">
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>Order Summary</span>
+                    </div>
+                    <p className="text-xs whitespace-pre-wrap text-foreground/90 leading-relaxed font-normal">
+                      {todayLog.order_summary || 'Nil'}
+                    </p>
+                  </div>
                 </div>
-              )}
+
+                {todayLog.so_notes && (
+                  <div className="p-2.5 rounded-lg bg-muted/30 border text-xs">
+                    <span className="font-semibold text-muted-foreground">Route Notes / Remarks:</span> {todayLog.so_notes}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
@@ -592,8 +790,9 @@ export const DailyTravelPage: React.FC = () => {
                     <th className="px-4 py-3 font-semibold">Distance</th>
                     <th className="px-4 py-3 font-semibold">Approved KM</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold">Activity Summaries</th>
                     <th className="px-4 py-3 font-semibold">HR Note</th>
-                    <th className="px-4 py-3 font-semibold text-right">Photos</th>
+                    <th className="px-4 py-3 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -637,6 +836,24 @@ export const DailyTravelPage: React.FC = () => {
                           {item.status}
                         </Badge>
                       </td>
+                      <td className="px-4 py-3 text-xs max-w-xs">
+                        {item.visit_summary || item.collection_summary || item.order_summary ? (
+                          <button
+                            type="button"
+                            onClick={() => setViewingHistoryLog(item)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary font-medium text-xs transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>View 3 Summaries</span>
+                          </button>
+                        ) : item.so_notes ? (
+                          <span className="text-muted-foreground truncate block max-w-[150px]" title={item.so_notes}>
+                            {item.so_notes}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">--</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate" title={item.hr_notes || ''}>
                         {item.hr_notes || '--'}
                       </td>
@@ -670,6 +887,67 @@ export const DailyTravelPage: React.FC = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* History Log Summaries Dialog */}
+      <Dialog open={!!viewingHistoryLog} onOpenChange={(open) => !open && setViewingHistoryLog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <FileText className="w-4 h-4 text-primary" />
+              <span>Activity Summaries &middot; {viewingHistoryLog?.date}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Travel Distance: {viewingHistoryLog?.total_km} KM &middot; Status: {viewingHistoryLog?.status}
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingHistoryLog && (
+            <div className="space-y-3 py-2">
+              <div className="p-3 rounded-xl border bg-blue-50/40 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/60 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-300">
+                  <Store className="w-3.5 h-3.5" />
+                  <span>1. Daily Visit Summary</span>
+                </div>
+                <p className="text-xs whitespace-pre-wrap text-foreground leading-relaxed">
+                  {viewingHistoryLog.visit_summary || 'N/A'}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl border bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/60 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                  <IndianRupee className="w-3.5 h-3.5" />
+                  <span>2. Payment Collection Summary</span>
+                </div>
+                <p className="text-xs whitespace-pre-wrap text-foreground leading-relaxed">
+                  {viewingHistoryLog.collection_summary || 'Nil'}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl border bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/60 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-300">
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>3. Order Summary</span>
+                </div>
+                <p className="text-xs whitespace-pre-wrap text-foreground leading-relaxed">
+                  {viewingHistoryLog.order_summary || 'Nil'}
+                </p>
+              </div>
+
+              {viewingHistoryLog.so_notes && (
+                <div className="p-2.5 rounded-lg bg-muted/30 border text-xs">
+                  <span className="font-semibold text-muted-foreground">Route Notes / Remarks:</span> {viewingHistoryLog.so_notes}
+                </div>
+              )}
+
+              {viewingHistoryLog.hr_notes && (
+                <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 text-xs">
+                  <span className="font-semibold text-amber-800 dark:text-amber-300">HR Verification Note:</span> {viewingHistoryLog.hr_notes}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Image Lightbox Modal */}
       <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>

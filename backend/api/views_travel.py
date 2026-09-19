@@ -42,6 +42,9 @@ def _serialize_travel_log(log):
         'start_location': log.start_location,
         'end_location': log.end_location,
         'so_notes': log.so_notes,
+        'visit_summary': getattr(log, 'visit_summary', '') or '',
+        'collection_summary': getattr(log, 'collection_summary', '') or '',
+        'order_summary': getattr(log, 'order_summary', '') or '',
         'status': log.status,
         'approved_km': log.approved_km,
         'hr_notes': log.hr_notes,
@@ -196,6 +199,17 @@ def travel_end(request):
     if end_km < log.start_km:
         return send_error(f"End KM ({end_km}) cannot be less than Start KM ({log.start_km})", 400)
 
+    visit_summary = (data.get('visit_summary') or '').strip()
+    collection_summary = (data.get('collection_summary') or '').strip()
+    order_summary = (data.get('order_summary') or '').strip()
+
+    if not visit_summary:
+        return send_error('Daily Visit Summary is compulsory. Please enter details of visits/dealers attended.', 400)
+    if not collection_summary:
+        return send_error('Payment Collection Summary is compulsory. Please enter collected amounts or write "Nil".', 400)
+    if not order_summary:
+        return send_error('Order Summary is compulsory. Please enter booked orders or write "Nil".', 400)
+
     log.end_km = end_km
     log.total_km = round(end_km - log.start_km, 2)
     # Default approved KM to total KM initially before HR verification
@@ -205,7 +219,22 @@ def travel_end(request):
     log.end_photo = data.get('end_photo') or log.end_photo
     log.end_location = data.get('end_location') or log.end_location
     log.end_time = timezone.now()
-    log.so_notes = data.get('so_notes') or log.so_notes
+
+    log.visit_summary = visit_summary
+    log.collection_summary = collection_summary
+    log.order_summary = order_summary
+
+    # Formatted composite notes for backward compatibility
+    structured_notes = [
+        f"📍 VISIT SUMMARY:\n{visit_summary}",
+        f"💰 PAYMENT COLLECTION:\n{collection_summary}",
+        f"📦 ORDER SUMMARY:\n{order_summary}"
+    ]
+    route_notes = (data.get('so_notes') or '').strip()
+    if route_notes:
+        structured_notes.append(f"🛣️ ROUTE / REMARKS:\n{route_notes}")
+    log.so_notes = "\n\n".join(structured_notes)
+
     log.status = 'PENDING'
     log.save()
 
