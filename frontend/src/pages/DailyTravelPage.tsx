@@ -37,7 +37,10 @@ import {
   ChevronRight,
   TrendingUp,
   AlertTriangle,
-  Layers
+  Layers,
+  Search,
+  Building2,
+  Check
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -56,8 +59,27 @@ export const DailyTravelPage: React.FC = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Dealers master list for tour planner selection
-  const [dealers, setDealers] = useState<any[]>([]);
+  // Registered Parties (Dealers + Distributors) master list
+  interface RegisteredParty {
+    id: string;
+    name: string;
+    code: string;
+    city: string;
+    address: string;
+    type: 'Dealer' | 'Distributor';
+  }
+  const [parties, setParties] = useState<RegisteredParty[]>([]);
+  const [partySearchQuery, setPartySearchQuery] = useState('');
+  const [partyTypeFilter, setPartyTypeFilter] = useState<'ALL' | 'Dealer' | 'Distributor'>('ALL');
+
+  const filteredParties = useMemo(() => {
+    return parties.filter(p => {
+      const matchType = partyTypeFilter === 'ALL' || p.type === partyTypeFilter;
+      const q = partySearchQuery.toLowerCase().trim();
+      const matchQuery = !q || p.name.toLowerCase().includes(q) || p.city.toLowerCase().includes(q) || p.code.toLowerCase().includes(q);
+      return matchType && matchQuery;
+    });
+  }, [parties, partyTypeFilter, partySearchQuery]);
 
   // Punch Start Form
   const [startKm, setStartKm] = useState<string>('');
@@ -134,16 +156,55 @@ export const DailyTravelPage: React.FC = () => {
     );
   }, []);
 
-  // Fetch Master Dealers
-  const fetchDealers = async () => {
+  // Fetch Master Dealers & Distributors
+  const fetchParties = async () => {
     try {
-      const res = await api.get('/dealers');
-      const data = res.data?.data || res.data || [];
-      if (Array.isArray(data)) {
-        setDealers(data);
+      const [dealersRes, distRes] = await Promise.all([
+        api.get('/dealers'),
+        api.get('/distributors').catch(() => ({ data: [] }))
+      ]);
+      const dList = dealersRes.data?.data || dealersRes.data || [];
+      const distList = distRes.data?.data || distRes.data || [];
+
+      const parsedParties: RegisteredParty[] = [];
+
+      if (Array.isArray(dList)) {
+        dList.forEach((d: any) => {
+          const name = d.dealerName || d.dealer_name || d.name || d.businessName || '';
+          if (name) {
+            parsedParties.push({
+              id: String(d.id || d.dealerCode || d.dealercode || name),
+              name,
+              code: d.dealerCode || d.dealercode || '',
+              city: d.city || d.territory || '',
+              address: d.address || '',
+              type: 'Dealer',
+            });
+          }
+        });
       }
+
+      if (Array.isArray(distList)) {
+        distList.forEach((dt: any) => {
+          const name = dt.distributorName || dt.distributor_name || dt.name || dt.businessName || '';
+          if (name) {
+            parsedParties.push({
+              id: String(dt.id || dt.distributorCode || dt.distributorcode || name),
+              name,
+              code: dt.distributorCode || dt.distributorcode || '',
+              city: dt.area || dt.city || dt.territory || '',
+              address: dt.address || '',
+              type: 'Distributor',
+            });
+          }
+        });
+      }
+
+      // Sort alphabetically by name
+      parsedParties.sort((a, b) => a.name.localeCompare(b.name));
+      setParties(parsedParties);
     } catch (err) {
-      console.error('Failed to fetch dealers:', err);
+      console.error('Failed to fetch dealers and distributors:', err);
     }
   };
 
@@ -212,7 +273,7 @@ export const DailyTravelPage: React.FC = () => {
     loadTodayLog();
     loadHistory();
     fetchGps();
-    fetchDealers();
+    fetchParties();
   }, [fetchGps]);
 
   useEffect(() => {
@@ -439,17 +500,14 @@ export const DailyTravelPage: React.FC = () => {
     setPlannerStops(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Quick select dealer from master list
-  const handleDealerSelect = (dealerId: string) => {
-    const d = dealers.find(item => String(item.id) === String(dealerId));
-    if (d) {
-      setStopForm(prev => ({
-        ...prev,
-        dealer_id: String(d.id),
-        dealer_name: d.name || d.businessName || '',
-        dealer_location: d.city || d.address || '',
-      }));
-    }
+  // Quick select dealer or distributor from master list
+  const handlePartySelect = (party: RegisteredParty) => {
+    setStopForm(prev => ({
+      ...prev,
+      dealer_id: party.id,
+      dealer_name: party.name,
+      dealer_location: party.city || party.address || '',
+    }));
   };
 
   // Status Badge Helper
@@ -1508,22 +1566,90 @@ export const DailyTravelPage: React.FC = () => {
           </DialogHeader>
 
           <div className="space-y-3 py-2 text-xs">
-            {/* Select Existing Dealer or Custom */}
-            {dealers.length > 0 && (
-              <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-muted-foreground">Select from Registered Dealers (Optional)</Label>
-                <select 
-                  value={stopForm.dealer_id} 
-                  onChange={(e) => handleDealerSelect(e.target.value)}
-                  className="w-full border rounded-lg p-2 text-xs bg-background"
-                >
-                  <option value="">-- Choose Registered Dealer or Type Below --</option>
-                  {dealers.map(d => (
-                    <option key={d.id} value={d.id}>{d.name || d.businessName} {d.city ? `(${d.city})` : ''}</option>
+            {/* Search & Select from Registered Dealers / Distributors */}
+            <div className="space-y-2 p-3 rounded-xl border bg-muted/15">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-primary" />
+                  <span>Choose Registered Dealer or Distributor (Optional)</span>
+                </Label>
+                <div className="flex items-center gap-1">
+                  {(['ALL', 'Dealer', 'Distributor'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setPartyTypeFilter(t)}
+                      className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+                        partyTypeFilter === t ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {t === 'ALL' ? 'All' : `${t}s`}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
-            )}
+
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search by dealer/distributor name, city, or code..."
+                  value={partySearchQuery}
+                  onChange={(e) => setPartySearchQuery(e.target.value)}
+                  className="pl-8 h-8 text-xs bg-background"
+                />
+                {partySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setPartySearchQuery('')}
+                    className="absolute right-2 top-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Quick Select Scroll Area */}
+              <div className="max-h-36 overflow-y-auto space-y-1 pr-1 border rounded-lg p-1 bg-background/50">
+                {filteredParties.length === 0 ? (
+                  <div className="p-3 text-center text-[11px] text-muted-foreground">
+                    {parties.length === 0 ? 'Loading parties...' : 'No matching dealer or distributor found. Type name manually below.'}
+                  </div>
+                ) : (
+                  filteredParties.slice(0, 50).map((p) => {
+                    const isSelected = stopForm.dealer_id === p.id || stopForm.dealer_name === p.name;
+                    return (
+                      <button
+                        key={`${p.type}-${p.id}`}
+                        type="button"
+                        onClick={() => handlePartySelect(p)}
+                        className={cn(
+                          "w-full text-left p-1.5 rounded-md flex items-center justify-between gap-2 text-xs transition-colors",
+                          isSelected ? "bg-primary/15 border border-primary/30 text-primary font-bold" : "hover:bg-muted/60"
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "text-[9px] px-1 py-0 shrink-0 font-semibold",
+                              p.type === 'Distributor' ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"
+                            )}
+                          >
+                            {p.type}
+                          </Badge>
+                          <span className="font-semibold text-foreground truncate">{p.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
+                          {p.city && <span>📍 {p.city}</span>}
+                          {isSelected && <Check className="w-3.5 h-3.5 text-primary ml-1" />}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
 
             {/* Dealer Name Input */}
             <div className="space-y-1">
