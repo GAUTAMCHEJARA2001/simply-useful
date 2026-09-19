@@ -1029,10 +1029,64 @@ class DailyTravelLog(models.Model):
     verified_by = models.ForeignKey(User, models.DO_NOTHING, db_column='verifiedBy', db_constraint=False, null=True, blank=True, related_name='verified_travel_logs')
     verified_at = models.DateTimeField(blank=True, null=True)
 
+    # Tour Plan vs Actual Auto-Evaluation Metrics
+    total_stops_planned = models.IntegerField(default=0)
+    total_stops_visited = models.IntegerField(default=0)
+    total_target_bags = models.FloatField(default=0.0)
+    total_actual_bags = models.FloatField(default=0.0)
+    total_target_amount = models.FloatField(default=0.0)
+    total_actual_amount = models.FloatField(default=0.0)
+    total_target_collection = models.FloatField(default=0.0)
+    total_actual_collection = models.FloatField(default=0.0)
+    target_achievement_pct = models.FloatField(default=0.0)
+    performance_rating = models.CharField(max_length=30, default='PENDING')  # OUTSTANDING, TARGET_ACHIEVED, PARTIAL, UNDERPERFORMED, PENDING
+
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
 
     class Meta:
         db_table = 'DailyTravelLog'
         unique_together = (('user', 'date'),)
+
+
+class DailyTourPlanStop(models.Model):
+    id = models.TextField(primary_key=True)
+    travel_log = models.ForeignKey(DailyTravelLog, models.CASCADE, related_name='stops', null=True, blank=True)
+    user = models.ForeignKey(User, models.DO_NOTHING, db_column='userId', db_constraint=False)
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    date = models.DateField()
+    stop_order = models.IntegerField(default=1)
+    is_unplanned = models.BooleanField(default=False)  # Spot visit added on the fly
+
+    # Dealer / Counter details
+    dealer_id = models.TextField(blank=True, null=True)
+    dealer_name = models.CharField(max_length=255)
+    dealer_location = models.CharField(max_length=255, blank=True, null=True)
+
+    # Planned Agenda & Targets
+    visit_purpose = models.CharField(max_length=50, default='ORDER')  # ORDER, PAYMENT, NEW_LEAD, ROUTINE, COMPLAINT, OTHER
+    target_order_bags = models.FloatField(default=0.0)
+    target_order_value = models.FloatField(default=0.0)
+    target_collection_value = models.FloatField(default=0.0)
+    plan_notes = models.TextField(blank=True, null=True)
+
+    # Actual Execution & Outcome (Reconciled at Day End)
+    visited = models.BooleanField(default=False)
+    actual_order_bags = models.FloatField(default=0.0)
+    actual_order_value = models.FloatField(default=0.0)
+    actual_collection_value = models.FloatField(default=0.0)
+    actual_status = models.CharField(max_length=40, default='PENDING')  # COMPLETED, PARTIALLY_FULFILLED, NOT_FULFILLED, CONVERTED_NEW_DEALER, SKIPPED, PENDING
+    shortfall_reason = models.CharField(max_length=150, blank=True, null=True)
+    actual_notes = models.TextField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'DailyTourPlanStop'
+        indexes = [
+            models.Index(fields=['user', 'date']),
+            models.Index(fields=['companyid', 'date']),
+        ]
 

@@ -39,7 +39,10 @@ from api.views import (
     get_analytics_bottlenecks, get_analytics_data_quality, PaymentReceiptViewSet, PartyOnboardingViewSet
 )
 from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties, import_busy_ledger, get_sync_status, ledger_requests_view, fulfill_ledger_request
-from api.views_travel import travel_today, travel_start, travel_end, travel_my_history, travel_hr_logs, travel_hr_verify
+from api.views_travel import (
+    travel_today, travel_start, travel_end, travel_my_history,
+    travel_hr_logs, travel_hr_verify, travel_plan, travel_add_unplanned_stop
+)
 
 router = DefaultRouter(trailing_slash=False)
 router.register('companies', CompanyViewSet, basename='companies')
@@ -188,8 +191,10 @@ urlpatterns = [
     path('busy/ledger-requests', ledger_requests_view, name='busy-ledger-requests'),
     path('busy/ledger-requests/<int:req_id>/fulfill', fulfill_ledger_request, name='busy-fulfill-request'),
     
-    # Daily Travel (KM Punch) & HR Verification
+    # Daily Travel (KM Punch), Tour Planning & HR Verification
     path('travel/today', travel_today, name='travel-today'),
+    path('travel/plan', travel_plan, name='travel-plan'),
+    path('travel/stops/unplanned', travel_add_unplanned_stop, name='travel-unplanned-stop'),
     path('travel/start', travel_start, name='travel-start'),
     path('travel/end', travel_end, name='travel-end'),
     path('travel/my-history', travel_my_history, name='travel-my-history'),

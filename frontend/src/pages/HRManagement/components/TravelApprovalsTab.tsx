@@ -25,7 +25,10 @@ import {
   Store,
   IndianRupee,
   ShoppingBag,
-  FileText
+  FileText,
+  Award,
+  Target,
+  Compass
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -358,10 +361,25 @@ export const TravelApprovalsTab: React.FC = () => {
       <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Gauge className="w-5 h-5 text-primary" />
-              Verify Travel Log: {selectedLog?.user_name}
-            </DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2">
+                <Gauge className="w-5 h-5 text-primary" />
+                <span>Verify Travel Log: {selectedLog?.user_name}</span>
+              </DialogTitle>
+              {selectedLog?.performance_rating && selectedLog.performance_rating !== 'PENDING' && (
+                <Badge 
+                  className={cn(
+                    "text-[10px] font-bold px-2.5 py-0.5",
+                    selectedLog.performance_rating === 'OUTSTANDING' && "bg-emerald-600 text-white",
+                    selectedLog.performance_rating === 'TARGET_ACHIEVED' && "bg-blue-600 text-white",
+                    selectedLog.performance_rating === 'PARTIAL' && "bg-amber-500 text-white",
+                    selectedLog.performance_rating === 'UNDERPERFORMED' && "bg-rose-600 text-white"
+                  )}
+                >
+                  {selectedLog.performance_rating} ({selectedLog.target_achievement_pct}%)
+                </Badge>
+              )}
+            </div>
             <DialogDescription className="text-xs">
               Date: {selectedLog?.date} &middot; Vehicle: {selectedLog?.vehicle_type}
             </DialogDescription>
@@ -431,6 +449,75 @@ export const TravelApprovalsTab: React.FC = () => {
                   <div className="font-black text-sm text-primary">{selectedLog.total_km} KM</div>
                 </div>
               </div>
+
+              {/* Tour Plan Targets Fulfillment Summary */}
+              {((selectedLog.total_stops_planned || 0) > 0 || (selectedLog.total_target_bags || 0) > 0 || (selectedLog.total_target_collection || 0) > 0) && (
+                <div className="p-3 rounded-xl border bg-purple-50/30 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/60 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-purple-900 dark:text-purple-200">
+                    <span className="flex items-center gap-1.5">
+                      <Target className="w-4 h-4 text-purple-600" /> Tour Plan vs Actual Targets
+                    </span>
+                    <span className="text-[11px] font-semibold">
+                      Day Score: {selectedLog.target_achievement_pct || 0}%
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="bg-white/70 dark:bg-purple-900/40 p-2 rounded-lg border border-purple-100 dark:border-purple-800">
+                      <span className="text-muted-foreground text-[10px]">Stops Visited</span>
+                      <div className="font-bold text-xs">{selectedLog.total_stops_visited || 0} / {selectedLog.total_stops_planned || 0}</div>
+                    </div>
+                    <div className="bg-white/70 dark:bg-purple-900/40 p-2 rounded-lg border border-purple-100 dark:border-purple-800">
+                      <span className="text-muted-foreground text-[10px]">Bags Booked</span>
+                      <div className="font-bold text-xs text-purple-600">{selectedLog.total_actual_bags || 0} / {selectedLog.total_target_bags || 0}</div>
+                    </div>
+                    <div className="bg-white/70 dark:bg-purple-900/40 p-2 rounded-lg border border-purple-100 dark:border-purple-800">
+                      <span className="text-muted-foreground text-[10px]">Collection</span>
+                      <div className="font-bold text-xs text-emerald-600">₹{Number(selectedLog.total_actual_collection || 0).toLocaleString('en-IN')}</div>
+                    </div>
+                  </div>
+
+                  {/* Planned vs Actual Stops Table */}
+                  {selectedLog.stops && selectedLog.stops.length > 0 && (
+                    <div className="border rounded-lg overflow-hidden bg-background">
+                      <table className="w-full text-left text-[11px]">
+                        <thead className="bg-muted/40 font-semibold text-muted-foreground border-b text-[10px]">
+                          <tr>
+                            <th className="px-2.5 py-1">Dealer</th>
+                            <th className="px-2.5 py-1">Target</th>
+                            <th className="px-2.5 py-1">Actual</th>
+                            <th className="px-2.5 py-1">Status / Shortfall</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {selectedLog.stops.map((s, idx) => (
+                            <tr key={idx} className="hover:bg-muted/10">
+                              <td className="px-2.5 py-1.5 font-medium">
+                                {s.dealer_name}
+                                {s.is_unplanned && <span className="ml-1 text-[9px] text-blue-600 font-bold">(Spot)</span>}
+                              </td>
+                              <td className="px-2.5 py-1.5 text-muted-foreground">
+                                {(s.target_order_bags || 0) > 0 && <div>{s.target_order_bags} bags</div>}
+                                {(s.target_collection_value || 0) > 0 && <div>₹{Number(s.target_collection_value).toLocaleString('en-IN')}</div>}
+                                {!(s.target_order_bags || 0) && !(s.target_collection_value || 0) && '--'}
+                              </td>
+                              <td className="px-2.5 py-1.5 font-bold">
+                                {(s.actual_order_bags || 0) > 0 && <div className="text-purple-600">{s.actual_order_bags} bags</div>}
+                                {(s.actual_collection_value || 0) > 0 && <div className="text-emerald-600">₹{Number(s.actual_collection_value).toLocaleString('en-IN')}</div>}
+                                {!(s.actual_order_bags || 0) && !(s.actual_collection_value || 0) && 'Nil'}
+                              </td>
+                              <td className="px-2.5 py-1.5">
+                                <span className="text-[10px] font-semibold block">{s.actual_status}</span>
+                                {s.shortfall_reason && <span className="text-[10px] text-muted-foreground italic">{s.shortfall_reason}</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Sales Officer 3 Activity Summaries */}
               <div className="space-y-2.5 pt-1">
