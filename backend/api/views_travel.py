@@ -222,7 +222,8 @@ def travel_my_history(request):
     if not user or not getattr(user, 'is_authenticated', False):
         return send_error('Unauthorized', 401)
 
-    qs = DailyTravelLog.objects.filter(user=user).order_by('-date')
+    user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
+    qs = DailyTravelLog.objects.filter(user_id=user_id).order_by('-date')
     month = request.query_params.get('month')
     if month:
         try:
