@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,28 @@ const DispatchOrderPage: React.FC = () => {
 
   const initializedRef = useRef(false);
 
+  // Aggregate items by product in case the order contains duplicate line items for the same product
+  const aggregatedItems = useMemo(() => {
+    if (!order?.items) return [];
+    const map = new Map<string, any>();
+    for (const item of order.items) {
+      const pId = String(item.productId || item.productid_id || (typeof item.product === 'object' ? item.product?.id : item.product) || '');
+      if (!pId) continue;
+      if (!map.has(pId)) {
+        map.set(pId, {
+          ...item,
+          productId: pId,
+          qty: 0,
+          sentQty: 0,
+        });
+      }
+      const existing = map.get(pId);
+      existing.qty += Number(item.qty || 0);
+      existing.sentQty += Number(item.sentQty || item.sentqty || 0);
+    }
+    return Array.from(map.values());
+  }, [order?.items]);
+
   useEffect(() => {
     if (id && orders.length > 0) {
       const found = orders.find(o => String(o.id) === id || o.orderId === id || (o as any).order_id === id);
@@ -41,12 +63,12 @@ const DispatchOrderPage: React.FC = () => {
         if (!initializedRef.current) {
           const initialQtys: Record<string, number> = {};
           (found.items || []).forEach((item: any) => {
-            const pId = item.productId || item.productid_id || (typeof item.product === 'object' ? item.product?.id : item.product);
+            const pId = String(item.productId || item.productid_id || (typeof item.product === 'object' ? item.product?.id : item.product) || '');
             if (pId) {
-              const ordered = item.qty || 0;
-              const sent = item.sentQty || 0;
-              const remaining = ordered - sent;
-              initialQtys[pId] = remaining > 0 ? remaining : 0;
+              const ordered = Number(item.qty || 0);
+              const sent = Number(item.sentQty || item.sentqty || 0);
+              const remaining = Math.max(0, ordered - sent);
+              initialQtys[pId] = (initialQtys[pId] || 0) + remaining;
             }
           });
           setDispatchItems(initialQtys);
@@ -144,7 +166,7 @@ const DispatchOrderPage: React.FC = () => {
           <div className="border border-border rounded-xl">
             {/* Mobile View */}
             <div className="block sm:hidden divide-y divide-border/40">
-              {order.items?.map((item: any) => {
+              {aggregatedItems.map((item: any) => {
                 const pId = item.productId || item.productid_id || (typeof item.product === 'object' ? item.product?.id : item.product);
                 const pObj = products.find((p: any) => String(p.id) === String(pId) || p.productCode === pId || p.name === pId);
                 const pName = pObj?.name || pObj?.productName || item.productName || (typeof item.product === 'object' ? item.product?.name : null) || item.product || 'Unknown Product';
@@ -206,7 +228,7 @@ const DispatchOrderPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
-                  {order.items?.map((item: any) => {
+                  {aggregatedItems.map((item: any) => {
                     const pId = item.productId || item.productid_id || (typeof item.product === 'object' ? item.product?.id : item.product);
                     const pObj = products.find((p: any) => String(p.id) === String(pId) || p.productCode === pId || p.name === pId);
                     const pName = pObj?.name || pObj?.productName || item.productName || (typeof item.product === 'object' ? item.product?.name : null) || item.product || 'Unknown Product';

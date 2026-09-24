@@ -1251,6 +1251,10 @@ class DealerViewSet(viewsets.ModelViewSet):
                 Q(distributorname__icontains=search)
             )
 
+        party_type = request.query_params.get('partyType') or request.query_params.get('party_type')
+        if party_type and party_type.upper() != 'ALL':
+            qs = qs.filter(party_type__iexact=party_type)
+
         page = request.query_params.get('page')
         limit = request.query_params.get('limit')
         if page is not None and limit is not None:
@@ -1643,12 +1647,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                 qty_to_send = int(item_data.get('qty', 0))
                 if qty_to_send <= 0:
                     continue
-                try:
-                    oi = instance.orderitem_set.get(productid_id=p_id)
-                except Orderitem.DoesNotExist:
+                order_items = list(instance.orderitem_set.filter(productid_id=p_id))
+                if not order_items:
                     return send_error(f'Product {p_id} not found in this order', 400)
-                if oi.sentqty + qty_to_send > oi.qty:
-                    return send_error(f'Cannot dispatch {qty_to_send} of {p_id}. Already sent: {oi.sentqty}, Total ordered: {oi.qty}', 400)
+                total_ordered = sum(oi.qty for oi in order_items)
+                total_sent = sum(oi.sentqty for oi in order_items)
+                if total_sent + qty_to_send > total_ordered:
+                    return send_error(f'Cannot dispatch {qty_to_send} of {p_id}. Already sent: {total_sent}, Total ordered: {total_ordered}', 400)
             
             from api.models import Product, Purchaseitem, Orderitem, Stocktransaction
             from django.db.models import Sum
@@ -1710,15 +1715,26 @@ class OrderViewSet(viewsets.ModelViewSet):
                 qty_to_send = int(item_data.get('qty', 0))
                 if qty_to_send <= 0:
                     continue
-                oi = instance.orderitem_set.get(productid_id=p_id)
-                oi.sentqty += qty_to_send
-                oi.save()
+                order_items = list(instance.orderitem_set.filter(productid_id=p_id).order_by('id'))
+                remaining_to_dispatch = qty_to_send
+                for oi in order_items:
+                    available = max(0, oi.qty - oi.sentqty)
+                    if available <= 0:
+                        continue
+                    take = min(remaining_to_dispatch, available)
+                    oi.sentqty += take
+                    oi.save(update_fields=['sentqty'])
+                    remaining_to_dispatch -= take
+                    if remaining_to_dispatch <= 0:
+                        break
+                if remaining_to_dispatch > 0 and order_items:
+                    order_items[-1].sentqty += remaining_to_dispatch
+                    order_items[-1].save(update_fields=['sentqty'])
                 item_log_id = 'c' + uuid.uuid4().hex[:23]
                 Dispatchlogitem.objects.create(id=item_log_id, dispatchlogid=dispatch_log, productid_id=p_id, qty=qty_to_send)
                 try:
-                    from api.models import Stocktransaction
-                    st_id = 'c' + uuid.uuid4().hex[:23]
-                    assigned_wh_id = instance.warehouseid_id or getattr(instance.assigned_warehouse, 'id', None)
+                    assigned_wh = getattr(instance, 'warehouseid', None)
+                    assigned_wh_id = getattr(instance, 'warehouseid_id', None) or (assigned_wh.id if hasattr(assigned_wh, 'id') else None)
                     Stocktransaction.objects.create(
                         id=st_id,
                         productid_id=p_id,
@@ -1776,17 +1792,21 @@ class OrderViewSet(viewsets.ModelViewSet):
             qty_to_return = int(item_data.get('qty', 0))
             if qty_to_return <= 0:
                 continue
-            try:
-                oi = instance.orderitem_set.get(productid_id=p_id)
-            except Orderitem.DoesNotExist:
+            order_items = list(instance.orderitem_set.filter(productid_id=p_id))
+            if not order_items:
                 return send_error(f'Product {p_id} not found in this order', 400)
-            effective_sentqty = oi.sentqty
-            if effective_sentqty == 0 and instance.status in ['Dispatched', 'Completed', 'Partially Returned', 'Returned']:
-                effective_sentqty = oi.qty
-                oi.sentqty = oi.qty
-                oi.save(update_fields=['sentqty'])
-            if oi.returnedqty + qty_to_return > effective_sentqty:
-                return send_error(f'Cannot return {qty_to_return} of {p_id}. Already returned: {oi.returnedqty}, Dispatched: {effective_sentqty}', 400)
+            total_dispatched = 0
+            total_returned = 0
+            for oi in order_items:
+                effective_sentqty = oi.sentqty
+                if effective_sentqty == 0 and instance.status in ['Dispatched', 'Completed', 'Partially Returned', 'Returned']:
+                    effective_sentqty = oi.qty
+                    oi.sentqty = oi.qty
+                    oi.save(update_fields=['sentqty'])
+                total_dispatched += effective_sentqty
+                total_returned += oi.returnedqty
+            if total_returned + qty_to_return > total_dispatched:
+                return send_error(f'Cannot return {qty_to_return} of {p_id}. Already returned: {total_returned}, Dispatched: {total_dispatched}', 400)
         import uuid
         from django.utils import timezone
         import datetime
@@ -1810,12 +1830,24 @@ class OrderViewSet(viewsets.ModelViewSet):
             qty_to_return = int(item_data.get('qty', 0))
             if qty_to_return <= 0:
                 continue
-            oi = instance.orderitem_set.get(productid_id=p_id)
-            oi.returnedqty += qty_to_return
-            oi.save()
+            order_items = list(instance.orderitem_set.filter(productid_id=p_id).order_by('id'))
+            remaining_to_return = qty_to_return
+            for oi in order_items:
+                effective_sent = oi.sentqty if oi.sentqty > 0 else (oi.qty if instance.status in ['Dispatched', 'Completed', 'Partially Returned', 'Returned'] else 0)
+                returnable = max(0, effective_sent - oi.returnedqty)
+                if returnable <= 0:
+                    continue
+                take = min(remaining_to_return, returnable)
+                oi.returnedqty += take
+                oi.save(update_fields=['returnedqty'])
+                remaining_to_return -= take
+                if remaining_to_return <= 0:
+                    break
+            if remaining_to_return > 0 and order_items:
+                order_items[-1].returnedqty += remaining_to_return
+                order_items[-1].save(update_fields=['returnedqty'])
             item_log_id = 'c' + uuid.uuid4().hex[:23]
             Returnlogitem.objects.create(id=item_log_id, returnlogid=return_log, productid_id=p_id, qty=qty_to_return)
-            pass
         all_returned = True
         any_returned = False
         for oi in instance.orderitem_set.all():
@@ -1849,13 +1881,16 @@ class OrderViewSet(viewsets.ModelViewSet):
             log_items = Returnlogitem.objects.filter(returnlogid=return_log)
             product_ids = []
             for item in log_items:
-                try:
-                    oi = instance.orderitem_set.get(productid_id=item.productid_id)
-                    oi.returnedqty = max(0, oi.returnedqty - item.qty)
+                order_items = list(instance.orderitem_set.filter(productid_id=item.productid_id).order_by('-id'))
+                remaining_revert = item.qty
+                for oi in order_items:
+                    take = min(remaining_revert, oi.returnedqty)
+                    oi.returnedqty = max(0, oi.returnedqty - take)
                     oi.save(update_fields=['returnedqty'])
-                    product_ids.append(item.productid_id)
-                except Orderitem.DoesNotExist:
-                    pass
+                    remaining_revert -= take
+                    if remaining_revert <= 0:
+                        break
+                product_ids.append(item.productid_id)
             log_items.delete()
             return_log.delete()
             for p_id in set(product_ids):
