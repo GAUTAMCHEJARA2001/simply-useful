@@ -35,7 +35,7 @@ const DispatchOrderPage: React.FC = () => {
     if (!order?.items) return [];
     const map = new Map<string, any>();
     for (const item of order.items) {
-      const pId = String(item.productId || item.productid_id || (typeof item.product === 'object' ? item.product?.id : item.product) || '');
+      const pId = String(item.productId || (item as any).productid_id || (typeof item.product === 'object' ? item.product?.id : item.product) || '');
       if (!pId) continue;
       if (!map.has(pId)) {
         map.set(pId, {
@@ -47,7 +47,7 @@ const DispatchOrderPage: React.FC = () => {
       }
       const existing = map.get(pId);
       existing.qty += Number(item.qty || 0);
-      existing.sentQty += Number(item.sentQty || item.sentqty || 0);
+      existing.sentQty += Number(item.sentQty || (item as any).sentqty || 0);
     }
     return Array.from(map.values());
   }, [order?.items]);
