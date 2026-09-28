@@ -116,7 +116,7 @@ const SubmitPaymentPage: React.FC = () => {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="flex items-center gap-2">
-              <Plus className="w-4 h-4" /> New Payment
+              <Plus className="w-4 h-4" /> New Payment Receipt
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-xl">

@@ -387,13 +387,14 @@ class DealerSerializer(serializers.ModelSerializer):
     email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     gst = serializers.CharField(source='gst_number', required=False, allow_blank=True, allow_null=True)
+    partyType = serializers.CharField(source='party_type', required=False, default='DEALER')
 
     class Meta:
         model = Dealer
         fields = [
             'id', 'dealerCode', 'dealerName', 'city', 'assignedSoEmails', 'brand', 'distributorName',
             'creditLimit', 'outstanding', 'active', 'companyId', 'createdAt', 'updatedAt', 'territory',
-            'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId'
+            'phone', 'email', 'address', 'gst', 'contactPerson', 'warehouseId', 'partyType'
         ]
 
     def to_representation(self, instance):

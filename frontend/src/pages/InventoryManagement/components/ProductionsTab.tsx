@@ -333,7 +333,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
     setBatchItems(newItems);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (overrideDeficit: boolean = false) => {
     if (!form.productId || !form.warehouseId || form.quantity <= 0) {
       toast({
         title: 'Validation Error',
@@ -352,7 +352,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
         expectedQuantity: (selectedRecipe?.outputQuantity || 1) * form.batches,
         quantity: form.quantity,
         date: form.date,
-        items: batchItems // Send adjustable/custom raw materials consumption list
+        items: batchItems, // Send adjustable/custom raw materials consumption list
+        allow_deficit: overrideDeficit
       };
 
       if (form.id) {
@@ -826,7 +827,14 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">Number of Batches <span className="text-destructive">*</span></label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">Number of Batches <span className="text-destructive">*</span></label>
+                  {selectedRecipe && selectedRecipe.outputQuantity && (
+                    <span className="text-[11px] text-primary font-medium">
+                      1 batch = {selectedRecipe.outputQuantity} units
+                    </span>
+                  )}
+                </div>
                 <input 
                   type="number" 
                   min="0.01" 
@@ -837,10 +845,29 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
                   className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                   placeholder="e.g. 1"
                 />
+                <div className="text-[11px] text-muted-foreground mt-1">
+                  Standard Yield: <span className="font-semibold text-foreground">{((selectedRecipe?.outputQuantity || 1) * (form.batches || 1)).toLocaleString()}</span> units
+                </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">Actual Quantity Produced <span className="text-destructive">*</span></label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">Actual Quantity Produced <span className="text-destructive">*</span></label>
+                  {selectedRecipe && selectedRecipe.outputQuantity && !isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const outQty = selectedRecipe.outputQuantity || 1;
+                        const batchesNeeded = parseFloat(((form.quantity || 1) / outQty).toFixed(2));
+                        handleBatchesChange(batchesNeeded);
+                      }}
+                      className="text-[11px] text-primary hover:underline font-medium"
+                      title="Set batches so standard yield matches actual quantity"
+                    >
+                      Auto-fit Batches
+                    </button>
+                  )}
+                </div>
                 <input 
                   type="number" 
                   min="0.01" 
@@ -850,6 +877,18 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
                   onChange={e => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })}
                   className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
+                <div className="text-[11px] mt-1">
+                  {(() => {
+                    const std = (selectedRecipe?.outputQuantity || 1) * (form.batches || 1);
+                    const act = form.quantity || 0;
+                    const diff = act - std;
+                    return (
+                      <span className={diff === 0 ? 'text-muted-foreground' : diff > 0 ? 'text-green-600 font-semibold' : 'text-red-500 font-semibold'}>
+                        Variance: {diff > 0 ? '+' : ''}{diff.toLocaleString()} units
+                      </span>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
 
@@ -1124,7 +1163,19 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
             </div>
             )}
 
-            <div className="flex justify-end pt-2 border-t border-border">
+            <div className="flex justify-end items-center gap-2 pt-2 border-t border-border">
+              {['ADMIN', 'SUPERADMIN', 'DIRECTOR', 'VP'].includes((user?.role || '').toUpperCase()) && (
+                <Button 
+                  variant="destructive"
+                  onClick={async () => {
+                    setDeficitModal(false);
+                    await handleSave(true);
+                  }}
+                  className="h-9 px-4 text-xs font-bold"
+                >
+                  Override & Save Anyway
+                </Button>
+              )}
               <Button 
                 variant={deficitItems.every((item: any) => (item.deficit || 0) <= 0) ? "default" : "outline"}
                 onClick={() => setDeficitModal(false)}

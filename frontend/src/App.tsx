@@ -85,6 +85,7 @@ const OnboardingRequestsPage = safeLazy(() => import("./pages/OnboardingRequests
 const AdminOnboardingPage = safeLazy(() => import("./pages/AdminOnboardingPage"), "AdminOnboardingPage");
 const PrintableOnboardingForm = safeLazy(() => import("./pages/PrintableOnboardingForm"), "PrintableOnboardingForm");
 const DailyTravelPage = safeLazy(() => import("./pages/DailyTravelPage"), "DailyTravelPage");
+const SalesTargetsPage = safeLazy(() => import("./pages/SalesTargetsPage"), "SalesTargetsPage");
 
 
 
@@ -205,6 +206,7 @@ const App = () => {
 
                       {/* Sales */}
                       <Route path="/sales" element={<ProtectedRoute><SalesDashboard /></ProtectedRoute>} />
+                      <Route path="/sales/targets" element={<ProtectedRoute><SalesTargetsPage /></ProtectedRoute>} />
                       <Route path="/sales/order" element={<ProtectedRoute><OrderPage /></ProtectedRoute>} />
                       <Route path="/sales/order/:id" element={<ProtectedRoute><OrderPage /></ProtectedRoute>} />
                       <Route path="/sales/estimates" element={<ProtectedRoute><EstimateList /></ProtectedRoute>} />

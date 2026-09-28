@@ -9,7 +9,7 @@ export interface TourPlanStopItem {
   dealer_id?: string | null;
   dealer_name: string;
   dealer_location?: string;
-  visit_purpose: 'ORDER' | 'PAYMENT' | 'NEW_LEAD' | 'ROUTINE' | 'COMPLAINT' | 'OTHER';
+  visit_purpose: string;
   target_order_bags?: number;
   target_order_value?: number;
   target_collection_value?: number;
@@ -21,6 +21,9 @@ export interface TourPlanStopItem {
   actual_status?: 'COMPLETED' | 'PARTIALLY_FULFILLED' | 'NOT_FULFILLED' | 'CONVERTED_NEW_DEALER' | 'SKIPPED' | 'PENDING';
   shortfall_reason?: string;
   actual_notes?: string;
+  visit_photo?: string | null;
+  gps_location?: string | null;
+  next_visit_date?: string | null;
   completed_at?: string | null;
   created_at?: string | null;
 }
@@ -78,11 +81,15 @@ export const travelService = {
   addUnplannedStop: (data: Partial<TourPlanStopItem>) =>
     api.post('/travel/stops/unplanned', data),
 
+  punchStopVisit: (data: Partial<TourPlanStopItem> & { stop_id?: string }) =>
+    api.post('/travel/stops/punch-visit', data),
+
   startTrip: (data: {
     start_km: number;
     vehicle_type: string;
     start_photo?: string;
     start_location?: string;
+    stops?: TourPlanStopItem[];
   }) => api.post('/travel/start', data),
 
   endTrip: (data: {
@@ -114,4 +121,75 @@ export const travelService = {
       hr_notes?: string;
     }
   ) => api.post(`/travel/hr/verify/${id}`, data),
+
+  getSOScorecard: (params?: {
+    period?: 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+    year?: number;
+    month?: number;
+    week?: number;
+    so_email?: string;
+  }) => api.get('/travel/so-scorecard', { params }),
 };
+
+export interface SOPillarScore {
+  name: string;
+  score: number;
+  max_score: number;
+  percentage: number;
+  weight_pct: number;
+  target_revenue?: number;
+  target_bags?: number;
+  actual_bags?: number;
+  actual_revenue?: number;
+  order_count?: number;
+  fulfillment_pct?: number;
+  [key: string]: any;
+}
+
+
+export interface SOScorecardOfficer {
+  rank: number;
+  user_id: string;
+  name: string;
+  email: string;
+  territory: string;
+  role: string;
+  composite_score: number;
+  grade: 'A+' | 'A' | 'B' | 'C' | 'D';
+  badge: 'ELITE' | 'ACHIEVER' | 'CONSISTENT' | 'AVERAGE' | 'CRITICAL';
+  grade_label: string;
+  badge_color: string;
+  pillars: {
+    orders: SOPillarScore;
+    visits: SOPillarScore;
+    payments: SOPillarScore;
+    onboarding: SOPillarScore;
+    discipline: SOPillarScore;
+  };
+  strengths: string[];
+  improvements: string[];
+}
+
+export interface SOScorecardData {
+  is_admin?: boolean;
+  date_range: {
+    period: 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+    year: number;
+    month: number;
+    week?: number;
+    start_date: string;
+    end_date: string;
+    label: string;
+  };
+  summary: {
+    total_officers: number;
+    team_avg_score: number;
+    total_team_bags: number;
+    total_team_revenue: number;
+    total_team_visits: number;
+    total_team_collections: number;
+    total_team_new_dealers: number;
+  };
+  officers: SOScorecardOfficer[];
+}
+

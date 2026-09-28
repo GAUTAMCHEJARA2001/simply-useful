@@ -41,8 +41,13 @@ from api.views import (
 from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties, import_busy_ledger, get_sync_status, ledger_requests_view, fulfill_ledger_request
 from api.views_travel import (
     travel_today, travel_start, travel_end, travel_my_history,
-    travel_hr_logs, travel_hr_verify, travel_plan, travel_add_unplanned_stop
+    travel_hr_logs, travel_hr_verify, travel_plan, travel_add_unplanned_stop,
+    travel_punch_stop_visit, travel_so_scorecard
 )
+from api.views_sales_target import (
+    list_sales_targets, upsert_sales_target, copy_previous_targets, get_target_masters
+)
+
 
 router = DefaultRouter(trailing_slash=False)
 router.register('companies', CompanyViewSet, basename='companies')
@@ -195,12 +200,21 @@ urlpatterns = [
     path('travel/today', travel_today, name='travel-today'),
     path('travel/plan', travel_plan, name='travel-plan'),
     path('travel/stops/unplanned', travel_add_unplanned_stop, name='travel-unplanned-stop'),
+    path('travel/stops/punch-visit', travel_punch_stop_visit, name='travel-punch-visit'),
     path('travel/start', travel_start, name='travel-start'),
     path('travel/end', travel_end, name='travel-end'),
     path('travel/my-history', travel_my_history, name='travel-my-history'),
     path('travel/hr/logs', travel_hr_logs, name='travel-hr-logs'),
     path('travel/hr/verify/<str:pk>', travel_hr_verify, name='travel-hr-verify'),
+    path('travel/so-scorecard', travel_so_scorecard, name='travel-so-scorecard'),
+
+    # HR Sales Target Management & Allocation
+    path('hr/sales-targets', list_sales_targets, name='hr-sales-targets-list'),
+    path('hr/sales-targets/save', upsert_sales_target, name='hr-sales-targets-save'),
+    path('hr/sales-targets/copy-previous', copy_previous_targets, name='hr-sales-targets-copy'),
+    path('hr/sales-targets/masters', get_target_masters, name='hr-sales-targets-masters'),
 
     # Router endpoints
     path('', include(router.urls)),
 ]
+

@@ -27,7 +27,7 @@ const OrderPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [partyType, setPartyType] = useState<'Dealer' | 'Distributor'>('Dealer');
+  const [partyType, setPartyType] = useState<'Dealer' | 'Distributor' | 'Project'>('Dealer');
   const [selectedParty, setSelectedParty] = useState('');
   const [soEmail, setSoEmail] = useState('');
   const [items, setItems] = useState<OrderItem[]>([
@@ -63,7 +63,7 @@ const OrderPage: React.FC = () => {
         (o.order_id && String(o.order_id).toLowerCase() === id.toLowerCase())
       );
       if (existing) {
-        setPartyType(existing.partyType);
+        setPartyType(existing.partyType as any);
         setSelectedParty(existing.partyName);
         setSoEmail(existing.soEmail || '');
         setItems((existing.items || []).map((item: any) => ({
@@ -92,20 +92,36 @@ const OrderPage: React.FC = () => {
   const rawRole = (user?.role || '').toUpperCase();
   const isSales = rawRole === 'SALES' || rawRole === 'SALES_OFFICER' || rawRole === 'SALES OFFICER' || rawRole === 'SALES_EXECUTIVE' || rawRole === 'SALES EXECUTIVE';
 
-  // For Sales users, only show active dealers/distributors assigned to them.
-  const myDealers = isSales 
-    ? dealers.filter(d => d.active && (d.assignedSoEmails || []).some(e => e.toLowerCase() === userEmail))
-    : dealers.filter(d => d.active);
+  // For Sales users, only show active dealers/distributors/projects assigned to them.
+  const myProjects = useMemo(() => {
+    return isSales
+      ? dealers.filter(d => d.active && (d.partyType === 'PROJECT' || (d as any).party_type === 'PROJECT') && (d.assignedSoEmails || []).some(e => e.toLowerCase() === userEmail))
+      : dealers.filter(d => d.active && (d.partyType === 'PROJECT' || (d as any).party_type === 'PROJECT'));
+  }, [dealers, isSales, userEmail]);
+
+  const myDealers = useMemo(() => {
+    return isSales 
+      ? dealers.filter(d => d.active && d.partyType !== 'PROJECT' && (d as any).party_type !== 'PROJECT' && (d.assignedSoEmails || []).some(e => e.toLowerCase() === userEmail))
+      : dealers.filter(d => d.active && d.partyType !== 'PROJECT' && (d as any).party_type !== 'PROJECT');
+  }, [dealers, isSales, userEmail]);
     
-  const myDistributors = isSales
-    ? distributors.filter(d => d.active && (d.assignedSoEmails || []).some(e => e.toLowerCase() === userEmail))
-    : distributors.filter(d => d.active);
+  const myDistributors = useMemo(() => {
+    return isSales
+      ? distributors.filter(d => d.active && (d.assignedSoEmails || []).some(e => e.toLowerCase() === userEmail))
+      : distributors.filter(d => d.active);
+  }, [distributors, isSales, userEmail]);
+
   const parties = useMemo(() => {
-    const rawList = partyType === 'Dealer' 
-      ? myDealers.map(d => d.dealerName) 
-      : myDistributors.map(d => d.distributorName);
+    let rawList: string[] = [];
+    if (partyType === 'Dealer') {
+      rawList = myDealers.map(d => d.dealerName);
+    } else if (partyType === 'Project') {
+      rawList = myProjects.map(d => d.dealerName);
+    } else {
+      rawList = myDistributors.map(d => d.distributorName);
+    }
     return Array.from(new Set(rawList.filter(Boolean)));
-  }, [partyType, myDealers, myDistributors]);
+  }, [partyType, myDealers, myProjects, myDistributors]);
 
   const salesOfficers = useMemo(() => {
     const activeSO = (users || []).filter(u => (u.role === 'SALES' || u.role === 'SALES_OFFICER') && u.active);
@@ -349,11 +365,12 @@ const OrderPage: React.FC = () => {
           <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
             <div className="space-y-2">
               <Label>Party Type</Label>
-              <Select value={partyType} onValueChange={(v: 'Dealer' | 'Distributor') => { setPartyType(v); setSelectedParty(''); }}>
+              <Select value={partyType} onValueChange={(v: 'Dealer' | 'Distributor' | 'Project') => { setPartyType(v); setSelectedParty(''); }}>
                 <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Dealer">Dealer</SelectItem>
-                  <SelectItem value="Distributor">Distributor</SelectItem>
+                  <SelectItem value="Dealer">Dealer (Counter / Retailer)</SelectItem>
+                  <SelectItem value="Distributor">Distributor (B2B)</SelectItem>
+                  <SelectItem value="Project">Project (Direct / Site Client)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -393,7 +410,26 @@ const OrderPage: React.FC = () => {
                     const exactParty = parties.find(p => p.toLowerCase() === highlightedParty?.toLowerCase()) || selectedParty;
                     if (!exactParty) return null;
                     
-                    if (partyType === 'Dealer') {
+                    if (partyType === 'Project') {
+                      const d = dealersByName.get(exactParty);
+                      if (!d) return (
+                        <div className="bg-muted/30 border-t border-border p-3 text-xs text-muted-foreground italic">No additional details available.</div>
+                      );
+                      return (
+                        <div className="bg-muted/30 border-t border-border p-3 text-xs flex flex-col gap-1.5">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-foreground">{d.dealerName}</span>
+                            <span className="text-primary bg-primary/10 px-1.5 rounded text-[10px] font-bold">PROJECT SITE</span>
+                          </div>
+                          <div className="grid grid-cols-[60px_1fr] gap-x-2 gap-y-1 mt-1 text-muted-foreground">
+                            <span className="font-medium">Site:</span>
+                            <span className="break-words line-clamp-2" title={d.address || d.city || '—'}>{d.address || d.city || '—'}</span>
+                            <span className="font-medium">Contact:</span>
+                            <span>{d.contactPerson ? `${d.contactPerson} ` : ''}{d.phone ? `(${d.phone})` : '—'}</span>
+                          </div>
+                        </div>
+                      );
+                    } else if (partyType === 'Dealer') {
                       const d = dealersByName.get(exactParty);
                       if (!d) return (
                         <div className="bg-muted/30 border-t border-border p-3 text-xs text-muted-foreground italic">No additional details available.</div>

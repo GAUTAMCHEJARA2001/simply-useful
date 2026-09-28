@@ -8,8 +8,8 @@ import { API_ENDPOINTS } from '../endpoints';
 export const partyService = {
   getDealers: () => api.get(API_ENDPOINTS.DEALERS),
   getDistributors: () => api.get(API_ENDPOINTS.DISTRIBUTORS),
-  getDealersPaginated: (page: number, limit: number, search?: string) =>
-    api.get(API_ENDPOINTS.DEALERS, { params: { page, limit, ...(search ? { search } : {}) } }),
+  getDealersPaginated: (page: number, limit: number, search?: string, partyType?: string) =>
+    api.get(API_ENDPOINTS.DEALERS, { params: { page, limit, ...(search ? { search } : {}), ...(partyType && partyType !== 'ALL' ? { partyType } : {}) } }),
   getDistributorsPaginated: (page: number, limit: number, search?: string) =>
     api.get(API_ENDPOINTS.DISTRIBUTORS, { params: { page, limit, ...(search ? { search } : {}) } }),
   

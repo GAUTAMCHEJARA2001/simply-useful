@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { travelService, DailyTravelLogItem, TourPlanStopItem } from '@/api/services/travel.service';
 import { api } from '@/api/client';
@@ -40,17 +41,87 @@ import {
   Layers,
   Search,
   Building2,
-  Check
+  Check,
+  RotateCcw,
+  Trophy
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { formatIndianNumber, formatIndianCurrency, formatIndianWords } from '@/utils/format';
+import { SOScorecardTab } from './travel/components/SOScorecardTab';
+
+export const VISIT_PURPOSE_OPTIONS = [
+  { id: 'ORDER', label: 'Order Booking', icon: '📦', badgeBg: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300' },
+  { id: 'PAYMENT', label: 'Payment Collection', icon: '💰', badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300' },
+  { id: 'PROJECT_VISIT', label: 'Project / Site Visit', icon: '🏗️', badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300' },
+  { id: 'MASON_MEET', label: 'Masonry Meet', icon: '🧱', badgeBg: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/60 dark:text-orange-300' },
+  { id: 'DEALER_MEET', label: 'Dealer Meet', icon: '🏬', badgeBg: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/60 dark:text-teal-300' },
+  { id: 'DISTRIBUTOR_MEET', label: 'Distributor Meet', icon: '🏭', badgeBg: 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/60 dark:text-cyan-300' },
+  { id: 'NEW_LEAD', label: 'New Prospect', icon: '🤝', badgeBg: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300' },
+  { id: 'ROUTINE', label: 'Routine Visit', icon: '☕', badgeBg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300' },
+  { id: 'COMPLAINT', label: 'Complaint / Issue', icon: '⚠️', badgeBg: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300' },
+  { id: 'OTHER', label: 'Other', icon: '📋', badgeBg: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300' },
+];
+
+export const renderVisitPurposeBadges = (rawPurpose?: string) => {
+  if (!rawPurpose) return null;
+  const parts = rawPurpose.split(',').map(p => p.trim()).filter(Boolean);
+  if (parts.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {parts.map((p, idx) => {
+        const matched = VISIT_PURPOSE_OPTIONS.find(o => 
+          p.toUpperCase() === o.id || p.toUpperCase().startsWith(`${o.id} `) || p.toUpperCase().startsWith(`${o.id}(`)
+        );
+        return (
+          <span 
+            key={idx} 
+            className={cn(
+              "text-[9px] font-semibold px-1.5 py-0.5 rounded border inline-flex items-center gap-1 shrink-0",
+              matched ? matched.badgeBg : "bg-muted text-muted-foreground border-border"
+            )}
+          >
+            <span>{matched?.icon || '📌'}</span>
+            <span>{matched ? (p.toUpperCase().startsWith('OTHER (') ? p : matched.label) : p}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+};
 
 export const DailyTravelPage: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Navigation tab
-  const [activeTab, setActiveTab] = useState<'TRIP' | 'PLANNER' | 'HISTORY'>('TRIP');
+  // Navigation tab with URL searchParams synchronization
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab')?.toUpperCase();
+  const [activeTab, setActiveTab] = useState<'TRIP' | 'PLANNER' | 'HISTORY' | 'SCORECARD'>(() => {
+    if (urlTab === 'SCORECARD' || urlTab === 'PLANNER' || urlTab === 'HISTORY' || urlTab === 'TRIP') {
+      return urlTab;
+    }
+    return 'TRIP';
+  });
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')?.toUpperCase();
+    if (tabParam === 'SCORECARD' || tabParam === 'PLANNER' || tabParam === 'HISTORY' || tabParam === 'TRIP') {
+      setActiveTab(tabParam as any);
+    } else {
+      setActiveTab('TRIP');
+    }
+  }, [searchParams]);
+
+  const handleSelectTab = (tab: 'TRIP' | 'PLANNER' | 'HISTORY' | 'SCORECARD') => {
+    setActiveTab(tab);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    }, { replace: true });
+  };
 
   // Logs & History State
   const [todayLog, setTodayLog] = useState<DailyTravelLogItem | null>(null);
@@ -69,17 +140,6 @@ export const DailyTravelPage: React.FC = () => {
     type: 'Dealer' | 'Distributor';
   }
   const [parties, setParties] = useState<RegisteredParty[]>([]);
-  const [partySearchQuery, setPartySearchQuery] = useState('');
-  const [partyTypeFilter, setPartyTypeFilter] = useState<'ALL' | 'Dealer' | 'Distributor'>('ALL');
-
-  const filteredParties = useMemo(() => {
-    return parties.filter(p => {
-      const matchType = partyTypeFilter === 'ALL' || p.type === partyTypeFilter;
-      const q = partySearchQuery.toLowerCase().trim();
-      const matchQuery = !q || p.name.toLowerCase().includes(q) || p.city.toLowerCase().includes(q) || p.code.toLowerCase().includes(q);
-      return matchType && matchQuery;
-    });
-  }, [parties, partyTypeFilter, partySearchQuery]);
 
   // Punch Start Form
   const [startKm, setStartKm] = useState<string>('');
@@ -102,6 +162,35 @@ export const DailyTravelPage: React.FC = () => {
   // Lightbox for photos & log viewer
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [viewingHistoryLog, setViewingHistoryLog] = useState<DailyTravelLogItem | null>(null);
+  const [viewingStopDetails, setViewingStopDetails] = useState<TourPlanStopItem | null>(null);
+
+  // Unified Camera & GPS Watermarking State
+  const cameraVideoRef = React.useRef<HTMLVideoElement>(null);
+  const [cameraActive, setCameraActive] = useState<boolean>(false);
+  const [cameraTarget, setCameraTarget] = useState<'START_ODOMETER' | 'END_ODOMETER' | 'VISIT' | null>(null);
+  const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
+  const [punchingStop, setPunchingStop] = useState<TourPlanStopItem | null>(null);
+  const [punchingIndex, setPunchingIndex] = useState<number>(-1);
+  const [savingVisitPunch, setSavingVisitPunch] = useState<boolean>(false);
+  const [punchForm, setPunchForm] = useState<{
+    actual_status: 'COMPLETED' | 'PARTIALLY_FULFILLED' | 'NOT_FULFILLED' | 'CONVERTED_NEW_DEALER' | 'SKIPPED';
+    actual_order_bags: string;
+    actual_collection_value: string;
+    shortfall_reason: string;
+    actual_notes: string;
+    next_visit_date: string;
+    visit_photo: string;
+    gps_location: string;
+  }>({
+    actual_status: 'COMPLETED',
+    actual_order_bags: '',
+    actual_collection_value: '',
+    shortfall_reason: '',
+    actual_notes: '',
+    next_visit_date: '',
+    visit_photo: '',
+    gps_location: '',
+  });
 
   // Planner Tab State
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -122,7 +211,8 @@ export const DailyTravelPage: React.FC = () => {
     dealer_id: string;
     dealer_name: string;
     dealer_location: string;
-    visit_purpose: 'ORDER' | 'PAYMENT' | 'NEW_LEAD' | 'ROUTINE' | 'COMPLAINT' | 'OTHER';
+    visit_purposes: string[];
+    other_purpose_note: string;
     target_order_bags: string;
     target_collection_value: string;
     plan_notes: string;
@@ -130,11 +220,27 @@ export const DailyTravelPage: React.FC = () => {
     dealer_id: '',
     dealer_name: '',
     dealer_location: '',
-    visit_purpose: 'ORDER',
+    visit_purposes: ['ORDER'],
+    other_purpose_note: '',
     target_order_bags: '',
     target_collection_value: '',
     plan_notes: '',
   });
+
+  const toggleVisitPurpose = (purposeId: string) => {
+    setStopForm(prev => {
+      const exists = prev.visit_purposes.includes(purposeId);
+      if (exists) {
+        if (prev.visit_purposes.length === 1) {
+          toast({ title: 'At least 1 purpose required', description: 'Please keep at least one visit purpose selected.' });
+          return prev;
+        }
+        return { ...prev, visit_purposes: prev.visit_purposes.filter(p => p !== purposeId) };
+      } else {
+        return { ...prev, visit_purposes: [...prev.visit_purposes, purposeId] };
+      }
+    });
+  };
 
   // GPS auto-capture
   const fetchGps = useCallback(() => {
@@ -223,19 +329,39 @@ export const DailyTravelPage: React.FC = () => {
           setTodayLog(data);
           if (data.start_km !== undefined) setStartKm(String(data.start_km));
           if (data.vehicle_type) setVehicleType(data.vehicle_type);
+          if (data.start_photo) setStartPhoto(data.start_photo);
           if (data.end_km !== null && data.end_km !== undefined) setEndKm(String(data.end_km));
+          if (data.end_photo) setEndPhoto(data.end_photo);
           if (data.visit_summary) setVisitSummary(data.visit_summary);
           if (data.collection_summary) setCollectionSummary(data.collection_summary);
           if (data.order_summary) setOrderSummary(data.order_summary);
 
           // Populate reconciling stops with existing stops
-          if (data.stops && Array.isArray(data.stops)) {
+          if (data.stops && Array.isArray(data.stops) && data.stops.length > 0) {
             setReconcilingStops(data.stops);
+          } else {
+            try {
+              const planRes = await travelService.getPlan(todayStr);
+              if (planRes.data?.data && planRes.data.data.length > 0) {
+                setReconcilingStops(planRes.data.data);
+              }
+            } catch (e) {
+              console.error('Failed to load today plan fallback:', e);
+            }
           }
         }
       } else {
         setTodayLog(null);
-        setReconcilingStops([]);
+        try {
+          const planRes = await travelService.getPlan(todayStr);
+          if (planRes.data?.data && planRes.data.data.length > 0) {
+            setReconcilingStops(planRes.data.data);
+          } else {
+            setReconcilingStops([]);
+          }
+        } catch (e) {
+          setReconcilingStops([]);
+        }
       }
     } catch (err) {
       console.error('Failed to load today travel log:', err);
@@ -282,14 +408,149 @@ export const DailyTravelPage: React.FC = () => {
     }
   }, [plannerDate, activeTab]);
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (s: string) => void) => {
+  // Emboss GPS Watermark, Timestamp, Tag, and Officer Info onto Canvas
+  const embossGpsWatermark = (
+    source: HTMLVideoElement | HTMLImageElement,
+    tagLabel: string,
+    coordsOverride?: string
+  ): string => {
+    try {
+      const canvas = document.createElement('canvas');
+      const srcWidth = (source instanceof HTMLVideoElement ? source.videoWidth : (source.naturalWidth || source.width)) || 1280;
+      const srcHeight = (source instanceof HTMLVideoElement ? source.videoHeight : (source.naturalHeight || source.height)) || 960;
+
+      // Scale to max width 1280 to maintain high resolution while keeping payload optimal
+      const maxW = 1280;
+      const scale = srcWidth > maxW ? maxW / srcWidth : 1;
+      const imgWidth = Math.round(srcWidth * scale);
+      const imgHeight = Math.round(srcHeight * scale);
+
+      // Height for dark slate info bar at bottom (approx 15-18% of image height, min 90px, max 160px)
+      const overlayHeight = Math.min(160, Math.max(90, Math.round(imgHeight * 0.16)));
+
+      canvas.width = imgWidth;
+      canvas.height = imgHeight + overlayHeight;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+
+      // 1. Draw photo in upper region
+      ctx.drawImage(source, 0, 0, imgWidth, imgHeight);
+
+      // 2. Draw dark slate bottom bar (#0f172a = slate-900)
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, imgHeight, canvas.width, overlayHeight);
+
+      // 3. Draw radar / GPS indicator box on left
+      const padding = Math.max(12, Math.round(canvas.width * 0.02));
+      const badgeSize = Math.max(64, overlayHeight - (padding * 2));
+      const badgeX = padding;
+      const badgeY = imgHeight + padding;
+      const radius = 8;
+
+      ctx.save();
+      ctx.beginPath();
+      if ((ctx as any).roundRect) {
+        (ctx as any).roundRect(badgeX, badgeY, badgeSize, badgeSize, radius);
+      } else {
+        ctx.rect(badgeX, badgeY, badgeSize, badgeSize);
+      }
+      ctx.clip();
+      ctx.fillStyle = '#1e293b'; // slate-800
+      ctx.fillRect(badgeX, badgeY, badgeSize, badgeSize);
+
+      // Radar grid lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 4; i++) {
+        const off = (badgeSize / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(badgeX + off, badgeY);
+        ctx.lineTo(badgeX + off, badgeY + badgeSize);
+        ctx.moveTo(badgeX, badgeY + off);
+        ctx.lineTo(badgeX + badgeSize, badgeY + off);
+        ctx.stroke();
+      }
+      // Green center GPS point
+      ctx.fillStyle = '#22c55e';
+      ctx.beginPath();
+      ctx.arc(badgeX + badgeSize / 2, badgeY + badgeSize / 2, Math.max(5, badgeSize * 0.1), 0, Math.PI * 2);
+      ctx.fill();
+      // Radar ripple
+      ctx.strokeStyle = 'rgba(34, 197, 94, 0.45)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize * 0.32, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // 4. Stamped Text Info
+      const textX = badgeX + badgeSize + padding;
+      const maxTextWidth = canvas.width - textX - padding;
+      const fontSize = Math.max(13, Math.floor(overlayHeight * 0.18));
+
+      // Line 1: Purpose Tag & Timestamp (White bold)
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${fontSize + 2}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      let textY = imgHeight + padding + fontSize;
+      ctx.fillText(`📌 ${tagLabel.toUpperCase()} • ${dateStr} ${timeStr}`, textX, textY, maxTextWidth);
+
+      // Line 2: GPS coordinates (Sky blue / cyan)
+      textY += fontSize + 6;
+      ctx.fillStyle = '#38bdf8'; // sky-400
+      ctx.font = `bold ${fontSize}px monospace, sans-serif`;
+      const effectiveGps = coordsOverride || gpsLocation;
+      const locDisplay = effectiveGps ? `📍 GPS: ${effectiveGps}` : `📍 GPS: Acquired (${gpsStatus})`;
+      ctx.fillText(locDisplay, textX, textY, maxTextWidth);
+
+      // Line 3: Officer / User info & security badge (Slate-400)
+      textY += fontSize + 6;
+      ctx.fillStyle = '#94a3b8'; // slate-400
+      ctx.font = `${Math.max(11, fontSize - 2)}px -apple-system, BlinkMacSystemFont, sans-serif`;
+      const officerName = (user?.name || user?.email?.split('@')[0] || 'Field Officer').toUpperCase();
+      ctx.fillText(`👤 OFFICER: ${officerName} • 🛡️ VERIFIED GEO-STAMP PROOF`, textX, textY, maxTextWidth);
+
+      return canvas.toDataURL('image/jpeg', 0.82);
+    } catch (e) {
+      console.error('Error in embossGpsWatermark:', e);
+      return '';
+    }
+  };
+
+  // Generic File Upload with Automatic GPS Watermarking
+  const handlePhotoFileUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    tagLabel: string,
+    onSuccess: (base64: string) => void
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 8 * 1024 * 1024) {
+      toast({ title: 'Image too large', description: 'Please select an image under 8MB.', variant: 'destructive' });
+      return;
+    }
+
+    fetchGps(); // Refresh GPS location
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setter(reader.result as string);
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const embossed = embossGpsWatermark(img, tagLabel);
+        onSuccess(embossed || (reader.result as string));
+        toast({ title: 'Photo Attached & GPS Embossed! 📍', description: 'Location, timestamp, and officer details stamped.' });
+      };
+      img.onerror = () => {
+        onSuccess(reader.result as string);
+      };
+      img.src = reader.result as string;
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   // Start Trip Action
@@ -306,12 +567,15 @@ export const DailyTravelPage: React.FC = () => {
         vehicle_type: vehicleType,
         start_photo: startPhoto,
         start_location: gpsLocation || gpsStatus,
+        stops: reconcilingStops,
       });
       toast({ title: 'Trip Started! 🚀', description: `Recorded starting at ${startKm} KM (${vehicleType})` });
       const logData = res.data?.data || null;
       setTodayLog(logData);
-      if (logData?.stops) {
+      if (logData?.stops && logData.stops.length > 0) {
         setReconcilingStops(logData.stops);
+      } else if (reconcilingStops.length > 0) {
+        setReconcilingStops(reconcilingStops);
       }
       loadHistory();
     } catch (err: any) {
@@ -423,18 +687,30 @@ export const DailyTravelPage: React.FC = () => {
       return;
     }
 
+    let finalPurpose = stopForm.visit_purposes.join(', ');
+    if (stopForm.visit_purposes.includes('OTHER') && stopForm.other_purpose_note.trim()) {
+      finalPurpose = stopForm.visit_purposes
+        .map(p => p === 'OTHER' ? `OTHER (${stopForm.other_purpose_note.trim()})` : p)
+        .join(', ');
+    }
+
+    const cleanCollection = String(stopForm.target_collection_value || '').replace(/[^0-9]/g, '');
+    const cleanBags = String(stopForm.target_order_bags || '').replace(/[^0-9]/g, '');
+
     const newStop: TourPlanStopItem = {
       id: `temp-${Date.now()}`,
       dealer_id: stopForm.dealer_id || null,
       dealer_name: stopForm.dealer_name.trim(),
       dealer_location: stopForm.dealer_location.trim(),
-      visit_purpose: stopForm.visit_purpose,
-      target_order_bags: Number(stopForm.target_order_bags) || 0,
-      target_collection_value: Number(stopForm.target_collection_value) || 0,
+      visit_purpose: finalPurpose || 'ORDER',
+      target_order_bags: Number(cleanBags) || 0,
+      target_collection_value: Number(cleanCollection) || 0,
       plan_notes: stopForm.plan_notes.trim(),
       is_unplanned: isSpotVisitModal,
       visited: isSpotVisitModal, // Spot visits conducted on the fly are visited
       actual_status: isSpotVisitModal ? 'COMPLETED' : 'PENDING',
+      actual_order_bags: isSpotVisitModal ? (Number(cleanBags) || 0) : 0,
+      actual_collection_value: isSpotVisitModal ? (Number(cleanCollection) || 0) : 0,
     };
 
     if (isSpotVisitModal) {
@@ -444,7 +720,17 @@ export const DailyTravelPage: React.FC = () => {
       // Call backend to persist if trip active
       if (todayLog?.id) {
         try {
-          await travelService.addUnplannedStop(newStop);
+          const resp = await travelService.addUnplannedStop({
+            ...newStop,
+            is_unplanned: true,
+            visited: true,
+            actual_order_bags: Number(cleanBags) || 0,
+            actual_collection_value: Number(cleanCollection) || 0,
+          });
+          if (resp.data?.data?.id) {
+            const savedStop = resp.data.data;
+            setReconcilingStops(prev => prev.map(s => s.id === newStop.id ? savedStop : s));
+          }
         } catch (e) {
           console.error('Failed to sync spot visit to backend:', e);
         }
@@ -454,9 +740,26 @@ export const DailyTravelPage: React.FC = () => {
       setPlannerStops(prev => [...prev, newStop]);
       toast({ title: 'Stop Added to Plan', description: `${newStop.dealer_name} added to ${plannerDate} plan.` });
     } else {
-      // Added pre-trip for today
+      // Added pre-trip or during active trip
       setReconcilingStops(prev => [...prev, newStop]);
-      toast({ title: 'Stop Added to Today Plan', description: `${newStop.dealer_name} added.` });
+      toast({ title: 'Stop Added to Today Agenda', description: `${newStop.dealer_name} added.` });
+      // If trip is active, persist to DB attached to travel_log
+      if (todayLog?.id) {
+        try {
+          const resp = await travelService.addUnplannedStop({
+            ...newStop,
+            is_unplanned: false,
+            visited: false,
+            actual_status: 'PENDING',
+          });
+          if (resp.data?.data?.id) {
+            const savedStop = resp.data.data;
+            setReconcilingStops(prev => prev.map(s => s.id === newStop.id ? savedStop : s));
+          }
+        } catch (e) {
+          console.error('Failed to sync planned stop to active trip:', e);
+        }
+      }
     }
 
     setShowAddStopModal(false);
@@ -464,7 +767,8 @@ export const DailyTravelPage: React.FC = () => {
       dealer_id: '',
       dealer_name: '',
       dealer_location: '',
-      visit_purpose: 'ORDER',
+      visit_purposes: ['ORDER'],
+      other_purpose_note: '',
       target_order_bags: '',
       target_collection_value: '',
       plan_notes: '',
@@ -510,6 +814,213 @@ export const DailyTravelPage: React.FC = () => {
     }));
   };
 
+  // Open Visit Tracking & Outcome Punch Modal
+  const openVisitPunchModal = (stop: TourPlanStopItem, index: number) => {
+    setPunchingStop(stop);
+    setPunchingIndex(index);
+    setPunchForm({
+      actual_status: (stop.actual_status && stop.actual_status !== 'PENDING' ? stop.actual_status : 'COMPLETED') as any,
+      actual_order_bags: stop.actual_order_bags ? String(stop.actual_order_bags) : '',
+      actual_collection_value: stop.actual_collection_value ? String(stop.actual_collection_value) : '',
+      shortfall_reason: stop.shortfall_reason || '',
+      actual_notes: stop.actual_notes || '',
+      next_visit_date: stop.next_visit_date || '',
+      visit_photo: stop.visit_photo || '',
+      gps_location: stop.gps_location || (gpsLocation ? `${gpsLocation}` : ''),
+    });
+  };
+
+  // Open Unified Live Camera Modal (Works for Start Odometer, End Odometer, and Visit Modal)
+  const openCameraModal = async (target: 'START_ODOMETER' | 'END_ODOMETER' | 'VISIT') => {
+    setCameraTarget(target);
+    setCameraActive(true);
+    fetchGps(); // Auto-refresh location immediately
+
+    setTimeout(async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: cameraFacing, width: { ideal: 1280 } },
+        });
+        if (cameraVideoRef.current) {
+          cameraVideoRef.current.srcObject = stream;
+          cameraVideoRef.current.play();
+        }
+      } catch {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          if (cameraVideoRef.current) {
+            cameraVideoRef.current.srcObject = stream;
+            cameraVideoRef.current.play();
+          }
+        } catch (err) {
+          console.error('Failed to access camera:', err);
+          toast({
+            title: 'Camera Access Denied',
+            description: 'Please enable camera permission in your browser or choose a photo from files.',
+            variant: 'destructive',
+          });
+          closeCameraModal();
+        }
+      }
+    }, 150);
+  };
+
+  // Switch facing mode (Front / Back camera)
+  const toggleCameraFacing = async () => {
+    const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    setCameraFacing(nextFacing);
+    if (cameraVideoRef.current?.srcObject) {
+      (cameraVideoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: nextFacing, width: { ideal: 1280 } },
+      });
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = stream;
+        cameraVideoRef.current.play();
+      }
+    } catch {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (cameraVideoRef.current) {
+          cameraVideoRef.current.srcObject = stream;
+          cameraVideoRef.current.play();
+        }
+      } catch (err) {
+        console.error('Failed to switch camera:', err);
+      }
+    }
+  };
+
+  // Close live camera modal & release media stream
+  const closeCameraModal = () => {
+    if (cameraVideoRef.current?.srcObject) {
+      try {
+        (cameraVideoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+      } catch (e) {
+        console.error('Error stopping camera tracks:', e);
+      }
+      cameraVideoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+    setCameraTarget(null);
+  };
+
+  const stopCamera = closeCameraModal;
+
+  // Snap photo from live video canvas & emboss GPS watermark
+  const handleCaptureCameraPhoto = () => {
+    const video = cameraVideoRef.current;
+    if (!video || video.readyState < 2) {
+      toast({ title: 'Camera Not Ready', description: 'Please wait for camera stream to load.', variant: 'destructive' });
+      return;
+    }
+
+    let tag = 'ODOMETER PHOTO';
+    if (cameraTarget === 'START_ODOMETER') tag = 'STARTING ODOMETER';
+    else if (cameraTarget === 'END_ODOMETER') tag = 'ENDING ODOMETER';
+    else if (cameraTarget === 'VISIT') {
+      tag = punchingStop?.dealer_name ? `STORE VISIT: ${punchingStop.dealer_name}` : 'STORE FRONT VISIT';
+    }
+
+    const watermarked = embossGpsWatermark(video, tag);
+    if (!watermarked) {
+      toast({ title: 'Capture Error', description: 'Could not capture frame from camera.', variant: 'destructive' });
+      return;
+    }
+
+    if (cameraTarget === 'START_ODOMETER') {
+      setStartPhoto(watermarked);
+      toast({ title: 'Start Meter Photo Attached! 📸', description: 'GPS coordinates & timestamp embossed.' });
+    } else if (cameraTarget === 'END_ODOMETER') {
+      setEndPhoto(watermarked);
+      toast({ title: 'End Meter Photo Attached! 📸', description: 'GPS coordinates & timestamp embossed.' });
+    } else if (cameraTarget === 'VISIT') {
+      setPunchForm((prev) => ({ ...prev, visit_photo: watermarked, gps_location: gpsLocation || prev.gps_location }));
+      toast({ title: 'Visit Photo Attached! 📸', description: 'Store front proof stamped with GPS.' });
+    }
+
+    closeCameraModal();
+  };
+
+  // Submit and Save Visit Punch
+  const handleSaveVisitPunch = async () => {
+    if (!punchingStop || punchingIndex < 0) return;
+    stopCamera();
+
+    try {
+      setSavingVisitPunch(true);
+      const cleanBags = Number(String(punchForm.actual_order_bags || '').replace(/[^0-9]/g, '')) || 0;
+      const cleanCollection = Number(String(punchForm.actual_collection_value || '').replace(/[^0-9]/g, '')) || 0;
+
+      const payload = {
+        stop_id: punchingStop.id,
+        dealer_name: punchingStop.dealer_name,
+        actual_status: punchForm.actual_status,
+        actual_order_bags: cleanBags,
+        actual_collection_value: cleanCollection,
+        shortfall_reason: punchForm.shortfall_reason.trim(),
+        actual_notes: punchForm.actual_notes.trim(),
+        next_visit_date: punchForm.next_visit_date || null,
+        visit_photo: punchForm.visit_photo,
+        gps_location: punchForm.gps_location || gpsLocation || '',
+      };
+
+      const res = await travelService.punchStopVisit(payload);
+      const savedStop = res.data?.data;
+
+      // Update local reconciling stops list
+      setReconcilingStops(prev => {
+        const next = [...prev];
+        next[punchingIndex] = {
+          ...next[punchingIndex],
+          visited: punchForm.actual_status !== 'SKIPPED',
+          actual_status: punchForm.actual_status,
+          actual_order_bags: cleanBags,
+          actual_collection_value: cleanCollection,
+          shortfall_reason: punchForm.shortfall_reason.trim(),
+          actual_notes: punchForm.actual_notes.trim(),
+          next_visit_date: punchForm.next_visit_date || null,
+          visit_photo: punchForm.visit_photo,
+          gps_location: punchForm.gps_location,
+          ...(savedStop || {}),
+        };
+        return next;
+      });
+
+      // Recalculate and update trip order/collection summaries if applicable
+      setReconcilingStops(updatedStops => {
+        const totalBags = updatedStops.reduce((sum, s) => sum + (s.actual_order_bags || 0), 0);
+        const totalCollection = updatedStops.reduce((sum, s) => sum + (s.actual_collection_value || 0), 0);
+        const visitedCount = updatedStops.filter(s => s.visited && s.actual_status !== 'SKIPPED').length;
+
+        if (totalBags > 0) setOrderSummary(`${totalBags} bags booked across ${visitedCount} stops`);
+        if (totalCollection > 0) setCollectionSummary(`₹${totalCollection.toLocaleString('en-IN')} collected`);
+        if (visitedCount > 0) setVisitSummary(`${visitedCount} of ${updatedStops.length} counters visited`);
+
+        return updatedStops;
+      });
+
+      toast({ 
+        title: 'Visit Outcome Punched! 🎯', 
+        description: `Recorded outcome for ${punchingStop.dealer_name}. Synced to company visit tracking.` 
+      });
+
+      setPunchingStop(null);
+      setPunchingIndex(-1);
+    } catch (err: any) {
+      console.error('Failed to punch visit outcome:', err);
+      toast({ 
+        title: 'Failed to record visit', 
+        description: err.response?.data?.message || 'Network error saving visit outcome.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setSavingVisitPunch(false);
+    }
+  };
+
   // Status Badge Helper
   const getRatingBadge = (rating?: string, score?: number) => {
     switch (rating) {
@@ -549,9 +1060,9 @@ export const DailyTravelPage: React.FC = () => {
         {/* Top Navigation Tabs */}
         <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border/40 shrink-0">
           <button
-            onClick={() => setActiveTab('TRIP')}
+            onClick={() => handleSelectTab('TRIP')}
             className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5",
+              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
               activeTab === 'TRIP' ? "bg-background text-primary shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -564,7 +1075,7 @@ export const DailyTravelPage: React.FC = () => {
 
           <button
             onClick={() => {
-              setActiveTab('PLANNER');
+              handleSelectTab('PLANNER');
               setPlannerDate(tomorrowStr);
             }}
             className={cn(
@@ -580,14 +1091,28 @@ export const DailyTravelPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab('HISTORY')}
+            onClick={() => handleSelectTab('HISTORY')}
             className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5",
+              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
               activeTab === 'HISTORY' ? "bg-background text-primary shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <Clock className="w-4 h-4" />
-            <span>History &amp; Scores</span>
+            <span>History</span>
+          </button>
+
+          <button
+            onClick={() => handleSelectTab('SCORECARD')}
+            className={cn(
+              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+              activeTab === 'SCORECARD' ? "bg-background text-primary shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Trophy className="w-4 h-4 text-amber-500" />
+            <span>{['SUPERADMIN', 'ADMIN', 'HR'].includes((user?.role || '').toUpperCase()) || (user as any)?.is_superuser ? 'Scorecard' : 'My Score'}</span>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold">
+              KPI
+            </Badge>
           </button>
         </div>
       </div>
@@ -652,43 +1177,84 @@ export const DailyTravelPage: React.FC = () => {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                         {reconcilingStops.map((stop, idx) => (
-                          <div key={stop.id || idx} className="p-3 rounded-xl border bg-card flex items-start justify-between gap-2 shadow-xs">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center">
+                          <div 
+                            key={stop.id || idx} 
+                            onClick={() => setViewingStopDetails(stop)}
+                            className="p-3.5 rounded-xl border bg-card hover:border-primary/50 hover:shadow-xs transition-all flex items-start justify-between gap-2 shadow-xs cursor-pointer group"
+                            title="Click to view full stop information"
+                          >
+                            <div className="space-y-1.5 flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center shrink-0">
                                   {idx + 1}
                                 </span>
-                                <h4 className="font-bold text-xs text-foreground">{stop.dealer_name}</h4>
-                                <Badge variant="outline" className="text-[10px] py-0">
-                                  {stop.visit_purpose}
-                                </Badge>
+                                <h4 className="font-bold text-xs text-foreground group-hover:text-primary transition-colors truncate">
+                                  {stop.dealer_name}
+                                </h4>
+                                {renderVisitPurposeBadges(stop.visit_purpose)}
                               </div>
+
                               {stop.dealer_location && (
                                 <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                  <MapPin className="w-3 h-3" /> {stop.dealer_location}
+                                  <MapPin className="w-3 h-3 shrink-0" /> 
+                                  <span className="truncate">{stop.dealer_location}</span>
                                 </p>
                               )}
-                              <div className="flex items-center gap-3 text-[11px] text-muted-foreground pt-0.5">
+
+                              {/* Target commitments shown on front side */}
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground pt-0.5">
                                 {(stop.target_order_bags || 0) > 0 && (
-                                  <span className="text-purple-600 font-semibold flex items-center gap-0.5">
-                                    <ShoppingBag className="w-3 h-3" /> {stop.target_order_bags} bags
+                                  <span className="text-purple-600 font-bold flex items-center gap-1 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
+                                    <ShoppingBag className="w-3 h-3" /> {formatIndianNumber(stop.target_order_bags)} bags
                                   </span>
                                 )}
                                 {(stop.target_collection_value || 0) > 0 && (
-                                  <span className="text-emerald-600 font-semibold flex items-center gap-0.5">
+                                  <span className="text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
                                     <IndianRupee className="w-3 h-3" /> ₹{Number(stop.target_collection_value).toLocaleString('en-IN')}
+                                    {formatIndianWords(stop.target_collection_value) && (
+                                      <span className="text-[9px] font-medium text-emerald-700/80 dark:text-emerald-300">
+                                        ({formatIndianWords(stop.target_collection_value)})
+                                      </span>
+                                    )}
                                   </span>
                                 )}
                               </div>
+
+                              {/* Front-side Action / Pitch Notes */}
+                              {stop.plan_notes && (
+                                <div className="text-[11px] text-muted-foreground/90 bg-muted/40 dark:bg-muted/20 px-2 py-1 rounded-md border border-border/60 italic flex items-start gap-1.5 mt-1">
+                                  <FileText className="w-3 h-3 text-primary shrink-0 mt-0.5" />
+                                  <span className="line-clamp-2">"{stop.plan_notes}"</span>
+                                </div>
+                              )}
                             </div>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6 text-muted-foreground hover:text-red-500" 
-                              onClick={() => setReconcilingStops(prev => prev.filter((_, i) => i !== idx))}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" 
+                                title="View Stop Info (Read-Only)"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewingStopDetails(stop);
+                                }}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-6 w-6 text-muted-foreground hover:text-red-500" 
+                                title="Delete Stop"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setReconcilingStops(prev => prev.filter((_, i) => i !== idx));
+                                }}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -764,28 +1330,90 @@ export const DailyTravelPage: React.FC = () => {
                   {/* Start Meter Photo */}
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold flex items-center justify-between">
-                      <span>Starting Meter Photo *</span>
-                      {startPhoto && <span className="text-emerald-600 text-xs">✓ Photo Attached</span>}
-                    </Label>
-                    <div className="flex flex-col sm:flex-row items-center gap-3">
-                      <label className="flex-1 w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-xl cursor-pointer hover:border-primary/60 hover:bg-muted/20 transition-all text-sm text-muted-foreground">
-                        <Camera className="w-5 h-5 text-primary" />
-                        <span>{startPhoto ? 'Retake / Change Photo' : 'Snap Starting Odometer Photo'}</span>
-                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhotoUpload(e, setStartPhoto)} />
-                      </label>
-                      {startPhoto && (
-                        <div className="relative group w-24 h-16 rounded-lg overflow-hidden border shrink-0">
-                          <img src={startPhoto} alt="Start Meter" className="w-full h-full object-cover" />
-                          <button 
-                            type="button"
-                            onClick={() => setPreviewImage(startPhoto)}
-                            className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </div>
+                      <span className="flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5 text-primary" />
+                        <span>Starting Meter Photo *</span>
+                      </span>
+                      {startPhoto ? (
+                        <span className="text-emerald-600 text-xs font-semibold flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" /> Photo Attached &amp; GPS Stamped
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground font-normal">
+                          {gpsStatus}
+                        </span>
                       )}
-                    </div>
+                    </Label>
+
+                    {startPhoto ? (
+                      <div className="p-3 border rounded-xl bg-card/50 flex flex-col sm:flex-row items-center gap-3">
+                        <div 
+                          className="relative group w-full sm:w-36 h-24 rounded-lg overflow-hidden border shrink-0 cursor-pointer bg-black/5"
+                          onClick={() => setPreviewImage(startPhoto)}
+                        >
+                          <img src={startPhoto} alt="Start Meter" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-semibold gap-1">
+                            <Eye className="w-4 h-4" /> View Full Proof
+                          </div>
+                        </div>
+                        <div className="flex-1 space-y-1 w-full text-center sm:text-left">
+                          <p className="text-xs font-bold text-foreground">Starting Odometer Photo Stamped</p>
+                          <p className="text-[11px] text-muted-foreground">Coordinates, timestamp &amp; user name embossed at bottom.</p>
+                          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openCameraModal('START_ODOMETER')}
+                              className="h-8 text-xs font-semibold gap-1.5 cursor-pointer"
+                            >
+                              <Camera className="w-3.5 h-3.5 text-primary" />
+                              Retake via Camera
+                            </Button>
+                            <label className="inline-flex items-center gap-1 px-2.5 h-8 rounded-lg text-xs font-medium border border-border bg-background hover:bg-muted cursor-pointer transition-colors shadow-2xs">
+                              <span>Change from File</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={(e) => handlePhotoFileUpload(e, 'STARTING ODOMETER', setStartPhoto)} 
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                            <Camera className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-foreground">Snap Starting Meter Reading</p>
+                            <p className="text-[11px] text-muted-foreground">Live GPS coordinates &amp; timestamp will be embossed directly on photo.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <Button
+                            type="button"
+                            onClick={() => openCameraModal('START_ODOMETER')}
+                            className="flex-1 sm:flex-initial h-10 text-xs font-bold bg-primary hover:bg-primary/90 text-white shadow-sm gap-2 cursor-pointer"
+                          >
+                            <Camera className="w-4 h-4" />
+                            <span>📸 Open Camera</span>
+                          </Button>
+                          <label className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 h-10 rounded-lg text-xs font-semibold bg-background border border-border text-foreground hover:bg-muted cursor-pointer transition-colors shadow-2xs">
+                            <span>📁 Choose File</span>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => handlePhotoFileUpload(e, 'STARTING ODOMETER', setStartPhoto)} 
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <Button 
@@ -801,41 +1429,29 @@ export const DailyTravelPage: React.FC = () => {
           ) : todayLog.end_km === null ? (
             /* STATE 2: TRIP IN PROGRESS - LIVE AGENDA & END TRIP FORM */
             <div className="space-y-6">
-              {/* Trip Active Glowing Banner */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-primary/10 to-amber-500/15 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-amber-500 text-white shadow-sm animate-pulse">
-                    {todayLog.vehicle_type === 'CAR' ? <Car className="w-5 h-5" /> : <Bike className="w-5 h-5" />}
+              {/* Compact Trip In Progress Banner */}
+              <div className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-amber-500 text-white shadow-xs animate-pulse shrink-0">
+                    {todayLog.vehicle_type === 'CAR' ? <Car className="w-3.5 h-3.5" /> : <Bike className="w-3.5 h-3.5" />}
                   </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <span>Trip In Progress</span>
-                      <Badge className="bg-amber-600 text-white text-[10px] uppercase">Live</Badge>
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Started at <strong>{todayLog.start_km} KM</strong> &middot; Time: {todayLog.start_time ? new Date(todayLog.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}
-                    </p>
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-foreground text-xs">Trip In Progress</span>
+                      <Badge className="bg-amber-600 text-white text-[9px] px-1.5 py-0 uppercase">Live</Badge>
+                    </div>
+                    <span className="text-muted-foreground text-[11px] flex items-center gap-1.5">
+                      <span>&bull; Started at <strong>{todayLog.start_km} KM</strong></span>
+                      <span>&bull; Time: {todayLog.start_time ? new Date(todayLog.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}</span>
+                    </span>
                   </div>
                 </div>
-
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => {
-                    setIsSpotVisitModal(true);
-                    setShowAddStopModal(true);
-                  }}
-                  className="text-xs h-9 gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>+ Add Spot / Unplanned Visit</span>
-                </Button>
               </div>
 
               {/* Live Stops Agenda Checklist */}
               <Card className="border shadow-sm">
                 <CardHeader className="border-b pb-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                     <div>
                       <CardTitle className="text-base font-bold flex items-center gap-2">
                         <Store className="w-5 h-5 text-blue-600" />
@@ -845,105 +1461,142 @@ export const DailyTravelPage: React.FC = () => {
                         Check off visits or update actual orders/collections as you complete each counter
                       </CardDescription>
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <Button 
+                        size="sm"
+                        onClick={() => {
+                          setIsSpotVisitModal(true);
+                          setShowAddStopModal(true);
+                        }}
+                        className="text-xs h-8 gap-1.5 bg-primary hover:bg-primary/90 text-white font-bold shadow-xs rounded-lg"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Stop</span>
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={loadTodayLog}
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        title="Reload / Sync Today's Agenda"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
 
                 <CardContent className="p-4 space-y-3">
                   {reconcilingStops.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-muted-foreground border border-dashed rounded-xl">
-                      No stops logged yet. Tap "+ Add Spot / Unplanned Visit" to log counters you visit today.
+                    <div className="p-6 text-center border-2 border-dashed rounded-2xl bg-muted/10 space-y-3">
+                      <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center shadow-xs">
+                        <Store className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-foreground">No stops in today's agenda yet</h4>
+                        <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                          Click below to add a dealer or counter stop to today's route.
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-center pt-2">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setIsSpotVisitModal(true);
+                            setShowAddStopModal(true);
+                          }}
+                          className="text-xs h-9 px-4 gap-1.5 bg-primary hover:bg-primary/90 text-white font-bold shadow-xs rounded-lg"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Add Stop to Route</span>
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <div className="divide-y border rounded-xl overflow-hidden">
-                      {reconcilingStops.map((stop, idx) => (
-                        <div key={stop.id || idx} className="p-3.5 bg-card hover:bg-muted/10 transition-colors space-y-2">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div className="flex items-start gap-2">
-                              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center mt-0.5 shrink-0">
+                      {reconcilingStops.map((stop, idx) => {
+                        const isVisited = stop.visited && stop.actual_status !== 'PENDING';
+                        return (
+                          <div 
+                            key={stop.id || idx} 
+                            onClick={() => openVisitPunchModal(stop, idx)}
+                            className={cn(
+                              "p-3 bg-card hover:bg-muted/20 transition-all cursor-pointer flex items-center justify-between gap-3 border-l-4",
+                              isVisited 
+                                ? "border-l-emerald-500 hover:border-l-emerald-600" 
+                                : "border-l-amber-500 hover:border-l-primary"
+                            )}
+                            title="Click to punch or view visit details"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={cn(
+                                "w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center shrink-0",
+                                isVisited ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-primary/10 text-primary"
+                              )}>
                                 {idx + 1}
                               </span>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <h4 className="font-bold text-xs text-foreground">{stop.dealer_name}</h4>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <h4 className="font-bold text-xs text-foreground truncate">{stop.dealer_name}</h4>
                                   {stop.is_unplanned ? (
-                                    <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-600 border-blue-200 py-0">Spot Visit</Badge>
+                                    <Badge variant="outline" className="text-[10px] font-bold bg-blue-50 text-blue-700 border-blue-200 py-0 flex items-center gap-1">
+                                      <MapPin className="w-2.5 h-2.5" /> Spot
+                                    </Badge>
                                   ) : (
-                                    <Badge variant="outline" className="text-[9px] py-0">{stop.visit_purpose}</Badge>
+                                    renderVisitPurposeBadges(stop.visit_purpose)
                                   )}
                                 </div>
                                 {stop.dealer_location && (
-                                  <p className="text-[11px] text-muted-foreground">{stop.dealer_location}</p>
+                                  <p className="text-[11px] text-muted-foreground truncate">{stop.dealer_location}</p>
                                 )}
                               </div>
                             </div>
 
-                            {/* Targets Pill */}
-                            <div className="flex items-center gap-2 text-xs">
-                              {(stop.target_order_bags || 0) > 0 && (
-                                <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md text-[11px] font-semibold border border-purple-200">
-                                  Target: {stop.target_order_bags} bags
+                            {/* Status: Pending or Visited */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              {(stop.target_order_bags || 0) > 0 && !isVisited && (
+                                <span className="hidden sm:inline-block bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md text-[11px] font-semibold border border-purple-200">
+                                  Target: {formatIndianNumber(stop.target_order_bags)} bags
                                 </span>
                               )}
-                              {(stop.target_collection_value || 0) > 0 && (
-                                <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md text-[11px] font-semibold border border-emerald-200">
-                                  Target: ₹{Number(stop.target_collection_value).toLocaleString('en-IN')}
-                                </span>
+                              {!isVisited ? (
+                                <Badge 
+                                  variant="outline"
+                                  className="text-[11px] font-bold py-1 px-2.5 bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 flex items-center gap-1 shadow-xs"
+                                >
+                                  <Clock className="w-3 h-3 text-amber-500" />
+                                  <span>Pending</span>
+                                </Badge>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <Badge 
+                                    variant="outline"
+                                    className={cn(
+                                      "text-[11px] font-bold py-1 px-2.5 flex items-center gap-1 shadow-xs",
+                                      stop.actual_status === 'COMPLETED' && "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300",
+                                      stop.actual_status === 'PARTIALLY_FULFILLED' && "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300",
+                                      stop.actual_status === 'NOT_FULFILLED' && "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300",
+                                      stop.actual_status === 'CONVERTED_NEW_DEALER' && "bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300",
+                                      stop.actual_status === 'SKIPPED' && "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300"
+                                    )}
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    <span>
+                                      {stop.actual_status === 'COMPLETED' ? 'Visited' :
+                                       stop.actual_status === 'PARTIALLY_FULFILLED' ? 'Partial' :
+                                       stop.actual_status === 'NOT_FULFILLED' ? 'Missed' :
+                                       stop.actual_status === 'CONVERTED_NEW_DEALER' ? 'Converted' :
+                                       stop.actual_status === 'SKIPPED' ? 'Skipped' : 'Visited'}
+                                    </span>
+                                  </Badge>
+                                </div>
                               )}
+                              <ChevronRight className="w-4 h-4 text-muted-foreground/60" />
                             </div>
                           </div>
-
-                          {/* Inline Reconciliation Controls */}
-                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
-                            <div>
-                              <Label className="text-[10px] text-muted-foreground">Visit Status *</Label>
-                              <select 
-                                value={stop.actual_status || 'PENDING'} 
-                                onChange={(e) => updateReconcilingStop(idx, { actual_status: e.target.value as any, visited: e.target.value !== 'SKIPPED' })}
-                                className="w-full border rounded-lg p-1.5 text-xs bg-background"
-                              >
-                                <option value="PENDING">⏳ In Progress / Pending</option>
-                                <option value="COMPLETED">✅ Completed &amp; Met</option>
-                                <option value="PARTIALLY_FULFILLED">🟡 Partially Fulfilled</option>
-                                <option value="NOT_FULFILLED">🔴 Target Missed</option>
-                                <option value="CONVERTED_NEW_DEALER">🌟 New Dealer Converted</option>
-                                <option value="SKIPPED">❌ Skipped / Closed</option>
-                              </select>
-                            </div>
-
-                            <div>
-                              <Label className="text-[10px] text-muted-foreground">Actual Order (Bags)</Label>
-                              <Input 
-                                type="number" 
-                                placeholder="0" 
-                                value={stop.actual_order_bags ?? ''} 
-                                onChange={(e) => updateReconcilingStop(idx, { actual_order_bags: Number(e.target.value) })}
-                                className="h-8 text-xs font-semibold"
-                              />
-                            </div>
-
-                            <div>
-                              <Label className="text-[10px] text-muted-foreground">Actual Collection (₹)</Label>
-                              <Input 
-                                type="number" 
-                                placeholder="0" 
-                                value={stop.actual_collection_value ?? ''} 
-                                onChange={(e) => updateReconcilingStop(idx, { actual_collection_value: Number(e.target.value) })}
-                                className="h-8 text-xs font-semibold"
-                              />
-                            </div>
-
-                            <div>
-                              <Label className="text-[10px] text-muted-foreground">Shortfall Reason / Notes</Label>
-                              <Input 
-                                placeholder="e.g. Overstocked, cheque next week" 
-                                value={stop.shortfall_reason || stop.actual_notes || ''} 
-                                onChange={(e) => updateReconcilingStop(idx, { shortfall_reason: e.target.value, actual_notes: e.target.value })}
-                                className="h-8 text-xs"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -994,28 +1647,90 @@ export const DailyTravelPage: React.FC = () => {
                   {/* End Meter Photo */}
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold flex items-center justify-between">
-                      <span>Ending Meter Photo *</span>
-                      {endPhoto && <span className="text-emerald-600 text-xs">✓ Photo Attached</span>}
-                    </Label>
-                    <div className="flex flex-col sm:flex-row items-center gap-3">
-                      <label className="flex-1 w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-xl cursor-pointer hover:border-amber-500/60 hover:bg-muted/20 transition-all text-sm text-muted-foreground">
-                        <Camera className="w-5 h-5 text-amber-500" />
-                        <span>{endPhoto ? 'Retake / Change Photo' : 'Snap Ending Odometer Photo'}</span>
-                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhotoUpload(e, setEndPhoto)} />
-                      </label>
-                      {endPhoto && (
-                        <div className="relative group w-24 h-16 rounded-lg overflow-hidden border shrink-0">
-                          <img src={endPhoto} alt="End Meter" className="w-full h-full object-cover" />
-                          <button 
-                            type="button"
-                            onClick={() => setPreviewImage(endPhoto)}
-                            className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </div>
+                      <span className="flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Ending Meter Photo *</span>
+                      </span>
+                      {endPhoto ? (
+                        <span className="text-emerald-600 text-xs font-semibold flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" /> Photo Attached &amp; GPS Stamped
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground font-normal">
+                          {gpsStatus}
+                        </span>
                       )}
-                    </div>
+                    </Label>
+
+                    {endPhoto ? (
+                      <div className="p-3 border rounded-xl bg-card/50 flex flex-col sm:flex-row items-center gap-3">
+                        <div 
+                          className="relative group w-full sm:w-36 h-24 rounded-lg overflow-hidden border shrink-0 cursor-pointer bg-black/5"
+                          onClick={() => setPreviewImage(endPhoto)}
+                        >
+                          <img src={endPhoto} alt="End Meter" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-semibold gap-1">
+                            <Eye className="w-4 h-4" /> View Full Proof
+                          </div>
+                        </div>
+                        <div className="flex-1 space-y-1 w-full text-center sm:text-left">
+                          <p className="text-xs font-bold text-foreground">Ending Odometer Photo Stamped</p>
+                          <p className="text-[11px] text-muted-foreground">Coordinates, timestamp &amp; user name embossed at bottom.</p>
+                          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openCameraModal('END_ODOMETER')}
+                              className="h-8 text-xs font-semibold gap-1.5 cursor-pointer"
+                            >
+                              <Camera className="w-3.5 h-3.5 text-amber-500" />
+                              Retake via Camera
+                            </Button>
+                            <label className="inline-flex items-center gap-1 px-2.5 h-8 rounded-lg text-xs font-medium border border-border bg-background hover:bg-muted cursor-pointer transition-colors shadow-2xs">
+                              <span>Change from File</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={(e) => handlePhotoFileUpload(e, 'ENDING ODOMETER', setEndPhoto)} 
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-amber-500/30 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 shrink-0">
+                            <Camera className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-foreground">Snap Ending Meter Reading</p>
+                            <p className="text-[11px] text-muted-foreground">Live GPS coordinates &amp; timestamp will be embossed directly on photo.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <Button
+                            type="button"
+                            onClick={() => openCameraModal('END_ODOMETER')}
+                            className="flex-1 sm:flex-initial h-10 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-sm gap-2 cursor-pointer"
+                          >
+                            <Camera className="w-4 h-4" />
+                            <span>📸 Open Camera</span>
+                          </Button>
+                          <label className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 h-10 rounded-lg text-xs font-semibold bg-background border border-border text-foreground hover:bg-muted cursor-pointer transition-colors shadow-2xs">
+                            <span>📁 Choose File</span>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => handlePhotoFileUpload(e, 'ENDING ODOMETER', setEndPhoto)} 
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 3 COMPULSORY ACTIVITY SUMMARIES (Auto-synced with Stops) */}
@@ -1407,9 +2122,9 @@ export const DailyTravelPage: React.FC = () => {
                         {idx + 1}
                       </span>
                       <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <h4 className="font-bold text-xs text-foreground">{stop.dealer_name}</h4>
-                          <Badge variant="outline" className="text-[10px] py-0">{stop.visit_purpose}</Badge>
+                          {renderVisitPurposeBadges(stop.visit_purpose)}
                         </div>
                         {stop.dealer_location && (
                           <p className="text-[11px] text-muted-foreground">{stop.dealer_location}</p>
@@ -1420,11 +2135,11 @@ export const DailyTravelPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-4 text-xs">
+                    <div className="flex items-center justify-between sm:justify-end gap-3 text-xs">
                       <div className="flex items-center gap-3">
                         {(stop.target_order_bags || 0) > 0 && (
                           <span className="font-bold text-purple-600 flex items-center gap-1">
-                            <ShoppingBag className="w-3.5 h-3.5" /> {stop.target_order_bags} bags
+                            <ShoppingBag className="w-3.5 h-3.5" /> {formatIndianNumber(stop.target_order_bags)} bags
                           </span>
                         )}
                         {(stop.target_collection_value || 0) > 0 && (
@@ -1436,7 +2151,17 @@ export const DailyTravelPage: React.FC = () => {
                       <Button 
                         variant="ghost" 
                         size="icon" 
+                        className="h-7 w-7 text-muted-foreground hover:text-primary" 
+                        title="View Stop Information"
+                        onClick={() => setViewingStopDetails(stop)}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
                         className="h-7 w-7 text-muted-foreground hover:text-red-500" 
+                        title="Delete Stop"
                         onClick={() => handleDeletePlannerStop(idx)}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1552,9 +2277,14 @@ export const DailyTravelPage: React.FC = () => {
         </Card>
       )}
 
+      {/* TAB 4: SALES OFFICER PERFORMANCE SCORECARD (Weekly, Monthly, Yearly) */}
+      {activeTab === 'SCORECARD' && (
+        <SOScorecardTab />
+      )}
+
       {/* MODAL: ADD DEALER STOP / SPOT VISIT */}
       <Dialog open={showAddStopModal} onOpenChange={(open) => !open && setShowAddStopModal(false)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md w-full max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-sm font-bold">
               {isSpotVisitModal ? <MapPin className="w-4 h-4 text-blue-600" /> : <Target className="w-4 h-4 text-purple-600" />}
@@ -1566,89 +2296,71 @@ export const DailyTravelPage: React.FC = () => {
           </DialogHeader>
 
           <div className="space-y-3 py-2 text-xs">
-            {/* Search & Select from Registered Dealers / Distributors */}
-            <div className="space-y-2 p-3 rounded-xl border bg-muted/15">
-              <div className="flex items-center justify-between">
-                <Label className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-primary" />
-                  <span>Choose Registered Dealer or Distributor (Optional)</span>
-                </Label>
-                <div className="flex items-center gap-1">
-                  {(['ALL', 'Dealer', 'Distributor'] as const).map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setPartyTypeFilter(t)}
-                      className={cn(
-                        "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
-                        partyTypeFilter === t ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {t === 'ALL' ? 'All' : `${t}s`}
-                    </button>
+            {/* Quick Type Switcher: Planned vs Unplanned */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted/40 rounded-xl border">
+              <button
+                type="button"
+                onClick={() => setIsSpotVisitModal(false)}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-all",
+                  !isSpotVisitModal
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Target className="w-3.5 h-3.5" />
+                <span>Planned Agenda</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSpotVisitModal(true)}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-all",
+                  isSpotVisitModal
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                <span>Spot / Unplanned</span>
+              </button>
+            </div>
+
+            {/* Registered Party Selector */}
+            <div className="space-y-1">
+              <Label className="text-[11px] font-bold flex items-center gap-1.5 text-foreground">
+                <Building2 className="w-3.5 h-3.5 text-primary" />
+                <span>Select from Registered Dealers / Distributors (Optional)</span>
+              </Label>
+              <select
+                value={stopForm.dealer_id || ''}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  const party = parties.find(p => p.id === selectedId);
+                  if (party) {
+                    handlePartySelect(party);
+                  } else {
+                    setStopForm(prev => ({ ...prev, dealer_id: '', dealer_name: '', dealer_location: '' }));
+                  }
+                }}
+                className="w-full border rounded-lg p-2 text-xs bg-background font-medium focus:ring-2 focus:ring-primary/20 outline-none truncate"
+              >
+                <option value="">-- Choose Registered Party or Type Name Below --</option>
+                <optgroup label="Registered Dealers">
+                  {parties.filter(p => p.type === 'Dealer').map(p => (
+                    <option key={`dealer-${p.id}`} value={p.id}>
+                      {p.name} {p.city ? `(${p.city})` : ''}
+                    </option>
                   ))}
-                </div>
-              </div>
-
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-                <Input
-                  placeholder="Search by dealer/distributor name, city, or code..."
-                  value={partySearchQuery}
-                  onChange={(e) => setPartySearchQuery(e.target.value)}
-                  className="pl-8 h-8 text-xs bg-background"
-                />
-                {partySearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setPartySearchQuery('')}
-                    className="absolute right-2 top-2 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-
-              {/* Quick Select Scroll Area */}
-              <div className="max-h-36 overflow-y-auto space-y-1 pr-1 border rounded-lg p-1 bg-background/50">
-                {filteredParties.length === 0 ? (
-                  <div className="p-3 text-center text-[11px] text-muted-foreground">
-                    {parties.length === 0 ? 'Loading parties...' : 'No matching dealer or distributor found. Type name manually below.'}
-                  </div>
-                ) : (
-                  filteredParties.slice(0, 50).map((p) => {
-                    const isSelected = stopForm.dealer_id === p.id || stopForm.dealer_name === p.name;
-                    return (
-                      <button
-                        key={`${p.type}-${p.id}`}
-                        type="button"
-                        onClick={() => handlePartySelect(p)}
-                        className={cn(
-                          "w-full text-left p-1.5 rounded-md flex items-center justify-between gap-2 text-xs transition-colors",
-                          isSelected ? "bg-primary/15 border border-primary/30 text-primary font-bold" : "hover:bg-muted/60"
-                        )}
-                      >
-                        <div className="flex items-center gap-1.5 truncate">
-                          <Badge 
-                            variant="outline" 
-                            className={cn(
-                              "text-[9px] px-1 py-0 shrink-0 font-semibold",
-                              p.type === 'Distributor' ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"
-                            )}
-                          >
-                            {p.type}
-                          </Badge>
-                          <span className="font-semibold text-foreground truncate">{p.name}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
-                          {p.city && <span>📍 {p.city}</span>}
-                          {isSelected && <Check className="w-3.5 h-3.5 text-primary ml-1" />}
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
+                </optgroup>
+                <optgroup label="Registered Distributors">
+                  {parties.filter(p => p.type === 'Distributor').map(p => (
+                    <option key={`dist-${p.id}`} value={p.id}>
+                      [Distributor] {p.name} {p.city ? `(${p.city})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
             </div>
 
             {/* Dealer Name Input */}
@@ -1673,45 +2385,98 @@ export const DailyTravelPage: React.FC = () => {
               />
             </div>
 
-            {/* Purpose */}
-            <div className="space-y-1">
-              <Label className="text-[11px] font-bold">Visit Purpose</Label>
-              <select 
-                value={stopForm.visit_purpose} 
-                onChange={(e) => setStopForm(prev => ({ ...prev, visit_purpose: e.target.value as any }))}
-                className="w-full border rounded-lg p-2 text-xs bg-background font-medium"
-              >
-                <option value="ORDER">📦 Order Booking</option>
-                <option value="PAYMENT">💰 Payment Collection</option>
-                <option value="NEW_LEAD">🤝 New Prospect / Introductory Meeting</option>
-                <option value="ROUTINE">☕ Routine Relationship Visit</option>
-                <option value="COMPLAINT">⚠️ Complaint / Replacement Resolution</option>
-                <option value="OTHER">📋 Other Activity</option>
-              </select>
+            {/* Visit Purpose - Interactive Multi-select */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] font-bold text-foreground">
+                  Visit Purpose (Select Multiple if applicable) *
+                </Label>
+                <span className="text-[10px] text-muted-foreground font-medium">
+                  {stopForm.visit_purposes.length} selected
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {VISIT_PURPOSE_OPTIONS.map(opt => {
+                  const isSelected = stopForm.visit_purposes.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => toggleVisitPurpose(opt.id)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs font-semibold transition-all text-left",
+                        isSelected 
+                          ? cn(opt.badgeBg, "ring-1 ring-primary/40 font-bold shadow-xs") 
+                          : "bg-background text-muted-foreground border-border hover:bg-muted/40"
+                      )}
+                    >
+                      <span className="text-xs shrink-0">{opt.icon}</span>
+                      <span className="truncate text-[11px] flex-1">{opt.label}</span>
+                      {isSelected && <Check className="w-3 h-3 text-primary shrink-0 ml-auto" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {stopForm.visit_purposes.includes('OTHER') && (
+                <div className="pt-1">
+                  <Input 
+                    placeholder="Specify other purpose (e.g. Sampling, Catalog, Delivery)..." 
+                    value={stopForm.other_purpose_note} 
+                    onChange={(e) => setStopForm(prev => ({ ...prev, other_purpose_note: e.target.value }))}
+                    className="h-8 text-xs"
+                  />
+                </div>
+              )}
             </div>
 
-            {/* Targets: Bags & Payment */}
+            {/* Targets: Bags & Payment with Indian Currency Formatting */}
             <div className="grid grid-cols-2 gap-2.5">
               <div className="space-y-1">
                 <Label className="text-[11px] font-bold text-purple-700 dark:text-purple-300">Target Order (Bags)</Label>
-                <Input 
-                  type="number"
-                  placeholder="e.g. 100" 
-                  value={stopForm.target_order_bags} 
-                  onChange={(e) => setStopForm(prev => ({ ...prev, target_order_bags: e.target.value }))}
-                  className="h-8 text-xs font-bold"
-                />
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs select-none">
+                    📦
+                  </span>
+                  <Input 
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="e.g. 100" 
+                    value={stopForm.target_order_bags ? formatIndianNumber(stopForm.target_order_bags) : ''} 
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/[^0-9]/g, '');
+                      setStopForm(prev => ({ ...prev, target_order_bags: clean }));
+                    }}
+                    className="h-8 pl-7 text-xs font-bold"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">
-                <Label className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Target Collection (₹)</Label>
-                <Input 
-                  type="number"
-                  placeholder="e.g. 50000" 
-                  value={stopForm.target_collection_value} 
-                  onChange={(e) => setStopForm(prev => ({ ...prev, target_collection_value: e.target.value }))}
-                  className="h-8 text-xs font-bold"
-                />
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Target Collection</Label>
+                  {stopForm.target_collection_value && formatIndianWords(stopForm.target_collection_value) ? (
+                    <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800">
+                      {formatIndianWords(stopForm.target_collection_value)}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-600 select-none">
+                    ₹
+                  </span>
+                  <Input 
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="e.g. 50,000" 
+                    value={stopForm.target_collection_value ? formatIndianNumber(stopForm.target_collection_value) : ''} 
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/[^0-9]/g, '');
+                      setStopForm(prev => ({ ...prev, target_collection_value: clean }));
+                    }}
+                    className="h-8 pl-6 text-xs font-bold text-foreground focus:ring-emerald-500"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1733,6 +2498,428 @@ export const DailyTravelPage: React.FC = () => {
             </Button>
             <Button size="sm" onClick={handleSaveStop} className="text-xs font-bold bg-primary text-white">
               {isSpotVisitModal ? 'Add Spot Visit' : 'Add Stop'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: VISIT TRACKING & OUTCOME PUNCH */}
+      <Dialog open={!!punchingStop} onOpenChange={(open) => { if (!open) { stopCamera(); setPunchingStop(null); } }}>
+        <DialogContent className="max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+                <Store className="w-5 h-5 text-primary" />
+                <span>Visit Check-In & Outcome</span>
+              </DialogTitle>
+              {punchingStop?.is_unplanned ? (
+                <Badge variant="outline" className="text-[10px] font-bold bg-blue-50 text-blue-700 border-blue-200">
+                  📍 Spot Visit
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] font-bold bg-purple-50 text-purple-700 border-purple-200">
+                  🎯 Planned Agenda
+                </Badge>
+              )}
+            </div>
+            <DialogDescription className="text-xs">
+              Take store photo, punch actual order & collection, and sync directly to visit records.
+            </DialogDescription>
+          </DialogHeader>
+
+          {punchingStop && (
+            <div className="space-y-4 py-2">
+              {/* Dealer Header Banner with Targets */}
+              <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-bold text-sm text-foreground">{punchingStop.dealer_name}</h3>
+                    {punchingStop.dealer_location && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-3 h-3 text-primary shrink-0" />
+                        <span>{punchingStop.dealer_location}</span>
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    {(punchingStop.target_order_bags || 0) > 0 && (
+                      <span className="bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 px-2 py-0.5 rounded text-[11px] font-bold border border-purple-200">
+                        Target: {formatIndianNumber(punchingStop.target_order_bags)} bags
+                      </span>
+                    )}
+                    {(punchingStop.target_collection_value || 0) > 0 && (
+                      <span className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 px-2 py-0.5 rounded text-[11px] font-bold border border-emerald-200">
+                        Target: ₹{Number(punchingStop.target_collection_value).toLocaleString('en-IN')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {punchingStop.plan_notes && (
+                  <div className="text-xs text-muted-foreground bg-background/80 px-2.5 py-1.5 rounded-lg border border-border/60 italic flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+                    <span>"{punchingStop.plan_notes}"</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Photo Upload / Camera Snap */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5 text-primary" />
+                    <span>Counter / Store Front Photo</span>
+                  </span>
+                  {punchForm.gps_location && (
+                    <span className="text-[10px] text-muted-foreground font-normal">
+                      📍 {punchForm.gps_location}
+                    </span>
+                  )}
+                </Label>
+
+                {punchForm.visit_photo ? (
+                  <div className="p-3 border rounded-xl bg-card/50 flex flex-col sm:flex-row items-center gap-3">
+                    <div 
+                      className="relative group w-full sm:w-36 h-24 rounded-lg overflow-hidden border shrink-0 cursor-pointer bg-black/5"
+                      onClick={() => setPreviewImage(punchForm.visit_photo)}
+                    >
+                      <img src={punchForm.visit_photo} alt="Store Front" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-semibold gap-1">
+                        <Eye className="w-4 h-4" /> View Full Proof
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-1 w-full text-center sm:text-left">
+                      <p className="text-xs font-bold text-foreground">Visit Photo Stamped &amp; Attached</p>
+                      <p className="text-[11px] text-muted-foreground">Coordinates, timestamp &amp; dealer embossed at bottom.</p>
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openCameraModal('VISIT')}
+                          className="h-8 text-xs font-semibold gap-1.5 cursor-pointer"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-primary" />
+                          Retake via Camera
+                        </Button>
+                        <label className="inline-flex items-center gap-1 px-2.5 h-8 rounded-lg text-xs font-medium border border-border bg-background hover:bg-muted cursor-pointer transition-colors shadow-2xs">
+                          <span>Change from File</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => handlePhotoFileUpload(e, punchingStop?.dealer_name ? `STORE VISIT: ${punchingStop.dealer_name}` : 'STORE FRONT VISIT', (b64) => setPunchForm(prev => ({ ...prev, visit_photo: b64, gps_location: gpsLocation || prev.gps_location })))} 
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-primary/30 hover:border-primary/60 bg-primary/5 hover:bg-primary/10 transition-colors rounded-xl p-4 flex flex-col items-center justify-center gap-2.5">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                      <Camera className="w-5 h-5" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs font-bold text-foreground">Live Store Front / Visit Photo</p>
+                      <p className="text-[10px] text-muted-foreground">Click below to open camera or choose a photo. GPS &amp; time will be embossed automatically.</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                      {/* Real Camera Launcher */}
+                      <Button 
+                        type="button"
+                        onClick={() => openCameraModal('VISIT')}
+                        className="h-9 px-3.5 text-xs font-bold bg-primary text-white hover:bg-primary/90 shadow-sm gap-1.5 cursor-pointer"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>📸 Open Camera</span>
+                      </Button>
+
+                      {/* Gallery / File Fallback */}
+                      <label 
+                        className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-background border border-border text-foreground hover:bg-muted shadow-2xs cursor-pointer active:scale-95 transition-transform"
+                      >
+                        <span>📁 Choose from Files</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={(e) => handlePhotoFileUpload(e, punchingStop?.dealer_name ? `STORE VISIT: ${punchingStop.dealer_name}` : 'STORE FRONT VISIT', (b64) => setPunchForm(prev => ({ ...prev, visit_photo: b64, gps_location: gpsLocation || prev.gps_location })))} 
+                          className="hidden" 
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Visit Outcome Status */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-foreground">
+                  Visit Outcome Status <span className="text-rose-500">*</span>
+                </Label>
+                <select
+                  value={punchForm.actual_status}
+                  onChange={(e) => setPunchForm(prev => ({ ...prev, actual_status: e.target.value as any }))}
+                  className="w-full h-9 px-3 rounded-lg border border-border bg-background text-xs font-medium focus:ring-2 focus:ring-primary focus:outline-none"
+                >
+                  <option value="COMPLETED">✅ Completed & Met - Target / Order Discussed</option>
+                  <option value="PARTIALLY_FULFILLED">🟡 Partially Fulfilled - Partial Order / Next Visit</option>
+                  <option value="NOT_FULFILLED">🔴 Target Missed - Stock Full / Payment Delayed</option>
+                  <option value="CONVERTED_NEW_DEALER">🌟 New Dealer Converted - First Billing</option>
+                  <option value="SKIPPED">❌ Skipped / Store Closed / Counter Absent</option>
+                </select>
+              </div>
+
+              {/* Actuals Grid: Bags & Collection */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Actual Order Bags */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                      <span>📦 Actual Order (Bags)</span>
+                    </Label>
+                    {(punchingStop.target_order_bags || 0) > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        Target: {formatIndianNumber(punchingStop.target_order_bags)}
+                      </span>
+                    )}
+                  </div>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={punchForm.actual_order_bags ? formatIndianNumber(punchForm.actual_order_bags) : ''}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/[^0-9]/g, '');
+                      setPunchForm(prev => ({ ...prev, actual_order_bags: clean }));
+                    }}
+                    className="h-9 text-xs font-bold text-purple-700 dark:text-purple-300"
+                  />
+                </div>
+
+                {/* Actual Collection */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                      <span>💰 Actual Collection (₹)</span>
+                    </Label>
+                    {punchForm.actual_collection_value && Number(punchForm.actual_collection_value) > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.2 rounded border border-emerald-200">
+                        {formatIndianWords(punchForm.actual_collection_value)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₹</span>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={punchForm.actual_collection_value ? formatIndianNumber(punchForm.actual_collection_value) : ''}
+                      onChange={(e) => {
+                        const clean = e.target.value.replace(/[^0-9]/g, '');
+                        setPunchForm(prev => ({ ...prev, actual_collection_value: clean }));
+                      }}
+                      className="h-9 text-xs pl-6 font-bold text-emerald-700 dark:text-emerald-300"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Shortfall Reason / Discussion Notes */}
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-muted-foreground">
+                  Meeting Notes / Shortfall Reason
+                </Label>
+                <Textarea
+                  placeholder="e.g. Dealer already has 50 bags stock. Promised cheque next Tuesday."
+                  value={punchForm.shortfall_reason}
+                  onChange={(e) => setPunchForm(prev => ({ ...prev, shortfall_reason: e.target.value }))}
+                  rows={2}
+                  className="text-xs resize-none"
+                />
+              </div>
+
+              {/* Next Meeting / Follow-up Date */}
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-primary" />
+                    <span>Next Meeting / Follow-Up Date</span>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground font-normal">Next visit plan</span>
+                </Label>
+                <Input
+                  type="date"
+                  min={todayStr}
+                  value={punchForm.next_visit_date}
+                  onChange={(e) => setPunchForm(prev => ({ ...prev, next_visit_date: e.target.value }))}
+                  className="h-9 text-xs"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="border-t pt-3 flex items-center justify-between gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPunchingStop(null)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveVisitPunch}
+              disabled={savingVisitPunch}
+              className="text-xs font-bold gap-1.5 bg-primary text-white shadow-sm"
+            >
+              {savingVisitPunch ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving & Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Save & Record Visit</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: VIEW STOP INFORMATION (READ-ONLY) */}
+      <Dialog open={!!viewingStopDetails} onOpenChange={(open) => !open && setViewingStopDetails(null)}>
+        <DialogContent className="max-w-md w-full max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2 text-sm font-bold text-foreground">
+                <Target className="w-4 h-4 text-purple-600" />
+                <span>Planned Stop Information</span>
+              </DialogTitle>
+              <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300">
+                🔒 Read-Only
+              </Badge>
+            </div>
+            <DialogDescription className="text-xs">
+              Stop details and targets locked for field accountability
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingStopDetails && (
+            <div className="space-y-3 py-2 text-xs">
+              {/* Counter Header */}
+              <div className="p-3 rounded-xl border bg-muted/20 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
+                    Dealer / Counter
+                  </span>
+                  {viewingStopDetails.is_unplanned && (
+                    <Badge variant="secondary" className="text-[9px] bg-blue-100 text-blue-700">
+                      Spot Visit
+                    </Badge>
+                  )}
+                </div>
+                <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                  <Store className="w-4 h-4 text-primary shrink-0" />
+                  <span>{viewingStopDetails.dealer_name}</span>
+                </h3>
+                {viewingStopDetails.dealer_location && (
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span>{viewingStopDetails.dealer_location}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Purpose(s) */}
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold text-muted-foreground">Visit Purpose</Label>
+                <div className="pt-0.5">
+                  {renderVisitPurposeBadges(viewingStopDetails.visit_purpose)}
+                </div>
+              </div>
+
+              {/* Target Commitments with Indian Numbers */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="p-3 rounded-xl border bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/50 space-y-0.5">
+                  <span className="text-[10px] text-purple-700 dark:text-purple-300 font-semibold flex items-center gap-1">
+                    <ShoppingBag className="w-3.5 h-3.5" /> Target Order
+                  </span>
+                  <div className="text-base font-black text-purple-900 dark:text-purple-100">
+                    {(viewingStopDetails.target_order_bags || 0) > 0 
+                      ? `${formatIndianNumber(viewingStopDetails.target_order_bags)} Bags` 
+                      : 'No target set'}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl border bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50 space-y-0.5">
+                  <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-1">
+                    <IndianRupee className="w-3.5 h-3.5" /> Target Collection
+                  </span>
+                  <div className="text-base font-black text-emerald-900 dark:text-emerald-100">
+                    {(viewingStopDetails.target_collection_value || 0) > 0 
+                      ? `₹${Number(viewingStopDetails.target_collection_value).toLocaleString('en-IN')}` 
+                      : 'No target set'}
+                  </div>
+                  {viewingStopDetails.target_collection_value && formatIndianWords(viewingStopDetails.target_collection_value) ? (
+                    <span className="text-[10px] text-emerald-700/80 dark:text-emerald-300 block font-medium">
+                      ({formatIndianWords(viewingStopDetails.target_collection_value)})
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Action Notes / Items to Pitch */}
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5 text-primary" />
+                  <span>Action Notes / Pitch Instructions</span>
+                </Label>
+                <div className="p-3 rounded-xl border bg-background text-xs text-foreground min-h-[50px] leading-relaxed">
+                  {viewingStopDetails.plan_notes ? (
+                    <p className="italic">"{viewingStopDetails.plan_notes}"</p>
+                  ) : (
+                    <span className="text-muted-foreground italic">No action notes specified for this stop.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Actual Outcome (if trip is active or reconciled) */}
+              {viewingStopDetails.actual_status && viewingStopDetails.actual_status !== 'PENDING' && (
+                <div className="p-3 rounded-xl border bg-muted/20 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Actual Result</span>
+                    <Badge variant="secondary" className="text-[10px] font-bold">
+                      {viewingStopDetails.actual_status}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                    <div>Actual Bags: <strong className="text-purple-600">{formatIndianNumber(viewingStopDetails.actual_order_bags || 0)}</strong></div>
+                    <div>Actual Collection: <strong className="text-emerald-600">₹{Number(viewingStopDetails.actual_collection_value || 0).toLocaleString('en-IN')}</strong></div>
+                  </div>
+                  {viewingStopDetails.shortfall_reason && (
+                    <p className="text-[11px] text-muted-foreground italic pt-1">
+                      Reason: {viewingStopDetails.shortfall_reason}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Locked Notice */}
+              <div className="p-2.5 rounded-lg bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>Stop target commitments are locked for payroll and HR performance evaluation.</span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="border-t pt-2">
+            <Button size="sm" onClick={() => setViewingStopDetails(null)} className="text-xs font-bold w-full sm:w-auto">
+              Close Details
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1843,6 +3030,81 @@ export const DailyTravelPage: React.FC = () => {
               <img src={previewImage} alt="Meter Preview" className="max-h-[75vh] w-auto object-contain rounded-lg shadow-2xl" />
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* UNIFIED LIVE CAMERA MODAL (Works on Desktop Webcams & Mobile Cameras) */}
+      <Dialog open={cameraActive && !!cameraTarget} onOpenChange={(open) => { if (!open) closeCameraModal(); }}>
+        <DialogContent className="max-w-md w-[95vw] p-4 bg-zinc-950 text-white border-zinc-800 rounded-2xl">
+          <DialogHeader className="space-y-1 text-left">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-base font-bold text-white flex items-center gap-2">
+                <Camera className="w-5 h-5 text-primary" />
+                <span>
+                  {cameraTarget === 'START_ODOMETER' && 'Starting Odometer Camera'}
+                  {cameraTarget === 'END_ODOMETER' && 'Ending Odometer Camera'}
+                  {cameraTarget === 'VISIT' && `Store Photo: ${punchingStop?.dealer_name || 'Visit'}`}
+                </span>
+              </DialogTitle>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={toggleCameraFacing}
+                className="h-8 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 border border-zinc-700 rounded-lg gap-1.5"
+                title="Switch Camera (Front/Back)"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Flip Camera</span>
+              </Button>
+            </div>
+            <DialogDescription className="text-xs text-zinc-400">
+              Frame your meter or store clearly. GPS coordinates &amp; timestamp will be embossed automatically.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Video Viewfinder with Live Overlays */}
+          <div className="relative w-full rounded-xl overflow-hidden bg-black border border-zinc-800 flex items-center justify-center min-h-[260px] max-h-[360px]">
+            <video
+              ref={cameraVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover rounded-xl"
+            />
+            {/* Viewfinder crosshairs / focus box */}
+            <div className="absolute inset-8 border border-white/25 rounded-lg pointer-events-none flex items-center justify-center">
+              <div className="w-8 h-8 border-t-2 border-l-2 border-primary absolute -top-1 -left-1" />
+              <div className="w-8 h-8 border-t-2 border-r-2 border-primary absolute -top-1 -right-1" />
+              <div className="w-8 h-8 border-b-2 border-l-2 border-primary absolute -bottom-1 -left-1" />
+              <div className="w-8 h-8 border-b-2 border-r-2 border-primary absolute -bottom-1 -right-1" />
+            </div>
+
+            {/* Live GPS badge at top left */}
+            <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-xs border border-white/10 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-md">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{gpsLocation ? `📍 ${gpsLocation.split('(')[0]}` : gpsStatus}</span>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-row sm:justify-between items-center gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeCameraModal}
+              className="flex-1 sm:flex-initial h-11 text-xs px-4 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCaptureCameraPhoto}
+              className="flex-1 sm:flex-1 h-11 text-sm font-bold bg-primary hover:bg-primary/90 text-white shadow-lg gap-2"
+            >
+              <Camera className="w-4 h-4" />
+              <span>📸 Snap &amp; Stamp Photo</span>
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

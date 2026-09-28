@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Users, ShoppingCart, TrendingUp, CheckCircle, XCircle, Clock, Truck, Star, Warehouse, ClipboardList, AlertTriangle } from 'lucide-react';
+import { Users, ShoppingCart, TrendingUp, CheckCircle, XCircle, Clock, Truck, Star, Warehouse, ClipboardList, AlertTriangle, Trophy, ArrowUpRight, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { motion } from 'framer-motion';
@@ -301,6 +301,45 @@ const AdminDashboard: React.FC = () => {
           </motion.div>
         ))}
       </div>
+
+      {/* Sales Officer Performance Scorecards Banner */}
+      <Card className="border shadow-xs bg-gradient-to-r from-amber-500/10 via-card to-card border-amber-500/30 overflow-hidden">
+        <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0 shadow-2xs">
+              <Trophy className="w-6 h-6" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-bold text-foreground">Sales Officers Performance Scorecard &amp; Leaderboard</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25">
+                  100-Pt Enterprise KPI
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Evaluate all field officers across Order Bags (30%), Visits (25%), Collections (20%), New Dealers (15%) &amp; Discipline (10%)
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+            <Button
+              variant="outline"
+              onClick={() => navigate('/sales/targets')}
+              className="w-full sm:w-auto h-9 text-xs font-bold gap-1.5 shrink-0 bg-background hover:bg-muted"
+            >
+              <Target className="w-4 h-4 text-primary" />
+              <span>Targets &amp; SIP</span>
+            </Button>
+            <Button
+              onClick={() => navigate('/sales/travel?tab=SCORECARD')}
+              className="w-full sm:w-auto h-9 text-xs font-bold gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs cursor-pointer"
+            >
+              <span>View Scorecards</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <LedgerRequestsPanel />

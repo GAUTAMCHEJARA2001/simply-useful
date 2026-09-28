@@ -23,6 +23,7 @@ const emptyDealer: Dealer = {
   dealerCode: '', dealerName: '', city: '', assignedSoEmails: [],
   distributorName: '', creditLimit: 0, outstanding: 0, active: true,
   territory: '', phone: '', email: '', address: '', gst: '', contactPerson: '', brand: '',
+  partyType: 'DEALER',
 };
 
 const DealerManagement: React.FC = () => {
@@ -30,6 +31,7 @@ const DealerManagement: React.FC = () => {
   const { can } = usePermissions();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
+  const [partyTypeFilter, setPartyTypeFilter] = useState<'ALL' | 'DEALER' | 'PROJECT'>('ALL');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
@@ -56,10 +58,10 @@ const DealerManagement: React.FC = () => {
     return (r === 'SALES' || r === 'SALES OFFICER' || r === 'SALES EXECUTIVE') && u.active;
   });
 
-  const fetchPage = useCallback(async (p: number, searchTerm: string, append: boolean) => {
+  const fetchPage = useCallback(async (p: number, searchTerm: string, append: boolean, filter = partyTypeFilter) => {
     setLoading(true);
     try {
-      const res = await apiService.parties.getDealersPaginated(p, PAGE_SIZE, searchTerm || undefined);
+      const res = await apiService.parties.getDealersPaginated(p, PAGE_SIZE, searchTerm || undefined, filter);
       const data = res.data?.data;
       if (data?.items) {
         setItems(prev => append ? [...prev, ...data.items] : data.items);
@@ -72,7 +74,7 @@ const DealerManagement: React.FC = () => {
       setLoading(false);
       setInitialLoading(false);
     }
-  }, []);
+  }, [partyTypeFilter]);
 
   useEffect(() => {
     setItems([]);
@@ -80,8 +82,8 @@ const DealerManagement: React.FC = () => {
     setHasMore(true);
     setInitialLoading(true);
     currentSearchRef.current = '';
-    fetchPage(1, '', false);
-  }, [fetchPage]);
+    fetchPage(1, '', false, partyTypeFilter);
+  }, [fetchPage, partyTypeFilter]);
 
   useEffect(() => {
     if (!sentinelRef.current || !hasMore || loading) return;
@@ -90,7 +92,7 @@ const DealerManagement: React.FC = () => {
         if (entry.isIntersecting && hasMore && !loading) {
           setPage(prev => {
             const next = prev + 1;
-            fetchPage(next, currentSearchRef.current, true);
+            fetchPage(next, currentSearchRef.current, true, partyTypeFilter);
             return next;
           });
         }
@@ -99,7 +101,7 @@ const DealerManagement: React.FC = () => {
     );
     obs.observe(sentinelRef.current);
     return () => obs.disconnect();
-  }, [hasMore, loading, fetchPage]);
+  }, [hasMore, loading, fetchPage, partyTypeFilter]);
 
   const handleSearch = (val: string) => {
     setSearch(val);
@@ -110,21 +112,31 @@ const DealerManagement: React.FC = () => {
       setPage(1);
       setHasMore(true);
       setInitialLoading(true);
-      fetchPage(1, val, false);
+      fetchPage(1, val, false, partyTypeFilter);
     }, 300);
   };
 
-  const openAdd = () => {
+  const handlePartyTypeFilterChange = (type: 'ALL' | 'DEALER' | 'PROJECT') => {
+    setPartyTypeFilter(type);
+    setItems([]);
+    setPage(1);
+    setHasMore(true);
+    setInitialLoading(true);
+    fetchPage(1, currentSearchRef.current, false, type);
+  };
+
+  const openAdd = (type: 'DEALER' | 'PROJECT' = partyTypeFilter === 'PROJECT' ? 'PROJECT' : 'DEALER') => {
     setEditing(null);
     setSoSearch('');
-    setForm({ ...emptyDealer, dealerCode: `DLR-${Date.now().toString().slice(-5)}` });
+    const prefix = type === 'PROJECT' ? 'PRJ' : 'DLR';
+    setForm({ ...emptyDealer, partyType: type, dealerCode: `${prefix}-${Date.now().toString().slice(-5)}` });
     setDialogOpen(true);
   };
 
   const openEdit = (d: Dealer) => {
     setEditing(d);
     setSoSearch('');
-    setForm({ ...d, assignedSoEmails: d.assignedSoEmails || [] });
+    setForm({ ...d, partyType: d.partyType || 'DEALER', assignedSoEmails: d.assignedSoEmails || [] });
     setDialogOpen(true);
   };
 
@@ -174,15 +186,45 @@ const DealerManagement: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="page-header">Dealer Management</h1>
-          <p className="page-subheader">{total} dealers registered</p>
+          <h1 className="page-header">Dealer & Project Management</h1>
+          <p className="page-subheader">{total} {partyTypeFilter === 'PROJECT' ? 'projects' : partyTypeFilter === 'DEALER' ? 'dealers' : 'parties'} registered</p>
         </div>
-        {can('manage_customers') && <Button className="action-button" onClick={openAdd}><Plus className="w-5 h-5 mr-2" /> Add Dealer</Button>}
+        {can('manage_customers') && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="border-purple-200 text-purple-700 hover:bg-purple-50" onClick={() => openAdd('PROJECT')}>
+              <Plus className="w-4 h-4 mr-1.5" /> Add Project
+            </Button>
+            <Button className="action-button" onClick={() => openAdd('DEALER')}>
+              <Plus className="w-4 h-4 mr-1.5" /> Add Dealer
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex border-b border-border/60 gap-6">
+        <button
+          onClick={() => handlePartyTypeFilterChange('ALL')}
+          className={`pb-2.5 text-sm font-semibold transition-all relative ${partyTypeFilter === 'ALL' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          All Parties
+        </button>
+        <button
+          onClick={() => handlePartyTypeFilterChange('DEALER')}
+          className={`pb-2.5 text-sm font-semibold transition-all relative ${partyTypeFilter === 'DEALER' ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          Dealers / Retailers
+        </button>
+        <button
+          onClick={() => handlePartyTypeFilterChange('PROJECT')}
+          className={`pb-2.5 text-sm font-semibold transition-all relative ${partyTypeFilter === 'PROJECT' ? 'text-purple-600 border-b-2 border-purple-600' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          Projects / Direct Sites
+        </button>
       </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Search dealers by name, city, territory, or code..." className="pl-10 h-12" value={search} onChange={e => handleSearch(e.target.value)} />
+        <Input placeholder={`Search ${partyTypeFilter === 'PROJECT' ? 'projects' : partyTypeFilter === 'DEALER' ? 'dealers' : 'dealers & projects'} by name, city, territory, or code...`} className="pl-10 h-12" value={search} onChange={e => handleSearch(e.target.value)} />
       </div>
 
       {initialLoading ? (
@@ -196,8 +238,13 @@ const DealerManagement: React.FC = () => {
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <p className="font-semibold text-sm">{d.dealerName}</p>
-                      <p className="text-xs text-muted-foreground">{d.dealerCode} · {d.city} {d.territory ? `(${d.territory})` : ''}</p>
+                      <div className="flex items-center gap-1.5">
+                        <Badge className={d.partyType === 'PROJECT' ? 'bg-purple-100 text-purple-700 border-purple-200 text-[10px]' : 'bg-slate-100 text-slate-700 border-slate-200 text-[10px]'}>
+                          {d.partyType === 'PROJECT' ? 'PROJECT' : 'DEALER'}
+                        </Badge>
+                        <p className="font-semibold text-sm">{d.dealerName}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{d.dealerCode} · {d.city} {d.territory ? `(${d.territory})` : ''}</p>
                     </div>
                     <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">
                       {d.active ? 'Active' : 'Blocked'}
@@ -229,7 +276,7 @@ const DealerManagement: React.FC = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      {['Code', 'Name', 'City', 'Territory', 'Brand', 'SOs', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
+                      {['Type', 'Code', 'Name', 'City', 'Territory', 'Brand', 'SOs', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
                       ))}
                     </tr>
@@ -237,6 +284,13 @@ const DealerManagement: React.FC = () => {
                   <tbody>
                     {items.map(d => (
                       <tr key={d.dealerCode} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                        <td className="px-4 py-3">
+                          {d.partyType === 'PROJECT' ? (
+                            <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px] hover:bg-purple-200">PROJECT</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-slate-600 border-slate-200 text-[10px]">DEALER</Badge>
+                          )}
+                        </td>
                         <td className="px-4 py-3 font-mono text-xs">{d.dealerCode}</td>
                         <td className="px-4 py-3 font-medium">{d.dealerName}</td>
                         <td className="px-4 py-3">{d.city}</td>
@@ -272,10 +326,10 @@ const DealerManagement: React.FC = () => {
             <div className="flex items-center justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
           )}
           {!hasMore && items.length > 0 && (
-            <p className="text-center text-xs text-muted-foreground py-2">All {total} dealers loaded</p>
+            <p className="text-center text-xs text-muted-foreground py-2">All {total} records loaded</p>
           )}
           {!loading && items.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">No dealers found</p>
+            <p className="text-center text-sm text-muted-foreground py-8">No records found</p>
           )}
         </>
       )}
@@ -284,20 +338,41 @@ const DealerManagement: React.FC = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" aria-describedby="dealer-form-desc">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Edit Dealer' : 'Add New Dealer'}</DialogTitle>
+            <DialogTitle>{editing ? (form.partyType === 'PROJECT' ? 'Edit Project' : 'Edit Dealer') : (form.partyType === 'PROJECT' ? 'Add New Project' : 'Add New Dealer')}</DialogTitle>
             <DialogDescription id="dealer-form-desc" className="sr-only">
-              {editing ? 'Update dealer details, credit limits, and assigned Sales Officer.' : 'Create a new dealer profile in the system.'}
+              {editing ? 'Update party details, credit limits, and assigned Sales Officer.' : 'Create a new dealer or project profile in the system.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Party Type *</Label>
+              <Select 
+                value={form.partyType || 'DEALER'} 
+                onValueChange={(v: 'DEALER' | 'PROJECT') => {
+                  const prefix = v === 'PROJECT' ? 'PRJ' : 'DLR';
+                  setForm(prev => ({ 
+                    ...prev, 
+                    partyType: v,
+                    dealerCode: !editing ? `${prefix}-${Date.now().toString().slice(-5)}` : prev.dealerCode
+                  }));
+                }}
+                disabled={!!editing}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DEALER">Dealer / Retail Store</SelectItem>
+                  <SelectItem value="PROJECT">Project / Direct Site</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Dealer Code</Label>
+                <Label>{form.partyType === 'PROJECT' ? 'Project Code' : 'Dealer Code'}</Label>
                 <Input value={form.dealerCode} onChange={e => updateForm('dealerCode', e.target.value)} disabled={!!editing} />
               </div>
               <div className="space-y-2">
-                <Label>Dealer Name *</Label>
-                <Input value={form.dealerName} onChange={e => updateForm('dealerName', e.target.value)} />
+                <Label>{form.partyType === 'PROJECT' ? 'Project Name *' : 'Dealer Name *'}</Label>
+                <Input value={form.dealerName} onChange={e => updateForm('dealerName', e.target.value)} placeholder={form.partyType === 'PROJECT' ? 'e.g. Skyline Towers Site' : 'e.g. Shrinath Hardware'} />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

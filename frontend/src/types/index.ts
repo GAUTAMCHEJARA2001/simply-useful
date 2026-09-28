@@ -52,6 +52,8 @@ export interface Dealer {
   address?: string;
   gst?: string;
   contactPerson?: string;
+  partyType?: 'DEALER' | 'PROJECT' | string;
+  party_type?: string;
 }
 
 export interface Distributor {

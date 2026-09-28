@@ -16,3 +16,4 @@ coverage/
 temp_*.txt
 *.tsbuildinfo
 backend/scratch/
+.vscode/

@@ -5,11 +5,13 @@
 #   * Make sure each ForeignKey and OneToOneField has `on_delete` set to the desired behavior
 #   * Remove `` lines if you wish to allow Django to create, modify, and delete the table
 # Feel free to rename the models, but don't rename db_table values or field names.
+import uuid
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.utils import timezone
 from decimal import Decimal
 from core.models import Company, User, Warehouse, Userwarehouseaccess
+
 
 
 class Bom(models.Model):
@@ -73,6 +75,7 @@ class Dealer(models.Model):
     outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     active = models.BooleanField()
     territory = models.TextField(blank=True, null=True)
+    party_type = models.CharField(max_length=50, default='DEALER', db_column='partyType')
     
     gst_number = models.CharField(max_length=50, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
@@ -1064,7 +1067,7 @@ class DailyTourPlanStop(models.Model):
     dealer_location = models.CharField(max_length=255, blank=True, null=True)
 
     # Planned Agenda & Targets
-    visit_purpose = models.CharField(max_length=50, default='ORDER')  # ORDER, PAYMENT, NEW_LEAD, ROUTINE, COMPLAINT, OTHER
+    visit_purpose = models.CharField(max_length=255, default='ORDER')  # e.g. ORDER, PAYMENT, OTHER
     target_order_bags = models.FloatField(default=0.0)
     target_order_value = models.FloatField(default=0.0)
     target_collection_value = models.FloatField(default=0.0)
@@ -1078,7 +1081,10 @@ class DailyTourPlanStop(models.Model):
     actual_status = models.CharField(max_length=40, default='PENDING')  # COMPLETED, PARTIALLY_FULFILLED, NOT_FULFILLED, CONVERTED_NEW_DEALER, SKIPPED, PENDING
     shortfall_reason = models.CharField(max_length=150, blank=True, null=True)
     actual_notes = models.TextField(blank=True, null=True)
+    visit_photo = models.TextField(blank=True, null=True)
+    gps_location = models.CharField(max_length=255, blank=True, null=True)
     completed_at = models.DateTimeField(blank=True, null=True)
+    next_visit_date = models.DateField(blank=True, null=True)
 
     createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
@@ -1089,4 +1095,73 @@ class DailyTourPlanStop(models.Model):
             models.Index(fields=['user', 'date']),
             models.Index(fields=['companyid', 'date']),
         ]
+
+
+class SalesTarget(models.Model):
+    id = models.TextField(primary_key=True)
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    user = models.ForeignKey('core.User', models.DO_NOTHING, db_column='userId', related_name='sales_targets', db_constraint=False)
+
+    # Periodicity
+    period_type = models.CharField(max_length=20, default='MONTHLY')  # 'MONTHLY', 'QUARTERLY', 'YEARLY'
+    fiscal_year = models.CharField(max_length=20, default='2026-2027')  # e.g., '2026-2027'
+    month = models.IntegerField(default=1)  # 1 to 12 (0 for full year)
+    quarter = models.IntegerField(blank=True, null=True)  # 1 to 4
+
+    # Financial & Volume Pillars
+    target_revenue = models.FloatField(default=0.0)  # Total sales revenue target in Rs
+    target_bags = models.FloatField(default=0.0)     # Total volume target in bags/units
+    target_collection = models.FloatField(default=0.0)  # Payment recovery target in Rs
+
+    # Channel Split (Dealer vs Non-Dealer)
+    target_dealer_revenue = models.FloatField(default=0.0)
+    target_dealer_bags = models.FloatField(default=0.0)
+    target_non_dealer_revenue = models.FloatField(default=0.0)
+    target_non_dealer_bags = models.FloatField(default=0.0)
+
+    # Field Activity KPIs
+    target_visits = models.IntegerField(default=0)          # Dealer/Counter visits target
+    target_new_dealers = models.IntegerField(default=0)     # Onboarding target
+    target_travel_days = models.IntegerField(default=22)    # Field discipline target
+
+    # Product & Category Breakdown (Structured JSON)
+    category_targets = models.JSONField(default=list, blank=True)
+    product_targets = models.JSONField(default=list, blank=True)
+
+    # Dynamic Custom Targets with Custom UOMs (e.g. Site Visits, Project Visits, Mason Meets, Epoxy pkts)
+    # Format: [{"id": "...", "name": "Site Visits", "uom": "visits", "target_val": 40, "incentive_rate": 50}, ...]
+    custom_targets = models.JSONField(default=list, blank=True)
+
+    # Enterprise Tiered Incentive Matrix & Slabs
+    # Format: [{"min_pct": 80, "max_pct": 99, "rate_per_bag": 3.0, "label": "Base Tier"}, ...]
+    incentive_slabs = models.JSONField(default=list, blank=True)
+    new_dealer_bounty = models.FloatField(default=500.0)  # Flat Rs per onboarded dealer
+    min_collection_pct_for_incentive = models.FloatField(default=70.0)  # Gatekeeper threshold
+
+    # Legacy / Flat Incentive Commission Rules
+    min_achievement_pct_for_incentive = models.FloatField(default=80.0)
+    incentive_per_bag = models.FloatField(default=0.0)
+    incentive_pct_on_revenue = models.FloatField(default=0.0)
+
+
+    # Metadata & Tracking
+    notes = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey('core.User', models.SET_NULL, blank=True, null=True, related_name='created_targets', db_constraint=False)
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'SalesTarget'
+        unique_together = (('companyid', 'user', 'period_type', 'fiscal_year', 'month'),)
+        indexes = [
+            models.Index(fields=['companyid', 'fiscal_year', 'month']),
+            models.Index(fields=['user', 'fiscal_year', 'month']),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.id = str(uuid.uuid4())
+        self.updatedat = timezone.now()
+        super().save(*args, **kwargs)
+
 

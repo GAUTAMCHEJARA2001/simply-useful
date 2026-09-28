@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Clock, Users, ArrowUpRight, ArrowDownRight, IndianRupee, Target, CalendarDays, TrendingUp, MapPin, Store, Building2, Scale, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Clock, Users, ArrowUpRight, ArrowDownRight, IndianRupee, Target, CalendarDays, TrendingUp, MapPin, Store, Building2, Scale, ChevronDown, Trophy, Award } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,9 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { SafeDataView } from '@/components/SafeDataView';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import { travelService, SOScorecardData, SOScorecardOfficer } from '@/api/services/travel.service';
+import { cn } from '@/lib/utils';
+import { SalesOfficerTargetSection } from '@/components/SalesOfficerTargetSection';
 
 
 const CHART_COLORS = ['hsl(224, 76%, 33%)', 'hsl(199, 89%, 48%)', 'hsl(142, 71%, 45%)', 'hsl(38, 92%, 50%)', 'hsl(0, 84%, 60%)'];
@@ -22,6 +25,32 @@ const SalesDashboard: React.FC = () => {
 
   // Period filter state: defaults to 'CURRENT_MONTH' so it resets every month!
   const [selectedPeriod, setSelectedPeriod] = useState<string>('CURRENT_MONTH');
+
+  // Sales Officer Performance Scorecard Data
+  const [scorecardData, setScorecardData] = useState<SOScorecardData | null>(null);
+  const [loadingScorecard, setLoadingScorecard] = useState<boolean>(false);
+
+  useEffect(() => {
+    const fetchScorecard = async () => {
+      try {
+        setLoadingScorecard(true);
+        const res = await travelService.getSOScorecard({ period: 'MONTHLY' });
+        if (res.data?.data) {
+          setScorecardData(res.data.data);
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard scorecard:', err);
+      } finally {
+        setLoadingScorecard(false);
+      }
+    };
+    fetchScorecard();
+  }, []);
+
+  const myScorecardOfficer = useMemo<SOScorecardOfficer | null>(() => {
+    if (!scorecardData?.officers || scorecardData.officers.length === 0) return null;
+    return scorecardData.officers.find(o => o.email?.toLowerCase() === user?.email?.toLowerCase()) || scorecardData.officers[0];
+  }, [scorecardData, user]);
 
   const { can } = usePermissions();
   const navigate = useNavigate();
@@ -297,6 +326,9 @@ const SalesDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* OFFICIAL HR SALES TARGETS & INCENTIVE SLABS (SIP) */}
+      <SalesOfficerTargetSection />
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi, i) => (
           <motion.div key={kpi.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
@@ -316,6 +348,147 @@ const SalesDashboard: React.FC = () => {
           </motion.div>
         ))}
       </div>
+
+      {/* SALES OFFICER PERFORMANCE SCORECARD WIDGET */}
+      {isSalesOnly && myScorecardOfficer ? (
+        <Card className="border shadow-xs bg-gradient-to-br from-amber-500/5 via-card to-card overflow-hidden">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              {/* Score Dial & Details */}
+              <div className="flex items-center gap-4">
+                <div className="relative flex items-center justify-center shrink-0">
+                  <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full border-3 border-amber-500/30 flex flex-col items-center justify-center bg-background shadow-2xs">
+                    <span className="text-xl sm:text-2xl font-black text-foreground">{myScorecardOfficer.composite_score}</span>
+                    <span className="text-[9px] font-bold text-muted-foreground uppercase">/ 100</span>
+                  </div>
+                  <div className="absolute -bottom-1">
+                    <Badge className={cn("text-[9px] font-extrabold px-1.5 py-0 shadow-2xs", myScorecardOfficer.badge_color)}>
+                      {myScorecardOfficer.grade}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5">
+                      <Trophy className="w-4 h-4 text-amber-500" />
+                      <span>My Performance Score</span>
+                    </h3>
+                    <Badge className={cn("text-[10px] font-bold px-2 py-0.5", myScorecardOfficer.badge_color)}>
+                      Grade {myScorecardOfficer.grade} • {myScorecardOfficer.grade_label}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Based on Order Booking (30%), Visits (25%), Collections (20%), Onboarding (15%) & Field Discipline (10%)
+                  </p>
+                </div>
+              </div>
+
+              {/* 5 Mini Pillar Bars */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 flex-1 max-w-xl">
+                {/* Orders */}
+                <div className="p-2 rounded-lg bg-background/80 border space-y-1">
+                  <div className="flex justify-between text-[10px] font-semibold text-muted-foreground">
+                    <span>Orders</span>
+                    <span className="text-foreground">{myScorecardOfficer.pillars.orders.score}/30</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-purple-600 rounded-full" style={{ width: `${Math.min(100, myScorecardOfficer.pillars.orders.percentage)}%` }} />
+                  </div>
+                </div>
+
+                {/* Visits */}
+                <div className="p-2 rounded-lg bg-background/80 border space-y-1">
+                  <div className="flex justify-between text-[10px] font-semibold text-muted-foreground">
+                    <span>Visits</span>
+                    <span className="text-foreground">{myScorecardOfficer.pillars.visits.score}/25</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-blue-600 rounded-full" style={{ width: `${Math.min(100, myScorecardOfficer.pillars.visits.percentage)}%` }} />
+                  </div>
+                </div>
+
+                {/* Payments */}
+                <div className="p-2 rounded-lg bg-background/80 border space-y-1">
+                  <div className="flex justify-between text-[10px] font-semibold text-muted-foreground">
+                    <span>Collection</span>
+                    <span className="text-foreground">{myScorecardOfficer.pillars.payments.score}/20</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-emerald-600 rounded-full" style={{ width: `${Math.min(100, myScorecardOfficer.pillars.payments.percentage)}%` }} />
+                  </div>
+                </div>
+
+                {/* Onboarding */}
+                <div className="p-2 rounded-lg bg-background/80 border space-y-1">
+                  <div className="flex justify-between text-[10px] font-semibold text-muted-foreground">
+                    <span>Onboard</span>
+                    <span className="text-foreground">{myScorecardOfficer.pillars.onboarding.score}/15</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-rose-600 rounded-full" style={{ width: `${Math.min(100, myScorecardOfficer.pillars.onboarding.percentage)}%` }} />
+                  </div>
+                </div>
+
+                {/* Discipline */}
+                <div className="p-2 rounded-lg bg-background/80 border space-y-1 col-span-2 sm:col-span-1">
+                  <div className="flex justify-between text-[10px] font-semibold text-muted-foreground">
+                    <span>Discipline</span>
+                    <span className="text-foreground">{myScorecardOfficer.pillars.discipline.score}/10</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-amber-600 rounded-full" style={{ width: `${Math.min(100, myScorecardOfficer.pillars.discipline.percentage)}%` }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <div className="shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate('/sales/travel?tab=SCORECARD')}
+                  className="w-full sm:w-auto h-9 text-xs font-bold gap-1.5 border-amber-500/30 hover:bg-amber-500/10 cursor-pointer shadow-2xs"
+                >
+                  <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                  <span>My Full Scorecard</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : !isSalesOnly && scorecardData?.summary ? (
+        <Card className="border shadow-xs bg-gradient-to-r from-primary/5 via-card to-card">
+          <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center font-bold text-primary shrink-0">
+                <Trophy className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <span>Sales Officers Performance Leaderboard</span>
+                  <Badge variant="secondary" className="text-[10px] font-bold">
+                    Team Avg: {scorecardData.summary.team_avg_score}/100
+                  </Badge>
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Track individual officer scores across 5 pillars, rankings, and incentive evaluations
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate('/sales/travel?tab=SCORECARD')}
+              className="h-8 text-xs font-bold gap-1.5 shrink-0 cursor-pointer"
+            >
+              <span>View Leaderboard</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">

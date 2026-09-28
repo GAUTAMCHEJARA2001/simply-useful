@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard, ShoppingCart, Users, MapPin, Receipt,
   Package, BarChart3, Settings, LogOut, Menu, X, Building2,
   ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store, BookOpen, Activity, FileText,
-  PanelLeftClose, PanelLeft, Maximize2, Minimize2, Gauge
+  PanelLeftClose, PanelLeft, Maximize2, Minimize2, Gauge, Trophy, Target
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -23,14 +23,16 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Main Overview', path: '/sales', icon: LayoutDashboard, feature: 'view_sales_dashboard' },
+  { label: 'Targets & Incentives', path: '/sales/targets', icon: Target, feature: 'view_sales_dashboard' },
   { label: 'New Order', path: '/sales/order', icon: ShoppingCart, feature: 'create_order' },
   { label: 'Saved Estimates', path: '/sales/estimates', icon: FileText, feature: 'create_order' },
   { label: 'Order List', path: '/sales/orders', icon: ClipboardList, feature: 'view_own_orders' },
   { label: 'My Ledger Requests', path: '/sales/ledger-requests', icon: FileText, feature: 'view_sales_dashboard' },
   { label: 'Customer Visits', path: '/sales/visits', icon: MapPin, feature: 'track_visits' },
   { label: 'Daily Travel (KM)', path: '/sales/travel', icon: Gauge, feature: 'track_visits' },
+  { label: 'SO Scorecards', path: '/sales/travel?tab=SCORECARD', icon: Trophy, feature: 'track_visits' },
   { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses' },
-  { label: 'Submit Payment', path: '/sales/payments/new', icon: Receipt, feature: 'view_sales_dashboard' },
+  { label: 'Payment Receipts', path: '/sales/payments/new', icon: Receipt, feature: 'view_sales_dashboard' },
   { label: 'CRM Leads', path: '/sales/crm', icon: Users, feature: 'track_visits' },
   { label: 'My Territory', path: '/sales/territory', icon: Store, feature: 'track_visits' },
   { label: 'Party Onboarding', path: '/sales/onboarding', icon: UserCheck, feature: 'view_sales_dashboard' },
@@ -67,6 +69,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const { can } = usePermissions();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Persist sidebar collapsed state
   const toggleDesktopSidebar = () => {
@@ -158,6 +161,45 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   if (adminItems.length > 0) groups.push({ label: 'Admin Tools', items: adminItems });
   if (otherItems.length > 0) groups.push({ label: 'More Options', items: otherItems });
 
+  const isItemActive = (itemPath: string) => {
+    const [itemBase, itemQuery] = itemPath.split('?');
+
+    // Check base pathname match
+    const exactRoots = ['/sales', '/admin', '/hr', '/inventory'];
+    const isBaseMatch = exactRoots.includes(itemBase)
+      ? location.pathname === itemBase
+      : location.pathname === itemBase || location.pathname.startsWith(itemBase + '/');
+
+    if (!isBaseMatch) return false;
+
+    // If this nav item has query params (e.g., '?tab=SCORECARD')
+    if (itemQuery) {
+      const itemParams = new URLSearchParams(itemQuery);
+      const currentParams = new URLSearchParams(location.search);
+      for (const [key, value] of itemParams.entries()) {
+        if (currentParams.get(key) !== value) return false;
+      }
+      return true;
+    }
+
+    // If this nav item does NOT have query params (e.g. '/sales/travel')
+    // but another nav item with the same base path has query params matching the current URL,
+    // yield active state to the more specific nav item
+    const currentParams = new URLSearchParams(location.search);
+    const hasMoreSpecificMatch = navItems.some(other => {
+      if (other.path === itemPath || !other.path.startsWith(itemBase + '?')) return false;
+      const otherQuery = other.path.split('?')[1];
+      if (!otherQuery) return false;
+      const otherParams = new URLSearchParams(otherQuery);
+      for (const [k, v] of otherParams.entries()) {
+        if (currentParams.get(k) !== v) return false;
+      }
+      return true;
+    });
+
+    return !hasMoreSpecificMatch;
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -213,20 +255,20 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 {group.label}
               </p>
               <div className="space-y-1">
-                {group.items.map(item => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === '/sales' || item.path === '/admin' || item.path === '/hr' || item.path === '/inventory'}
-                    onClick={() => setSidebarOpen(false)}
-                    className={({ isActive }) =>
-                      cn('sidebar-link', isActive && 'sidebar-link-active')
-                    }
-                  >
-                    <item.icon className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </NavLink>
-                ))}
+                {group.items.map(item => {
+                  const active = isItemActive(item.path);
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setSidebarOpen(false)}
+                      className={cn('sidebar-link', active && 'sidebar-link-active')}
+                    >
+                      <item.icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </NavLink>
+                  );
+                })}
               </div>
             </div>
           ))}

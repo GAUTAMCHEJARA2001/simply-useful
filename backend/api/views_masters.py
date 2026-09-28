@@ -351,10 +351,41 @@ class CategoryViewSet(viewsets.ModelViewSet):
         data = request.data.copy()
         if _get_company_id(request):
             data['companyId'] = _get_company_id(request)
+        if 'parentId' in data and data['parentId']:
+            try:
+                data['parentId'] = int(data['parentId'])
+            except (ValueError, TypeError):
+                data['parentId'] = None
         serializer = CategorySerializer(data=data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return send_success(serializer.data, 'Category created successfully', 201)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        data = request.data.copy()
+        company_id = _get_company_id(request)
+        if company_id and not data.get('companyId'):
+            data['companyId'] = company_id
+        if 'parentId' in data and data['parentId']:
+            try:
+                data['parentId'] = int(data['parentId'])
+            except (ValueError, TypeError):
+                data['parentId'] = None
+        serializer = self.get_serializer(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return send_success(serializer.data, 'Category updated successfully')
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return send_success(None, 'Category deleted successfully')
 
 class BrandViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]

@@ -9,6 +9,15 @@ from api.models import DailyTravelLog, DailyTourPlanStop, DailyAttendance, Labou
 from api.views import send_success, send_error, _get_company_id
 
 
+def _clean_visit_purpose(raw_val):
+    if not raw_val:
+        return 'ORDER'
+    if isinstance(raw_val, list):
+        cleaned = [str(x).strip() for x in raw_val if str(x).strip()]
+        return ', '.join(cleaned) if cleaned else 'ORDER'
+    return str(raw_val).strip() or 'ORDER'
+
+
 def _serialize_tour_stop(stop):
     return {
         'id': stop.id,
@@ -31,7 +40,10 @@ def _serialize_tour_stop(stop):
         'actual_status': stop.actual_status,
         'shortfall_reason': stop.shortfall_reason,
         'actual_notes': stop.actual_notes,
+        'visit_photo': getattr(stop, 'visit_photo', None) or None,
+        'gps_location': getattr(stop, 'gps_location', None) or None,
         'completed_at': stop.completed_at.isoformat() if stop.completed_at else None,
+        'next_visit_date': stop.next_visit_date.strftime('%Y-%m-%d') if getattr(stop, 'next_visit_date', None) else None,
         'created_at': stop.createdat.isoformat() if stop.createdat else None,
     }
 
@@ -57,10 +69,11 @@ def _serialize_travel_log(log):
 
     stops_list = []
     try:
-        if hasattr(log, 'stops'):
-            stops_list = [_serialize_tour_stop(s) for s in log.stops.all().order_by('stop_order', 'createdat')]
-        else:
-            stops_list = [_serialize_tour_stop(s) for s in DailyTourPlanStop.objects.filter(travel_log_id=log.id).order_by('stop_order', 'createdat')]
+        DailyTourPlanStop.objects.filter(user_id=log.user_id, date=log.date, travel_log__isnull=True).update(travel_log=log)
+        stops_qs = DailyTourPlanStop.objects.filter(travel_log=log).order_by('stop_order', 'createdat')
+        if not stops_qs.exists():
+            stops_qs = DailyTourPlanStop.objects.filter(user_id=log.user_id, date=log.date).order_by('stop_order', 'createdat')
+        stops_list = [_serialize_tour_stop(s) for s in stops_qs]
     except Exception:
         pass
 
@@ -173,6 +186,14 @@ def travel_today(request):
             }, 'Today tour plan fetched (Trip not yet started)')
         return send_success(None, 'No travel punched today')
 
+    # Link any stops created for today to this travel_log
+    DailyTourPlanStop.objects.filter(user_id=user_id, date=today, travel_log__isnull=True).update(travel_log=log)
+    planned_qs = DailyTourPlanStop.objects.filter(travel_log=log, is_unplanned=False)
+    log.total_stops_planned = planned_qs.count()
+    log.total_target_bags = sum(s.target_order_bags for s in planned_qs)
+    log.total_target_collection = sum(s.target_collection_value for s in planned_qs)
+    log.save(update_fields=['total_stops_planned', 'total_target_bags', 'total_target_collection'])
+
     return send_success(_serialize_travel_log(log), 'Today travel log fetched')
 
 
@@ -245,7 +266,7 @@ def travel_plan(request):
             stop.dealer_id = item.get('dealer_id') or None
             stop.dealer_name = dealer_name
             stop.dealer_location = item.get('dealer_location') or ''
-            stop.visit_purpose = (item.get('visit_purpose') or 'ORDER').upper()
+            stop.visit_purpose = _clean_visit_purpose(item.get('visit_purpose'))
             stop.target_order_bags = float(item.get('target_order_bags') or 0.0)
             stop.target_order_value = float(item.get('target_order_value') or 0.0)
             stop.target_collection_value = float(item.get('target_collection_value') or 0.0)
@@ -295,6 +316,15 @@ def travel_add_unplanned_stop(request):
     log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
     highest_order = DailyTourPlanStop.objects.filter(user_id=user_id, date=today).count() + 1
 
+    is_unplanned = bool(data.get('is_unplanned', True))
+    visited = bool(data.get('visited', True if is_unplanned else False))
+
+    target_bags = float(data.get('target_order_bags') or 0.0)
+    actual_bags = float(data.get('actual_order_bags') or (target_bags if is_unplanned else 0.0))
+
+    target_col = float(data.get('target_collection_value') or 0.0)
+    actual_col = float(data.get('actual_collection_value') or (target_col if is_unplanned else 0.0))
+
     stop = DailyTourPlanStop(
         id=f"STP-{uuid.uuid4().hex[:12].upper()}",
         user_id=user_id,
@@ -302,24 +332,167 @@ def travel_add_unplanned_stop(request):
         date=today,
         travel_log=log,
         stop_order=highest_order,
-        is_unplanned=True,
+        is_unplanned=is_unplanned,
         dealer_id=data.get('dealer_id') or None,
         dealer_name=dealer_name,
         dealer_location=data.get('dealer_location') or '',
-        visit_purpose=(data.get('visit_purpose') or 'ORDER').upper(),
-        plan_notes=data.get('plan_notes') or 'Spot visit on route',
-        visited=True,
-        actual_order_bags=float(data.get('actual_order_bags') or 0.0),
+        visit_purpose=_clean_visit_purpose(data.get('visit_purpose')),
+        plan_notes=data.get('plan_notes') or ('Spot visit on route' if is_unplanned else ''),
+        target_order_bags=target_bags,
+        target_order_value=float(data.get('target_order_value') or 0.0),
+        target_collection_value=target_col,
+        visited=visited,
+        actual_order_bags=actual_bags,
         actual_order_value=float(data.get('actual_order_value') or 0.0),
-        actual_collection_value=float(data.get('actual_collection_value') or 0.0),
-        actual_status=(data.get('actual_status') or 'COMPLETED').upper(),
+        actual_collection_value=actual_col,
+        actual_status=(data.get('actual_status') or ('COMPLETED' if visited else 'PENDING')).upper(),
         shortfall_reason=data.get('shortfall_reason') or '',
         actual_notes=data.get('actual_notes') or '',
-        completed_at=timezone.now(),
+        completed_at=timezone.now() if visited else None,
     )
     stop.save()
 
-    return send_success(_serialize_tour_stop(stop), 'Spot visit logged successfully')
+    if log:
+        planned_qs = DailyTourPlanStop.objects.filter(travel_log=log, is_unplanned=False)
+        log.total_stops_planned = planned_qs.count()
+        log.total_target_bags = sum(s.target_order_bags for s in planned_qs)
+        log.total_target_collection = sum(s.target_collection_value for s in planned_qs)
+        log.save(update_fields=['total_stops_planned', 'total_target_bags', 'total_target_collection'])
+
+    return send_success(_serialize_tour_stop(stop), 'Stop logged successfully')
+
+
+@api_view(['POST'])
+def travel_punch_stop_visit(request):
+    """
+    Punch / Record execution outcome for a stop on the beat route.
+    Captures:
+    - stop_id (STP-xxx or temporary ID)
+    - actual_status (COMPLETED, PARTIALLY_FULFILLED, NOT_FULFILLED, CONVERTED_NEW_DEALER, SKIPPED)
+    - actual_order_bags
+    - actual_collection_value
+    - shortfall_reason
+    - actual_notes
+    - visit_photo (base64 image of store or visit photo)
+    - gps_location
+    Also auto-records into the company Visit table so no separate visit tracking page is needed!
+    """
+    user = getattr(request, 'user', None)
+    if not user or not getattr(user, 'is_authenticated', False):
+        return send_error('Unauthorized', 401)
+
+    company_id = _get_company_id(request) or getattr(user, 'companyid_id', None) or getattr(user, 'companyId', None)
+    user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
+    today = timezone.localdate()
+
+    data = request.data or {}
+    stop_id = data.get('stop_id') or data.get('id')
+    stop = None
+    if stop_id and not str(stop_id).startswith('temp-'):
+        stop = DailyTourPlanStop.objects.filter(id=stop_id, user_id=user_id).first()
+
+    dealer_name = (data.get('dealer_name') or (stop.dealer_name if stop else '')).strip()
+    if not dealer_name:
+        return send_error('Dealer / Counter name is required', 400)
+
+    log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
+
+    if not stop:
+        highest_order = DailyTourPlanStop.objects.filter(user_id=user_id, date=today).count() + 1
+        stop = DailyTourPlanStop(
+            id=f"STP-{uuid.uuid4().hex[:12].upper()}",
+            user_id=user_id,
+            companyid_id=company_id,
+            date=today,
+            travel_log=log,
+            stop_order=highest_order,
+            dealer_id=data.get('dealer_id') or None,
+            dealer_name=dealer_name,
+            dealer_location=data.get('dealer_location') or '',
+            visit_purpose=_clean_visit_purpose(data.get('visit_purpose')),
+            is_unplanned=bool(data.get('is_unplanned', False)),
+        )
+
+    status_val = (data.get('actual_status') or 'COMPLETED').upper()
+    is_skipped = status_val == 'SKIPPED'
+
+    stop.actual_status = status_val
+    stop.visited = not is_skipped
+    stop.actual_order_bags = float(data.get('actual_order_bags') or 0.0)
+    stop.actual_order_value = float(data.get('actual_order_value') or 0.0)
+    stop.actual_collection_value = float(data.get('actual_collection_value') or 0.0)
+    stop.shortfall_reason = data.get('shortfall_reason') or ''
+    stop.actual_notes = data.get('actual_notes') or ''
+    next_date_str = data.get('next_visit_date')
+    if next_date_str:
+        try:
+            stop.next_visit_date = datetime.strptime(str(next_date_str).strip()[:10], '%Y-%m-%d').date()
+        except Exception:
+            pass
+    elif 'next_visit_date' in data and not next_date_str:
+        stop.next_visit_date = None
+
+    if data.get('visit_photo'):
+        stop.visit_photo = data.get('visit_photo')
+    if data.get('gps_location'):
+        stop.gps_location = data.get('gps_location')
+    if stop.visited and not stop.completed_at:
+        stop.completed_at = timezone.now()
+    if log and not stop.travel_log:
+        stop.travel_log = log
+    stop.save()
+
+    # Auto-sync into official Visit model
+    try:
+        from api.models import Visit
+        so_user = User.objects.filter(id=user_id).first()
+        if so_user:
+            full_remarks = f"Status: {stop.actual_status}. "
+            if stop.actual_order_bags:
+                full_remarks += f"Order: {stop.actual_order_bags:g} bags. "
+            if stop.actual_collection_value:
+                full_remarks += f"Collection: ₹{stop.actual_collection_value:,.0f}. "
+            if stop.shortfall_reason:
+                full_remarks += f"Reason: {stop.shortfall_reason}. "
+            if stop.actual_notes:
+                full_remarks += f"Notes: {stop.actual_notes}. "
+
+            visit_rec = Visit.objects.filter(
+                soemail=so_user,
+                dealername=stop.dealer_name,
+                date__date=today
+            ).first()
+
+            if not visit_rec:
+                visit_rec = Visit(
+                    id=f"VST-{uuid.uuid4().hex[:12].upper()}",
+                    companyid_id=company_id,
+                    soemail=so_user,
+                    dealername=stop.dealer_name,
+                    date=timezone.now(),
+                )
+
+            visit_rec.remarks = full_remarks.strip() or 'Visited on beat route'
+            if stop.visit_photo:
+                visit_rec.photo = stop.visit_photo
+            if stop.gps_location:
+                visit_rec.gpslocation = stop.gps_location
+            if getattr(stop, 'next_visit_date', None):
+                visit_rec.nextfollowup = timezone.make_aware(datetime.combine(stop.next_visit_date, datetime.min.time()))
+            visit_rec.visit_status = 'COMPLETED' if stop.visited else 'SKIPPED'
+            visit_rec.save()
+    except Exception as e:
+        pass
+
+    # Update log stats if log exists
+    if log:
+        all_stops = DailyTourPlanStop.objects.filter(travel_log=log)
+        log.total_stops_visited = all_stops.filter(visited=True).count()
+        log.total_actual_bags = sum(s.actual_order_bags for s in all_stops.filter(visited=True))
+        log.total_actual_collection = sum(s.actual_collection_value for s in all_stops.filter(visited=True))
+        log.save(update_fields=['total_stops_visited', 'total_actual_bags', 'total_actual_collection'])
+
+    return send_success(_serialize_tour_stop(stop), 'Visit punched successfully')
 
 
 @api_view(['POST'])
@@ -371,8 +544,43 @@ def travel_start(request):
     log.status = 'PENDING'
     log.save()
 
+    # Ingest any stops sent from frontend pre-trip state or planned agenda
+    stops_input = data.get('stops', [])
+    if isinstance(stops_input, list) and stops_input:
+        for idx, item in enumerate(stops_input):
+            dealer_name = (item.get('dealer_name') or '').strip()
+            if not dealer_name:
+                continue
+
+            stop_id = item.get('id')
+            stop = None
+            if stop_id and not str(stop_id).startswith('temp-'):
+                stop = DailyTourPlanStop.objects.filter(id=stop_id, user_id=user_id).first()
+
+            if not stop:
+                stop = DailyTourPlanStop(
+                    id=f"STP-{uuid.uuid4().hex[:12].upper()}",
+                    user_id=user_id,
+                    companyid_id=company_id,
+                    date=today,
+                    travel_log=log
+                )
+
+            stop.stop_order = idx + 1
+            stop.dealer_id = item.get('dealer_id') or None
+            stop.dealer_name = dealer_name
+            stop.dealer_location = item.get('dealer_location') or ''
+            stop.visit_purpose = _clean_visit_purpose(item.get('visit_purpose'))
+            stop.target_order_bags = float(item.get('target_order_bags') or 0.0)
+            stop.target_order_value = float(item.get('target_order_value') or 0.0)
+            stop.target_collection_value = float(item.get('target_collection_value') or 0.0)
+            stop.plan_notes = item.get('plan_notes') or ''
+            stop.is_unplanned = bool(item.get('is_unplanned', False))
+            stop.travel_log = log
+            stop.save()
+
     # Link any existing planned stops for today to this travel log
-    DailyTourPlanStop.objects.filter(user_id=user_id, date=today, travel_log__isnull=True).update(travel_log=log)
+    DailyTourPlanStop.objects.filter(user_id=user_id, date=today).update(travel_log=log)
     planned_qs = DailyTourPlanStop.objects.filter(travel_log=log, is_unplanned=False)
     log.total_stops_planned = planned_qs.count()
     log.total_target_bags = sum(s.target_order_bags for s in planned_qs)
@@ -435,7 +643,7 @@ def travel_end(request):
                 dealer_id=item.get('dealer_id') or None,
                 dealer_name=dealer_name,
                 dealer_location=item.get('dealer_location') or '',
-                visit_purpose=(item.get('visit_purpose') or 'ORDER').upper(),
+                visit_purpose=_clean_visit_purpose(item.get('visit_purpose')),
                 plan_notes=item.get('plan_notes') or 'Added during day end',
             )
 
@@ -692,3 +900,63 @@ def travel_hr_verify(request, pk):
         _sync_travel_to_attendance(log, reset_km=True)
 
         return send_success(_serialize_travel_log(log), "Travel log rejected")
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def travel_so_scorecard(request):
+    """
+    Sales Officer Performance Scorecard & Evaluation Engine.
+    Evaluates Sales Officers across 5 Professional KPI Pillars:
+    1. Order Booking & Revenue (30% weight)
+    2. Counter Visits & Beat Adherence (25% weight)
+    3. Payment & Outstanding Collection (20% weight)
+    4. Market Expansion & New Dealer Onboarding (15% weight)
+    5. Field Travel Discipline & Attendance (10% weight)
+
+    Query params:
+      period: 'WEEKLY' | 'MONTHLY' | 'YEARLY' (default 'MONTHLY')
+      year: int (e.g. 2026)
+      month: int (1-12)
+      week: int (1-5, or omitted for rolling 7 days)
+      so_email: optional filter for single SO
+    """
+    company_id = _get_company_id(request)
+    if not company_id:
+        return send_error('Company context required', 400)
+
+    user = getattr(request, 'user', None)
+    user_role = (getattr(user, 'role', '') or '').strip().upper()
+    is_admin = getattr(user, 'is_superuser', False) or user_role in ['SUPERADMIN', 'ADMIN', 'HR', 'MANAGEMENT']
+
+    period = request.GET.get('period', 'MONTHLY')
+    year = request.GET.get('year')
+    month = request.GET.get('month')
+    week = request.GET.get('week')
+
+    # Security: Non-admin users (Sales Officers) can ONLY view their own individual scorecard
+    if is_admin:
+        so_email = request.GET.get('so_email')
+    else:
+        so_email = getattr(user, 'email', None)
+        if not so_email:
+            return send_error('Sales officer profile email is required', 400)
+
+    try:
+        from api.services.so_scorecard_service import get_so_scorecard
+        data = get_so_scorecard(
+            company_id=company_id,
+            period=period,
+            year=year,
+            month=month,
+            week=week,
+            so_email=so_email,
+            is_admin=is_admin,
+            request_user=user,
+        )
+        return send_success(data, "Sales Officer Scorecard computed successfully")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return send_error(f"Failed to calculate scorecard: {str(e)}", 500)
+

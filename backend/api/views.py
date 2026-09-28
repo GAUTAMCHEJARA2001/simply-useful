@@ -1735,6 +1735,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 try:
                     assigned_wh = getattr(instance, 'warehouseid', None)
                     assigned_wh_id = getattr(instance, 'warehouseid_id', None) or (assigned_wh.id if hasattr(assigned_wh, 'id') else None)
+                    st_id = 'st_' + uuid.uuid4().hex[:20]
                     Stocktransaction.objects.create(
                         id=st_id,
                         productid_id=p_id,
@@ -3343,16 +3344,20 @@ def transaction_productions(request):
         if not product:
             return Response({'success': False, 'message': 'Product not found'}, status=status.HTTP_400_BAD_REQUEST)
         
+        allow_deficit = bool(data.get('allow_deficit') or data.get('allow_negative') or data.get('force'))
         negatives = check_negative_raw_materials(prod_id, qty_produced, wh_id, data.get('items'), None)
-        if negatives:
+        if negatives and not allow_deficit:
             return Response({'success': False, 'error_type': 'NEGATIVE_RAW_MATERIALS', 'message': 'Some raw materials will go negative.', 'data': negatives}, status=status.HTTP_400_BAD_REQUEST)
             
-        st_reason = 'PENDING_APPROVAL'
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        is_admin = getattr(request.user, 'is_superuser', False) or user_role in ('ADMIN', 'SUPERADMIN', 'DIRECTOR', 'VP')
+        st_reason = 'APPROVED' if is_admin else 'PENDING_APPROVAL'
         
         Stocktransaction.objects.create(
             id=st_id, productid=product, warehouseid_id=wh.id, transactiontype='PRODUCTION', 
             quantity=qty_produced, batches=batches, expected_quantity=expected_quantity,
-            referenceid='PROD', reason=st_reason, createdat=now, created_by_id=request.user.id
+            referenceid='PROD', reason=st_reason, createdat=now, created_by_id=request.user.id,
+            approved_by_id=request.user.id if is_admin else None
         )
         custom_items = data.get('items')
         if custom_items is not None and isinstance(custom_items, list):
@@ -3417,8 +3422,11 @@ def transaction_productions_detail(request, pk):
         prod = resolve_product_for_db(prod_id)
         if not prod:
             return Response({'success': False, 'message': 'Product not found'}, status=status.HTTP_400_BAD_REQUEST)
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        is_admin = getattr(request.user, 'is_superuser', False) or user_role in ('ADMIN', 'SUPERADMIN', 'DIRECTOR', 'VP')
+        allow_deficit = bool(data.get('allow_deficit') or data.get('allow_negative') or data.get('force'))
         negatives = check_negative_raw_materials(prod_id, qty_produced, wh_id, data.get('items'), pk)
-        if negatives:
+        if negatives and not allow_deficit:
             return Response({'success': False, 'error_type': 'NEGATIVE_RAW_MATERIALS', 'message': 'Some raw materials will go negative.', 'data': negatives}, status=status.HTTP_400_BAD_REQUEST)
         custom_date = data.get('date')
         if custom_date:
@@ -3446,7 +3454,11 @@ def transaction_productions_detail(request, pk):
             main_st.quantity = qty_produced
             main_st.batches = batches
             main_st.expected_quantity = expected_quantity
-            main_st.createdat = now_str
+            user_role = (getattr(request.user, 'role', '') or '').upper()
+            is_admin = getattr(request.user, 'is_superuser', False) or user_role in ('ADMIN', 'SUPERADMIN', 'DIRECTOR', 'VP')
+            if is_admin:
+                main_st.reason = 'APPROVED'
+                main_st.approved_by_id = request.user.id
             main_st.save()
 
             # Delete old consumed transactions for this production run
@@ -3456,7 +3468,7 @@ def transaction_productions_detail(request, pk):
             ).delete()
 
             custom_items = data.get('items')
-            st_reason = main_st.reason or 'PENDING_APPROVAL'
+            st_reason = main_st.reason or ('APPROVED' if is_admin else 'PENDING_APPROVAL')
             if custom_items is not None and isinstance(custom_items, list):
                 for item in custom_items:
                     item_prod_id = item.get('productId') or item.get('product_id')

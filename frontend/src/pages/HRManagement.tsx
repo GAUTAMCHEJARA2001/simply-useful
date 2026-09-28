@@ -1,7 +1,7 @@
 import React from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart, Gauge } from 'lucide-react';
+import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart, Gauge, Target } from 'lucide-react';
 
 import { EmployeeMasterTab } from './HRManagement/components/EmployeeMasterTab';
 import { AdvancedAttendanceTab } from './HRManagement/components/AdvancedAttendanceTab';
@@ -11,10 +11,12 @@ import { HRConfigTab } from './HRManagement/components/HRConfigTab';
 import { EmployeeLedgerTab } from './HRManagement/components/EmployeeLedgerTab';
 import { LeaveManagementTab } from './HRManagement/components/LeaveManagementTab';
 import { TravelApprovalsTab } from './HRManagement/components/TravelApprovalsTab';
+import { SalesTargetManagementTab } from './HRManagement/components/SalesTargetManagementTab';
 
 
 
-export type HRTab = 'employees' | 'attendance' | 'travel' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
+
+export type HRTab = 'employees' | 'targets' | 'attendance' | 'travel' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
 
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
@@ -27,6 +29,7 @@ const HRManagement: React.FC = () => {
 
   const navItems = [
     { id: 'employees', label: 'Employee Master', icon: Users },
+    { id: 'targets', label: 'Sales Targets & KPIs', icon: Target },
     { id: 'orgchart', label: 'Organization Chart', icon: Users },
     { id: 'attendance', label: 'Daily Attendance', icon: Clock },
     { id: 'travel', label: 'Travel & KM Approvals', icon: Gauge },
@@ -78,6 +81,7 @@ const HRManagement: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background">
         {tab === 'employees' && <EmployeeMasterTab />}
+        {tab === 'targets' && <SalesTargetManagementTab />}
         {tab === 'orgchart' && <OrgChartTab />}
         {tab === 'attendance' && <AdvancedAttendanceTab />}
         {tab === 'travel' && <TravelApprovalsTab />}
