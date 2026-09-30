@@ -333,7 +333,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
     setBatchItems(newItems);
   };
 
-  const handleSave = async (overrideDeficit: boolean = false) => {
+  const handleSave = async (overrideDeficit: any = false) => {
     if (!form.productId || !form.warehouseId || form.quantity <= 0) {
       toast({
         title: 'Validation Error',
@@ -345,6 +345,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
 
     setIsSubmitting(true);
     try {
+      const isOverride = overrideDeficit === true;
       const payload = {
         productId: form.productId,
         warehouseId: form.warehouseId,
@@ -353,7 +354,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
         quantity: form.quantity,
         date: form.date,
         items: batchItems, // Send adjustable/custom raw materials consumption list
-        allow_deficit: overrideDeficit
+        allow_deficit: isOverride
       };
 
       if (form.id) {
@@ -444,10 +445,8 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
 
   useEffect(() => {
     const editId = editProductionId || localStorage.getItem('edit_production_id');
-    console.log('[DEBUG ProductionsTab] editId=', editId, ' filteredProductions.length=', filteredProductions.length);
     if (editId && filteredProductions.length > 0 && products.length > 0) {
       const idx = filteredProductions.findIndex((p: any) => p.id === editId || p.referenceid === editId);
-      console.log('[DEBUG ProductionsTab] idx found=', idx);
       if (idx !== -1) {
         if (!editProductionId) localStorage.removeItem('edit_production_id');
         const p = filteredProductions[idx];
@@ -1071,7 +1070,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
               </Button>
               {!isReadOnly && (
               <Button 
-                onClick={handleSave} 
+                onClick={() => handleSave(false)} 
                 disabled={isSubmitting || !form.productId || !form.warehouseId || form.quantity <= 0}
               >
                 {isSubmitting ? (

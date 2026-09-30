@@ -25,6 +25,23 @@ const extractChallanNumber = (narration: string) => {
   return match ? match[1] : '';
 };
 
+const formatDateForInput = (dVal: any) => {
+  if (!dVal) return '';
+  if (typeof dVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dVal.trim())) {
+    return dVal.trim();
+  }
+  try {
+    const d = new Date(dVal);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  } catch (_) {}
+  return '';
+};
+
 const extractWarehouseId = (narration: string) => {
   if (!narration) return '';
   const match = narration.match(/\[WAREHOUSE ID:\s*([^\]]+)\]/i);
@@ -101,20 +118,28 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         .replace(/\[RETURN DATE:\s*[^\]]+\]/gi, '')
         .trim() : '';
 
+      const parsedDispatchDate = formatDateForInput(sale.dispatchDate || extractedDetails.dispatchDate || sale.date) || new Date().toISOString().split('T')[0];
+      const parsedSaleDate = formatDateForInput(sale.date || sale.createdAt) || new Date().toISOString().split('T')[0];
+
       setForm({
         ...sale,
         customerName: sale.partyName || sale.customerName || '',
         challanNumber: sale.invoiceNumber || extractChallanNumber(sale.narration) || sale.challanNumber || '',
         warehouse_id: whId,
+        date: parsedSaleDate,
+        dispatchDate: parsedDispatchDate,
         narration: cleanNarration || sale.narration || '',
         lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }],
         vehicleNumber: sale.vehicleNumber || sale.vehiclenumber || extractedDetails.vehicle || '',
         driverName: sale.driverName || sale.drivername || extractedDetails.driver || '',
         driverMobile: sale.driverMobileNumber || sale.drivermobile || extractedDetails.mobile || '',
-        dispatchDate: sale.dispatchDate || extractedDetails.dispatchDate || '',
       });
     } else {
-      setForm({ lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }] });
+      setForm({ 
+        date: new Date().toISOString().split('T')[0],
+        dispatchDate: new Date().toISOString().split('T')[0],
+        lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }] 
+      });
     }
   }, [sale, isOpen]);
 
@@ -190,6 +215,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
       status: form.status || 'Completed',
       grandTotal: grandTotal,
       narration: cleanNarration,
+      date: form.date || new Date().toISOString().split('T')[0],
       warehouse_id: form.warehouse_id || '',
       invoiceNumber: form.challanNumber || '',
       dispatchWarehouse: selectedWh ? selectedWh.name : '',
@@ -211,6 +237,8 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         vehicleNumber: form.vehicleNumber || extractedDetails.vehicle || '',
         driverName: form.driverName || extractedDetails.driver || '',
         driverMobile: form.driverMobile || extractedDetails.mobile || '',
+        dispatchDate: form.dispatchDate || new Date().toISOString().split('T')[0],
+        warehouse_id: form.warehouse_id || '',
         remarks: cleanNarration,
         items: payload.items
       });
@@ -292,6 +320,11 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
             <label className="text-[11px] font-semibold block mb-1">Invoice/Challan Number</label>
             <input value={form.challanNumber || ''} onChange={e => setForm({ ...form, challanNumber: e.target.value })}
               placeholder="INV-1001" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold block mb-1">Sale / Order Date</label>
+            <input type="date" value={form.date || ''} onChange={e => setForm({ ...form, date: e.target.value })}
+              className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
           </div>
           <div className="col-span-2">
             <label className="text-[11px] font-semibold block mb-1">Remarks / Narration</label>

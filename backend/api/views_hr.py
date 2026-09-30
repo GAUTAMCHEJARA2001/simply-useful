@@ -73,6 +73,17 @@ def hr_employees(request):
             qs = qs.filter(companyid_id=company_id)
         
         employees = []
+        def _get_full_url(file_field):
+            if not file_field:
+                return None
+            try:
+                url = file_field.url
+                if url.startswith('http://') or url.startswith('https://'):
+                    return url
+                return request.build_absolute_uri(url)
+            except Exception:
+                return None
+
         for l in qs:
             employees.append({
                 'id': l.id,
@@ -103,10 +114,10 @@ def hr_employees(request):
                 'bank_name': l.bank_name,
                 'bank_account_number': l.bank_account_number,
                 'bank_ifsc': l.bank_ifsc,
-                'employee_photo': l.employee_photo.url if l.employee_photo else None,
-                'aadhar_photo': l.aadhar_photo.url if l.aadhar_photo else None,
-                'pan_photo': l.pan_photo.url if l.pan_photo else None,
-                'bank_proof_photo': l.bank_proof_photo.url if l.bank_proof_photo else None
+                'employee_photo': _get_full_url(l.employee_photo),
+                'aadhar_photo': _get_full_url(l.aadhar_photo),
+                'pan_photo': _get_full_url(l.pan_photo),
+                'bank_proof_photo': _get_full_url(l.bank_proof_photo)
             })
         return send_success(employees, 'Employees fetched')
 
@@ -152,7 +163,15 @@ def hr_employees(request):
         if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
         emp.save()
         
-        return send_success({'id': emp.id, **data}, 'Employee created')
+        return send_success({
+            'id': emp.id,
+            'name': emp.name,
+            'employee_photo': _get_full_url(emp.employee_photo),
+            'aadhar_photo': _get_full_url(emp.aadhar_photo),
+            'pan_photo': _get_full_url(emp.pan_photo),
+            'bank_proof_photo': _get_full_url(emp.bank_proof_photo),
+            **data
+        }, 'Employee created')
 
 @api_view(['PUT', 'DELETE'])
 def hr_employees_detail(request, pk):
@@ -204,7 +223,26 @@ def hr_employees_detail(request, pk):
         if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
 
         emp.save()
-        return send_success({'id': emp.id, **data}, 'Employee updated')
+        def _get_full_url(file_field):
+            if not file_field:
+                return None
+            try:
+                url = file_field.url
+                if url.startswith('http://') or url.startswith('https://'):
+                    return url
+                return request.build_absolute_uri(url)
+            except Exception:
+                return None
+
+        return send_success({
+            'id': emp.id,
+            'name': emp.name,
+            'employee_photo': _get_full_url(emp.employee_photo),
+            'aadhar_photo': _get_full_url(emp.aadhar_photo),
+            'pan_photo': _get_full_url(emp.pan_photo),
+            'bank_proof_photo': _get_full_url(emp.bank_proof_photo),
+            **data
+        }, 'Employee updated')
 
     elif request.method == 'DELETE':
         emp.active = False
