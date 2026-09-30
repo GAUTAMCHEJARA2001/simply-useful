@@ -2822,6 +2822,9 @@ def transaction_sales(request):
                     sale['invoiceNumber'] = log.invoicenumber
                     sale['challanNumber'] = log.invoicenumber
                     sale['date'] = log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else (log.createdat.strftime('%Y-%m-%d') if log.createdat else '')
+                    sale['dispatchDate'] = log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else ''
+                    if log.createdat:
+                        sale['createdAt'] = log.createdat.isoformat()
                     sale['isDispatchLog'] = True
                     sale['driverMobileNumber'] = log.drivermobile
                     log_items = log.items.all()

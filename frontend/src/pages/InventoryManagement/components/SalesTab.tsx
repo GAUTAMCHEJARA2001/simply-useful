@@ -217,8 +217,16 @@ export const SalesTab: React.FC = () => {
               Currency((s.items || []).reduce((acc: number, it: any) => 
                 acc + ((it.qty || 0) - (it.returnedqty || it.returnedQty || 0)) * (it.price || it.rate || 0) * (1 + (it.tax_percent || 0) / 100)
               , 0) || s.netAmount || s.grandTotal || s.totalAmount || 0),
-              <span key={s.id + '-st'} className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${statusColor}`}>{status}</span>,
-              s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN') : '—',
+              (() => {
+                const dVal = s.date || s.dispatchDate || s.createdAt;
+                if (!dVal) return '—';
+                try {
+                  const d = new Date(dVal);
+                  return isNaN(d.getTime()) ? String(dVal) : d.toLocaleDateString('en-IN');
+                } catch (_) {
+                  return String(dVal);
+                }
+              })(),
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap min-w-[140px]">
                 <Button size="sm" variant="secondary" onClick={() => handleView(s)} className="h-7 text-[10px] px-2" title="View Transaction">
                   <Eye className="w-3 h-3" />
