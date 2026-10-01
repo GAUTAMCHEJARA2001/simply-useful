@@ -10,13 +10,11 @@ import {
   MapPin, Store, Building2, Search, Phone, CreditCard,
   Users, TrendingUp, ArrowUpRight, Package, Calendar, ChevronDown, Check, ArrowUpDown
 } from 'lucide-react';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { PartyDetailsModal } from '@/components/PartyDetailsModal';
+import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
 
 const MyTerritory: React.FC = () => {
   const { user } = useAuth();
@@ -26,6 +24,24 @@ const MyTerritory: React.FC = () => {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'dealers' | 'distributors'>('dealers');
   const [selectedSo, setSelectedSo] = useState<string>('all');
+
+  // Party Details Modal & Ledger Modal State
+  const [selectedParty, setSelectedParty] = useState<any | null>(null);
+  const [partyModalOpen, setPartyModalOpen] = useState(false);
+  const [partyTypeModal, setPartyTypeModal] = useState<'dealer' | 'distributor'>('dealer');
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledgerTarget, setLedgerTarget] = useState('');
+
+  const handleOpenParty = (party: any, type: 'dealer' | 'distributor') => {
+    setSelectedParty(party);
+    setPartyTypeModal(type);
+    setPartyModalOpen(true);
+  };
+
+  const handleViewLedger = (code: string) => {
+    setLedgerTarget(code);
+    setLedgerOpen(true);
+  };
 
   // Month Period filter - resets automatically every 1st of the month
   const now = new Date();
@@ -520,15 +536,22 @@ const MyTerritory: React.FC = () => {
                       return (
                         <tr
                           key={d.dealerCode}
+                          onClick={() => handleOpenParty(d, 'dealer')}
                           className={cn(
-                            'border-b border-border/40 transition-colors hover:bg-muted/20',
+                            'border-b border-border/40 transition-colors hover:bg-muted/30 cursor-pointer group',
                             idx % 2 === 1 && 'bg-muted/5'
                           )}
+                          title="Click to view complete dealer details"
                         >
-                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground group-hover:text-primary transition-colors">
                             {d.dealerCode}
                           </td>
-                          <td className="px-4 py-3 font-semibold">{d.dealerName}</td>
+                          <td className="px-4 py-3 font-semibold group-hover:text-primary transition-colors">
+                            <span className="flex items-center gap-1.5">
+                              {d.dealerName}
+                              <span className="text-[10px] text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity">↗</span>
+                            </span>
+                          </td>
                           <td className="px-4 py-3 text-muted-foreground">{d.city}</td>
                           <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
                           <td className="px-4 py-3 text-muted-foreground text-xs">
@@ -566,7 +589,11 @@ const MyTerritory: React.FC = () => {
                 {filteredDealers.map(d => {
                   const orderCount = orderCountByParty.get(d.dealerName.toLowerCase()) || 0;
                   return (
-                    <Card key={d.dealerCode} className="rounded-2xl border border-border/60">
+                    <Card 
+                      key={d.dealerCode} 
+                      onClick={() => handleOpenParty(d, 'dealer')}
+                      className="rounded-2xl border border-border/60 hover:border-primary/50 transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+                    >
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div>
@@ -646,12 +673,19 @@ const MyTerritory: React.FC = () => {
                       return (
                         <tr
                           key={d.distributorName}
+                          onClick={() => handleOpenParty(d, 'distributor')}
                           className={cn(
-                            'border-b border-border/40 transition-colors hover:bg-muted/20',
+                            'border-b border-border/40 transition-colors hover:bg-muted/30 cursor-pointer group',
                             idx % 2 === 1 && 'bg-muted/5'
                           )}
+                          title="Click to view complete distributor details"
                         >
-                          <td className="px-4 py-3 font-semibold">{d.distributorName}</td>
+                          <td className="px-4 py-3 font-semibold group-hover:text-primary transition-colors">
+                            <span className="flex items-center gap-1.5">
+                              {d.distributorName}
+                              <span className="text-[10px] text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity">↗</span>
+                            </span>
+                          </td>
                           <td className="px-4 py-3 text-muted-foreground">{d.area || '—'}</td>
                           <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
                           <td className="px-4 py-3 font-medium">
@@ -687,7 +721,11 @@ const MyTerritory: React.FC = () => {
                   const dName = d.distributorName.toLowerCase().trim();
                   const orderCount = (orderCountByParty.get(dName) || 0) + (orderCountByParty.get(`dist_${dName}`) || 0);
                   return (
-                    <Card key={d.distributorName} className="rounded-2xl border border-border/60">
+                    <Card 
+                      key={d.distributorName} 
+                      onClick={() => handleOpenParty(d, 'distributor')}
+                      className="rounded-2xl border border-border/60 hover:border-primary/50 transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+                    >
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div>
@@ -727,6 +765,21 @@ const MyTerritory: React.FC = () => {
           {activeTab} · Orders: {selectedPeriodLabel} · {isAdmin ? (selectedSo === 'all' ? 'All Organization Parties (Admin View)' : `Filtered to SO: ${selectedSo}`) : `Filtered to your account (${user?.email})`}
         </p>
       )}
+
+      {/* Party Details & Ledger Modals */}
+      <PartyDetailsModal
+        isOpen={partyModalOpen}
+        onClose={() => setPartyModalOpen(false)}
+        party={selectedParty}
+        partyType={partyTypeModal}
+        onViewLedger={handleViewLedger}
+      />
+
+      <LedgerModal
+        isOpen={ledgerOpen}
+        onClose={() => setLedgerOpen(false)}
+        partyCode={ledgerTarget}
+      />
     </div>
   );
 };

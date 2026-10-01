@@ -10,12 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Search, Plus, Edit, Trash2, BookOpen, Loader2 } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, BookOpen, Loader2, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { apiService } from '@/api/apiService';
 import LedgerModal from '@/pages/InventoryManagement/modals/LedgerModal';
 import { useBrands } from '@/hooks/inventory/useBrands';
+import { PartyDetailsModal } from '@/components/PartyDetailsModal';
 
 const PAGE_SIZE = 25;
 
@@ -36,6 +37,8 @@ const DealerManagement: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [ledgerTarget, setLedgerTarget] = useState('');
+  const [partyModalOpen, setPartyModalOpen] = useState(false);
+  const [selectedParty, setSelectedParty] = useState<Dealer | null>(null);
   const [editing, setEditing] = useState<Dealer | null>(null);
   const [form, setForm] = useState<Dealer>(emptyDealer);
   const [soSearch, setSoSearch] = useState('');
@@ -242,7 +245,13 @@ const DealerManagement: React.FC = () => {
                         <Badge className={d.partyType === 'PROJECT' ? 'bg-purple-100 text-purple-700 border-purple-200 text-[10px]' : 'bg-slate-100 text-slate-700 border-slate-200 text-[10px]'}>
                           {d.partyType === 'PROJECT' ? 'PROJECT' : 'DEALER'}
                         </Badge>
-                        <p className="font-semibold text-sm">{d.dealerName}</p>
+                        <p 
+                          className="font-semibold text-sm hover:text-primary cursor-pointer hover:underline" 
+                          onClick={() => handleOpenParty(d)}
+                          title="Click to view details"
+                        >
+                          {d.dealerName}
+                        </p>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{d.dealerCode} · {d.city} {d.territory ? `(${d.territory})` : ''}</p>
                     </div>
@@ -257,13 +266,24 @@ const DealerManagement: React.FC = () => {
                     <div><span className="text-muted-foreground">Distributor:</span> <span className="font-medium">{d.distributorName || 'Direct'}</span></div>
                     <div><span className="text-muted-foreground">Brand:</span> <span className="font-medium">{d.brand || '—'}</span></div>
                   </div>
-                  {can('manage_customers') && (
-                    <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                      <Button size="sm" variant="outline" onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="flex-1 border-blue-200 text-blue-600 hover:bg-blue-50"><BookOpen className="w-3.5 h-3.5 mr-1" /> Ledger</Button>
-                      <Button size="sm" variant="outline" onClick={() => openEdit(d)} className="flex-1"><Edit className="w-3.5 h-3.5 mr-1" /> Edit</Button>
-                      <Button size="sm" variant="destructive" onClick={() => openDelete(d.dealerCode)} className="flex-1"><Trash2 className="w-3.5 h-3.5 mr-1" /> Delete</Button>
-                    </div>
-                  )}
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                    <Button size="sm" variant="outline" onClick={() => handleOpenParty(d)} className="flex-1">
+                      <Eye className="w-3.5 h-3.5 mr-1 text-primary" /> Details
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="flex-1 border-blue-200 text-blue-600 hover:bg-blue-50">
+                      <BookOpen className="w-3.5 h-3.5 mr-1" /> Ledger
+                    </Button>
+                    {can('manage_customers') && (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => openEdit(d)} className="flex-1">
+                          <Edit className="w-3.5 h-3.5 mr-1" /> Edit
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => openDelete(d.dealerCode)} className="flex-1">
+                          <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -276,7 +296,7 @@ const DealerManagement: React.FC = () => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      {['Type', 'Code', 'Name', 'City', 'Territory', 'Brand', 'SOs', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', ...(can('manage_customers') ? ['Actions'] : [])].map(h => (
+                      {['Type', 'Code', 'Name', 'City', 'Territory', 'Brand', 'SOs', 'Distributor', 'Credit Limit', 'Outstanding', 'Status', 'Actions'].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-muted-foreground font-medium">{h}</th>
                       ))}
                     </tr>
@@ -292,7 +312,13 @@ const DealerManagement: React.FC = () => {
                           )}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs">{d.dealerCode}</td>
-                        <td className="px-4 py-3 font-medium">{d.dealerName}</td>
+                        <td 
+                          className="px-4 py-3 font-medium text-foreground hover:text-primary hover:underline cursor-pointer"
+                          onClick={() => handleOpenParty(d)}
+                          title="Click to view full details"
+                        >
+                          {d.dealerName}
+                        </td>
                         <td className="px-4 py-3">{d.city}</td>
                         <td className="px-4 py-3 font-medium text-xs text-primary">{d.territory || '—'}</td>
                         <td className="px-4 py-3 font-medium text-xs text-primary">{d.brand || '—'}</td>
@@ -303,15 +329,18 @@ const DealerManagement: React.FC = () => {
                         <td className="px-4 py-3">
                           <Badge variant={d.active ? 'default' : 'destructive'} className="text-[10px]">{d.active ? 'Active' : 'Blocked'}</Badge>
                         </td>
-                        {can('manage_customers') && (
-                          <td className="px-4 py-3">
-                            <div className="flex gap-1">
-                              <button onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="View Ledger"><BookOpen className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => openEdit(d)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><Edit className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => openDelete(d.dealerCode)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                            </div>
-                          </td>
-                        )}
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1">
+                            <button onClick={() => handleOpenParty(d)} className="p-1.5 rounded-lg hover:bg-muted text-foreground transition-colors" title="View Details"><Eye className="w-3.5 h-3.5 text-primary" /></button>
+                            <button onClick={() => { setLedgerTarget(d.dealerCode); setLedgerOpen(true); }} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600 transition-colors" title="View Ledger"><BookOpen className="w-3.5 h-3.5" /></button>
+                            {can('manage_customers') && (
+                              <>
+                                <button onClick={() => openEdit(d)} className="p-1.5 rounded-lg hover:bg-muted transition-colors" title="Edit"><Edit className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => openDelete(d.dealerCode)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                              </>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -535,6 +564,17 @@ const DealerManagement: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PartyDetailsModal
+        isOpen={partyModalOpen}
+        onClose={() => setPartyModalOpen(false)}
+        party={selectedParty}
+        partyType={selectedParty?.partyType === 'PROJECT' ? 'project' : 'dealer'}
+        onViewLedger={(code) => {
+          setLedgerTarget(code);
+          setLedgerOpen(true);
+        }}
+      />
 
       <LedgerModal 
         isOpen={ledgerOpen} 
