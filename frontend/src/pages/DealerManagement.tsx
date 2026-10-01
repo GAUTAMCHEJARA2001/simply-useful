@@ -148,6 +148,11 @@ const DealerManagement: React.FC = () => {
     setDeleteDialogOpen(true);
   };
 
+  const handleOpenParty = (d: Dealer) => {
+    setSelectedParty(d);
+    setPartyModalOpen(true);
+  };
+
   const handleSave = async () => {
     if (!form.dealerName || !form.city) {
       toast({ title: 'Validation Error', description: 'Please fill out all required fields.', variant: 'destructive' });

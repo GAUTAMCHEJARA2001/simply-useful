@@ -44,6 +44,21 @@ def find_pg_dump():
         for path in standard_dirs:
             if os.path.exists(path):
                 return path
+    else:
+        # Standard Linux / Unix paths
+        linux_paths = [
+            "/usr/bin/pg_dump",
+            "/usr/local/bin/pg_dump",
+            "/usr/lib/postgresql/17/bin/pg_dump",
+            "/usr/lib/postgresql/16/bin/pg_dump",
+            "/usr/lib/postgresql/15/bin/pg_dump",
+            "/usr/lib/postgresql/14/bin/pg_dump",
+            "/usr/lib/postgresql/13/bin/pg_dump",
+            "/usr/lib/postgresql/12/bin/pg_dump",
+        ]
+        for path in linux_paths:
+            if os.path.exists(path):
+                return path
                 
     return "pg_dump" # fallback
 
@@ -65,6 +80,20 @@ def find_pg_restore():
             r"C:\Program Files\PostgreSQL\12\bin\pg_restore.exe",
         ]
         for path in standard_dirs:
+            if os.path.exists(path):
+                return path
+    else:
+        linux_paths = [
+            "/usr/bin/pg_restore",
+            "/usr/local/bin/pg_restore",
+            "/usr/lib/postgresql/17/bin/pg_restore",
+            "/usr/lib/postgresql/16/bin/pg_restore",
+            "/usr/lib/postgresql/15/bin/pg_restore",
+            "/usr/lib/postgresql/14/bin/pg_restore",
+            "/usr/lib/postgresql/13/bin/pg_restore",
+            "/usr/lib/postgresql/12/bin/pg_restore",
+        ]
+        for path in linux_paths:
             if os.path.exists(path):
                 return path
                 

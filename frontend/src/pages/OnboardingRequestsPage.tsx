@@ -320,29 +320,29 @@ const OnboardingRequestsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Onboarding Requests</h1>
-          <p className="text-gray-500">Submit and track dealer/distributor onboarding applications.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">My Onboarding Requests</h1>
+          <p className="text-xs sm:text-sm text-gray-500">Submit and track dealer/distributor onboarding applications.</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={handleAddNew} className="bg-primary hover:bg-primary-dark">
+            <Button onClick={handleAddNew} className="bg-primary hover:bg-primary-dark w-full sm:w-auto shadow-sm">
               <Plus className="mr-2 h-4 w-4" /> Submit New Request
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-[800px] w-[95vw] h-[90vh] flex flex-col p-0 gap-0">
-            <DialogHeader className="p-6 border-b shrink-0">
-              <DialogTitle className="text-2xl">
+          <DialogContent className="max-w-[800px] w-[95vw] sm:w-[90vw] h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+            <DialogHeader className="p-4 sm:p-6 border-b shrink-0">
+              <DialogTitle className="text-xl sm:text-2xl">
                 {isViewOnly ? 'View Onboarding Request' : editingId ? 'Edit Onboarding Request' : 'Submit New Dealer/Distributor'}
               </DialogTitle>
             </DialogHeader>
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
-              <form id="onboarding-form" onSubmit={handleSubmit} className="space-y-8">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-gray-50/50">
+              <form id="onboarding-form" onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
                 
                 {/* 1. Basic Information */}
-                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                <div className="bg-white p-4 sm:p-6 rounded-lg border shadow-sm">
                   <h3 className="text-lg font-semibold mb-4 border-b pb-2">1. Basic Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -388,7 +388,7 @@ const OnboardingRequestsPage: React.FC = () => {
                       <Input value={gstNumber} onChange={(e) => setGstNumber(e.target.value)} className="bg-white" disabled={isFieldDisabled('gSTNumber')} />
                       <FieldFeedback fieldKey="gSTNumber" />
                     </div>
-                    <div className="col-span-2 space-y-2">
+                    <div className="col-span-1 md:col-span-2 space-y-2">
                       <Label>Registered Address *</Label>
                       <Input required value={address} onChange={(e) => setAddress(e.target.value)} className="bg-white" disabled={isFieldDisabled('registeredAddress')} />
                       <FieldFeedback fieldKey="registeredAddress" />
@@ -397,10 +397,10 @@ const OnboardingRequestsPage: React.FC = () => {
                 </div>
 
                 {/* 2. Bank Details */}
-                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                <div className="bg-white p-4 sm:p-6 rounded-lg border shadow-sm">
                   <h3 className="text-lg font-semibold mb-4 border-b pb-2">2. Bank Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="col-span-2 space-y-2">
+                    <div className="col-span-1 md:col-span-2 space-y-2">
                       <Label>Name & Address of Bank</Label>
                       <Input value={extendedData.bankName} onChange={(e) => setExtendedData({...extendedData, bankName: e.target.value})} className="bg-white" disabled={isFieldDisabled('nameAddressBank')} />
                       <FieldFeedback fieldKey="nameAddressBank" />
@@ -422,7 +422,7 @@ const OnboardingRequestsPage: React.FC = () => {
                       <Input value={extendedData.bankAccountNo} onChange={(e) => setExtendedData({...extendedData, bankAccountNo: e.target.value})} className="bg-white" disabled={isFieldDisabled('accountNo')} />
                       <FieldFeedback fieldKey="accountNo" />
                     </div>
-                    <div className="col-span-2 space-y-2">
+                    <div className="col-span-1 md:col-span-2 space-y-2">
                       <Label>Name of Authorised Signatory</Label>
                       <Input value={extendedData.bankSignatory} onChange={(e) => setExtendedData({...extendedData, bankSignatory: e.target.value})} className="bg-white" disabled={isFieldDisabled('nameAuthorised')} />
                       <FieldFeedback fieldKey="nameAuthorised" />
@@ -431,7 +431,7 @@ const OnboardingRequestsPage: React.FC = () => {
                 </div>
 
                 {/* 3. Status & Existing Dealerships */}
-                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                <div className="bg-white p-4 sm:p-6 rounded-lg border shadow-sm">
                   <h3 className="text-lg font-semibold mb-4 border-b pb-2">3. Business Status</h3>
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -478,31 +478,33 @@ const OnboardingRequestsPage: React.FC = () => {
                         {!isViewOnly && <Button type="button" variant="outline" size="sm" onClick={addProprietor}><Plus className="w-4 h-4 mr-1"/> Add</Button>}
                       </div>
                       {extendedData.proprietorDetails?.map((p, i) => (
-                        <div key={i} className="flex flex-col gap-2 bg-gray-50 p-4 rounded border">
-                          <div className="flex gap-2 items-start">
-                            <div className="flex-1 space-y-1">
+                        <div key={i} className="flex flex-col gap-2 bg-gray-50 p-3 sm:p-4 rounded border">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 items-start">
+                            <div className="space-y-1">
                               <Label className="text-[10px] text-gray-500 uppercase">Full Name</Label>
                               <Input disabled={isViewOnly} placeholder="Name" value={p.name} onChange={e => updateProprietor(i, 'name', e.target.value)} className="bg-white" />
                             </div>
-                            <div className="w-40 space-y-1">
+                            <div className="space-y-1">
                               <Label className="text-[10px] text-gray-500 uppercase">Date of Birth</Label>
                               <Input disabled={isViewOnly} type="date" value={p.dob} onChange={e => updateProprietor(i, 'dob', e.target.value)} className="bg-white" />
                             </div>
-                            <div className="flex-1 space-y-1">
+                            <div className="space-y-1">
                               <Label className="text-[10px] text-gray-500 uppercase">Father's Name</Label>
                               <Input disabled={isViewOnly} placeholder="Father's Name" value={p.fathersName} onChange={e => updateProprietor(i, 'fathersName', e.target.value)} className="bg-white" />
                             </div>
-                            <div className="w-32 space-y-1">
+                            <div className="space-y-1">
                               <Label className="text-[10px] text-gray-500 uppercase">Marital Status</Label>
                               <Input disabled={isViewOnly} placeholder="Single / Married" value={p.maritalStatus} onChange={e => updateProprietor(i, 'maritalStatus', e.target.value)} className="bg-white" />
                             </div>
                             {!isViewOnly && (
-                              <div className="pt-5">
-                                <Button type="button" variant="ghost" size="icon" onClick={() => removeProprietor(i)}><Trash2 className="w-4 h-4 text-red-500"/></Button>
+                              <div className="sm:col-span-2 md:col-span-4 flex justify-end pt-1">
+                                <Button type="button" variant="ghost" size="sm" onClick={() => removeProprietor(i)} className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 px-2 text-xs">
+                                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove Partner
+                                </Button>
                               </div>
                             )}
                           </div>
-                          <div className="flex gap-4 mt-2">
+                          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-2">
                             <div className="space-y-1 flex-1">
                               <Label className="text-xs">Aadhaar Card (Partner {i+1})</Label>
                               {!isViewOnly && <Input type="file" onChange={(e) => handleFileChange(e, `proprietorAadhaar_${i}`)} className="bg-white text-xs" />}
@@ -523,7 +525,7 @@ const OnboardingRequestsPage: React.FC = () => {
                 </div>
 
                 {/* 4. Operations & Security */}
-                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                <div className="bg-white p-4 sm:p-6 rounded-lg border shadow-sm">
                   <h3 className="text-lg font-semibold mb-4 border-b pb-2">4. Operations & Security</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div className="space-y-2">
@@ -543,7 +545,7 @@ const OnboardingRequestsPage: React.FC = () => {
                   </div>
 
                   <h4 className="font-medium mb-2">Security Deposit (If Any)</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-6">
                     <Input disabled={isViewOnly} placeholder="DD/Cheque No" value={extendedData.securityDeposit?.ddChequeNo} onChange={e => setExtendedData({...extendedData, securityDeposit: {...extendedData.securityDeposit!, ddChequeNo: e.target.value}})} className="bg-white" />
                     <Input disabled={isViewOnly} placeholder="Bank" value={extendedData.securityDeposit?.bank} onChange={e => setExtendedData({...extendedData, securityDeposit: {...extendedData.securityDeposit!, bank: e.target.value}})} className="bg-white" />
                     <Input disabled={isViewOnly} placeholder="Payable At" value={extendedData.securityDeposit?.payableAt} onChange={e => setExtendedData({...extendedData, securityDeposit: {...extendedData.securityDeposit!, payableAt: e.target.value}})} className="bg-white" />
@@ -570,7 +572,7 @@ const OnboardingRequestsPage: React.FC = () => {
                         </label>
                         <FieldFeedback fieldKey="doyouhavegodownfacility" />
                     </div>
-                    <div className="col-span-2 space-y-2">
+                    <div className="col-span-1 md:col-span-2 space-y-2">
                       <Label>Godown Address</Label>
                       <Input disabled={isFieldDisabled('godownAddress') || !extendedData.hasGodown} value={extendedData.godownAddress} onChange={(e) => setExtendedData({...extendedData, godownAddress: e.target.value})} className="bg-white" />
                       <FieldFeedback fieldKey="godownAddress" />
@@ -589,7 +591,7 @@ const OnboardingRequestsPage: React.FC = () => {
                 </div>
 
                 {/* 5. Document Uploads */}
-                <div className="bg-white p-6 rounded-lg border shadow-sm">
+                <div className="bg-white p-4 sm:p-6 rounded-lg border shadow-sm">
                   <h3 className="text-lg font-semibold mb-4 border-b pb-2">5. Document Uploads</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {[
@@ -670,14 +672,14 @@ const OnboardingRequestsPage: React.FC = () => {
               </form>
             </div>
             
-            <div className="flex justify-end pt-4 border-t gap-4 p-6">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-4 p-3 sm:p-6 border-t bg-background shrink-0">
+              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting} className="w-full sm:w-auto">
                 Cancel
               </Button>
               {!isViewOnly && (
                 <>
                   {editingStatus !== 'APPROVED' && (
-                    <Button form="onboarding-form" type="submit" name="status" value="DRAFT" variant="secondary" disabled={isSubmitting}>
+                    <Button form="onboarding-form" type="submit" name="status" value="DRAFT" variant="secondary" disabled={isSubmitting} className="w-full sm:w-auto">
                       {isSubmitting ? 'Saving...' : 'Save as Draft'}
                     </Button>
                   )}
@@ -686,7 +688,7 @@ const OnboardingRequestsPage: React.FC = () => {
                     type="submit" 
                     name="status" 
                     value={editingStatus === 'APPROVED' ? 'APPROVED' : 'PENDING'} 
-                    className="bg-primary hover:bg-primary-dark" 
+                    className="bg-primary hover:bg-primary-dark w-full sm:w-auto" 
                     disabled={isSubmitting || (editingStatus === 'APPROVED' && !files.docSignedForm)}
                   >
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -699,75 +701,77 @@ const OnboardingRequestsPage: React.FC = () => {
         </Dialog>
       </div>
 
-      <Card className="border-primary/20 shadow-sm">
+      <Card className="border-primary/20 shadow-sm overflow-hidden">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-primary/5">
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Firm Name</TableHead>
-                <TableHead>Area</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
-              ) : requests.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-500">No requests found</TableCell></TableRow>
-              ) : (
-                requests.map((req) => (
-                  <TableRow key={req.id}>
-                    <TableCell>{req.createdAt ? format(new Date(req.createdAt), 'dd MMM yyyy') : ''}</TableCell>
-                    <TableCell><span className="font-semibold">{req.partyType}</span></TableCell>
-                    <TableCell>
-                      <div className="font-medium">{req.partyName}</div>
-                      <div className="text-xs text-gray-500">{req.partyType}</div>
-                      {req.status === 'COMPLETED' && req.createdPartyId && (
-                        <div className="mt-1 text-xs font-semibold text-green-700 bg-green-50 inline-block px-2 py-0.5 rounded border border-green-200">
-                          Code: {req.createdPartyId}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>{req.cityOrArea}</TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        req.status === 'APPROVED' ? 'bg-blue-100 text-blue-800' :
-                        req.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                        req.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
-                        req.status === 'DRAFT' ? 'bg-gray-100 text-gray-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {req.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex gap-2 items-center justify-end flex-wrap">
-                        <Button variant="outline" size="sm" onClick={() => openEditModal(req, true)} className="h-8 px-2">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {(req.status === 'DRAFT' || req.status === 'REJECTED') && (
-                          <Button variant="outline" size="sm" onClick={() => openEditModal(req, false)} className="h-8 px-2" title="Edit Request">
-                            <Edit className="h-4 w-4" />
-                          </Button>
+          <div className="overflow-x-auto min-w-full">
+            <Table>
+              <TableHeader className="bg-primary/5">
+                <TableRow>
+                  <TableHead className="whitespace-nowrap">Date</TableHead>
+                  <TableHead className="whitespace-nowrap">Type</TableHead>
+                  <TableHead className="whitespace-nowrap">Firm Name</TableHead>
+                  <TableHead className="whitespace-nowrap">Area</TableHead>
+                  <TableHead className="whitespace-nowrap">Status</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
+                ) : requests.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-500">No requests found</TableCell></TableRow>
+                ) : (
+                  requests.map((req) => (
+                    <TableRow key={req.id}>
+                      <TableCell className="whitespace-nowrap">{req.createdAt ? format(new Date(req.createdAt), 'dd MMM yyyy') : ''}</TableCell>
+                      <TableCell><span className="font-semibold">{req.partyType}</span></TableCell>
+                      <TableCell>
+                        <div className="font-medium">{req.partyName}</div>
+                        <div className="text-xs text-gray-500">{req.partyType}</div>
+                        {req.status === 'COMPLETED' && req.createdPartyId && (
+                          <div className="mt-1 text-xs font-semibold text-green-700 bg-green-50 inline-block px-2 py-0.5 rounded border border-green-200">
+                            Code: {req.createdPartyId}
+                          </div>
                         )}
-                        <Link to={`/sales/onboarding/${req.id}/print`} target="_blank">
-                          <Button variant="outline" size="sm" className="border-primary text-primary hover:bg-primary/10 h-8">
-                            <Printer className="h-4 w-4 mr-2" /> Download
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{req.cityOrArea}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                          req.status === 'APPROVED' ? 'bg-blue-100 text-blue-800' :
+                          req.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                          req.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                          req.status === 'DRAFT' ? 'bg-gray-100 text-gray-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {req.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex gap-2 items-center justify-end flex-wrap">
+                          <Button variant="outline" size="sm" onClick={() => openEditModal(req, true)} className="h-8 px-2">
+                            <Eye className="h-4 w-4" />
                           </Button>
-                        </Link>
-                      </div>
-                      {req.status === 'REJECTED' && (
-                        <span className="text-xs text-red-500 block mt-1" title={req.remarks}>{req.remarks?.substring(0,20)}...</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                          {(req.status === 'DRAFT' || req.status === 'REJECTED') && (
+                            <Button variant="outline" size="sm" onClick={() => openEditModal(req, false)} className="h-8 px-2" title="Edit Request">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Link to={`/sales/onboarding/${req.id}/print`} target="_blank">
+                            <Button variant="outline" size="sm" className="border-primary text-primary hover:bg-primary/10 h-8">
+                              <Printer className="h-4 w-4 mr-2" /> Download
+                            </Button>
+                          </Link>
+                        </div>
+                        {req.status === 'REJECTED' && (
+                          <span className="text-xs text-red-500 block mt-1" title={req.remarks}>{req.remarks?.substring(0,20)}...</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

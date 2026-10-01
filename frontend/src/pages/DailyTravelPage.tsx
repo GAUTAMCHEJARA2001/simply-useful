@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { travelService, DailyTravelLogItem, TourPlanStopItem } from '@/api/services/travel.service';
+import { leadService } from '@/api/services/lead.service';
 import { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PartySearchSelector, PartyOption } from '@/components/PartySearchSelector';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +45,8 @@ import {
   Building2,
   Check,
   RotateCcw,
-  Trophy
+  Trophy,
+  UserPlus
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -130,15 +133,8 @@ export const DailyTravelPage: React.FC = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Registered Parties (Dealers + Distributors) master list
-  interface RegisteredParty {
-    id: string;
-    name: string;
-    code: string;
-    city: string;
-    address: string;
-    type: 'Dealer' | 'Distributor';
-  }
+  // Registered Parties (Dealers + Distributors + CRM Leads) master list
+  type RegisteredParty = PartyOption;
   const [parties, setParties] = useState<RegisteredParty[]>([]);
 
   // Punch Start Form
@@ -216,6 +212,10 @@ export const DailyTravelPage: React.FC = () => {
     target_order_bags: string;
     target_collection_value: string;
     plan_notes: string;
+    is_crm_lead?: boolean;
+    lead_phone?: string;
+    lead_contact?: string;
+    save_to_crm?: boolean;
   }>({
     dealer_id: '',
     dealer_name: '',
@@ -225,6 +225,10 @@ export const DailyTravelPage: React.FC = () => {
     target_order_bags: '',
     target_collection_value: '',
     plan_notes: '',
+    is_crm_lead: false,
+    lead_phone: '',
+    lead_contact: '',
+    save_to_crm: false,
   });
 
   const toggleVisitPurpose = (purposeId: string) => {
@@ -262,15 +266,17 @@ export const DailyTravelPage: React.FC = () => {
     );
   }, []);
 
-  // Fetch Master Dealers & Distributors
+  // Fetch Master Dealers, Distributors & CRM Leads
   const fetchParties = async () => {
     try {
-      const [dealersRes, distRes] = await Promise.all([
+      const [dealersRes, distRes, leadsRes] = await Promise.all([
         api.get('/dealers'),
-        api.get('/distributors').catch(() => ({ data: [] }))
+        api.get('/distributors').catch(() => ({ data: [] })),
+        leadService.getAll().catch(() => ({ data: [] }))
       ]);
       const dList = dealersRes.data?.data || dealersRes.data || [];
       const distList = distRes.data?.data || distRes.data || [];
+      const leadsList = leadsRes.data?.data || leadsRes.data?.results || leadsRes.data || [];
 
       const parsedParties: RegisteredParty[] = [];
 
@@ -306,11 +312,35 @@ export const DailyTravelPage: React.FC = () => {
         });
       }
 
+      if (Array.isArray(leadsList)) {
+        leadsList.forEach((ld: any) => {
+          const leadFirm = ld.companyName || ld.company_name || '';
+          const leadContact = ld.name || '';
+          const displayName = leadFirm && leadContact && leadFirm !== leadContact
+            ? `${leadFirm} (${leadContact})`
+            : leadFirm || leadContact;
+
+          if (displayName) {
+            parsedParties.push({
+              id: String(ld.id || displayName),
+              name: displayName,
+              code: `LEAD-${String(ld.id || '').slice(-6).toUpperCase()}`,
+              city: ld.city || ld.state || '',
+              address: ld.address || ld.notes || '',
+              phone: ld.phone || '',
+              contactPerson: leadContact,
+              companyName: leadFirm,
+              type: 'Lead',
+            });
+          }
+        });
+      }
+
       // Sort alphabetically by name
       parsedParties.sort((a, b) => a.name.localeCompare(b.name));
       setParties(parsedParties);
     } catch (err) {
-      console.error('Failed to fetch dealers and distributors:', err);
+      console.error('Failed to fetch dealers, distributors, and leads:', err);
     }
   };
 
@@ -697,9 +727,34 @@ export const DailyTravelPage: React.FC = () => {
     const cleanCollection = String(stopForm.target_collection_value || '').replace(/[^0-9]/g, '');
     const cleanBags = String(stopForm.target_order_bags || '').replace(/[^0-9]/g, '');
 
+    let linkedDealerId = stopForm.dealer_id || null;
+
+    // If user marked to register this counter as a new CRM Lead in pipeline
+    if (stopForm.save_to_crm && !stopForm.dealer_id?.startsWith('LEAD-')) {
+      try {
+        const leadRes = await leadService.create({
+          name: stopForm.lead_contact?.trim() || stopForm.dealer_name.trim(),
+          company_name: stopForm.dealer_name.trim(),
+          city: stopForm.dealer_location.trim(),
+          phone: stopForm.lead_phone?.trim() || undefined,
+          source: isSpotVisitModal ? 'Field Spot Visit' : 'Field Tour Plan',
+          notes: stopForm.plan_notes?.trim() || `Generated from ${isSpotVisitModal ? 'Spot Visit' : 'Tour Plan'} on ${plannerDate || 'Today'}`,
+          status: 'NEW',
+        });
+        const createdLead = leadRes.data?.data || leadRes.data;
+        if (createdLead?.id) {
+          linkedDealerId = `LEAD-${createdLead.id}`;
+          toast({ title: 'Lead Added to CRM Pipeline! 🎯', description: `${stopForm.dealer_name} registered in CRM Leads.` });
+          fetchParties();
+        }
+      } catch (leadErr) {
+        console.warn('Failed to sync to CRM leads:', leadErr);
+      }
+    }
+
     const newStop: TourPlanStopItem = {
       id: `temp-${Date.now()}`,
-      dealer_id: stopForm.dealer_id || null,
+      dealer_id: linkedDealerId,
       dealer_name: stopForm.dealer_name.trim(),
       dealer_location: stopForm.dealer_location.trim(),
       visit_purpose: finalPurpose || 'ORDER',
@@ -772,6 +827,10 @@ export const DailyTravelPage: React.FC = () => {
       target_order_bags: '',
       target_collection_value: '',
       plan_notes: '',
+      is_crm_lead: false,
+      lead_phone: '',
+      lead_contact: '',
+      save_to_crm: false,
     });
   };
 
@@ -804,13 +863,21 @@ export const DailyTravelPage: React.FC = () => {
     setPlannerStops(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Quick select dealer or distributor from master list
-  const handlePartySelect = (party: RegisteredParty) => {
+  // Quick select dealer, distributor, or CRM lead from list
+  const handlePartySelect = (party: PartyOption) => {
+    const isLead = party.type === 'Lead';
     setStopForm(prev => ({
       ...prev,
-      dealer_id: party.id,
+      dealer_id: isLead ? `LEAD-${party.id}` : party.id,
       dealer_name: party.name,
-      dealer_location: party.city || party.address || '',
+      dealer_location: party.city || party.address || prev.dealer_location,
+      visit_purposes: isLead && prev.visit_purposes.length === 1 && prev.visit_purposes[0] === 'ORDER'
+        ? ['NEW_LEAD']
+        : prev.visit_purposes,
+      is_crm_lead: isLead,
+      lead_phone: party.phone || prev.lead_phone,
+      lead_contact: party.contactPerson || prev.lead_contact,
+      save_to_crm: false,
     }));
   };
 
@@ -1539,6 +1606,11 @@ export const DailyTravelPage: React.FC = () => {
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <h4 className="font-bold text-xs text-foreground truncate">{stop.dealer_name}</h4>
+                                  {stop.dealer_id?.startsWith('LEAD-') && (
+                                    <span className="text-[9px] bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/25">
+                                      🎯 CRM Lead
+                                    </span>
+                                  )}
                                   {stop.is_unplanned ? (
                                     <Badge variant="outline" className="text-[10px] font-bold bg-blue-50 text-blue-700 border-blue-200 py-0 flex items-center gap-1">
                                       <MapPin className="w-2.5 h-2.5" /> Spot
@@ -2124,6 +2196,11 @@ export const DailyTravelPage: React.FC = () => {
                       <div className="space-y-0.5">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <h4 className="font-bold text-xs text-foreground">{stop.dealer_name}</h4>
+                          {stop.dealer_id?.startsWith('LEAD-') && (
+                            <span className="text-[9px] bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/25">
+                              🎯 CRM Lead
+                            </span>
+                          )}
                           {renderVisitPurposeBadges(stop.visit_purpose)}
                         </div>
                         {stop.dealer_location && (
@@ -2284,93 +2361,92 @@ export const DailyTravelPage: React.FC = () => {
 
       {/* MODAL: ADD DEALER STOP / SPOT VISIT */}
       <Dialog open={showAddStopModal} onOpenChange={(open) => !open && setShowAddStopModal(false)}>
-        <DialogContent className="max-w-md w-full max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-sm font-bold">
-              {isSpotVisitModal ? <MapPin className="w-4 h-4 text-blue-600" /> : <Target className="w-4 h-4 text-purple-600" />}
-              <span>{isSpotVisitModal ? 'Add Spot / Unplanned Visit' : `Add Planned Stop (${plannerDate || 'Today'})`}</span>
+        <DialogContent className="max-w-md w-[95vw] sm:w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl shadow-2xl">
+          <DialogHeader className="p-4 sm:p-5 border-b shrink-0 bg-background/95 backdrop-blur-sm">
+            <DialogTitle className="flex items-center gap-2 text-sm sm:text-base font-bold text-foreground">
+              {isSpotVisitModal ? <MapPin className="w-4 h-4 text-blue-600 shrink-0" /> : <Target className="w-4 h-4 text-purple-600 shrink-0" />}
+              <span className="truncate">{isSpotVisitModal ? 'Add Spot / Unplanned Visit' : `Add Planned Stop (${plannerDate || 'Today'})`}</span>
             </DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs text-muted-foreground">
               {isSpotVisitModal ? 'Record an unscheduled visit conducted along the route' : 'Set counter visit and targets for this stop'}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-2 text-xs">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3.5 text-xs">
             {/* Quick Type Switcher: Planned vs Unplanned */}
             <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted/40 rounded-xl border">
               <button
                 type="button"
                 onClick={() => setIsSpotVisitModal(false)}
                 className={cn(
-                  "flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-all",
+                  "flex items-center justify-center gap-1.5 py-2 px-2 text-xs font-bold rounded-lg transition-all",
                   !isSpotVisitModal
                     ? "bg-purple-600 text-white shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <Target className="w-3.5 h-3.5" />
-                <span>Planned Agenda</span>
+                <Target className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Planned Agenda</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsSpotVisitModal(true)}
                 className={cn(
-                  "flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-all",
+                  "flex items-center justify-center gap-1.5 py-2 px-2 text-xs font-bold rounded-lg transition-all",
                   isSpotVisitModal
                     ? "bg-blue-600 text-white shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <MapPin className="w-3.5 h-3.5" />
-                <span>Spot / Unplanned</span>
+                <MapPin className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Spot / Unplanned</span>
               </button>
             </div>
 
-            {/* Registered Party Selector */}
-            <div className="space-y-1">
-              <Label className="text-[11px] font-bold flex items-center gap-1.5 text-foreground">
-                <Building2 className="w-3.5 h-3.5 text-primary" />
-                <span>Select from Registered Dealers / Distributors (Optional)</span>
-              </Label>
-              <select
-                value={stopForm.dealer_id || ''}
-                onChange={(e) => {
-                  const selectedId = e.target.value;
-                  const party = parties.find(p => p.id === selectedId);
+            {/* Registered Party & CRM Lead Selector */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-1 flex-wrap">
+                <Label className="text-[11px] font-bold flex items-center gap-1.5 text-foreground">
+                  <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>Select Party or Lead (Optional)</span>
+                </Label>
+                {parties.filter(p => p.type === 'Lead').length > 0 && (
+                  <span className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-500/20 whitespace-nowrap">
+                    {parties.filter(p => p.type === 'Lead').length} CRM Leads
+                  </span>
+                )}
+              </div>
+              <PartySearchSelector
+                parties={parties}
+                selectedPartyId={stopForm.dealer_id || ''}
+                onSelect={(party) => {
                   if (party) {
                     handlePartySelect(party);
                   } else {
-                    setStopForm(prev => ({ ...prev, dealer_id: '', dealer_name: '', dealer_location: '' }));
+                    setStopForm(prev => ({ 
+                      ...prev, 
+                      dealer_id: '', 
+                      dealer_name: '', 
+                      dealer_location: '',
+                      is_crm_lead: false,
+                      save_to_crm: false,
+                      lead_phone: '',
+                      lead_contact: ''
+                    }));
                   }
                 }}
-                className="w-full border rounded-lg p-2 text-xs bg-background font-medium focus:ring-2 focus:ring-primary/20 outline-none truncate"
-              >
-                <option value="">-- Choose Registered Party or Type Name Below --</option>
-                <optgroup label="Registered Dealers">
-                  {parties.filter(p => p.type === 'Dealer').map(p => (
-                    <option key={`dealer-${p.id}`} value={p.id}>
-                      {p.name} {p.city ? `(${p.city})` : ''}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Registered Distributors">
-                  {parties.filter(p => p.type === 'Distributor').map(p => (
-                    <option key={`dist-${p.id}`} value={p.id}>
-                      [Distributor] {p.name} {p.city ? `(${p.city})` : ''}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
+                placeholder="Search registered dealer, distributor, or CRM lead..."
+              />
             </div>
 
             {/* Dealer Name Input */}
             <div className="space-y-1">
-              <Label className="text-[11px] font-bold">Dealer / Counter / Lead Name *</Label>
+              <Label className="text-[11px] font-bold text-foreground">Dealer / Counter / Lead Name *</Label>
               <Input 
                 placeholder="e.g. Sharma Hardware or New Lead Gupta Stores" 
                 value={stopForm.dealer_name} 
                 onChange={(e) => setStopForm(prev => ({ ...prev, dealer_name: e.target.value }))}
-                className="h-8 text-xs font-semibold"
+                className="h-9 text-xs font-semibold bg-background"
               />
             </div>
 
@@ -2381,21 +2457,82 @@ export const DailyTravelPage: React.FC = () => {
                 placeholder="e.g. Industrial Area Phase 1" 
                 value={stopForm.dealer_location} 
                 onChange={(e) => setStopForm(prev => ({ ...prev, dealer_location: e.target.value }))}
-                className="h-8 text-xs"
+                className="h-8 text-xs bg-background"
               />
+            </div>
+
+            {/* CRM Lead Sync & Registration Box */}
+            <div className="bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 space-y-2">
+              <div className="flex items-center justify-between gap-1 flex-wrap">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={stopForm.save_to_crm || stopForm.is_crm_lead}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setStopForm(prev => ({
+                        ...prev,
+                        save_to_crm: checked,
+                        is_crm_lead: checked,
+                        visit_purposes: checked && !prev.visit_purposes.includes('NEW_LEAD')
+                          ? [...prev.visit_purposes, 'NEW_LEAD']
+                          : prev.visit_purposes
+                      }));
+                    }}
+                    className="rounded text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                    <UserPlus className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="text-[11px] sm:text-xs">
+                      {stopForm.dealer_id?.startsWith('LEAD-')
+                        ? 'Linked with CRM Lead'
+                        : 'Register as New CRM Lead'}
+                    </span>
+                  </span>
+                </label>
+
+                {stopForm.dealer_id?.startsWith('LEAD-') && (
+                  <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] shrink-0">
+                    🎯 CRM Lead
+                  </Badge>
+                )}
+              </div>
+
+              {(stopForm.save_to_crm || (stopForm.is_crm_lead && !stopForm.dealer_id?.startsWith('LEAD-'))) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-amber-500/15">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-semibold text-muted-foreground">Lead Contact Person</Label>
+                    <Input
+                      placeholder="e.g. Rajesh Kumar"
+                      value={stopForm.lead_contact || ''}
+                      onChange={(e) => setStopForm(prev => ({ ...prev, lead_contact: e.target.value }))}
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-semibold text-muted-foreground">Lead Phone / Mobile</Label>
+                    <Input
+                      placeholder="e.g. 9876543210"
+                      value={stopForm.lead_phone || ''}
+                      onChange={(e) => setStopForm(prev => ({ ...prev, lead_phone: e.target.value }))}
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Visit Purpose - Interactive Multi-select */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="text-[11px] font-bold text-foreground">
-                  Visit Purpose (Select Multiple if applicable) *
+                  Visit Purpose *
                 </Label>
-                <span className="text-[10px] text-muted-foreground font-medium">
+                <span className="text-[10px] text-muted-foreground font-semibold bg-muted/60 px-2 py-0.5 rounded-full">
                   {stopForm.visit_purposes.length} selected
                 </span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 gap-1.5">
                 {VISIT_PURPOSE_OPTIONS.map(opt => {
                   const isSelected = stopForm.visit_purposes.includes(opt.id);
                   return (
@@ -2404,7 +2541,7 @@ export const DailyTravelPage: React.FC = () => {
                       type="button"
                       onClick={() => toggleVisitPurpose(opt.id)}
                       className={cn(
-                        "flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs font-semibold transition-all text-left",
+                        "flex items-center gap-1.5 px-2.5 py-2 rounded-lg border text-xs font-semibold transition-all text-left",
                         isSelected 
                           ? cn(opt.badgeBg, "ring-1 ring-primary/40 font-bold shadow-xs") 
                           : "bg-background text-muted-foreground border-border hover:bg-muted/40"
@@ -2412,7 +2549,7 @@ export const DailyTravelPage: React.FC = () => {
                     >
                       <span className="text-xs shrink-0">{opt.icon}</span>
                       <span className="truncate text-[11px] flex-1">{opt.label}</span>
-                      {isSelected && <Check className="w-3 h-3 text-primary shrink-0 ml-auto" />}
+                      {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-auto" />}
                     </button>
                   );
                 })}
@@ -2424,7 +2561,7 @@ export const DailyTravelPage: React.FC = () => {
                     placeholder="Specify other purpose (e.g. Sampling, Catalog, Delivery)..." 
                     value={stopForm.other_purpose_note} 
                     onChange={(e) => setStopForm(prev => ({ ...prev, other_purpose_note: e.target.value }))}
-                    className="h-8 text-xs"
+                    className="h-8 text-xs bg-background"
                   />
                 </div>
               )}
@@ -2433,7 +2570,7 @@ export const DailyTravelPage: React.FC = () => {
             {/* Targets: Bags & Payment with Indian Currency Formatting */}
             <div className="grid grid-cols-2 gap-2.5">
               <div className="space-y-1">
-                <Label className="text-[11px] font-bold text-purple-700 dark:text-purple-300">Target Order (Bags)</Label>
+                <Label className="text-[11px] font-bold text-purple-700 dark:text-purple-300 truncate block">Target Order (Bags)</Label>
                 <div className="relative">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs select-none">
                     📦
@@ -2447,16 +2584,16 @@ export const DailyTravelPage: React.FC = () => {
                       const clean = e.target.value.replace(/[^0-9]/g, '');
                       setStopForm(prev => ({ ...prev, target_order_bags: clean }));
                     }}
-                    className="h-8 pl-7 text-xs font-bold"
+                    className="h-8 pl-7 text-xs font-bold bg-background"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <Label className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">Target Collection</Label>
+                  <Label className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 truncate block">Target Collection</Label>
                   {stopForm.target_collection_value && formatIndianWords(stopForm.target_collection_value) ? (
-                    <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800">
+                    <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800 truncate max-w-[80px]">
                       {formatIndianWords(stopForm.target_collection_value)}
                     </span>
                   ) : null}
@@ -2474,7 +2611,7 @@ export const DailyTravelPage: React.FC = () => {
                       const clean = e.target.value.replace(/[^0-9]/g, '');
                       setStopForm(prev => ({ ...prev, target_collection_value: clean }));
                     }}
-                    className="h-8 pl-6 text-xs font-bold text-foreground focus:ring-emerald-500"
+                    className="h-8 pl-6 text-xs font-bold text-foreground focus:ring-emerald-500 bg-background"
                   />
                 </div>
               </div>
@@ -2487,29 +2624,40 @@ export const DailyTravelPage: React.FC = () => {
                 placeholder="e.g. Pitch ET-111 waterproof putty, collect overdue cheque" 
                 value={stopForm.plan_notes} 
                 onChange={(e) => setStopForm(prev => ({ ...prev, plan_notes: e.target.value }))}
-                className="h-8 text-xs"
+                className="h-8 text-xs bg-background"
               />
             </div>
           </div>
 
-          <DialogFooter className="border-t pt-2">
-            <Button variant="ghost" size="sm" onClick={() => setShowAddStopModal(false)} className="text-xs">
+          <div className="p-3 sm:p-4 border-t bg-background shrink-0 flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddStopModal(false)}
+              className="text-xs h-9 px-4 flex-1 sm:flex-initial"
+            >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSaveStop} className="text-xs font-bold bg-primary text-white">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSaveStop}
+              className="text-xs h-9 px-5 font-bold bg-primary hover:bg-primary/90 text-white flex-1 sm:flex-initial shadow-xs"
+            >
               {isSpotVisitModal ? 'Add Spot Visit' : 'Add Stop'}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* MODAL: VISIT TRACKING & OUTCOME PUNCH */}
       <Dialog open={!!punchingStop} onOpenChange={(open) => { if (!open) { stopCamera(); setPunchingStop(null); } }}>
-        <DialogContent className="max-w-lg w-full max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-                <Store className="w-5 h-5 text-primary" />
+        <DialogContent className="max-w-lg w-[95vw] sm:w-full max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl shadow-2xl">
+          <DialogHeader className="p-4 sm:p-5 border-b shrink-0 bg-background/95 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <DialogTitle className="flex items-center gap-2 text-sm sm:text-base font-bold text-foreground">
+                <Store className="w-5 h-5 text-primary shrink-0" />
                 <span>Visit Check-In & Outcome</span>
               </DialogTitle>
               {punchingStop?.is_unplanned ? (
@@ -2522,13 +2670,13 @@ export const DailyTravelPage: React.FC = () => {
                 </Badge>
               )}
             </div>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs text-muted-foreground">
               Take store photo, punch actual order & collection, and sync directly to visit records.
             </DialogDescription>
           </DialogHeader>
 
           {punchingStop && (
-            <div className="space-y-4 py-2">
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 text-xs">
               {/* Dealer Header Banner with Targets */}
               <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -2760,20 +2908,22 @@ export const DailyTravelPage: React.FC = () => {
             </div>
           )}
 
-          <DialogFooter className="border-t pt-3 flex items-center justify-between gap-2">
+          <div className="p-3 sm:p-4 border-t bg-background shrink-0 flex items-center justify-end gap-2">
             <Button
-              variant="ghost"
+              type="button"
+              variant="outline"
               size="sm"
               onClick={() => setPunchingStop(null)}
-              className="text-xs"
+              className="text-xs h-9 px-4 flex-1 sm:flex-initial"
             >
               Cancel
             </Button>
             <Button
+              type="button"
               size="sm"
               onClick={handleSaveVisitPunch}
               disabled={savingVisitPunch}
-              className="text-xs font-bold gap-1.5 bg-primary text-white shadow-sm"
+              className="text-xs h-9 px-5 font-bold gap-1.5 bg-primary hover:bg-primary/90 text-white flex-1 sm:flex-initial shadow-xs"
             >
               {savingVisitPunch ? (
                 <>
@@ -2787,30 +2937,30 @@ export const DailyTravelPage: React.FC = () => {
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* MODAL: VIEW STOP INFORMATION (READ-ONLY) */}
       <Dialog open={!!viewingStopDetails} onOpenChange={(open) => !open && setViewingStopDetails(null)}>
-        <DialogContent className="max-w-md w-full max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2 text-sm font-bold text-foreground">
-                <Target className="w-4 h-4 text-purple-600" />
+        <DialogContent className="max-w-md w-[95vw] sm:w-full max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl shadow-2xl">
+          <DialogHeader className="p-4 sm:p-5 border-b shrink-0 bg-background/95 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <DialogTitle className="flex items-center gap-2 text-sm sm:text-base font-bold text-foreground">
+                <Target className="w-4 h-4 text-purple-600 shrink-0" />
                 <span>Planned Stop Information</span>
               </DialogTitle>
               <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300">
                 🔒 Read-Only
               </Badge>
             </div>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs text-muted-foreground">
               Stop details and targets locked for field accountability
             </DialogDescription>
           </DialogHeader>
 
           {viewingStopDetails && (
-            <div className="space-y-3 py-2 text-xs">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 text-xs">
               {/* Counter Header */}
               <div className="p-3 rounded-xl border bg-muted/20 space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -2917,32 +3067,32 @@ export const DailyTravelPage: React.FC = () => {
             </div>
           )}
 
-          <DialogFooter className="border-t pt-2">
-            <Button size="sm" onClick={() => setViewingStopDetails(null)} className="text-xs font-bold w-full sm:w-auto">
+          <div className="p-3 sm:p-4 border-t bg-background shrink-0 flex items-center justify-end">
+            <Button size="sm" onClick={() => setViewingStopDetails(null)} className="text-xs h-9 font-bold w-full sm:w-auto px-5 bg-primary text-white shadow-xs">
               Close Details
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* MODAL: VIEW HISTORY LOG / SCORECARD */}
       <Dialog open={!!viewingHistoryLog} onOpenChange={(open) => !open && setViewingHistoryLog(null)}>
-        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2 text-sm font-bold">
-                <Award className="w-4 h-4 text-primary" />
+        <DialogContent className="max-w-xl w-[95vw] sm:w-full max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl shadow-2xl">
+          <DialogHeader className="p-4 sm:p-5 border-b shrink-0 bg-background/95 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <DialogTitle className="flex items-center gap-2 text-sm sm:text-base font-bold">
+                <Award className="w-4 h-4 text-primary shrink-0" />
                 <span>Performance Scorecard &middot; {viewingHistoryLog?.date}</span>
               </DialogTitle>
               {viewingHistoryLog && getRatingBadge(viewingHistoryLog.performance_rating, viewingHistoryLog.target_achievement_pct)}
             </div>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs text-muted-foreground">
               Distance: {viewingHistoryLog?.total_km} KM &middot; Approved KM: {viewingHistoryLog?.approved_km ?? viewingHistoryLog?.total_km} KM
             </DialogDescription>
           </DialogHeader>
 
           {viewingHistoryLog && (
-            <div className="space-y-4 py-2 text-xs">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs">
               {/* Target Fulfillment Grid */}
               <div className="grid grid-cols-3 gap-2 bg-muted/30 p-2.5 rounded-xl border text-center font-medium">
                 <div>
@@ -3016,6 +3166,12 @@ export const DailyTravelPage: React.FC = () => {
               )}
             </div>
           )}
+
+          <div className="p-3 sm:p-4 border-t bg-background shrink-0 flex items-center justify-end">
+            <Button size="sm" onClick={() => setViewingHistoryLog(null)} className="text-xs h-9 font-bold w-full sm:w-auto px-5 bg-primary text-white shadow-xs">
+              Close Scorecard
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -866,21 +866,33 @@ const SettingsPage: React.FC = () => {
                                         </>
                                     )}
                                 </Button>
-                                <Button
-                                    onClick={handleDownloadPostgresDump}
-                                    disabled={isDownloadingDump || isSavingSchedule || !backupStatus?.pg_dump_found}
-                                >
-                                    {isDownloadingDump ? (
-                                        <>
-                                            <div className="w-4 h-4 mr-2 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                                            Downloading dump...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Download className="w-4 h-4 mr-2" /> Download Postgres DB Dump
-                                        </>
+                                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                                    {!backupStatus?.pg_dump_found && (
+                                        <span className="text-[11px] text-amber-500 font-medium">
+                                            ⚠️ pg_dump binary not found on server
+                                        </span>
                                     )}
-                                </Button>
+                                    <Button
+                                        onClick={handleDownloadPostgresDump}
+                                        disabled={isDownloadingDump || isSavingSchedule || !backupStatus?.pg_dump_found}
+                                        title={
+                                            !backupStatus?.pg_dump_found
+                                                ? "Disabled because PostgreSQL pg_dump utility was not found on the backend host server."
+                                                : "Download a full PostgreSQL .dump binary backup"
+                                        }
+                                    >
+                                        {isDownloadingDump ? (
+                                            <>
+                                                <div className="w-4 h-4 mr-2 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                                                Downloading dump...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Download className="w-4 h-4 mr-2" /> Download Postgres DB Dump
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>

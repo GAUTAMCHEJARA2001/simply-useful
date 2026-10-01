@@ -120,7 +120,7 @@ export const AuditLogsPage: React.FC = () => {
     const headers = ['ID', 'Timestamp', 'User Name', 'User Email', 'Role', 'Log Type', 'Feature', 'Action', 'IP Address'];
     const rows = logs.map(l => [
       l.id,
-      new Date(l.createdAt).toLocaleString(),
+      `"${new Date(l.createdAt).toLocaleString()}"`,
       `"${l.userName || ''}"`,
       `"${l.userEmail || ''}"`,
       l.userRole,

@@ -65,6 +65,21 @@ def download_postgres_dump_view(request):
                 os.remove(local_temp_path)
             except Exception:
                 pass
+        # If pg_dump failed due to PostgreSQL client/server version mismatch or environment limitation,
+        # gracefully fallback to a full application database dump
+        if 'server version mismatch' in error_msg.lower() or not os.path.exists(local_temp_path):
+            try:
+                from django.core.management import call_command
+                import io
+                out = io.StringIO()
+                call_command('dumpdata', stdout=out, indent=2)
+                dump_content = out.getvalue().encode('utf-8')
+                json_backup_filename = f'db_backup_{timestamp}.json'
+                response = HttpResponse(dump_content, content_type='application/json')
+                response['Content-Disposition'] = f'attachment; filename="{json_backup_filename}"'
+                return response
+            except Exception as dump_err:
+                return send_error(f'pg_dump failed ({error_msg}) and fallback dump failed: {str(dump_err)}', 500)
         return send_error(f'pg_dump failed: {error_msg}', 500)
     except Exception as e:
         if os.path.exists(local_temp_path):
@@ -89,28 +104,35 @@ def schedule_local_backup_view(request):
     current_data['localBackupDir'] = local_backup_dir
     save_settings(current_data)
     task_name = 'SimplyUsefulAutoBackup'
-    try:
-        subprocess.run(['schtasks', '/delete', '/tn', task_name, '/f'], capture_output=True, text=True)
-    except Exception:
-        pass
+    if os.name == 'nt':
+        try:
+            subprocess.run(['schtasks', '/delete', '/tn', task_name, '/f'], capture_output=True, text=True)
+        except Exception:
+            pass
+
     if not enabled:
         return send_success(None, 'Automatic backup schedule disabled.')
-    venv_python = os.path.join(settings.BASE_DIR, 'venv', 'Scripts', 'python.exe')
-    if not os.path.exists(venv_python):
-        venv_python = sys.executable
-    script_path = os.path.join(settings.BASE_DIR, 'backup_to_local.py')
-    if not os.path.exists(script_path):
-        return send_error("Backup helper script 'backup_to_local.py' not found in backend directory.", 500)
-    task_cmd = f'cmd.exe /c "cd /d "{settings.BASE_DIR}" && "{venv_python}" "{script_path}""'
-    try:
-        cmd = ['schtasks', '/create', '/tn', task_name, '/tr', task_cmd, '/sc', 'daily', '/st', backup_time, '/f']
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode != 0:
-            error_details = res.stderr or res.stdout
-            return send_error(f'Failed to create automatic schedule task: {error_details}', 500)
-        return send_success({'task_name': task_name, 'time': backup_time, 'local_backup_dir': local_backup_dir}, f'Automatic backup scheduled daily at {backup_time} to {local_backup_dir}.')
-    except Exception as e:
-        return send_error(f'An unexpected error occurred: {str(e)}', 500)
+
+    if os.name == 'nt':
+        venv_python = os.path.join(settings.BASE_DIR, 'venv', 'Scripts', 'python.exe')
+        if not os.path.exists(venv_python):
+            venv_python = sys.executable
+        script_path = os.path.join(settings.BASE_DIR, 'backup_to_local.py')
+        if not os.path.exists(script_path):
+            return send_error("Backup helper script 'backup_to_local.py' not found in backend directory.", 500)
+        task_cmd = f'cmd.exe /c "cd /d "{settings.BASE_DIR}" && "{venv_python}" "{script_path}""'
+        try:
+            cmd = ['schtasks', '/create', '/tn', task_name, '/tr', task_cmd, '/sc', 'daily', '/st', backup_time, '/f']
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode != 0:
+                error_details = res.stderr or res.stdout
+                return send_error(f'Failed to create automatic schedule task: {error_details}', 500)
+            return send_success({'task_name': task_name, 'time': backup_time, 'local_backup_dir': local_backup_dir}, f'Automatic backup scheduled daily at {backup_time} to {local_backup_dir}.')
+        except Exception as e:
+            return send_error(f'An unexpected error occurred: {str(e)}', 500)
+    else:
+        # Non-Windows environment (e.g. Linux / Railway container)
+        return send_success({'task_name': task_name, 'time': backup_time, 'local_backup_dir': local_backup_dir}, f'Backup settings saved successfully (time: {backup_time}, dir: {local_backup_dir}).')
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

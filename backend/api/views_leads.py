@@ -188,32 +188,82 @@ class LeadViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='convert', throttle_classes=[LeadConversionThrottle])
     def convert_to_dealer(self, request, pk=None):
         from api.models import Dealer
-        with transaction.atomic():
-            lead = Lead.all_objects.select_related('assigned_to', 'companyid').select_for_update().get(pk=pk)
-            if lead.status == 'WON' or Dealer.objects.filter(converted_lead=lead).exists():
-                return send_error('Lead has already been converted to a dealer', 400)
-            if lead.status == 'LOST':
-                return send_error('A lost lead cannot be converted to a dealer', 400)
-            if not lead.phone:
-                return send_error('Lead phone number is required for dealer creation', 400)
-            if not lead.company_name and (not lead.name):
-                return send_error('Company name or contact name is required', 400)
-            if not lead.assigned_to_id:
-                return send_error('Lead must have an assigned sales manager before converting', 400)
-            existing_dealer = Dealer.objects.select_for_update().filter(companyid=lead.companyid, dealername=lead.company_name or lead.name).first()
-            if existing_dealer:
-                return send_error(f"A dealer named '{existing_dealer.dealername}' already exists in your company records.", 400)
-            dealer_id = 'c' + uuid.uuid4().hex[:23]
-            dealer = Dealer.objects.create(id=dealer_id, dealercode=f'DLR-{uuid.uuid4().hex[:6].upper()}', dealername=lead.company_name or lead.name, city='Default City', assignedsoemail=lead.assigned_to.email, distributorname='Select Distributor', creditlimit=LeadPipelineService.quantize_decimal(50000.0), outstanding=LeadPipelineService.quantize_decimal(0.0), active=True, companyid=lead.companyid, converted_lead=lead)
-            old_status = lead.status
-            lead.status = 'WON'
-            lead.updated_by_id = request.user.id
-            lead.updatedat = timezone.now()
-            lead.version += 1
-            lead.save()
-            LeadStageHistory.objects.create(id='h' + uuid.uuid4().hex[:23], lead=lead, old_status=old_status, new_status='WON', changed_by_id=request.user.id)
-            LeadFollowUp.objects.create(id='f' + uuid.uuid4().hex[:23], lead=lead, type='MEETING', notes=f'Converted lead to active Dealer record: {dealer.dealername} ({dealer.dealercode}).', created_by_id=request.user.id)
-        return send_success({'leadId': lead.id, 'dealerId': dealer.id, 'dealerCode': dealer.dealercode}, 'Lead converted to active Dealer successfully')
+        try:
+            with transaction.atomic():
+                try:
+                    lead = Lead.all_objects.select_related('assigned_to', 'companyid').select_for_update().get(pk=pk)
+                except Lead.DoesNotExist:
+                    return send_error('Lead not found', 404)
+
+                if lead.status == 'WON' or Dealer.objects.filter(converted_lead=lead).exists():
+                    return send_error('Lead has already been converted to a dealer', 400)
+                if lead.status == 'LOST':
+                    return send_error('A lost lead cannot be converted to a dealer', 400)
+                if not lead.phone:
+                    return send_error('Lead phone number is required for dealer creation', 400)
+                if not lead.company_name and (not lead.name):
+                    return send_error('Company name or contact name is required', 400)
+                if not lead.assigned_to_id:
+                    return send_error('Lead must have an assigned sales manager before converting', 400)
+
+                existing_dealer = Dealer.objects.select_for_update().filter(
+                    companyid=lead.companyid,
+                    dealername=lead.company_name or lead.name
+                ).first()
+                if existing_dealer:
+                    return send_error(f"A dealer named '{existing_dealer.dealername}' already exists in your company records.", 400)
+
+                dealer_id = 'c' + uuid.uuid4().hex[:23]
+                assigned_so_list = [lead.assigned_to.email] if (lead.assigned_to and getattr(lead.assigned_to, 'email', None)) else []
+
+                dealer = Dealer.objects.create(
+                    id=dealer_id,
+                    dealercode=f'DLR-{uuid.uuid4().hex[:6].upper()}',
+                    dealername=lead.company_name or lead.name,
+                    city=getattr(lead, 'city', None) or 'Default City',
+                    assignedsoemails=assigned_so_list,
+                    distributorname='Select Distributor',
+                    creditlimit=LeadPipelineService.quantize_decimal(50000.0),
+                    outstanding=LeadPipelineService.quantize_decimal(0.0),
+                    active=True,
+                    party_type='DEALER',
+                    phone=lead.phone or '',
+                    email=getattr(lead, 'email', None) or '',
+                    contact_person=lead.name or '',
+                    address=getattr(lead, 'address', None) or '',
+                    companyid=lead.companyid,
+                    converted_lead=lead
+                )
+
+                old_status = lead.status
+                lead.status = 'WON'
+                lead.updated_by_id = request.user.id
+                lead.updatedat = timezone.now()
+                lead.version += 1
+                lead.save()
+
+                LeadStageHistory.objects.create(
+                    id='h' + uuid.uuid4().hex[:23],
+                    lead=lead,
+                    old_status=old_status,
+                    new_status='WON',
+                    changed_by_id=request.user.id
+                )
+                LeadFollowUp.objects.create(
+                    id='f' + uuid.uuid4().hex[:23],
+                    lead=lead,
+                    type='MEETING',
+                    notes=f'Converted lead to active Dealer record: {dealer.dealername} ({dealer.dealercode}).',
+                    created_by_id=request.user.id
+                )
+
+            return send_success({
+                'leadId': lead.id,
+                'dealerId': dealer.id,
+                'dealerCode': dealer.dealercode
+            }, 'Lead converted to active Dealer successfully')
+        except Exception as e:
+            return send_error(f'Failed to convert lead to dealer: {str(e)}', 500)
 
     @action(detail=False, methods=['get'], url_path='dashboard', throttle_classes=[LeadDashboardThrottle])
     def get_dashboard_metrics(self, request):

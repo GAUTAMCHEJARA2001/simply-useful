@@ -9,10 +9,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Lead } from './PipelineBoard';
+import { Lead, STAGES, ALLOWED_TRANSITIONS } from './PipelineBoard';
 import { leadService } from '@/api/services/lead.service';
 import { Phone, Mail, Building2, Calendar, DollarSign, Clock, MessageSquare, ShieldAlert, Award, RefreshCw, UserCheck } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 interface LeadDetailsProps {
   lead: Lead | null;
@@ -171,6 +172,30 @@ const LeadDetails: React.FC<LeadDetailsProps> = ({ lead, open, onClose, onRefres
     }
   };
 
+  const handleMoveStage = async (newStage: Lead['status']) => {
+    if (!lead || lead.status === newStage) return;
+    setLoading(true);
+    try {
+      const res = await leadService.moveStage(lead.id, newStage);
+      if (res.data?.success) {
+        toast({
+          title: 'Stage Updated! 🎯',
+          description: `${lead.name} moved to ${STAGE_LABELS[newStage] || newStage}.`,
+        });
+        onRefresh();
+        onClose();
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Failed to update stage',
+        description: err.response?.data?.message || 'Conflict during stage move.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatDateTime = (val: string) => {
     if (!val) return '';
     const d = new Date(val);
@@ -200,6 +225,43 @@ const LeadDetails: React.FC<LeadDetailsProps> = ({ lead, open, onClose, onRefres
         </SheetHeader>
 
         <div className="space-y-6 py-6">
+          {/* Quick Stage Progression Switcher for Mobile & Desktop */}
+          {canManage && (
+            <div className="bg-muted/30 border border-border/50 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-foreground flex items-center gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5 text-primary" /> Move Pipeline Stage:
+                </span>
+                <span className="text-[11px] text-muted-foreground font-medium">
+                  Current: <strong className="text-primary">{STAGE_LABELS[lead.status] || lead.status}</strong>
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
+                {STAGES.map((s) => {
+                  const isCurrent = lead.status === s.id;
+                  const isAllowed = (ALLOWED_TRANSITIONS[lead.status] || []).includes(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      disabled={loading || isCurrent}
+                      onClick={() => handleMoveStage(s.id)}
+                      className={cn(
+                        "px-2.5 py-1.5 rounded-lg text-xs font-semibold text-center transition-all border",
+                        isCurrent
+                          ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs cursor-default"
+                          : isAllowed
+                          ? "bg-background border-primary/40 text-foreground hover:bg-primary/10 hover:border-primary font-bold shadow-2xs active:scale-95"
+                          : "bg-background/50 border-border/40 text-muted-foreground hover:bg-muted hover:text-foreground opacity-80"
+                      )}
+                    >
+                      {s.id === 'LOST' ? '🔴 Lost' : s.id === 'WON' ? '🟢 Won' : s.title}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {/* Action Trigger Card - CONVERT TO DEALER */}
           {lead.status !== 'WON' && lead.status !== 'LOST' && canManage && (
             <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent shadow-sm">

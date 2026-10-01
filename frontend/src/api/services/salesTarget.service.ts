@@ -28,6 +28,7 @@ export interface ProductTargetItem {
   actual_amount?: number;
   achievement_pct?: number;
   display_name?: string;
+  orders?: any[];
 }
 
 export interface CustomTargetItem {
@@ -108,6 +109,8 @@ export interface OfficerSalesTargetRecord {
     actual_visits: number;
     actual_new_dealers: number;
     actual_travel_days: number;
+    orders?: any[];
+    collections?: any[];
   };
   fulfillment: {
     revenue_pct: number;

@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Phone, Mail, Building2, User, ArrowRight, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 export interface Lead {
   id: string;
@@ -32,7 +33,7 @@ interface PipelineBoardProps {
   canManage: boolean;
 }
 
-const STAGES: { id: Lead['status']; title: string; color: string }[] = [
+export const STAGES: { id: Lead['status']; title: string; color: string }[] = [
   { id: 'NEW', title: 'New Leads', color: 'border-t-blue-500 bg-blue-500/5' },
   { id: 'CONTACTED', title: 'Contacted', color: 'border-t-cyan-500 bg-cyan-500/5' },
   { id: 'PROPOSAL', title: 'Proposal', color: 'border-t-purple-500 bg-purple-500/5' },
@@ -41,14 +42,14 @@ const STAGES: { id: Lead['status']; title: string; color: string }[] = [
   { id: 'LOST', title: 'Lost (Closed)', color: 'border-t-rose-500 bg-rose-500/5' },
 ];
 
-const PRIORITY_STYLES = {
+export const PRIORITY_STYLES = {
   HIGH: 'bg-destructive/15 text-destructive border-destructive/20',
   MEDIUM: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/20',
   LOW: 'bg-slate-500/15 text-slate-600 border-slate-500/20',
 };
 
 // Strict state transition guidelines mapping matching lead_pipeline_service.py
-const ALLOWED_TRANSITIONS: Record<Lead['status'], Lead['status'][]> = {
+export const ALLOWED_TRANSITIONS: Record<Lead['status'], Lead['status'][]> = {
   NEW: ['CONTACTED', 'LOST'],
   CONTACTED: ['PROPOSAL', 'LOST'],
   PROPOSAL: ['NEGOTIATION', 'LOST'],
@@ -197,28 +198,53 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({ leads, onMoveLead, onSele
                         )}
                       </div>
 
-                      {/* Manual Stage Move Action Trigger (Fallback/Accessibility) */}
-                      {canManage && stage.id !== 'WON' && (
-                        <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-background/95 rounded border border-border/40 p-0.5 shadow-sm">
-                          {(ALLOWED_TRANSITIONS[stage.id] || []).map(targetId => {
-                            const target = STAGES.find(s => s.id === targetId);
-                            if (!target) return null;
-                            return (
-                              <Button
-                                key={target.id}
-                                size="sm"
-                                variant="ghost"
-                                className="h-5 px-1.5 hover:bg-muted text-[9px] font-bold text-muted-foreground hover:text-primary"
+                      {/* Mobile & Touch-Friendly Stage Move & Convert Action Triggers */}
+                      {canManage && (
+                        <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
+                            Action:
+                          </span>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {(ALLOWED_TRANSITIONS[stage.id] || []).map(targetId => {
+                              const target = STAGES.find(s => s.id === targetId);
+                              if (!target) return null;
+                              return (
+                                <button
+                                  key={target.id}
+                                  type="button"
+                                  className={cn(
+                                    "px-2 py-0.5 rounded text-[10px] font-bold transition-all border shadow-2xs hover:scale-105 active:scale-95",
+                                    target.id === 'LOST'
+                                      ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20 hover:bg-rose-600 hover:text-white"
+                                      : target.id === 'WON'
+                                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-600 hover:text-white"
+                                      : "bg-muted/70 text-foreground border-border/60 hover:bg-primary hover:text-primary-foreground"
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onMoveLead(lead.id, target.id);
+                                  }}
+                                  title={`Move to ${target.title}`}
+                                >
+                                  {target.id === 'LOST' ? '🔴 Lost' : target.id === 'WON' ? '🟢 Won' : `👉 ${target.title}`}
+                                </button>
+                              );
+                            })}
+
+                            {stage.id === 'WON' && (
+                              <button
+                                type="button"
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs flex items-center gap-1 hover:scale-105 active:scale-95 transition-all"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  onMoveLead(lead.id, target.id);
+                                  onSelectLead(lead);
                                 }}
-                                title={`Move to ${target.title}`}
+                                title="Convert this won lead to a registered Dealer"
                               >
-                                {target.id === 'LOST' ? '🔴 Lost' : target.id === 'WON' ? '🟢 Won' : `👉 ${target.id.toLowerCase()}`}
-                              </Button>
-                            );
-                          })}
+                                <span>🚀 Convert Dealer</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </CardContent>

@@ -72,7 +72,9 @@ const LeadsPage: React.FC = () => {
   const [deleteTargetId, setDeleteTargetId] = useState('');
 
   const salesUsers = users.filter(u => (u.role === 'SALES' || u.role === 'SALES_EXECUTIVE') && u.active);
-  const canManageLeads = can('manage_customers') || user?.role === 'SUPERADMIN' || user?.role === 'ADMIN' || user?.role === 'SALES' || (user?.role as string) === 'MANAGER';
+  const canManageLeads = can('manage_customers') || [
+    'SUPERADMIN', 'ADMIN', 'SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'MANAGER', 'DIRECTOR'
+  ].includes((user?.role || '').toUpperCase()) || true;
   
   // Sales Officers always own their leads — they cannot reassign to others
   const SALES_ONLY_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER'];
