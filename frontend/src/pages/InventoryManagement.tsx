@@ -59,7 +59,6 @@ const InventoryManagement: React.FC = () => {
     { id: 'deleted_productions', label: 'Deleted Production', icon: Trash2, group: 'Transactions' },
     { id: 'production_approvals', label: 'Production Approvals', icon: UserCheck, group: 'Transactions' },
     { id: 'adjustments', label: 'Adjustments', icon: ClipboardList, group: 'Transactions' },
-    { id: 'attendance', label: 'Attendance', icon: UserCheck, group: 'Transactions' },
     { id: 'approvals', label: 'Approvals', icon: ClipboardList, group: 'Transactions' },
     { id: 'purchase_returns', label: 'Purchase Returns', icon: ShoppingCart, group: 'Transactions' },
     { id: 'sales_returns', label: 'Sales Returns', icon: ShoppingCart, group: 'Transactions' },

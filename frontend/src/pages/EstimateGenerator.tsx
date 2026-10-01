@@ -50,7 +50,7 @@ const EstimateGenerator: React.FC = () => {
       setIsLoading(true);
       const res = await apiService.estimates.getById(estimateDbId);
       if (res.data) {
-        const est = res.data;
+        const est = res.data?.data || res.data;
         setDbId(est.id);
         setEstimateId(est.estimateId);
         setPartyName(est.partyName || '');

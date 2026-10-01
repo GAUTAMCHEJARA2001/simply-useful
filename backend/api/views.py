@@ -4037,8 +4037,10 @@ def transaction_dispatch_log_detail(request, pk):
         dispatch_log.drivername = data.get('driverName', dispatch_log.drivername)
         dispatch_log.drivermobile = data.get('driverMobile', dispatch_log.drivermobile)
         dispatch_log.remarks = data.get('remarks', dispatch_log.remarks)
-        if data.get('dispatchDate'):
-            disp_d = str(data.get('dispatchDate')).strip()
+        disp_raw = data.get('dispatchDate') or data.get('date')
+        dt_obj = None
+        if disp_raw:
+            disp_d = str(disp_raw).strip()
             from django.utils.dateparse import parse_datetime, parse_date
             from django.utils import timezone
             from datetime import datetime, time
@@ -4086,8 +4088,10 @@ def transaction_dispatch_log_detail(request, pk):
                 all_dispatched = False
                 break
         order.status = 'Completed' if all_dispatched else 'Partially Dispatched'
-        if data.get('dispatchDate'):
-            order.dispatchdate = str(data.get('dispatchDate')).strip()
+        if disp_raw:
+            order.dispatchdate = str(disp_raw).strip()
+            if dt_obj:
+                order.date = dt_obj
         order.save()
         return send_success(None, 'Dispatch transaction updated')
     elif request.method == 'DELETE':

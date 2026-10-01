@@ -132,7 +132,7 @@ export const SalesTab: React.FC = () => {
   };
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('Completed');
 
   const { filterBySelectedFY } = useFinancialYear();
 
@@ -142,7 +142,12 @@ export const SalesTab: React.FC = () => {
     const status = s.status || 'Pending';
     
     const matchesSearch = customer.includes(searchTerm.toLowerCase()) || challan.includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || status === statusFilter;
+    const matchesStatus = 
+      statusFilter === 'Completed'
+        ? (status === 'Completed' || status === 'Dispatched')
+        : statusFilter === 'All'
+        ? true
+        : status === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
@@ -165,14 +170,14 @@ export const SalesTab: React.FC = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
           >
+            <option value="Completed">Completed Orders</option>
             <option value="All">All Statuses</option>
+            <option value="Dispatched">Dispatched</option>
             <option value="Pending">Pending</option>
             <option value="Approved">Approved</option>
             <option value="Partially Dispatched">Partially Dispatched</option>
-            <option value="Dispatched">Dispatched</option>
             <option value="Partially Returned">Partially Returned</option>
             <option value="Returned">Returned</option>
-            <option value="Completed">Completed</option>
             <option value="Cancelled">Cancelled</option>
           </select>
           <Button size="sm" onClick={handleAdd} className="shrink-0">
@@ -221,6 +226,10 @@ export const SalesTab: React.FC = () => {
                 const dVal = s.date || s.dispatchDate || s.createdAt;
                 if (!dVal) return '—';
                 try {
+                  if (typeof dVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dVal)) {
+                    const [y, m, day] = dVal.split('-');
+                    return `${parseInt(day, 10)}/${parseInt(m, 10)}/${y}`;
+                  }
                   const d = new Date(dVal);
                   return isNaN(d.getTime()) ? String(dVal) : d.toLocaleDateString('en-IN');
                 } catch (_) {
