@@ -77,10 +77,26 @@ def _serialize_travel_log(log):
     except Exception:
         pass
 
+    bike_rate = 3.0
+    car_rate = 8.0
+    try:
+        emp = getattr(log.user, 'employee_profile', None)
+        if emp:
+            if emp.bike_allowance_per_km and emp.bike_allowance_per_km > 0:
+                bike_rate = emp.bike_allowance_per_km
+            if emp.car_allowance_per_km and emp.car_allowance_per_km > 0:
+                car_rate = emp.car_allowance_per_km
+    except Exception:
+        pass
+    applied_rate = car_rate if (log.vehicle_type or '').upper() == 'CAR' else bike_rate
+
     return {
         'id': log.id,
         'date': log.date.strftime('%Y-%m-%d') if log.date else None,
         'vehicle_type': log.vehicle_type,
+        'rate': applied_rate,
+        'bike_rate': bike_rate,
+        'car_rate': car_rate,
         'start_km': log.start_km,
         'end_km': log.end_km,
         'total_km': log.total_km,

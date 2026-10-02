@@ -67,7 +67,7 @@ const ExpenseEntry: React.FC = () => {
   const normalizedTravelClaims = useMemo(() => {
     return travelLogs.map(l => {
       const km = Number(l.approved_km !== null && l.approved_km !== undefined ? l.approved_km : (l.total_km || 0));
-      const rate = getTravelRate(l.vehicle_type);
+      const rate = Number(l.rate !== undefined && l.rate !== null ? l.rate : getTravelRate(l.vehicle_type));
       const calculatedAmt = Math.round(km * rate);
       const vehicle = (l.vehicle_type || 'CAR').toUpperCase();
 

@@ -10,8 +10,9 @@ from django.db.models import Sum
 from api.models import (
     Labour, LeaveType, EmployeeLeaveBalance, LeaveRecord,
     SalaryAdvance, DailyAttendance, SalarySlip, Company,
-    HRDepartment, HRDesignation, EmployeeLedger
+    HRDepartment, HRDesignation, EmployeeLedger, Expense
 )
+from core.models import User
 from django.db.models import Sum, Case, When, FloatField
 from api.views import send_success, send_error, _get_company_id, load_settings
 
@@ -494,7 +495,34 @@ def hr_generate_payroll(request):
             if total_sales > 0: parts.append(f"₹{total_sales} sales * {emp.sales_incentive_pct * 100}%")
             incentive_calc = " + ".join(parts) + f" = ₹{incentives:.2f}"
         
-        gross_pay = basic_pay + hra + other_allowances + ot_pay + travel_pay + incentives
+        # Approved Expenses from Expense Entry (Only APPROVED expenses for the given month)
+        emp_emails = []
+        if emp.user and emp.user.email:
+            emp_emails.append(emp.user.email.strip().lower())
+        matching_users = User.objects.filter(name__iexact=emp.name)
+        for mu in matching_users:
+            if mu.email and mu.email.strip().lower() not in emp_emails:
+                emp_emails.append(mu.email.strip().lower())
+                
+        approved_expenses_total = 0.0
+        expense_calc_parts = []
+        if emp_emails:
+            approved_exp_qs = Expense.objects.filter(
+                status='APPROVED',
+                date__year=int(y_str),
+                date__month=int(m_str)
+            )
+            exp_list = [e for e in approved_exp_qs if (getattr(e, 'soemail_id', '') or '').strip().lower() in emp_emails]
+            for exp in exp_list:
+                amt = float(exp.amount or 0.0)
+                if amt > 0:
+                    approved_expenses_total += amt
+                    cat = exp.category or 'Expense'
+                    expense_calc_parts.append(f"₹{amt:.2f} ({cat})")
+
+        expense_calc = " + ".join(expense_calc_parts) + f" = ₹{approved_expenses_total:.2f}" if expense_calc_parts else ""
+
+        gross_pay = basic_pay + hra + other_allowances + ot_pay + travel_pay + incentives + approved_expenses_total
         
         # Deductions
         late_deduction = total_late_hours * (base_hourly_rate * emp.late_deduction_rate)
@@ -568,6 +596,7 @@ def hr_generate_payroll(request):
                 'travel': round(travel_pay, 2),
                 'ot_pay': round(ot_pay, 2),
                 'incentives': round(incentives, 2),
+                'expenses': round(approved_expenses_total, 2),
                 'gross': round(gross_pay, 2)
             },
             'deductions': {
@@ -584,7 +613,8 @@ def hr_generate_payroll(request):
                 'travel': travel_calc,
                 'late': late_calc,
                 'incentive': incentive_calc,
-                'advance': advance_calc
+                'advance': advance_calc,
+                'expenses': expense_calc
             },
             'breakdown_data': {
                 'bike_km': bike_km_total,

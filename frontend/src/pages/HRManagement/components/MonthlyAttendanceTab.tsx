@@ -293,6 +293,7 @@ export const MonthlyAttendanceTab = () => {
                           {emp.earnings.travel > 0 && <div className="flex justify-between text-muted-foreground"><span>Travel:</span> <span>₹{emp.earnings.travel.toFixed(2)}</span></div>}
                           {emp.earnings.allowances > 0 && <div className="flex justify-between text-muted-foreground"><span>Allow:</span> <span>₹{emp.earnings.allowances.toFixed(2)}</span></div>}
                           {emp.earnings.incentives > 0 && <div className="flex justify-between text-muted-foreground"><span>Inc:</span> <span>₹{emp.earnings.incentives.toFixed(2)}</span></div>}
+                          {emp.earnings.expenses > 0 && <div className="flex justify-between text-emerald-700 font-semibold"><span>Exp:</span> <span>+₹{emp.earnings.expenses.toFixed(2)}</span></div>}
                           <div className="flex justify-between font-semibold pt-1 border-t mt-1"><span>Gross:</span> <span>₹{emp.earnings.gross.toFixed(2)}</span></div>
                         </div>
                       </td>
@@ -424,6 +425,7 @@ export const MonthlyAttendanceTab = () => {
                   {selectedEmp.earnings.allowances > 0 && <div className="flex justify-between"><span>Allowances & Travel:</span> <span>₹{selectedEmp.earnings.allowances.toFixed(2)}</span></div>}
                   {selectedEmp.earnings.ot_pay > 0 && <div className="flex justify-between"><span>OT Pay:</span> <span>₹{selectedEmp.earnings.ot_pay.toFixed(2)}</span></div>}
                   {selectedEmp.earnings.incentives > 0 && <div className="flex justify-between"><span>Incentives:</span> <span>₹{selectedEmp.earnings.incentives.toFixed(2)}</span></div>}
+                  {selectedEmp.earnings.expenses > 0 && <div className="flex justify-between text-emerald-800 font-semibold"><span>Approved Expenses:</span> <span>+₹{selectedEmp.earnings.expenses.toFixed(2)}</span></div>}
                   <div className="flex justify-between font-bold pt-1 border-t border-green-200"><span>Gross Pay:</span> <span>₹{selectedEmp.earnings.gross.toFixed(2)}</span></div>
                 </div>
               </div>

@@ -52,6 +52,7 @@ export interface SalarySlipItem {
     travel?: number;
     ot_pay?: number;
     incentives?: number;
+    expenses?: number;
     gross: number;
   };
   deductions: {
@@ -512,6 +513,12 @@ export const SalarySlipPdfModal: React.FC<SalarySlipPdfModalProps> = ({
                               <div className="flex justify-between py-0.5">
                                 <span className="text-slate-600">Incentives &amp; Commission</span>
                                 <span className="font-mono font-medium">{Currency(slip.earnings.incentives || 0)}</span>
+                              </div>
+                            )}
+                            {(slip.earnings.expenses || 0) > 0 && (
+                              <div className="flex justify-between py-0.5">
+                                <span className="text-slate-600 font-medium">Approved Expense Reimbursement</span>
+                                <span className="font-mono font-medium text-emerald-700">+{Currency(slip.earnings.expenses || 0)}</span>
                               </div>
                             )}
                           </div>
