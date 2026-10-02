@@ -356,8 +356,16 @@ def hr_generate_payroll(request):
     
     employees = Labour.objects.filter(active=True).exclude(employee_type='NONE')
     payroll_data = []
-    # Load salary component settings
+    # Load salary component settings and company branding
     settings_data = load_settings()
+    company_info = {
+        'name': settings_data.get('company_name') or settings_data.get('companyName') or 'Company Name',
+        'address': settings_data.get('company_address') or '',
+        'phone': settings_data.get('company_phone') or '',
+        'email': settings_data.get('company_email') or '',
+        'gst': settings_data.get('company_gst') or '',
+        'logo': settings_data.get('company_logo') or '',
+    }
     hr_salary_components = settings_data.get('hr_salary_components', {})
     basic_pct = float(hr_salary_components.get('basic', 50)) / 100.0
     hra_pct = float(hr_salary_components.get('hra', 30)) / 100.0
@@ -369,9 +377,19 @@ def hr_generate_payroll(request):
         if slip and slip.is_finalized and slip.slip_data:
             # Reconstruct exact past payload to avoid dynamic recalculation
             stored_data = slip.slip_data.copy()
-            # Ensure dynamic UI flags are updated
+            # Ensure dynamic UI flags and branding are updated
             stored_data['is_finalized'] = True
             stored_data['is_paid'] = slip.is_paid
+            if 'company' not in stored_data or not stored_data.get('company'):
+                stored_data['company'] = company_info
+            if 'month' not in stored_data:
+                stored_data['month'] = month
+            if 'employee_id' not in stored_data:
+                stored_data['employee_id'] = emp.employee_id
+            if 'designation' not in stored_data:
+                stored_data['designation'] = emp.designation
+            if 'department' not in stored_data:
+                stored_data['department'] = emp.department
             payroll_data.append(stored_data)
             continue
             
@@ -524,11 +542,19 @@ def hr_generate_payroll(request):
             net_pay = gross_pay - late_deduction - slip.manual_advance_override
         
         payroll_data.append({
+            'month': month,
             'labour_id': emp.id,
             'labour_name': emp.name,
+            'employee_id': emp.employee_id or '',
+            'designation': emp.designation or '',
+            'department': emp.department or '',
+            'doj': emp.doj.strftime('%Y-%m-%d') if emp.doj else '',
+            'pan_number': emp.pan_number or '',
+            'aadhar_number': emp.aadhar_number or '',
             'employee_type': emp.employee_type,
             'is_finalized': is_finalized,
             'is_paid': is_paid,
+            'company': company_info,
             'bank_details': {
                 'bank_name': emp.bank_name,
                 'account_no': emp.bank_account_number,
@@ -623,11 +649,12 @@ def hr_finalize_payroll(request):
         slip.save()
         
         # Post to ledger (Salary Payable)
+        salary_credit = round(slip.net_pay + (slip.advance_deduction or 0.0), 2)
         EmployeeLedger.objects.create(
             labourid_id=labour_id,
             transaction_type='SALARY',
             description=f'Salary for {month}',
-            amount=slip.net_pay,
+            amount=salary_credit,
             reference_id=slip.id
         )
         
@@ -647,20 +674,79 @@ def hr_finalize_payroll(request):
 
 @api_view(['GET'])
 def hr_employee_ledger(request, labour_id):
-    ledger = EmployeeLedger.objects.filter(labourid_id=labour_id).order_by('date', 'created_at')
-    data = []
-    balance = 0.0
+    # 1. Manual and system EmployeeLedger entries
+    ledger = list(EmployeeLedger.objects.filter(labourid_id=labour_id).order_by('date', 'created_at'))
+    
+    # 2. Daily Attendance advances
+    attendance_advances = list(DailyAttendance.objects.filter(labourid_id=labour_id, daily_advance__gt=0).order_by('date'))
+    
+    raw_entries = []
+    
     for entry in ledger:
-        balance += entry.amount
-        data.append({
+        amt = entry.amount
+        # If this is a SALARY entry linked to a SalarySlip that had advance_deduction,
+        # adjust amount to gross earnings so the advance (debited separately) is not double deducted
+        if entry.transaction_type == 'SALARY' and entry.reference_id:
+            slip = SalarySlip.objects.filter(id=entry.reference_id).first()
+            if slip and slip.advance_deduction > 0 and abs(amt - slip.net_pay) < 0.01:
+                amt = round(slip.net_pay + slip.advance_deduction, 2)
+        
+        raw_entries.append({
             'id': entry.id,
-            'date': entry.date.strftime('%Y-%m-%d'),
+            'date': entry.date,
             'type': entry.transaction_type,
             'description': entry.description,
-            'amount': entry.amount,
-            'balance': balance,
-            'reference_id': entry.reference_id
+            'amount': amt,
+            'reference_id': entry.reference_id,
+            'payment_mode': entry.payment_mode or '',
+            'payment_reference': entry.payment_reference or '',
+            'created_at': entry.created_at
         })
+    
+    for adv in attendance_advances:
+        desc_parts = ['Daily Attendance Advance']
+        if adv.advance_medium:
+            desc_parts.append(f"via {adv.advance_medium}")
+        if adv.advance_slip_no:
+            desc_parts.append(f"Slip #{adv.advance_slip_no}")
+        if adv.advance_note:
+            desc_parts.append(f"Note: {adv.advance_note}")
+        
+        dt_val = datetime.datetime.combine(adv.date, datetime.time.min)
+        if timezone.is_aware(timezone.now()):
+            dt_val = timezone.make_aware(dt_val)
+            
+        raw_entries.append({
+            'id': f"att_{adv.id}",
+            'date': adv.date,
+            'type': 'ADVANCE',
+            'description': ' — '.join(desc_parts),
+            'amount': -float(adv.daily_advance), # Debit (-)
+            'reference_id': adv.id,
+            'payment_mode': adv.advance_medium or 'CASH',
+            'payment_reference': adv.advance_slip_no or '',
+            'created_at': dt_val
+        })
+    
+    # Sort chronologically by date and creation time
+    raw_entries.sort(key=lambda x: (x['date'], x.get('created_at') or datetime.datetime.min))
+    
+    data = []
+    balance = 0.0
+    for e in raw_entries:
+        balance = round(balance + e['amount'], 2)
+        data.append({
+            'id': e['id'],
+            'date': e['date'].strftime('%Y-%m-%d') if hasattr(e['date'], 'strftime') else str(e['date']),
+            'type': e['type'],
+            'description': e['description'],
+            'amount': e['amount'],
+            'balance': balance,
+            'reference_id': e['reference_id'],
+            'payment_mode': e.get('payment_mode', ''),
+            'payment_reference': e.get('payment_reference', '')
+        })
+    
     return send_success({'ledger': data, 'current_balance': balance}, 'Ledger fetched')
 
 @api_view(['POST'])
@@ -669,7 +755,9 @@ def hr_ledger_payment(request):
     labour_id = data.get('labour_id')
     amount = float(data.get('amount') or 0.0)
     description = data.get('description', 'Salary Payment')
-    date_str = data.get('date', timezone.now().date().strftime('%Y-%m-%d'))
+    date_str = data.get('date') or timezone.now().date().strftime('%Y-%m-%d')
+    payment_mode = data.get('payment_mode') or 'CASH'
+    payment_reference = data.get('payment_reference') or ''
     
     if not labour_id or amount <= 0:
         return send_error('Valid labour_id and amount > 0 required', 400)
@@ -679,10 +767,118 @@ def hr_ledger_payment(request):
         date=date_str,
         transaction_type='PAYMENT',
         description=description,
-        amount=-amount # Payment reduces the company's debt to employee
+        amount=-amount, # Payment reduces the company's debt to employee
+        payment_mode=payment_mode,
+        payment_reference=payment_reference
     )
     
     return send_success({'id': entry.id}, 'Payment recorded successfully')
+
+@api_view(['GET', 'POST'])
+def hr_loans(request):
+    if request.method == 'GET':
+        labour_id = request.GET.get('labour_id')
+        qs = SalaryAdvance.objects.all().select_related('labourid').order_by('-date_issued', '-id')
+        if labour_id:
+            qs = qs.filter(labourid_id=labour_id)
+        
+        loans_data = []
+        for adv in qs:
+            emp = adv.labourid
+            loans_data.append({
+                'id': adv.id,
+                'labour_id': adv.labourid_id,
+                'employee_name': emp.name if emp else 'Unknown',
+                'amount': adv.amount,
+                'deduction_per_month': adv.deduction_per_month,
+                'remaining_balance': adv.remaining_balance,
+                'repaid_amount': round(adv.amount - adv.remaining_balance, 2),
+                'repaid_pct': round(((adv.amount - adv.remaining_balance) / adv.amount * 100), 1) if adv.amount > 0 else 100.0,
+                'date_issued': adv.date_issued.strftime('%Y-%m-%d'),
+                'is_active': adv.remaining_balance > 0,
+            })
+        return send_success(loans_data, 'Loans fetched')
+
+    elif request.method == 'POST':
+        data = request.data
+        labour_id = data.get('labour_id')
+        amount = float(data.get('amount') or 0.0)
+        deduction_per_month = float(data.get('deduction_per_month') or 0.0)
+        date_issued = data.get('date_issued') or timezone.now().date().strftime('%Y-%m-%d')
+        payment_mode = data.get('payment_mode') or 'BANK_TRANSFER'
+        payment_reference = data.get('payment_reference') or ''
+        reason = data.get('reason') or data.get('description') or 'Salary Advance / Loan'
+        
+        if not labour_id:
+            return send_error('Labour ID is required', 400)
+        if amount <= 0:
+            return send_error('Loan amount must be greater than 0', 400)
+        if deduction_per_month <= 0:
+            deduction_per_month = amount
+            
+        adv = SalaryAdvance.objects.create(
+            labourid_id=labour_id,
+            amount=amount,
+            deduction_per_month=deduction_per_month,
+            remaining_balance=amount,
+            date_issued=date_issued
+        )
+        
+        # Post to EmployeeLedger as a Debit (-)
+        EmployeeLedger.objects.create(
+            labourid_id=labour_id,
+            date=date_issued,
+            transaction_type='ADVANCE',
+            description=f"Loan Issued #{adv.id} — {reason}",
+            amount=-amount, # Debit: Company gave money to employee
+            reference_id=adv.id,
+            payment_mode=payment_mode,
+            payment_reference=payment_reference
+        )
+        
+        return send_success({'id': adv.id}, 'Loan issued and posted to ledger successfully')
+
+@api_view(['POST'])
+def hr_loan_set_off(request):
+    data = request.data
+    advance_id = data.get('advance_id')
+    set_off_amount = float(data.get('set_off_amount') or 0.0)
+    set_off_date = data.get('date') or timezone.now().date().strftime('%Y-%m-%d')
+    payment_mode = data.get('payment_mode') or 'CASH'
+    payment_reference = data.get('payment_reference') or ''
+    notes = data.get('notes') or 'Manual Loan Set-Off'
+    
+    if not advance_id:
+        return send_error('Advance ID is required', 400)
+    if set_off_amount <= 0:
+        return send_error('Set-off amount must be greater than 0', 400)
+        
+    adv = SalaryAdvance.objects.filter(id=advance_id).first()
+    if not adv:
+        return send_error('Loan/Advance record not found', 404)
+        
+    if set_off_amount > adv.remaining_balance:
+        set_off_amount = adv.remaining_balance
+        
+    adv.remaining_balance = max(0.0, round(adv.remaining_balance - set_off_amount, 2))
+    adv.save()
+    
+    # Post adjustment to EmployeeLedger as Credit (+)
+    entry = EmployeeLedger.objects.create(
+        labourid_id=adv.labourid_id,
+        date=set_off_date,
+        transaction_type='ADJUSTMENT',
+        description=f"Loan Repayment / Set-off #{adv.id} — {notes}",
+        amount=set_off_amount, # Credit: Employee repaid loan / settled debt
+        reference_id=adv.id,
+        payment_mode=payment_mode,
+        payment_reference=payment_reference
+    )
+    
+    return send_success({
+        'id': entry.id,
+        'remaining_balance': adv.remaining_balance
+    }, 'Loan set-off recorded successfully')
 
 
 
@@ -817,3 +1013,99 @@ def hr_mark_slip_paid(request):
     )
     
     return send_success(None, 'Payment recorded and slip marked as paid')
+
+@api_view(['GET'])
+def hr_salary_slips(request):
+    """
+    Get salary slips for an employee or all employees.
+    Supports filtering by:
+    - labour_id: specific employee
+    - month: single month (YYYY-MM)
+    - months: comma-separated list of months (YYYY-MM,YYYY-MM)
+    - is_finalized: boolean (true/false)
+    """
+    labour_id = request.GET.get('labour_id')
+    month = request.GET.get('month')
+    months_param = request.GET.get('months')
+    is_finalized = request.GET.get('is_finalized')
+    
+    qs = SalarySlip.objects.all().select_related('labourid').order_by('-month', 'labourid__name')
+    
+    if labour_id:
+        qs = qs.filter(labourid_id=labour_id)
+        
+    if month:
+        qs = qs.filter(month=month)
+    elif months_param:
+        months_list = [m.strip() for m in months_param.split(',') if m.strip()]
+        if months_list:
+            qs = qs.filter(month__in=months_list)
+            
+    if is_finalized is not None:
+        qs = qs.filter(is_finalized=(is_finalized.lower() in ('true', '1')))
+        
+    settings_data = load_settings()
+    company_info = {
+        'name': settings_data.get('company_name') or settings_data.get('companyName') or 'Company Name',
+        'address': settings_data.get('company_address') or '',
+        'phone': settings_data.get('company_phone') or '',
+        'email': settings_data.get('company_email') or '',
+        'gst': settings_data.get('company_gst') or '',
+        'logo': settings_data.get('company_logo') or '',
+    }
+    
+    results = []
+    for slip in qs:
+        emp = slip.labourid
+        slip_raw = slip.slip_data or {}
+        earnings = slip_raw.get('earnings') or {
+            'basic': slip.basic_pay,
+            'hra': slip.hra,
+            'allowances': slip.allowances,
+            'travel': slip.travel_allowance,
+            'ot_pay': slip.ot_pay,
+            'incentives': slip.incentives,
+            'gross': slip.gross_pay
+        }
+        deductions = slip_raw.get('deductions') or {
+            'advance': slip.advance_deduction,
+            'late': slip.late_deduction,
+            'unpaid_leave': slip.unpaid_leave_deduction,
+            'other': slip.other_deductions,
+            'total_deductions': round(slip.advance_deduction + slip.late_deduction + slip.unpaid_leave_deduction + slip.other_deductions, 2)
+        }
+        stats = slip_raw.get('stats') or {
+            'payable_days': 30,
+            'present_days': 30,
+            'absent': 0,
+            'ot_hours': 0,
+            'late_hours': 0
+        }
+        
+        results.append({
+            'id': slip.id,
+            'month': slip.month,
+            'labour_id': slip.labourid_id,
+            'labour_name': emp.name if emp else 'Unknown',
+            'employee_id': emp.employee_id if emp else '',
+            'employee_type': emp.employee_type if emp else 'FIXED',
+            'designation': emp.designation if emp else '',
+            'department': emp.department if emp else '',
+            'doj': emp.doj.strftime('%Y-%m-%d') if (emp and emp.doj) else '',
+            'pan_number': emp.pan_number if emp else '',
+            'aadhar_number': emp.aadhar_number if emp else '',
+            'bank_details': {
+                'bank_name': emp.bank_name if emp else '',
+                'account_no': emp.bank_account_number if emp else '',
+                'ifsc': emp.bank_ifsc if emp else '',
+            },
+            'stats': stats,
+            'earnings': earnings,
+            'deductions': deductions,
+            'net_pay': slip.net_pay,
+            'is_finalized': slip.is_finalized,
+            'is_paid': slip.is_paid,
+            'company': company_info
+        })
+        
+    return send_success(results, 'Salary slips retrieved successfully')

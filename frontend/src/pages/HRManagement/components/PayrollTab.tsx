@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useHRPayroll, useLedgerMutations } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
-import { Printer, Download, Search, FileText, Calculator } from 'lucide-react';
+import { Download, Search, FileText, Calculator } from 'lucide-react';
+import { SalarySlipPdfModal } from '@/components/PDF/SalarySlipPdfModal';
 
 const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -13,7 +14,8 @@ export const PayrollTab: React.FC = () => {
   
   const { data: payroll = [], isLoading, error, refetch } = useHRPayroll(fetchMonth);
 
-  const [selectedSlip, setSelectedSlip] = useState<any>(null);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [modalSlips, setModalSlips] = useState<any[]>([]);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [overrides, setOverrides] = useState<Record<number, number>>({});
   
@@ -21,7 +23,6 @@ export const PayrollTab: React.FC = () => {
 
   const handleGenerate = () => {
     setFetchMonth(selectedMonth);
-    setSelectedSlip(null);
     setOverrides({});
   };
 
@@ -49,80 +50,6 @@ export const PayrollTab: React.FC = () => {
     await finalizePayroll({ month: fetchMonth, slips: slipsToFinalize });
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  if (selectedSlip) {
-    return (
-      <div className="max-w-3xl mx-auto bg-white text-black p-8 rounded-xl shadow-sm border border-gray-200">
-        <div className="flex justify-between items-start mb-8 print:hidden">
-          <Button variant="outline" onClick={() => setSelectedSlip(null)}>Back to List</Button>
-          <Button onClick={handlePrint} className="gap-2"><Printer className="w-4 h-4" /> Print Slip</Button>
-        </div>
-
-        {/* Salary Slip Template */}
-        <div className="border border-gray-800 p-6 print:border-none">
-          <div className="text-center mb-6 border-b border-gray-800 pb-4">
-            <h1 className="text-2xl font-bold uppercase tracking-wider">Company Name</h1>
-            <p className="text-sm">Salary Slip for the month of {new Date(fetchMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
-            <div>
-              <p><span className="font-semibold w-32 inline-block">Employee Name:</span> {selectedSlip.labour_name}</p>
-              <p><span className="font-semibold w-32 inline-block">Employee Type:</span> {selectedSlip.employee_type}</p>
-            </div>
-            <div>
-              <p><span className="font-semibold w-32 inline-block">Total Days:</span> {selectedSlip.stats.payable_days}</p>
-              <p><span className="font-semibold w-32 inline-block">Leave/Absent:</span> {selectedSlip.stats.absent}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-8 border-t border-gray-800 pt-4">
-            {/* Earnings Column */}
-            <div>
-              <h3 className="font-bold border-b border-gray-400 pb-2 mb-2">Earnings</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span>Basic Pay</span><span>{Currency(selectedSlip.earnings.basic)}</span></div>
-                {selectedSlip.earnings.hra > 0 && <div className="flex justify-between"><span>House Rent Allowance (HRA)</span><span>{Currency(selectedSlip.earnings.hra)}</span></div>}
-                {selectedSlip.earnings.allowances > 0 && <div className="flex justify-between"><span>Other / Travel Allowances</span><span>{Currency(selectedSlip.earnings.allowances)}</span></div>}
-                {selectedSlip.earnings.ot_pay > 0 && <div className="flex justify-between"><span>Overtime Pay ({selectedSlip.stats.ot_hours} hrs)</span><span>{Currency(selectedSlip.earnings.ot_pay)}</span></div>}
-                {selectedSlip.earnings.incentives > 0 && <div className="flex justify-between"><span>Incentives</span><span>{Currency(selectedSlip.earnings.incentives)}</span></div>}
-              </div>
-              <div className="flex justify-between font-bold border-t border-gray-400 mt-4 pt-2">
-                <span>Total Earnings</span><span>{Currency(selectedSlip.earnings.gross)}</span>
-              </div>
-            </div>
-
-            {/* Deductions Column */}
-            <div>
-              <h3 className="font-bold border-b border-gray-400 pb-2 mb-2">Deductions</h3>
-              <div className="space-y-2 text-sm">
-                {selectedSlip.deductions.late > 0 && <div className="flex justify-between"><span>Late Coming Deduction</span><span>{Currency(selectedSlip.deductions.late)}</span></div>}
-                {selectedSlip.deductions.advance > 0 && <div className="flex justify-between"><span>Salary Advance Recovery</span><span>{Currency(selectedSlip.deductions.advance)}</span></div>}
-                {selectedSlip.deductions.total_deductions === 0 && <div className="text-gray-500 italic">No deductions</div>}
-              </div>
-              <div className="flex justify-between font-bold border-t border-gray-400 mt-4 pt-2">
-                <span>Total Deductions</span><span>{Currency(selectedSlip.deductions.total_deductions)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 border-t-2 border-gray-800 pt-4 bg-gray-100 p-4 flex justify-between items-center text-lg">
-            <span className="font-bold uppercase">Net Pay</span>
-            <span className="font-bold text-2xl">{Currency(selectedSlip.net_pay)}</span>
-          </div>
-          
-          <div className="mt-16 flex justify-between text-sm pt-8">
-            <div className="border-t border-gray-800 w-48 text-center pt-2">Employer Signature</div>
-            <div className="border-t border-gray-800 w-48 text-center pt-2">Employee Signature</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-card p-4 rounded-xl border border-border">
@@ -130,7 +57,7 @@ export const PayrollTab: React.FC = () => {
           <h2 className="text-xl font-bold">Payroll & Salary Slips</h2>
           <p className="text-sm text-muted-foreground mt-1">Generate compliant Indian salary slips for your staff.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2.5">
           <input 
             type="month" 
             value={selectedMonth} 
@@ -138,14 +65,25 @@ export const PayrollTab: React.FC = () => {
             className="border rounded-lg px-3 py-2 text-sm bg-background"
           />
           {payroll.some((p: any) => !p.is_finalized) && (
-            <Button onClick={handleFinalize} variant="default" className="gap-2 bg-green-600 hover:bg-green-700 text-white">
+            <Button onClick={handleFinalize} variant="default" className="gap-2 bg-green-600 hover:bg-green-700 text-white cursor-pointer">
               Finalize Payroll
             </Button>
           )}
-          <Button variant="outline" onClick={() => setShowBreakdown(!showBreakdown)} className="gap-2">
+          <Button variant="outline" onClick={() => setShowBreakdown(!showBreakdown)} className="gap-2 cursor-pointer">
             <Calculator className="w-4 h-4" /> {showBreakdown ? 'Hide Breakdown' : 'Show Breakdown'}
           </Button>
-          <Button onClick={handleGenerate} className="gap-2"><Search className="w-4 h-4" /> Run Payroll</Button>
+          <Button onClick={handleGenerate} className="gap-2 cursor-pointer"><Search className="w-4 h-4" /> Run Payroll</Button>
+          <Button 
+            variant="outline" 
+            disabled={payroll.length === 0} 
+            onClick={() => {
+              setModalSlips(payroll);
+              setPdfModalOpen(true);
+            }} 
+            className="gap-2 border-primary/50 text-primary hover:bg-primary/10 cursor-pointer font-medium"
+          >
+            <Download className="w-4 h-4" /> Download Slips (PDF)
+          </Button>
         </div>
       </div>
 
@@ -211,8 +149,15 @@ export const PayrollTab: React.FC = () => {
                   </div>
                 )}
               </div>
-              <Button variant="secondary" className="w-full gap-2" onClick={() => setSelectedSlip(slip)}>
-                <FileText className="w-4 h-4" /> View Salary Slip
+              <Button 
+                variant="secondary" 
+                className="w-full gap-2 cursor-pointer font-medium" 
+                onClick={() => {
+                  setModalSlips([slip]);
+                  setPdfModalOpen(true);
+                }}
+              >
+                <FileText className="w-4 h-4" /> View Salary Slip (PDF)
               </Button>
             </div>
           ))}
@@ -223,6 +168,15 @@ export const PayrollTab: React.FC = () => {
           )}
         </div>
       </SafeDataView>
+
+      {/* Salary Slip PDF Modal */}
+      <SalarySlipPdfModal
+        isOpen={pdfModalOpen}
+        onClose={() => setPdfModalOpen(false)}
+        slips={modalSlips}
+        defaultSelectedMonth={fetchMonth}
+        title={modalSlips.length === 1 ? `Salary Slip — ${modalSlips[0]?.labour_name}` : `Staff Salary Slips (${modalSlips.length})`}
+      />
     </div>
   );
 };

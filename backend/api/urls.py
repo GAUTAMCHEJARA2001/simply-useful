@@ -76,6 +76,7 @@ router.register('estimates', EstimateViewSet, basename='estimates')
 from api.views_hr import (
     hr_employees, hr_employees_detail,
     hr_attendance, hr_generate_payroll, hr_finalize_payroll, hr_mark_slip_paid, hr_employee_ledger, hr_ledger_payment, hr_employee_change_status,
+    hr_loans, hr_loan_set_off, hr_salary_slips,
     hr_departments, hr_departments_detail,
     hr_designations, hr_designations_detail,
     hr_leave_types, hr_leave_types_detail,
@@ -161,6 +162,9 @@ urlpatterns = [
     path('hr/payroll/mark-paid', hr_mark_slip_paid, name='hr-payroll-mark-paid'),
     path('hr/ledger/<str:labour_id>', hr_employee_ledger, name='hr-employee-ledger'),
     path('hr/ledger/payment', hr_ledger_payment, name='hr-ledger-payment'),
+    path('hr/loans', hr_loans, name='hr-loans'),
+    path('hr/loans/set-off', hr_loan_set_off, name='hr-loan-set-off'),
+    path('hr/salary-slips', hr_salary_slips, name='hr-salary-slips'),
     
     # Leave Management
     path('hr/leave-types', hr_leave_types, name='hr-leave-types'),

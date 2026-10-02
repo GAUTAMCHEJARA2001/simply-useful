@@ -201,12 +201,12 @@ export const useLedgerMutations = () => {
   });
 
   const recordPayment = useMutation({
-    mutationFn: (data: { labour_id: number, amount: number, description?: string, date?: string }) => api.post('/hr/ledger/payment', data),
+    mutationFn: (data: { labour_id: number; amount: number; description?: string; date?: string; payment_mode?: string; payment_reference?: string }) => api.post('/hr/ledger/payment', data),
     onSuccess: (_, variables) => {
       toast({ title: 'Success', description: 'Payment recorded successfully' });
       queryClient.invalidateQueries({ queryKey: ['hr_ledger', variables.labour_id] });
     },
-    onError: (e: any) => toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    onError: (e: any) => toast({ title: 'Error', description: e?.response?.data?.message || e.message, variant: 'destructive' })
   });
 
   const markSlipPaid = useMutation({
@@ -221,6 +221,83 @@ export const useLedgerMutations = () => {
   });
 
   return { finalizePayroll: finalizePayroll.mutateAsync, recordPayment: recordPayment.mutateAsync, markSlipPaid: markSlipPaid.mutateAsync };
+};
+
+export const useEmployeeLoans = (labourId?: number | string) => {
+  return useQuery({
+    queryKey: ['hr_loans', labourId],
+    queryFn: async () => {
+      const url = labourId ? `/hr/loans?labour_id=${labourId}` : '/hr/loans';
+      const res = await api.get(url);
+      return res.data?.data || [];
+    },
+    enabled: !!labourId
+  });
+};
+
+export const useLoanMutations = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const issueLoan = useMutation({
+    mutationFn: (data: {
+      labour_id: number | string;
+      amount: number;
+      deduction_per_month?: number;
+      date_issued?: string;
+      payment_mode?: string;
+      payment_reference?: string;
+      reason?: string;
+    }) => api.post('/hr/loans', data),
+    onSuccess: (_, variables) => {
+      toast({ title: 'Success', description: 'Loan/Advance issued and posted to ledger' });
+      queryClient.invalidateQueries({ queryKey: ['hr_loans'] });
+      queryClient.invalidateQueries({ queryKey: ['hr_ledger', variables.labour_id] });
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e?.response?.data?.message || e.message, variant: 'destructive' })
+  });
+
+  const setOffLoan = useMutation({
+    mutationFn: (data: {
+      advance_id: number;
+      set_off_amount: number;
+      date?: string;
+      payment_mode?: string;
+      payment_reference?: string;
+      notes?: string;
+      labour_id?: number | string;
+    }) => api.post('/hr/loans/set-off', data),
+    onSuccess: (_, variables) => {
+      toast({ title: 'Success', description: 'Loan set-off recorded successfully' });
+      queryClient.invalidateQueries({ queryKey: ['hr_loans'] });
+      if (variables.labour_id) {
+        queryClient.invalidateQueries({ queryKey: ['hr_ledger', variables.labour_id] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['hr_ledger'] });
+      }
+    },
+    onError: (e: any) => toast({ title: 'Error', description: e?.response?.data?.message || e.message, variant: 'destructive' })
+  });
+
+  return {
+    issueLoan: issueLoan.mutateAsync,
+    setOffLoan: setOffLoan.mutateAsync,
+  };
+};
+
+export const useSalarySlips = (params?: { labour_id?: number | string; month?: string; months?: string; is_finalized?: boolean }) => {
+  return useQuery({
+    queryKey: ['hr_salary_slips', params],
+    queryFn: async () => {
+      const q = new URLSearchParams();
+      if (params?.labour_id) q.set('labour_id', String(params.labour_id));
+      if (params?.month) q.set('month', params.month);
+      if (params?.months) q.set('months', params.months);
+      if (params?.is_finalized !== undefined) q.set('is_finalized', String(params.is_finalized));
+      const res = await api.get(`/hr/salary-slips?${q.toString()}`);
+      return res.data?.data || [];
+    }
+  });
 };
 
 
