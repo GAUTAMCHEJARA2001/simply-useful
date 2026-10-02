@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { ImageViewerModal } from '@/components/ImageViewerModal';
 
 export const TravelApprovalsTab: React.FC = () => {
   const { toast } = useToast();
@@ -625,19 +626,13 @@ export const TravelApprovalsTab: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Image Lightbox Modal */}
-      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="max-w-2xl p-2 bg-black/90 border-0">
-          <DialogHeader className="p-2">
-            <DialogTitle className="text-white text-sm">Meter Photo</DialogTitle>
-          </DialogHeader>
-          {previewImage && (
-            <div className="flex items-center justify-center max-h-[80vh]">
-              <img src={previewImage} alt="Meter Preview" className="max-h-[75vh] w-auto object-contain rounded-lg shadow-2xl" />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Zoomable Image Viewer Modal */}
+      <ImageViewerModal
+        isOpen={!!previewImage}
+        onClose={() => setPreviewImage(null)}
+        imageUrl={previewImage}
+        title="Odometer Meter Reading Photo"
+      />
     </div>
   );
 };

@@ -52,6 +52,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { formatIndianNumber, formatIndianCurrency, formatIndianWords } from '@/utils/format';
 import { SOScorecardTab } from './travel/components/SOScorecardTab';
+import { ImageViewerModal } from '@/components/ImageViewerModal';
 
 export const VISIT_PURPOSE_OPTIONS = [
   { id: 'ORDER', label: 'Order Booking', icon: '📦', badgeBg: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300' },
@@ -3175,19 +3176,13 @@ export const DailyTravelPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Lightbox Modal */}
-      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="max-w-2xl p-2 bg-black/90 border-0">
-          <DialogHeader className="p-2">
-            <DialogTitle className="text-white text-sm">Meter Photo</DialogTitle>
-          </DialogHeader>
-          {previewImage && (
-            <div className="flex items-center justify-center max-h-[80vh]">
-              <img src={previewImage} alt="Meter Preview" className="max-h-[75vh] w-auto object-contain rounded-lg shadow-2xl" />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Zoomable Image Viewer Modal */}
+      <ImageViewerModal
+        isOpen={!!previewImage}
+        onClose={() => setPreviewImage(null)}
+        imageUrl={previewImage}
+        title="Odometer Meter Reading Photo"
+      />
 
       {/* UNIFIED LIVE CAMERA MODAL (Works on Desktop Webcams & Mobile Cameras) */}
       <Dialog open={cameraActive && !!cameraTarget} onOpenChange={(open) => { if (!open) closeCameraModal(); }}>

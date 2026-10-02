@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { travelService } from '@/api/services/travel.service';
+import { ImageViewerModal } from '@/components/ImageViewerModal';
 
 const categories = ['Travel', 'Food', 'Accommodation', 'Fuel', 'Phone', 'Other'];
 
@@ -40,6 +41,7 @@ const ExpenseEntry: React.FC = () => {
   const [travelLogs, setTravelLogs] = useState<any[]>([]);
   const [loadingTravel, setLoadingTravel] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'travel' | 'bills'>('all');
+  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
 
   const roleUpper = (user?.role || '').toUpperCase();
   const isHr = ['SUPERADMIN', 'ADMIN', 'HR', 'DIRECTOR', 'VP'].includes(roleUpper) || !!(user as any)?.is_superuser;
@@ -292,12 +294,6 @@ const ExpenseEntry: React.FC = () => {
                       )}>
                         {e.status || 'PENDING'}
                       </span>
-
-                      {e.isTravelClaim && (
-                        <span className="text-[10px] bg-blue-500/10 text-blue-700 font-semibold px-2 py-0.5 rounded border border-blue-500/20">
-                          {e.km} KM @ ₹{e.rate}/KM
-                        </span>
-                      )}
                     </div>
 
                     <p className="text-xs text-muted-foreground">
@@ -340,8 +336,9 @@ const ExpenseEntry: React.FC = () => {
 
                     {e.photo && (
                       <div 
-                        className="mt-2 group relative w-16 h-16 border rounded-lg overflow-hidden cursor-pointer" 
-                        onClick={() => window.open(e.photo, '_blank')}
+                        className="mt-2 group relative w-16 h-16 border rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity" 
+                        onClick={() => setPreviewPhoto(e.photo)}
+                        title="Click to zoom in / inspect photo"
                       >
                         <img src={e.photo} alt="Receipt / Odometer" className="w-full h-full object-cover" />
                       </div>
@@ -451,6 +448,14 @@ const ExpenseEntry: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Interactive Zoomable Image Viewer Modal */}
+      <ImageViewerModal
+        isOpen={!!previewPhoto}
+        onClose={() => setPreviewPhoto(null)}
+        imageUrl={previewPhoto}
+        title="Expense / Odometer Photo"
+      />
     </div>
   );
 };
