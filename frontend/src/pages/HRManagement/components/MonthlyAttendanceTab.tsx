@@ -55,7 +55,8 @@ export const MonthlyAttendanceTab = () => {
 
   const handleOpenFinalize = (emp: any) => {
     setSelectedEmp(emp);
-    setAdvanceOverride(emp.deductions?.advance?.toString() || '0');
+    const defaultEmi = emp.deductions?.loan_emi !== undefined ? emp.deductions.loan_emi : (emp.deductions?.advance || 0);
+    setAdvanceOverride(defaultEmi.toString());
     setModalOpen(true);
   };
 
@@ -63,18 +64,22 @@ export const MonthlyAttendanceTab = () => {
     if (!selectedEmp) return;
     try {
       const overrideVal = parseFloat(advanceOverride);
-      const actualAdv = !isNaN(overrideVal) ? Math.max(0, overrideVal) : (selectedEmp.deductions.advance || 0);
+      const actualEmi = !isNaN(overrideVal) ? Math.max(0, overrideVal) : (selectedEmp.deductions.loan_emi || 0);
+      const dailyAdv = selectedEmp.deductions.daily_advance || 0;
+      const actualTotalAdv = Number((actualEmi + dailyAdv).toFixed(2));
       const lateDed = selectedEmp.deductions.late || 0;
-      const netPay = Number((selectedEmp.earnings.gross - lateDed - actualAdv).toFixed(2));
+      const netPay = Number((selectedEmp.earnings.gross - lateDed - actualTotalAdv).toFixed(2));
       
       const slipData = {
         ...selectedEmp,
-        manual_advance_override: !isNaN(overrideVal) ? actualAdv : null,
+        manual_advance_override: !isNaN(overrideVal) ? actualTotalAdv : null,
         net_pay: netPay,
         deductions: {
           ...selectedEmp.deductions,
-          advance: actualAdv,
-          total_deductions: Number((lateDed + actualAdv).toFixed(2))
+          advance: actualTotalAdv,
+          loan_emi: actualEmi,
+          daily_advance: dailyAdv,
+          total_deductions: Number((lateDed + actualTotalAdv).toFixed(2))
         }
       };
 
@@ -293,10 +298,30 @@ export const MonthlyAttendanceTab = () => {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col gap-0.5 text-xs w-28 ml-auto">
-                          {emp.deductions.late > 0 && <div className="flex justify-between text-red-500/80"><span>Late:</span> <span>-₹{emp.deductions.late.toFixed(2)}</span></div>}
-                          {emp.deductions.advance > 0 && <div className="flex justify-between text-red-600 font-semibold"><span>Loan/Adv:</span> <span>-₹{emp.deductions.advance.toFixed(2)}</span></div>}
+                          {emp.deductions.loan_emi > 0 && (
+                            <div className="flex justify-between text-red-600 font-semibold" title="Loan EMI Deduction">
+                              <span>EMI:</span> <span>-₹{emp.deductions.loan_emi.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {emp.deductions.daily_advance > 0 && (
+                            <div className="flex justify-between text-amber-700 font-medium" title="Attendance Daily Advance">
+                              <span>Adv:</span> <span>-₹{emp.deductions.daily_advance.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {!emp.deductions.loan_emi && !emp.deductions.daily_advance && emp.deductions.advance > 0 && (
+                            <div className="flex justify-between text-red-600 font-semibold">
+                              <span>Loan/Adv:</span> <span>-₹{emp.deductions.advance.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {emp.deductions.late > 0 && (
+                            <div className="flex justify-between text-red-500/80">
+                              <span>Late:</span> <span>-₹{emp.deductions.late.toFixed(2)}</span>
+                            </div>
+                          )}
                           {emp.deductions.total_deductions > 0 ? (
-                            <div className="flex justify-between font-bold text-red-600 pt-1 border-t border-red-200 mt-1"><span>Ded:</span> <span>-₹{emp.deductions.total_deductions.toFixed(2)}</span></div>
+                            <div className="flex justify-between font-bold text-red-600 pt-1 border-t border-red-200 mt-1">
+                              <span>Ded:</span> <span>-₹{emp.deductions.total_deductions.toFixed(2)}</span>
+                            </div>
                           ) : (
                             <div className="text-muted-foreground text-center">-</div>
                           )}
@@ -406,11 +431,17 @@ export const MonthlyAttendanceTab = () => {
                 <h4 className="text-sm font-semibold text-red-800 mb-2 border-b border-red-200 pb-1">Deductions</h4>
                 <div className="space-y-2 text-sm text-red-900">
                   {selectedEmp.deductions.late > 0 && <div className="flex justify-between"><span>Late Deduction:</span> <span>₹{selectedEmp.deductions.late.toFixed(2)}</span></div>}
+                  {selectedEmp.deductions.daily_advance > 0 && (
+                    <div className="flex justify-between text-amber-800">
+                      <span>Daily Attendance Advance:</span> 
+                      <span>₹{selectedEmp.deductions.daily_advance.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex flex-col gap-1">
                     <div className="flex justify-between items-center">
-                      <span className="font-semibold text-red-700">Loan / Advance Deduction:</span>
+                      <span className="font-semibold text-red-700">Loan EMI Deduction:</span>
                       {selectedEmp.is_finalized && selectedEmp.is_paid ? (
-                        <span className="font-bold text-red-600">₹{selectedEmp.deductions.advance.toFixed(2)}</span>
+                        <span className="font-bold text-red-600">₹{(selectedEmp.deductions.loan_emi ?? selectedEmp.deductions.advance ?? 0).toFixed(2)}</span>
                       ) : (
                         <div className="flex items-center border border-red-300 rounded bg-white w-28">
                           <span className="px-2 text-gray-500">₹</span>
@@ -426,13 +457,13 @@ export const MonthlyAttendanceTab = () => {
                     </div>
                     {(!selectedEmp.is_finalized || !selectedEmp.is_paid) && (
                       <p className="text-[10px] text-red-600 opacity-80 leading-tight">
-                        Computed loan deduction: ₹{(selectedEmp.deductions.advance || 0).toFixed(2)}. Edit to override for this month.
+                        Computed loan EMI: ₹{(selectedEmp.deductions.loan_emi ?? selectedEmp.deductions.advance ?? 0).toFixed(2)}. Edit to override for this month.
                       </p>
                     )}
                   </div>
                   <div className="flex justify-between font-bold pt-1 border-t border-red-200 mt-2">
                     <span>Total Deductions:</span> 
-                    <span>₹{((selectedEmp.deductions.late || 0) + (parseFloat(advanceOverride) || 0)).toFixed(2)}</span>
+                    <span>₹{((selectedEmp.deductions.late || 0) + (selectedEmp.deductions.daily_advance || 0) + (parseFloat(advanceOverride) || 0)).toFixed(2)}</span>
                   </div>
                 </div>
               </div>

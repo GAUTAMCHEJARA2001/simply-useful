@@ -56,6 +56,8 @@ export interface SalarySlipItem {
   };
   deductions: {
     advance?: number;
+    loan_emi?: number;
+    daily_advance?: number;
     late?: number;
     unpaid_leave?: number;
     other?: number;
@@ -158,11 +160,11 @@ export const SalarySlipPdfModal: React.FC<SalarySlipPdfModalProps> = ({
   };
 
   const fallbackCompany = {
-    name: settings?.company_name || 'Simply Useful ERP',
-    address: settings?.company_address || '',
-    phone: settings?.company_phone || '',
-    email: settings?.company_email || '',
-    gst: settings?.company_gst || '',
+    name: settings?.company_name || 'KAMLA CONCHEM PVT LTD',
+    address: settings?.company_address || 'navsari, gujarat-396445',
+    phone: settings?.company_phone || '+91 81559 31559',
+    email: settings?.company_email || 'support@kamla.com',
+    gst: settings?.company_gst || '24AALCK3507C1ZX',
     logo: settings?.company_logo || ''
   };
 
@@ -344,7 +346,9 @@ export const SalarySlipPdfModal: React.FC<SalarySlipPdfModalProps> = ({
                 const isLast = index === activeSlips.length - 1;
                 const rawCompany = slip.company || {};
                 const company = {
-                  name: rawCompany.name || fallbackCompany.name,
+                  name: (rawCompany.name && rawCompany.name !== 'Company Name' && rawCompany.name !== 'Simply Useful ERP')
+                    ? rawCompany.name
+                    : (fallbackCompany.name || 'KAMLA CONCHEM PVT LTD'),
                   address: rawCompany.address || fallbackCompany.address,
                   phone: rawCompany.phone || fallbackCompany.phone,
                   email: rawCompany.email || fallbackCompany.email,
@@ -527,12 +531,28 @@ export const SalarySlipPdfModal: React.FC<SalarySlipPdfModalProps> = ({
                             <span>Amount (₹)</span>
                           </div>
                           <div className="p-3 space-y-1.5 text-xs">
-                            <div className="flex justify-between py-0.5">
-                              <span className="text-slate-600">Advance &amp; Loan Deduction</span>
-                              <span className="font-mono font-medium text-red-600">
-                                {slip.deductions.advance ? `-${Currency(slip.deductions.advance)}` : '₹0.00'}
-                              </span>
-                            </div>
+                            {((slip.deductions.loan_emi || 0) > 0 || (slip.deductions.advance && !slip.deductions.daily_advance && !slip.deductions.loan_emi)) && (
+                              <div className="flex justify-between py-0.5">
+                                <span className="text-slate-600 font-medium">Loan EMI Deduction</span>
+                                <span className="font-mono font-medium text-red-600">
+                                  -{Currency(slip.deductions.loan_emi || slip.deductions.advance || 0)}
+                                </span>
+                              </div>
+                            )}
+                            {(slip.deductions.daily_advance || 0) > 0 && (
+                              <div className="flex justify-between py-0.5">
+                                <span className="text-slate-600 font-medium">Salary / Daily Advance</span>
+                                <span className="font-mono font-medium text-red-600">
+                                  -{Currency(slip.deductions.daily_advance || 0)}
+                                </span>
+                              </div>
+                            )}
+                            {!(slip.deductions.loan_emi || 0) && !(slip.deductions.daily_advance || 0) && !(slip.deductions.advance || 0) && (
+                              <div className="flex justify-between py-0.5">
+                                <span className="text-slate-600">Loan &amp; Advance</span>
+                                <span className="font-mono font-medium text-slate-400">₹0.00</span>
+                              </div>
+                            )}
                             {(slip.deductions.late || 0) > 0 && (
                               <div className="flex justify-between py-0.5">
                                 <span className="text-slate-600">Late Attendance Penalty</span>

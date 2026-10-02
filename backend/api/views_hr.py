@@ -573,6 +573,8 @@ def hr_generate_payroll(request):
             'deductions': {
                 'late': round(late_deduction, 2),
                 'advance': round(advance_deduction + total_daily_advance, 2),
+                'loan_emi': round(advance_deduction, 2),
+                'daily_advance': round(total_daily_advance, 2),
                 'total_deductions': round(late_deduction + advance_deduction + total_daily_advance, 2)
             },
             'net_pay': round(net_pay, 2),

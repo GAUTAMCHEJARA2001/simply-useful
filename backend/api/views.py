@@ -431,28 +431,32 @@ def _get_company():
 
 def load_settings():
     default_vals = {'stock_method': 'FIFO', 'allow_negative_stock': False, 'company_name': 'Simply Useful ERP', 'companyName': 'Simply Useful ERP', 'currency_symbol': '₹', 'sku_prefix': 'KCPL', 'stockMethod': 'FIFO', 'skuPrefix': 'KCPL', 'allow_price_edit_sales': False, 'allowPriceEditSales': False, 'show_credit_warnings': True, 'showCreditWarnings': True, 'order_approval_required': False, 'orderApprovalRequired': False, 'auto_backup_enabled': False, 'autoBackupEnabled': False, 'auto_backup_time': '02:00', 'autoBackupTime': '02:00', 'local_backup_dir': 'C:\\SimplyUsefulBackups', 'localBackupDir': 'C:\\SimplyUsefulBackups', 'local_backup_enabled': False, 'localBackupEnabled': False, 'local_backup_time': '02:00', 'localBackupTime': '02:00'}
-    data = None
+    file_data = {}
+    if os.path.exists(SETTINGS_FILE_PATH):
+        try:
+            with open(SETTINGS_FILE_PATH, 'r', encoding='utf-8') as f:
+                file_data = json.load(f)
+        except Exception:
+            pass
+
+    db_data = {}
+    company = None
     try:
         company = _get_company()
         if company and company.settings_json:
-            data = json.loads(company.settings_json)
+            db_data = json.loads(company.settings_json)
     except Exception:
         pass
-    if data is None and os.path.exists(SETTINGS_FILE_PATH):
+
+    data = {**default_vals, **file_data, **db_data}
+    
+    # If DB company has empty settings or missing company details, sync from file_data
+    if company and file_data and (not company.settings_json or company.settings_json == '{}' or not db_data.get('company_name')):
         try:
-            with open(SETTINGS_FILE_PATH, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                try:
-                    company = _get_company()
-                    if company:
-                        company.settings_json = json.dumps(data, ensure_ascii=False)
-                        company.save(update_fields=['settings_json'])
-                except Exception:
-                    pass
+            company.settings_json = json.dumps(data, ensure_ascii=False)
+            company.save(update_fields=['settings_json'])
         except Exception:
             pass
-    if data is None:
-        return default_vals
     data.pop('key', None)
     data.pop('value', None)
     _sync_keys(data, 'stock_method', 'stockMethod')
