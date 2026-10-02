@@ -505,19 +505,9 @@ def hr_generate_payroll(request):
         advance_deduction = 0.0
         advance_calc_parts = []
         
-        # Calculate maximum possible EMI deduction without going negative
-        max_emi_possible = gross_pay - late_deduction - total_daily_advance
-        if max_emi_possible < 0:
-            max_emi_possible = 0.0
-            
         for adv in advances:
-            if advance_deduction >= max_emi_possible:
-                break
             emi = adv.deduction_per_month if (adv.deduction_per_month and adv.deduction_per_month > 0) else adv.remaining_balance
             deduct = min(emi, adv.remaining_balance)
-            # Cap the deduction to the remaining possible net pay
-            if advance_deduction + deduct > max_emi_possible:
-                deduct = max_emi_possible - advance_deduction
             if deduct > 0:
                 advance_deduction += deduct
                 advance_calc_parts.append(f"₹{deduct:.2f} (Loan/Adv EMI)")
@@ -527,7 +517,7 @@ def hr_generate_payroll(request):
             
         advance_calc = " + ".join(advance_calc_parts) + f" = ₹{advance_deduction + total_daily_advance:.2f}" if advance_calc_parts else ""
             
-        net_pay = max(0.0, round(gross_pay - late_deduction - advance_deduction - total_daily_advance, 2))
+        net_pay = round(gross_pay - late_deduction - advance_deduction - total_daily_advance, 2)
         
         # Check if finalized
         slip = SalarySlip.objects.filter(labourid=emp, month=month).first()

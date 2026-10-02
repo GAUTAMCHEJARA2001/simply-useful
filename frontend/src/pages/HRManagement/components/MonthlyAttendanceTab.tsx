@@ -65,7 +65,7 @@ export const MonthlyAttendanceTab = () => {
       const overrideVal = parseFloat(advanceOverride);
       const actualAdv = !isNaN(overrideVal) ? Math.max(0, overrideVal) : (selectedEmp.deductions.advance || 0);
       const lateDed = selectedEmp.deductions.late || 0;
-      const netPay = Math.max(0, Number((selectedEmp.earnings.gross - lateDed - actualAdv).toFixed(2)));
+      const netPay = Number((selectedEmp.earnings.gross - lateDed - actualAdv).toFixed(2));
       
       const slipData = {
         ...selectedEmp,
@@ -303,8 +303,8 @@ export const MonthlyAttendanceTab = () => {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="font-bold text-primary text-base">
-                          ₹{emp.net_pay.toFixed(2)}
+                        <div className={`font-bold text-base ${emp.net_pay < 0 ? 'text-red-600 font-mono' : 'text-primary'}`}>
+                          {emp.net_pay < 0 ? `-₹${Math.abs(emp.net_pay).toFixed(2)}` : `₹${emp.net_pay.toFixed(2)}`}
                         </div>
                         {emp.deductions.advance > 0 && (
                           <div className="text-[10px] text-red-600 font-semibold whitespace-nowrap mt-0.5" title="Net Pay after loan/advance deduction">
@@ -445,8 +445,11 @@ export const MonthlyAttendanceTab = () => {
                   Gross (₹{selectedEmp.earnings.gross.toFixed(2)}) - Late (₹{(selectedEmp.deductions.late || 0).toFixed(2)}) - Loan/Adv (₹{(parseFloat(advanceOverride) || 0).toFixed(2)})
                 </span>
               </div>
-              <span className="text-2xl font-bold text-primary-900 font-mono">
-                ₹{Math.max(0, selectedEmp.earnings.gross - (selectedEmp.deductions.late || 0) - (parseFloat(advanceOverride) || 0)).toFixed(2)}
+              <span className={`text-2xl font-bold font-mono ${(selectedEmp.earnings.gross - (selectedEmp.deductions.late || 0) - (parseFloat(advanceOverride) || 0)) < 0 ? 'text-red-600' : 'text-primary-900'}`}>
+                {(() => {
+                  const net = selectedEmp.earnings.gross - (selectedEmp.deductions.late || 0) - (parseFloat(advanceOverride) || 0);
+                  return net < 0 ? `-₹${Math.abs(net).toFixed(2)}` : `₹${net.toFixed(2)}`;
+                })()}
               </span>
             </div>
 

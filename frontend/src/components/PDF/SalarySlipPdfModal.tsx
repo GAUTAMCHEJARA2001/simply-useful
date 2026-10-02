@@ -82,7 +82,13 @@ interface SalarySlipPdfModalProps {
   title?: string;
 }
 
-const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const Currency = (v: number) => {
+  const val = Number(v || 0);
+  if (val < 0) {
+    return `-₹${Math.abs(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 
 const formatMonthName = (monthStr: string) => {
   if (!monthStr) return '';
@@ -345,7 +351,9 @@ export const SalarySlipPdfModal: React.FC<SalarySlipPdfModalProps> = ({
                   gst: rawCompany.gst || fallbackCompany.gst,
                   logo: rawCompany.logo || fallbackCompany.logo,
                 };
-                const netInWords = amountToWords(slip.net_pay || 0);
+                const netInWords = (slip.net_pay || 0) < 0 
+                  ? `Minus ${amountToWords(Math.abs(slip.net_pay || 0))}` 
+                  : amountToWords(slip.net_pay || 0);
                 const deductionsTotal = slip.deductions.total_deductions !== undefined
                   ? slip.deductions.total_deductions
                   : ((slip.deductions.advance || 0) + (slip.deductions.late || 0) + (slip.deductions.unpaid_leave || 0) + (slip.deductions.other || 0));
