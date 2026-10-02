@@ -372,14 +372,13 @@ def hr_generate_payroll(request):
     allowance_pct = float(hr_salary_components.get('allowances', 20)) / 100.0
     
     for emp in employees:
-        # Check if already finalized and freeze past data
+        # Freeze past data ONLY if slip is already paid. If finalized but unpaid, calculate live so new loans/advances are reflected.
         slip = SalarySlip.objects.filter(labourid=emp, month=month).first()
-        if slip and slip.is_finalized and slip.slip_data:
+        if slip and slip.is_finalized and slip.is_paid and slip.slip_data:
             # Reconstruct exact past payload to avoid dynamic recalculation
             stored_data = slip.slip_data.copy()
-            # Ensure dynamic UI flags and branding are updated
             stored_data['is_finalized'] = True
-            stored_data['is_paid'] = slip.is_paid
+            stored_data['is_paid'] = True
             if 'company' not in stored_data or not stored_data.get('company'):
                 stored_data['company'] = company_info
             if 'month' not in stored_data:
@@ -514,20 +513,21 @@ def hr_generate_payroll(request):
         for adv in advances:
             if advance_deduction >= max_emi_possible:
                 break
-            deduct = min(adv.deduction_per_month, adv.remaining_balance)
+            emi = adv.deduction_per_month if (adv.deduction_per_month and adv.deduction_per_month > 0) else adv.remaining_balance
+            deduct = min(emi, adv.remaining_balance)
             # Cap the deduction to the remaining possible net pay
             if advance_deduction + deduct > max_emi_possible:
                 deduct = max_emi_possible - advance_deduction
             if deduct > 0:
                 advance_deduction += deduct
-                advance_calc_parts.append(f"₹{deduct:.2f} (Monthly EMI)")
+                advance_calc_parts.append(f"₹{deduct:.2f} (Loan/Adv EMI)")
             
         if total_daily_advance > 0:
             advance_calc_parts.append(f"₹{total_daily_advance:.2f} (Daily Advances)")
             
         advance_calc = " + ".join(advance_calc_parts) + f" = ₹{advance_deduction + total_daily_advance:.2f}" if advance_calc_parts else ""
             
-        net_pay = gross_pay - late_deduction - advance_deduction - total_daily_advance
+        net_pay = max(0.0, round(gross_pay - late_deduction - advance_deduction - total_daily_advance, 2))
         
         # Check if finalized
         slip = SalarySlip.objects.filter(labourid=emp, month=month).first()
@@ -536,10 +536,8 @@ def hr_generate_payroll(request):
         
         if slip and slip.manual_advance_override is not None:
             # Recompute net_pay based on override
-            old_adv = advance_deduction + total_daily_advance
-            advance_deduction = slip.manual_advance_override - total_daily_advance
-            if advance_deduction < 0: advance_deduction = 0
-            net_pay = gross_pay - late_deduction - slip.manual_advance_override
+            advance_deduction = max(0.0, slip.manual_advance_override - total_daily_advance)
+            net_pay = max(0.0, round(gross_pay - late_deduction - slip.manual_advance_override, 2))
         
         payroll_data.append({
             'month': month,
@@ -622,10 +620,12 @@ def hr_finalize_payroll(request):
         if not labour_id:
             continue
             
-        # Check if already finalized
+        # Check if already finalized and paid
         slip = SalarySlip.objects.filter(labourid_id=labour_id, month=month).first()
-        if slip and slip.is_finalized:
+        if slip and slip.is_finalized and slip.is_paid:
             continue
+            
+        old_adv_deduction = float(slip.advance_deduction) if slip and slip.id else 0.0
             
         if not slip:
             slip = SalarySlip(labourid_id=labour_id, month=month)
@@ -640,35 +640,51 @@ def hr_finalize_payroll(request):
         slip.incentives = slip_data['earnings'].get('incentives', 0.0)
         slip.gross_pay = slip_data['earnings'].get('gross', 0.0)
         
-        slip.advance_deduction = slip_data['deductions'].get('advance', 0.0)
-        slip.late_deduction = slip_data['deductions'].get('late', 0.0)
-        slip.net_pay = slip_data.get('net_pay', 0.0)
+        manual_override = slip_data.get('manual_advance_override')
+        if manual_override is not None:
+            slip.advance_deduction = float(manual_override)
+        else:
+            slip.advance_deduction = float(slip_data.get('deductions', {}).get('advance', 0.0))
+            
+        slip.late_deduction = float(slip_data.get('deductions', {}).get('late', 0.0))
+        slip.net_pay = float(slip_data.get('net_pay', 0.0))
         
-        slip.manual_advance_override = slip_data.get('manual_advance_override')
+        slip.manual_advance_override = manual_override
         slip.is_finalized = True
         slip.save()
         
         # Post to ledger (Salary Payable)
         salary_credit = round(slip.net_pay + (slip.advance_deduction or 0.0), 2)
-        EmployeeLedger.objects.create(
-            labourid_id=labour_id,
-            transaction_type='SALARY',
-            description=f'Salary for {month}',
-            amount=salary_credit,
-            reference_id=slip.id
-        )
+        ledger_entry = EmployeeLedger.objects.filter(labourid_id=labour_id, reference_id=slip.id, transaction_type='SALARY').first()
+        if ledger_entry:
+            ledger_entry.amount = salary_credit
+            ledger_entry.description = f'Salary for {month}'
+            ledger_entry.save()
+        else:
+            EmployeeLedger.objects.create(
+                labourid_id=labour_id,
+                transaction_type='SALARY',
+                description=f'Salary for {month}',
+                amount=salary_credit,
+                reference_id=slip.id
+            )
         
-        # Reduce Advance Balance if advance was deducted
-        if slip.advance_deduction > 0:
-            # We deduct from active advances
+        # Adjust Advance/Loan Balance
+        diff_adv = slip.advance_deduction - old_adv_deduction
+        if diff_adv > 0:
             advances = SalaryAdvance.objects.filter(labourid_id=labour_id, remaining_balance__gt=0).order_by('createdat')
-            remaining_to_deduct = slip.advance_deduction
+            rem = diff_adv
             for adv in advances:
-                if remaining_to_deduct <= 0: break
-                deduct = min(adv.remaining_balance, remaining_to_deduct)
-                adv.remaining_balance -= deduct
+                if rem <= 0: break
+                deduct = min(adv.remaining_balance, rem)
+                adv.remaining_balance = max(0.0, round(adv.remaining_balance - deduct, 2))
                 adv.save()
-                remaining_to_deduct -= deduct
+                rem -= deduct
+        elif diff_adv < 0:
+            adv = SalaryAdvance.objects.filter(labourid_id=labour_id).order_by('-createdat').first()
+            if adv:
+                adv.remaining_balance = round(adv.remaining_balance + abs(diff_adv), 2)
+                adv.save()
                 
     return send_success(None, 'Payroll finalized and posted to ledgers')
 

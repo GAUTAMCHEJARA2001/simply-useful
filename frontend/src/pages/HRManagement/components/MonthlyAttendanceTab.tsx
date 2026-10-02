@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
-import { CheckCircle, AlertTriangle, FileText, Download } from 'lucide-react';
+import { CheckCircle, AlertTriangle, FileText, Download, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateRTGSSlip } from '@/utils/pdfGenerator';
 import { useData } from '@/contexts/DataContext';
+import { SalarySlipPdfModal } from '@/components/PDF/SalarySlipPdfModal';
 
 export const MonthlyAttendanceTab = () => {
   const [month, setMonth] = useState(() => {
@@ -23,6 +24,9 @@ export const MonthlyAttendanceTab = () => {
   const [selectedEmp, setSelectedEmp] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [advanceOverride, setAdvanceOverride] = useState<string>('');
+
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [pdfSlips, setPdfSlips] = useState<any[]>([]);
 
   const [paymentModalEmp, setPaymentModalEmp] = useState<any>(null);
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -59,10 +63,19 @@ export const MonthlyAttendanceTab = () => {
     if (!selectedEmp) return;
     try {
       const overrideVal = parseFloat(advanceOverride);
+      const actualAdv = !isNaN(overrideVal) ? Math.max(0, overrideVal) : (selectedEmp.deductions.advance || 0);
+      const lateDed = selectedEmp.deductions.late || 0;
+      const netPay = Math.max(0, Number((selectedEmp.earnings.gross - lateDed - actualAdv).toFixed(2)));
+      
       const slipData = {
         ...selectedEmp,
-        manual_advance_override: isNaN(overrideVal) ? null : overrideVal,
-        net_pay: selectedEmp.earnings.gross - selectedEmp.deductions.late - (isNaN(overrideVal) ? selectedEmp.deductions.advance : overrideVal)
+        manual_advance_override: !isNaN(overrideVal) ? actualAdv : null,
+        net_pay: netPay,
+        deductions: {
+          ...selectedEmp.deductions,
+          advance: actualAdv,
+          total_deductions: Number((lateDed + actualAdv).toFixed(2))
+        }
       };
 
       await finalizePayroll({
@@ -71,6 +84,7 @@ export const MonthlyAttendanceTab = () => {
       });
       setModalOpen(false);
       setSelectedEmp(null);
+      refetch();
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -161,6 +175,21 @@ export const MonthlyAttendanceTab = () => {
             </div>
           </div>
           <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-1.5 text-blue-700 border-blue-300 hover:bg-blue-50"
+              onClick={() => {
+                if (!payrollList || payrollList.length === 0) {
+                  toast({ title: 'No Slips', description: 'No payroll data available for this month', variant: 'destructive' });
+                  return;
+                }
+                setPdfSlips(filteredData.length > 0 ? filteredData : payrollList);
+                setPdfModalOpen(true);
+              }}
+            >
+              <FileText className="w-4 h-4" /> Download All Slips (PDF)
+            </Button>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               Refresh
             </Button>
@@ -265,15 +294,24 @@ export const MonthlyAttendanceTab = () => {
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col gap-0.5 text-xs w-28 ml-auto">
                           {emp.deductions.late > 0 && <div className="flex justify-between text-red-500/80"><span>Late:</span> <span>-₹{emp.deductions.late.toFixed(2)}</span></div>}
-                          {emp.deductions.advance > 0 && <div className="flex justify-between text-red-500/80"><span>Adv:</span> <span>-₹{emp.deductions.advance.toFixed(2)}</span></div>}
+                          {emp.deductions.advance > 0 && <div className="flex justify-between text-red-600 font-semibold"><span>Loan/Adv:</span> <span>-₹{emp.deductions.advance.toFixed(2)}</span></div>}
                           {emp.deductions.total_deductions > 0 ? (
-                            <div className="flex justify-between font-semibold text-red-600 pt-1 border-t border-red-100 mt-1"><span>Ded:</span> <span>-₹{emp.deductions.total_deductions.toFixed(2)}</span></div>
+                            <div className="flex justify-between font-bold text-red-600 pt-1 border-t border-red-200 mt-1"><span>Ded:</span> <span>-₹{emp.deductions.total_deductions.toFixed(2)}</span></div>
                           ) : (
                             <div className="text-muted-foreground text-center">-</div>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-primary text-base">₹{emp.net_pay.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="font-bold text-primary text-base">
+                          ₹{emp.net_pay.toFixed(2)}
+                        </div>
+                        {emp.deductions.advance > 0 && (
+                          <div className="text-[10px] text-red-600 font-semibold whitespace-nowrap mt-0.5" title="Net Pay after loan/advance deduction">
+                            (after -₹{emp.deductions.advance.toFixed(2)} loan)
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         {emp.is_paid ? (
                           <span className="inline-flex items-center text-emerald-700 bg-emerald-100 text-xs px-2 py-0.5 rounded-full font-semibold border border-emerald-200 shadow-sm">
@@ -298,6 +336,19 @@ export const MonthlyAttendanceTab = () => {
                             onClick={() => handleOpenFinalize(emp)}
                           >
                             {emp.is_finalized ? 'View Slip' : 'Finalize'}
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 w-7 p-0 text-slate-700 hover:text-slate-900"
+                            title="View / Download Salary Slip (PDF)"
+                            onClick={() => {
+                              setPdfSlips([emp]);
+                              setPdfModalOpen(true);
+                            }}
+                          >
+                            <FileText className="w-4 h-4" />
                           </Button>
                           
                           {emp.is_finalized && (
@@ -357,14 +408,15 @@ export const MonthlyAttendanceTab = () => {
                   {selectedEmp.deductions.late > 0 && <div className="flex justify-between"><span>Late Deduction:</span> <span>₹{selectedEmp.deductions.late.toFixed(2)}</span></div>}
                   <div className="flex flex-col gap-1">
                     <div className="flex justify-between items-center">
-                      <span>Loan/Advance:</span>
-                      {selectedEmp.is_finalized ? (
-                        <span>₹{selectedEmp.deductions.advance.toFixed(2)}</span>
+                      <span className="font-semibold text-red-700">Loan / Advance Deduction:</span>
+                      {selectedEmp.is_finalized && selectedEmp.is_paid ? (
+                        <span className="font-bold text-red-600">₹{selectedEmp.deductions.advance.toFixed(2)}</span>
                       ) : (
-                        <div className="flex items-center border border-red-300 rounded bg-white w-24">
+                        <div className="flex items-center border border-red-300 rounded bg-white w-28">
                           <span className="px-2 text-gray-500">₹</span>
                           <input 
                             type="number" 
+                            step="0.01"
                             className="w-full outline-none py-1 text-right pr-2 text-red-900 font-semibold"
                             value={advanceOverride}
                             onChange={e => setAdvanceOverride(e.target.value)}
@@ -372,41 +424,59 @@ export const MonthlyAttendanceTab = () => {
                         </div>
                       )}
                     </div>
-                    {!selectedEmp.is_finalized && (
+                    {(!selectedEmp.is_finalized || !selectedEmp.is_paid) && (
                       <p className="text-[10px] text-red-600 opacity-80 leading-tight">
-                        Standard deduction computed as ₹{selectedEmp.deductions.advance.toFixed(2)}. Edit to override.
+                        Computed loan deduction: ₹{(selectedEmp.deductions.advance || 0).toFixed(2)}. Edit to override for this month.
                       </p>
                     )}
                   </div>
                   <div className="flex justify-between font-bold pt-1 border-t border-red-200 mt-2">
                     <span>Total Deductions:</span> 
-                    <span>₹{(selectedEmp.deductions.late + parseFloat(advanceOverride || '0')).toFixed(2)}</span>
+                    <span>₹{((selectedEmp.deductions.late || 0) + (parseFloat(advanceOverride) || 0)).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
             </div>
 
             <div className="flex justify-between items-center p-4 bg-primary/10 border border-primary/20 rounded-xl">
-              <span className="text-base font-semibold text-primary-800">Net Payable Amount</span>
-              <span className="text-2xl font-bold text-primary-900">
-                ₹{Math.max(0, selectedEmp.earnings.gross - selectedEmp.deductions.late - parseFloat(advanceOverride || '0')).toFixed(2)}
+              <div>
+                <span className="text-base font-semibold text-primary-800 block">Net Payable Amount</span>
+                <span className="text-xs text-muted-foreground">
+                  Gross (₹{selectedEmp.earnings.gross.toFixed(2)}) - Late (₹{(selectedEmp.deductions.late || 0).toFixed(2)}) - Loan/Adv (₹{(parseFloat(advanceOverride) || 0).toFixed(2)})
+                </span>
+              </div>
+              <span className="text-2xl font-bold text-primary-900 font-mono">
+                ₹{Math.max(0, selectedEmp.earnings.gross - (selectedEmp.deductions.late || 0) - (parseFloat(advanceOverride) || 0)).toFixed(2)}
               </span>
             </div>
 
-            {!selectedEmp.is_finalized && (
+            {(!selectedEmp.is_finalized || !selectedEmp.is_paid) && (
               <div className="bg-blue-50 text-blue-800 p-3 rounded-lg text-sm flex items-start gap-2 border border-blue-100">
                 <FileText className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <p>Finalizing this slip will automatically generate a <strong>Salary Payable</strong> entry of <strong>₹{Math.max(0, selectedEmp.earnings.gross - selectedEmp.deductions.late - parseFloat(advanceOverride || '0')).toFixed(2)}</strong> in the employee's ledger. Active loans will also be reduced by the Advance deduction.</p>
+                <p>Finalizing this slip will automatically post a <strong>Salary Payable</strong> credit in the employee's ledger and reduce active loan balance by <strong>₹{(parseFloat(advanceOverride) || 0).toFixed(2)}</strong>.</p>
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setModalOpen(false)}>Close</Button>
-              {!selectedEmp.is_finalized && (
-                <Button onClick={handleFinalize}>
-                  Finalize & Post to Ledger
-                </Button>
-              )}
+            <div className="flex justify-between items-center pt-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="gap-1.5 text-slate-700 hover:text-slate-900"
+                onClick={() => {
+                  setPdfSlips([selectedEmp]);
+                  setPdfModalOpen(true);
+                }}
+              >
+                <Printer className="w-4 h-4" /> Print / PDF Slip
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setModalOpen(false)}>Close</Button>
+                {(!selectedEmp.is_finalized || !selectedEmp.is_paid) && (
+                  <Button onClick={handleFinalize}>
+                    {selectedEmp.is_finalized ? 'Update & Re-finalize' : 'Finalize & Post to Ledger'}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -450,6 +520,15 @@ export const MonthlyAttendanceTab = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Branded PDF Salary Slip Modal */}
+      <SalarySlipPdfModal
+        isOpen={pdfModalOpen}
+        onClose={() => setPdfModalOpen(false)}
+        slips={pdfSlips}
+        defaultSelectedMonth={month}
+        title={pdfSlips.length === 1 ? `Salary Slip — ${pdfSlips[0]?.labour_name}` : `Staff Salary Slips (${pdfSlips.length})`}
+      />
     </div>
   );
 };
