@@ -348,11 +348,11 @@ const InventoryDashboard: React.FC = () => {
   const pendingOrders = assignedOrders.filter(o => o.status === 'Pending' || o.status === 'Approved');
   const completedOrders = assignedOrders.filter(o => o.status === 'Completed');
 
-  const unapprovedOrdersCount = useMemo(() => assignedOrders.filter(o => o.status === 'Pending').length, [assignedOrders]);
-  const approvedOrdersCount = useMemo(() => assignedOrders.filter(o => o.status === 'Approved').length, [assignedOrders]);
-  const dispatchedOrdersCount = useMemo(() => assignedOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status)).length, [assignedOrders]);
-  const completedOrdersCount = useMemo(() => assignedOrders.filter(o => o.status === 'Completed').length, [assignedOrders]);
-  const activeOrdersCount = useMemo(() => assignedOrders.filter(o => ['Pending', 'Approved', 'Partially Dispatched', 'Dispatched', 'Partially Returned'].includes(o.status)).length, [assignedOrders]);
+  const unapprovedOrdersCount = assignedOrders.filter(o => o.status === 'Pending').length;
+  const approvedOrdersCount = assignedOrders.filter(o => o.status === 'Approved').length;
+  const dispatchedOrdersCount = assignedOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status)).length;
+  const completedOrdersCount = assignedOrders.filter(o => o.status === 'Completed').length;
+  const activeOrdersCount = assignedOrders.filter(o => ['Pending', 'Approved', 'Partially Dispatched', 'Dispatched', 'Partially Returned'].includes(o.status)).length;
   const totalOrdersCount = assignedOrders.length;
 
   const filterTabs = [
@@ -364,30 +364,29 @@ const InventoryDashboard: React.FC = () => {
     { key: 'ALL', label: 'All Orders', count: totalOrdersCount },
   ] as const;
 
-  const filteredQueueOrders = useMemo(() => {
-    let list = assignedOrders;
-    if (orderStatusFilter === 'APPROVED') {
-      list = list.filter(o => o.status === 'Approved');
-    } else if (orderStatusFilter === 'UNAPPROVED') {
-      list = list.filter(o => o.status === 'Pending');
-    } else if (orderStatusFilter === 'DISPATCHED') {
-      list = list.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
-    } else if (orderStatusFilter === 'COMPLETED') {
-      list = list.filter(o => o.status === 'Completed');
-    } else if (orderStatusFilter === 'ACTIVE') {
-      list = list.filter(o => ['Pending', 'Approved', 'Partially Dispatched', 'Dispatched', 'Partially Returned'].includes(o.status));
-    }
+  let filteredQueueOrders = assignedOrders;
+  if (orderStatusFilter === 'APPROVED') {
+    filteredQueueOrders = filteredQueueOrders.filter(o => o.status === 'Approved');
+  } else if (orderStatusFilter === 'UNAPPROVED') {
+    filteredQueueOrders = filteredQueueOrders.filter(o => o.status === 'Pending');
+  } else if (orderStatusFilter === 'DISPATCHED') {
+    filteredQueueOrders = filteredQueueOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
+  } else if (orderStatusFilter === 'COMPLETED') {
+    filteredQueueOrders = filteredQueueOrders.filter(o => o.status === 'Completed');
+  } else if (orderStatusFilter === 'ACTIVE') {
+    filteredQueueOrders = filteredQueueOrders.filter(o => ['Pending', 'Approved', 'Partially Dispatched', 'Dispatched', 'Partially Returned'].includes(o.status));
+  }
 
-    if (!orderSearchTerm.trim()) return list;
+  if (orderSearchTerm.trim()) {
     const term = orderSearchTerm.toLowerCase();
-    return list.filter(o => {
+    filteredQueueOrders = filteredQueueOrders.filter(o => {
       const oId = (o.orderId || (o as any).order_id || o.id || '').toLowerCase();
       const pName = (o.partyName || (o as any).party_name || '').toLowerCase();
       const sEmail = (o.soEmail || (o as any).so_email || '').toLowerCase();
       const status = (o.status || '').toLowerCase();
       return oId.includes(term) || pName.includes(term) || sEmail.includes(term) || status.includes(term);
     });
-  }, [assignedOrders, orderStatusFilter, orderSearchTerm]);
+  }
 
   const productDemand = (assignedOrders || [])
     .filter(o => o.status === 'Pending' || o.status === 'Approved' || o.status === 'Partially Dispatched')
