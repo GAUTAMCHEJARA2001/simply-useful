@@ -1472,32 +1472,70 @@ class OrderViewSet(viewsets.ModelViewSet):
         if company_id and user_role != 'SUPERADMIN':
             qs = qs.filter(companyid_id=company_id)
 
-        # Warehouse scoping: Inventory/Production users see orders for their assigned warehouse(s)
-        wh_ids = _get_request_warehouse_ids(self.request)
-        if wh_ids is not None:
-            qs = qs.filter(warehouseid_id__in=wh_ids)
-        else:
-            wh_header = self.request.headers.get('X-Warehouse-Id') or self.request.headers.get('X-Warehouse-ID') or self.request.headers.get('x-warehouse-id')
-            if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
-                qs = qs.filter(warehouseid_id=wh_header)
-
         # Sales Officers only see their own orders
         SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
         if user_role in SALES_ROLES and getattr(self.request.user, 'email', None):
             qs = qs.filter(soemail=self.request.user.email)
+
+        # Warehouse scoping: Inventory/Production users see orders for their assigned warehouse(s)
+        if user_role in ('INVENTORY', 'PRODUCTION'):
+            assigned_wh_ids = []
+            if getattr(self.request, 'user', None) and getattr(self.request.user, 'id', None):
+                from api.models import Userwarehouseaccess
+                assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=self.request.user.id).values_list('warehouseid_id', flat=True))
+                if getattr(self.request.user, 'warehouseid_id', None) and self.request.user.warehouseid_id not in assigned_wh_ids:
+                    assigned_wh_ids.append(self.request.user.warehouseid_id)
+            if assigned_wh_ids:
+                qs = qs.filter(warehouseid_id__in=assigned_wh_ids)
+
+        # Warehouse filter only applies on list action, not on detail/update/delete operations
+        if getattr(self, 'action', None) == 'list':
+            wh_header = self.request.headers.get('X-Warehouse-Id') or self.request.headers.get('X-Warehouse-ID') or self.request.headers.get('x-warehouse-id')
+            wh_query = self.request.GET.get('warehouse_id') or self.request.GET.get('warehouseId')
+            wh_filter = wh_query or wh_header
+            if wh_filter and str(wh_filter).strip().upper() not in ('', 'ALL', 'NONE', 'NULL', 'UNDEFINED', 'GLOBAL'):
+                try:
+                    wh_id = int(str(wh_filter).strip())
+                    qs = qs.filter(warehouseid_id=wh_id)
+                except (ValueError, TypeError):
+                    pass
+
         return qs
 
     def get_object(self):
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
-        pk = self.kwargs[lookup_url_kwarg]
+        raw_pk = self.kwargs.get(lookup_url_kwarg, '')
+        pk = str(raw_pk).strip()
+
+        # 1. Primary lookup within current action queryset
         qs = self.get_queryset()
-        try:
-            return qs.get(id=pk)
-        except Order.DoesNotExist:
-            try:
-                return qs.get(orderid=pk)
-            except Order.DoesNotExist:
-                raise exceptions.NotFound('Order not found')
+        obj = qs.filter(id=pk).first() or qs.filter(orderid=pk).first() or qs.filter(orderid__iexact=pk).first()
+        if obj:
+            return obj
+
+        # 2. Resilient fallback: lookup in company-scoped queryset without warehouse header filter
+        # (Prevents 404 when active warehouse header differs from order warehouse)
+        company_id = _get_company_id(self.request)
+        user_role = (getattr(self.request.user, 'role', '') or '').upper()
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
+
+        base_qs = Order.objects.all()
+        if company_id and user_role != 'SUPERADMIN':
+            base_qs = base_qs.filter(companyid_id=company_id)
+        if user_role in SALES_ROLES and getattr(self.request.user, 'email', None):
+            base_qs = base_qs.filter(soemail=self.request.user.email)
+
+        obj = base_qs.filter(id=pk).first() or base_qs.filter(orderid=pk).first() or base_qs.filter(orderid__iexact=pk).first()
+        if obj:
+            return obj
+
+        # 3. SuperAdmin global fallback
+        if user_role == 'SUPERADMIN':
+            obj = Order.objects.filter(id=pk).first() or Order.objects.filter(orderid=pk).first() or Order.objects.filter(orderid__iexact=pk).first()
+            if obj:
+                return obj
+
+        raise exceptions.NotFound('Order not found')
 
     def list(self, request, *args, **kwargs):
         qs = self.get_queryset()

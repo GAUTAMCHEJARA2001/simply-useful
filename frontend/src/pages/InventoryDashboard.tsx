@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import apiClient, { api } from '@/api/client';
@@ -76,6 +76,7 @@ const InventoryDashboard: React.FC = () => {
   const [boms, setBoms] = useState<any[]>([]);
   const [loadingBoms, setLoadingBoms] = useState<boolean>(true);
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'ACTIVE' | 'APPROVED' | 'UNAPPROVED' | 'DISPATCHED' | 'COMPLETED' | 'ALL'>('ACTIVE');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -346,6 +347,47 @@ const InventoryDashboard: React.FC = () => {
   const dispatchedOrders = assignedOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
   const pendingOrders = assignedOrders.filter(o => o.status === 'Pending' || o.status === 'Approved');
   const completedOrders = assignedOrders.filter(o => o.status === 'Completed');
+
+  const unapprovedOrdersCount = useMemo(() => assignedOrders.filter(o => o.status === 'Pending').length, [assignedOrders]);
+  const approvedOrdersCount = useMemo(() => assignedOrders.filter(o => o.status === 'Approved').length, [assignedOrders]);
+  const dispatchedOrdersCount = useMemo(() => assignedOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status)).length, [assignedOrders]);
+  const completedOrdersCount = useMemo(() => assignedOrders.filter(o => o.status === 'Completed').length, [assignedOrders]);
+  const activeOrdersCount = useMemo(() => assignedOrders.filter(o => ['Pending', 'Approved', 'Partially Dispatched', 'Dispatched', 'Partially Returned'].includes(o.status)).length, [assignedOrders]);
+  const totalOrdersCount = assignedOrders.length;
+
+  const filterTabs = [
+    { key: 'ACTIVE', label: 'All Active', count: activeOrdersCount },
+    { key: 'APPROVED', label: 'Approved', count: approvedOrdersCount },
+    { key: 'UNAPPROVED', label: 'Unapproved', count: unapprovedOrdersCount },
+    { key: 'DISPATCHED', label: 'Dispatched', count: dispatchedOrdersCount },
+    { key: 'COMPLETED', label: 'Completed', count: completedOrdersCount },
+    { key: 'ALL', label: 'All Orders', count: totalOrdersCount },
+  ] as const;
+
+  const filteredQueueOrders = useMemo(() => {
+    let list = assignedOrders;
+    if (orderStatusFilter === 'APPROVED') {
+      list = list.filter(o => o.status === 'Approved');
+    } else if (orderStatusFilter === 'UNAPPROVED') {
+      list = list.filter(o => o.status === 'Pending');
+    } else if (orderStatusFilter === 'DISPATCHED') {
+      list = list.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
+    } else if (orderStatusFilter === 'COMPLETED') {
+      list = list.filter(o => o.status === 'Completed');
+    } else if (orderStatusFilter === 'ACTIVE') {
+      list = list.filter(o => ['Pending', 'Approved', 'Partially Dispatched', 'Dispatched', 'Partially Returned'].includes(o.status));
+    }
+
+    if (!orderSearchTerm.trim()) return list;
+    const term = orderSearchTerm.toLowerCase();
+    return list.filter(o => {
+      const oId = (o.orderId || (o as any).order_id || o.id || '').toLowerCase();
+      const pName = (o.partyName || (o as any).party_name || '').toLowerCase();
+      const sEmail = (o.soEmail || (o as any).so_email || '').toLowerCase();
+      const status = (o.status || '').toLowerCase();
+      return oId.includes(term) || pName.includes(term) || sEmail.includes(term) || status.includes(term);
+    });
+  }, [assignedOrders, orderStatusFilter, orderSearchTerm]);
 
   const productDemand = (assignedOrders || [])
     .filter(o => o.status === 'Pending' || o.status === 'Approved' || o.status === 'Partially Dispatched')
@@ -636,34 +678,82 @@ const InventoryDashboard: React.FC = () => {
 
         {/* Orders Queue with Actions */}
         <Card className="shadow-sm border-border flex flex-col">
-          <CardHeader className="p-4 border-b bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 space-y-0">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              Orders to Pack & Send
-              {approvedOrders.length > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold uppercase tracking-wider">{approvedOrders.length} ready</span>}
-            </CardTitle>
-            <div className="relative w-full sm:w-auto">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <input 
-                type="text" 
-                placeholder="Search orders, party..." 
-                value={orderSearchTerm}
-                onChange={(e) => setOrderSearchTerm(e.target.value)}
-                className="pl-8 pr-3 h-8 w-full sm:w-[220px] rounded-md border border-input bg-background text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-              />
+          <CardHeader className="p-4 border-b bg-muted/10 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2 flex-wrap">
+                Orders to Pack & Send
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                  orderStatusFilter === 'APPROVED' ? 'bg-blue-100 text-blue-700' :
+                  orderStatusFilter === 'UNAPPROVED' ? 'bg-yellow-100 text-yellow-800' :
+                  orderStatusFilter === 'DISPATCHED' ? 'bg-purple-100 text-purple-700' :
+                  orderStatusFilter === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                  'bg-blue-100 text-blue-700'
+                }`}>
+                  {filteredQueueOrders.length} {orderStatusFilter === 'APPROVED' ? 'READY' : orderStatusFilter}
+                </span>
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <div className="relative w-full sm:w-auto">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <input 
+                    type="text" 
+                    placeholder="Search orders, party, SO..." 
+                    value={orderSearchTerm}
+                    onChange={(e) => setOrderSearchTerm(e.target.value)}
+                    className="pl-8 pr-3 h-8 w-full sm:w-[220px] rounded-md border border-input bg-background text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Status Filter Tabs */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-0.5 scrollbar-thin">
+              {filterTabs.map(tab => {
+                const isActive = orderStatusFilter === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setOrderStatusFilter(tab.key)}
+                    className={`px-2.5 py-1 text-xs rounded-full font-medium transition-all shrink-0 flex items-center gap-1.5 border cursor-pointer ${
+                      isActive 
+                        ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold' 
+                        : 'bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border/80'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isActive 
+                        ? 'bg-white/25 text-white' 
+                        : 'bg-muted text-foreground'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </CardHeader>
           <CardContent className="p-3 overflow-y-auto max-h-[600px] space-y-3 bg-muted/5">
-            {pendingOrders.length === 0 && dispatchedOrders.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-8">No orders to fulfill</p>
+            {filteredQueueOrders.length === 0 && (
+              <div className="text-center py-10 space-y-2">
+                <p className="text-sm font-medium text-foreground">No orders found</p>
+                <p className="text-xs text-muted-foreground">
+                  {orderSearchTerm ? `No orders matching "${orderSearchTerm}" in this filter` : `No orders in ${orderStatusFilter.toLowerCase()} status`}
+                </p>
+                {(orderStatusFilter !== 'ACTIVE' || orderSearchTerm) && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => { setOrderStatusFilter('ACTIVE'); setOrderSearchTerm(''); }}
+                    className="text-xs mt-2 h-7"
+                  >
+                    Reset Filter
+                  </Button>
+                )}
+              </div>
             )}
-            {[...pendingOrders, ...dispatchedOrders].filter(o => {
-              if (!orderSearchTerm.trim()) return true;
-              const term = orderSearchTerm.toLowerCase();
-              const oId = (o.orderId || (o as any).order_id || o.id || '').toLowerCase();
-              const pName = (o.partyName || (o as any).party_name || '').toLowerCase();
-              const sEmail = (o.soEmail || (o as any).so_email || '').toLowerCase();
-              return oId.includes(term) || pName.includes(term) || sEmail.includes(term);
-            }).map(o => {
+            {filteredQueueOrders.map(o => {
               const action = actionLabel(o);
               const orderId = o.orderId || (o as any).order_id || o.id || 'Unknown ID';
               const partyName = o.partyName || (o as any).party_name || 'Party';

@@ -56,31 +56,54 @@ const OrderPage: React.FC = () => {
   }, [id, user]);
 
   useEffect(() => {
-    if (id && orders.length > 0 && !isInitialized) {
+    if (!id || isInitialized) return;
+
+    const populateFromOrder = (existing: any) => {
+      setPartyType(existing.partyType as any);
+      setSelectedParty(existing.partyName);
+      setSoEmail(existing.soEmail || '');
+      setItems((existing.items || []).map((item: any) => ({
+        ...item,
+        product: typeof item.product === 'object' ? item.product?.id : (item.productId || item.product),
+        itemRemark: item.itemRemark ?? item.item_remark ?? item.remark ?? '',
+      })));
+      setNarration(existing.narration || '');
+      setOrderDate(existing.date ? existing.date.split('T')[0] : (existing.createdAt ? existing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]));
+      if (existing.assignedWarehouse || existing.warehouseId) {
+        setWarehouseId(existing.assignedWarehouse || existing.warehouseId);
+      }
+      setIsInitialized(true);
+    };
+
+    if (orders.length > 0) {
       const existing = orders.find(o => 
         (o.orderId && o.orderId.toLowerCase() === id.toLowerCase()) ||
         (o.id && String(o.id).toLowerCase() === id.toLowerCase()) ||
         (o.order_id && String(o.order_id).toLowerCase() === id.toLowerCase())
       );
       if (existing) {
-        setPartyType(existing.partyType as any);
-        setSelectedParty(existing.partyName);
-        setSoEmail(existing.soEmail || '');
-        setItems((existing.items || []).map((item: any) => ({
-          ...item,
-          product: typeof item.product === 'object' ? item.product?.id : (item.productId || item.product),
-          itemRemark: item.itemRemark ?? item.item_remark ?? item.remark ?? '',
-        })));
-        setNarration(existing.narration || '');
-        setOrderDate(existing.date ? existing.date.split('T')[0] : (existing.createdAt ? existing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]));
-        setIsInitialized(true);
+        populateFromOrder(existing);
+        return;
       }
     }
+
+    import('@/api/services/order.service').then(({ orderService }) => {
+      orderService.getById(id)
+        .then(res => {
+          if (res.data?.success && res.data?.data) {
+            populateFromOrder(res.data.data);
+          }
+        })
+        .catch(() => {});
+    });
+  }, [id, orders, isInitialized]);
+
+  useEffect(() => {
     // Fallback warehouse if 1 is not present
     if (warehouses && warehouses.length > 0 && !warehouses.find(w => w.id === warehouseId)) {
-        setWarehouseId(warehouses[0].id);
+      setWarehouseId(warehouses[0].id);
     }
-  }, [id, orders, warehouses, warehouseId, isInitialized]);
+  }, [warehouses, warehouseId]);
 
   // Force re-fetch shared states/settings when visiting form view
   useEffect(() => {
