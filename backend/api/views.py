@@ -2790,9 +2790,16 @@ def transaction_sales(request):
                 assigned_wh_ids = [int(wh_header)]
             except (ValueError, TypeError):
                 pass
-        all_orders = list(Order.objects.all().prefetch_related('orderitem_set__productid'))
+        company_id = _get_company_id(request)
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+
+        orders_qs = Order.objects.all().prefetch_related('orderitem_set__productid')
+        if company_id and user_role != 'SUPERADMIN':
+            orders_qs = orders_qs.filter(companyid_id=company_id)
         if assigned_wh_ids:
-            all_orders = [o for o in all_orders if o.warehouseid_id in assigned_wh_ids]
+            orders_qs = orders_qs.filter(warehouseid_id__in=assigned_wh_ids)
+
+        all_orders = list(orders_qs)
         serialized = OrderSerializer(all_orders, many=True, context={'skip_stock': True}).data
         
         expanded_sales = []

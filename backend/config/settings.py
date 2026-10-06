@@ -256,7 +256,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'api.pagination.StandardResultsSetPagination',
     'PAGE_SIZE': 25,
     'URL_FORMAT_OVERRIDE': None,
     'EXCEPTION_HANDLER': 'api.exceptions.custom_exception_handler',
