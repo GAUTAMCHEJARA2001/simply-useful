@@ -160,12 +160,38 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response Interceptor: Automatic Error Logging (403, 500, 400)
+// Helper to determine if an error is transient and safe to retry
+const isTransientError = (error: any): boolean => {
+  if (!error) return false;
+  // Network drops, aborted requests, or timeouts without server response
+  if (!error.response) return true;
+  const status = error.response.status;
+  // HTTP status codes indicating transient server/gateway issues
+  return [408, 429, 502, 503, 504].includes(status);
+};
+
+// Response Interceptor: Automatic Transient Retry for GET requests + Error Logging (403, 500, 400)
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    const config = error.config || {};
-    const url = config.url || '';
+  async (error) => {
+    const config = error.config as (AxiosRequestConfig & { __retryCount?: number }) | undefined;
+
+    // Automatic retry for transient errors on idempotent GET requests
+    if (config) {
+      const method = (config.method || 'get').toLowerCase();
+      const MAX_RETRIES = 2;
+      const RETRY_BASE_DELAY_MS = 600;
+
+      config.__retryCount = config.__retryCount || 0;
+      if (isTransientError(error) && method === 'get' && config.__retryCount < MAX_RETRIES) {
+        config.__retryCount += 1;
+        const delay = RETRY_BASE_DELAY_MS * config.__retryCount;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return api.request(config);
+      }
+    }
+
+    const url = config?.url || '';
     const status = error.response?.status;
     const serverMsg = error.response?.data?.message || error.response?.data?.error || '';
 
@@ -182,14 +208,14 @@ api.interceptors.response.use(
       else if (url.includes('/dealers')) feature = 'Dealers';
       else if (url.includes('/suppliers')) feature = 'Suppliers';
 
-      const method = (config.method || 'get').toLowerCase();
+      const method = (config?.method || 'get').toLowerCase();
 
       if (status === 403) {
         toast.error(serverMsg || 'Access Denied: You do not have permission to perform this action.');
         logPermissionError(feature, `Access Denied — User does not have permission to perform this action in ${feature}`, {
           reason: serverMsg || 'Insufficient permissions',
         });
-      } else if (status >= 500) {
+      } else if (status && status >= 500) {
         toast.error(`Server Error: ${serverMsg || 'An unexpected error occurred. Please try again.'}`);
         logUserError(feature, `System Error — Something went wrong while processing a ${feature} request. Please try again.`, {
           reason: serverMsg || 'Internal server error',
@@ -204,6 +230,11 @@ api.interceptors.response.use(
       } else if (status === 404) {
         logUserError(feature, `Not Found — The requested ${feature} record could not be found. It may have been deleted.`, {
           reason: serverMsg || 'Record not found',
+        });
+      } else if (!status) {
+        toast.error('Network Error: Unable to reach server. Please check your connection.');
+        logUserError(feature, 'Network Error — Connection failed or server is unreachable.', {
+          reason: error.message || 'Network disconnected',
         });
       }
     }
