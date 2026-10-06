@@ -259,6 +259,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 25,
     'URL_FORMAT_OVERRIDE': None,
+    'EXCEPTION_HANDLER': 'api.exceptions.custom_exception_handler',
 }
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'simply-useful-secret-key-123-super-secure-key-2026')
