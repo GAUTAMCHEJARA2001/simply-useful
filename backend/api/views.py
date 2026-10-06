@@ -1228,7 +1228,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         qs = Dealer.objects.filter(companyid_id=company_id) if company_id else Dealer.objects.all()
-        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__icontains=user_email)
         return qs
 
@@ -1240,7 +1240,7 @@ class DealerViewSet(viewsets.ModelViewSet):
         qs = Dealer.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
-        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__icontains=user_email)
 
         search = request.query_params.get('search', '').strip()
@@ -1358,7 +1358,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         user_role = (getattr(self.request.user, 'role', '') or '').upper()
         user_email = getattr(self.request.user, 'email', None)
         qs = Distributor.objects.filter(companyid_id=company_id) if company_id else Distributor.objects.all()
-        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__icontains=user_email)
         return qs
 
@@ -1370,7 +1370,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         qs = Distributor.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
-        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER') and user_email:
+        if user_role in ('SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER') and user_email:
             qs = qs.filter(assignedsoemails__icontains=user_email)
 
         search = request.query_params.get('search', '').strip()
@@ -1475,8 +1475,11 @@ class OrderViewSet(viewsets.ModelViewSet):
         # Sales Officers only see their own orders
         SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
         if user_role in SALES_ROLES and getattr(self.request.user, 'email', None):
-            user_email = (getattr(self.request.user, 'email', '') or '').strip()
-            qs = qs.filter(Q(soemail__iexact=user_email) | Q(soemail=self.request.user))
+            user_email = (getattr(self.request.user, 'email', '') or '').strip().lower()
+            from django.db.models.functions import Lower
+            qs = qs.annotate(_so_email_lower=Lower('soemail_id')).filter(
+                Q(_so_email_lower=user_email) | Q(soemail=self.request.user)
+            )
 
         # Warehouse scoping: Inventory/Production users see orders for their assigned warehouse(s)
         if user_role in ('INVENTORY', 'PRODUCTION'):
@@ -1524,8 +1527,11 @@ class OrderViewSet(viewsets.ModelViewSet):
         if company_id and user_role != 'SUPERADMIN':
             base_qs = base_qs.filter(companyid_id=company_id)
         if user_role in SALES_ROLES and getattr(self.request.user, 'email', None):
-            user_email = (getattr(self.request.user, 'email', '') or '').strip()
-            base_qs = base_qs.filter(Q(soemail__iexact=user_email) | Q(soemail=self.request.user))
+            user_email = (getattr(self.request.user, 'email', '') or '').strip().lower()
+            from django.db.models.functions import Lower
+            base_qs = base_qs.annotate(_so_email_lower=Lower('soemail_id')).filter(
+                Q(_so_email_lower=user_email) | Q(soemail=self.request.user)
+            )
 
         obj = base_qs.filter(id=pk).first() or base_qs.filter(orderid=pk).first() or base_qs.filter(orderid__iexact=pk).first()
         if obj:
@@ -4451,8 +4457,8 @@ class EstimateViewSet(viewsets.ModelViewSet):
             return Response({'success': False, 'message': str(e)}, status=500)
 
         user_role = (getattr(request.user, 'role', '') or '').upper()
-        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
-        if user_role in SALES_ROLES and instance.soemail_id != getattr(request.user, 'email', None):
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
+        if user_role in SALES_ROLES and (instance.soemail_id or '').strip().lower() != (getattr(request.user, 'email', '') or '').strip().lower():
             return Response({'success': False, 'message': 'You cannot edit estimates created by another Sales Officer'}, status=403)
 
         try:
@@ -4498,8 +4504,8 @@ class EstimateViewSet(viewsets.ModelViewSet):
             return Response({'success': False, 'message': str(e)}, status=500)
 
         user_role = (getattr(request.user, 'role', '') or '').upper()
-        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER']
-        if user_role in SALES_ROLES and instance.soemail_id != getattr(request.user, 'email', None):
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
+        if user_role in SALES_ROLES and (instance.soemail_id or '').strip().lower() != (getattr(request.user, 'email', '') or '').strip().lower():
             return Response({'success': False, 'message': 'You cannot delete estimates created by another Sales Officer'}, status=403)
 
         try:

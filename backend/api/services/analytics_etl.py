@@ -334,17 +334,34 @@ def compile_analytical_warehouse(company_id=None):
         """)
 
         # E. Populate DimCustomer (Merges Dealers and Distributors)
-        cursor.execute("""
-            INSERT INTO DimCustomer (customer_key, customer_code, name, type, city, state, assigned_so_email, active, company_id)
-            SELECT id, dealerCode, dealerName, 'Dealer', city, 'State', assignedSoEmail, active, companyId
-            FROM Dealer
-        """)
-        cursor.execute("""
-            INSERT INTO DimCustomer (customer_key, customer_code, name, type, city, state, assigned_so_email, active, company_id)
-            SELECT id, distributorName, distributorName, 'Distributor', area, 'State', assignedSoEmail, active, companyId
-            FROM Distributor
-            WHERE distributorName NOT IN (SELECT name FROM DimCustomer)
-        """)
+        from api.models import Dealer, Distributor
+        dealer_rows = []
+        for d in Dealer.objects.all():
+            so_str = ', '.join(d.assignedsoemails) if isinstance(d.assignedsoemails, list) else (str(d.assignedsoemails or ''))
+            dealer_rows.append((
+                str(d.id), d.dealercode or '', d.dealername or '', 'Dealer',
+                d.city or '', 'State', so_str, 1 if d.active else 0,
+                str(d.companyid_id) if d.companyid_id else None
+            ))
+        if dealer_rows:
+            cursor.executemany("""
+                INSERT INTO DimCustomer (customer_key, customer_code, name, type, city, state, assigned_so_email, active, company_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, dealer_rows)
+
+        dist_rows = []
+        for dist in Distributor.objects.all():
+            so_str = ', '.join(dist.assignedsoemails) if isinstance(dist.assignedsoemails, list) else (str(dist.assignedsoemails or ''))
+            dist_rows.append((
+                str(dist.id), dist.distributorcode or dist.distributorname or '', dist.distributorname or '', 'Distributor',
+                dist.area or '', 'State', so_str, 1 if dist.active else 0,
+                str(dist.companyid_id) if dist.companyid_id else None
+            ))
+        if dist_rows:
+            cursor.executemany("""
+                INSERT INTO DimCustomer (customer_key, customer_code, name, type, city, state, assigned_so_email, active, company_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, dist_rows)
 
         # ──────────────────────────────────────────────────────────────────
         # 4. POPULATE FACT TABLES (ETL Phase)

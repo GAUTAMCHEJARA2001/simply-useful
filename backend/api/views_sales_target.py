@@ -318,7 +318,7 @@ def list_sales_targets(request):
                 companyid_id=company_id,
                 createdat__gte=start_dt,
                 createdat__lte=end_dt,
-                assignedsoemails__contains=[u_email]
+                assignedsoemails__icontains=u_email
             ).count()
 
         # Active Travel Days

@@ -244,7 +244,9 @@ def search_busy_parties(request):
             dealers = dealers.filter(companyid_id=company_id)
             distributors = distributors.filter(companyid_id=company_id)
         
-        if not is_admin:
+        user_role = (getattr(user, 'role', '') or '').upper()
+        SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
+        if user_role in SALES_ROLES:
             # Sales officers only see their own assigned customers
             user_email = (getattr(user, 'email', '') or '').strip().lower()
             if user_email:

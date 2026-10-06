@@ -125,54 +125,103 @@ def hr_employees(request):
     elif request.method == 'POST':
         data = request.data
         if not company_id:
-            company_id = 1 # fallback
+            first_comp = Company.objects.first()
+            company_id = first_comp.id if first_comp else None
 
-        emp = Labour.objects.create(
-            name=data.get('name', ''),
-            employee_type=data.get('employee_type', 'VARIABLE'),
-            companyid_id=company_id,
-            base_salary_monthly=float(data.get('base_salary_monthly') or 0.0),
-            dailywage=float(data.get('dailywage') or 0.0),
-            overtime_hourly_rate=float(data.get('overtime_hourly_rate') or 0.0),
-            late_deduction_rate=float(data.get('late_deduction_rate') or 0.0),
-            bike_allowance_per_km=float(data.get('bike_allowance_per_km') or 0.0),
-            car_allowance_per_km=float(data.get('car_allowance_per_km') or 0.0),
-            sales_incentive_pct=float(data.get('sales_incentive_pct') or 0.0),
-            bag_incentive_rate=float(data.get('bag_incentive_rate') or 0.0),
-            contactinfo=data.get('contactinfo', ''),
-            warehouseid_id=data.get('warehouseid'),
-            department=data.get('department'),
-            designation=data.get('designation'),
-            reports_to_id=data.get('reports_to') or None,
-            is_ot_eligible=bool(data.get('is_ot_eligible')),
-            is_late_deduction_eligible=data.get('is_late_deduction_eligible') == 'true' or data.get('is_late_deduction_eligible') is True,
-            is_km_eligible=data.get('is_km_eligible') == 'true' or data.get('is_km_eligible') is True,
-            is_bag_eligible=data.get('is_bag_eligible') == 'true' or data.get('is_bag_eligible') is True,
-            user_id=data.get('user_id') or None,
-            doj=data.get('doj') or None,
-            aadhar_number=data.get('aadhar_number', ''),
-            pan_number=data.get('pan_number', ''),
-            bank_name=data.get('bank_name', ''),
-            bank_account_number=data.get('bank_account_number', ''),
-            bank_ifsc=data.get('bank_ifsc', '')
-        )
-        
-        # Handle file uploads
-        if 'employee_photo' in request.FILES: emp.employee_photo = request.FILES['employee_photo']
-        if 'aadhar_photo' in request.FILES: emp.aadhar_photo = request.FILES['aadhar_photo']
-        if 'pan_photo' in request.FILES: emp.pan_photo = request.FILES['pan_photo']
-        if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
-        emp.save()
-        
-        return send_success({
-            'id': emp.id,
-            'name': emp.name,
-            'employee_photo': _get_full_url(emp.employee_photo),
-            'aadhar_photo': _get_full_url(emp.aadhar_photo),
-            'pan_photo': _get_full_url(emp.pan_photo),
-            'bank_proof_photo': _get_full_url(emp.bank_proof_photo),
-            **data
-        }, 'Employee created')
+        name = str(data.get('name', '')).strip()
+        if not name:
+            return send_error('Employee name is required', 400)
+
+        existing_emp = Labour.objects.filter(name__iexact=name, companyid_id=company_id).first()
+        if existing_emp:
+            return send_error(f'An employee with name "{name}" already exists', 400)
+
+        def _to_float(v, default=0.0):
+            try:
+                return float(v) if v not in (None, '', 'null', 'undefined') else default
+            except (ValueError, TypeError):
+                return default
+
+        wh_raw = data.get('warehouseid')
+        warehouse_id = None
+        if wh_raw not in (None, '', 'null', 'undefined', 'None'):
+            try:
+                warehouse_id = int(wh_raw)
+            except (ValueError, TypeError):
+                warehouse_id = None
+
+        rep_raw = data.get('reports_to')
+        reports_to_id = None
+        if rep_raw not in (None, '', 'null', 'undefined', 'None'):
+            try:
+                reports_to_id = int(rep_raw)
+            except (ValueError, TypeError):
+                reports_to_id = None
+
+        user_id_raw = data.get('user_id')
+        user_id = str(user_id_raw).strip() if user_id_raw not in (None, '', 'null', 'undefined', 'None') else None
+        if user_id:
+            existing_user_emp = Labour.objects.filter(user_id=user_id).first()
+            if existing_user_emp:
+                return send_error(f'User account is already linked to employee {existing_user_emp.name}', 400)
+
+        doj_raw = data.get('doj')
+        doj_val = None
+        if doj_raw not in (None, '', 'null', 'undefined', 'None'):
+            try:
+                doj_val = datetime.datetime.strptime(str(doj_raw).strip()[:10], '%Y-%m-%d').date()
+            except ValueError:
+                doj_val = None
+
+        try:
+            emp = Labour.objects.create(
+                name=name,
+                employee_type=data.get('employee_type', 'VARIABLE'),
+                companyid_id=company_id,
+                base_salary_monthly=_to_float(data.get('base_salary_monthly')),
+                dailywage=_to_float(data.get('dailywage')),
+                overtime_hourly_rate=_to_float(data.get('overtime_hourly_rate')),
+                late_deduction_rate=_to_float(data.get('late_deduction_rate')),
+                bike_allowance_per_km=_to_float(data.get('bike_allowance_per_km')),
+                car_allowance_per_km=_to_float(data.get('car_allowance_per_km')),
+                sales_incentive_pct=_to_float(data.get('sales_incentive_pct')),
+                bag_incentive_rate=_to_float(data.get('bag_incentive_rate')),
+                contactinfo=data.get('contactinfo', ''),
+                warehouseid_id=warehouse_id,
+                department=data.get('department') or None,
+                designation=data.get('designation') or None,
+                reports_to_id=reports_to_id,
+                is_ot_eligible=bool(data.get('is_ot_eligible')),
+                is_late_deduction_eligible=data.get('is_late_deduction_eligible') == 'true' or data.get('is_late_deduction_eligible') is True,
+                is_km_eligible=data.get('is_km_eligible') == 'true' or data.get('is_km_eligible') is True,
+                is_bag_eligible=data.get('is_bag_eligible') == 'true' or data.get('is_bag_eligible') is True,
+                user_id=user_id,
+                doj=doj_val,
+                aadhar_number=data.get('aadhar_number', ''),
+                pan_number=data.get('pan_number', ''),
+                bank_name=data.get('bank_name', ''),
+                bank_account_number=data.get('bank_account_number', ''),
+                bank_ifsc=data.get('bank_ifsc', '')
+            )
+            
+            # Handle file uploads
+            if 'employee_photo' in request.FILES: emp.employee_photo = request.FILES['employee_photo']
+            if 'aadhar_photo' in request.FILES: emp.aadhar_photo = request.FILES['aadhar_photo']
+            if 'pan_photo' in request.FILES: emp.pan_photo = request.FILES['pan_photo']
+            if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
+            emp.save()
+            
+            return send_success({
+                'id': emp.id,
+                'name': emp.name,
+                'employee_photo': _get_full_url(emp.employee_photo),
+                'aadhar_photo': _get_full_url(emp.aadhar_photo),
+                'pan_photo': _get_full_url(emp.pan_photo),
+                'bank_proof_photo': _get_full_url(emp.bank_proof_photo),
+                **data
+            }, 'Employee created')
+        except Exception as e:
+            return send_error(f'Failed to create employee: {str(e)}', 400)
 
 @api_view(['PUT', 'DELETE'])
 def hr_employees_detail(request, pk):
@@ -183,67 +232,110 @@ def hr_employees_detail(request, pk):
 
     if request.method == 'PUT':
         data = request.data
-        emp.name = data.get('name', emp.name)
-        emp.employee_type = data.get('employee_type', emp.employee_type)
-        emp.base_salary_monthly = float(data.get('base_salary_monthly') or emp.base_salary_monthly)
-        emp.dailywage = float(data.get('dailywage') or emp.dailywage)
-        emp.overtime_hourly_rate = float(data.get('overtime_hourly_rate') or emp.overtime_hourly_rate)
-        emp.late_deduction_rate = float(data.get('late_deduction_rate') or emp.late_deduction_rate)
-        emp.bike_allowance_per_km = float(data.get('bike_allowance_per_km') or emp.bike_allowance_per_km)
-        emp.car_allowance_per_km = float(data.get('car_allowance_per_km') or emp.car_allowance_per_km)
-        emp.sales_incentive_pct = float(data.get('sales_incentive_pct') or emp.sales_incentive_pct)
-        emp.bag_incentive_rate = float(data.get('bag_incentive_rate') or emp.bag_incentive_rate)
-        emp.contactinfo = data.get('contactinfo', emp.contactinfo)
-        emp.department = data.get('department', emp.department)
-        emp.designation = data.get('designation', emp.designation)
-        
-        reports_to_val = data.get('reports_to', emp.reports_to_id)
-        emp.reports_to_id = None if reports_to_val == '' else reports_to_val
-        
-        if 'is_ot_eligible' in data: emp.is_ot_eligible = data.get('is_ot_eligible') == 'true' or data.get('is_ot_eligible') is True
-        if 'is_late_deduction_eligible' in data: emp.is_late_deduction_eligible = data.get('is_late_deduction_eligible') == 'true' or data.get('is_late_deduction_eligible') is True
-        if 'is_km_eligible' in data: emp.is_km_eligible = data.get('is_km_eligible') == 'true' or data.get('is_km_eligible') is True
-        if 'is_bag_eligible' in data: emp.is_bag_eligible = data.get('is_bag_eligible') == 'true' or data.get('is_bag_eligible') is True
-        
-        if data.get('warehouseid'):
-            emp.warehouseid_id = data.get('warehouseid')
-            
-        if 'user_id' in data:
-            emp.user_id = data.get('user_id') or None
-        if 'doj' in data:
-            emp.doj = data.get('doj') or None
-        if 'aadhar_number' in data: emp.aadhar_number = data.get('aadhar_number')
-        if 'pan_number' in data: emp.pan_number = data.get('pan_number')
-        if 'bank_name' in data: emp.bank_name = data.get('bank_name')
-        if 'bank_account_number' in data: emp.bank_account_number = data.get('bank_account_number')
-        if 'bank_ifsc' in data: emp.bank_ifsc = data.get('bank_ifsc')
-
-        if 'employee_photo' in request.FILES: emp.employee_photo = request.FILES['employee_photo']
-        if 'aadhar_photo' in request.FILES: emp.aadhar_photo = request.FILES['aadhar_photo']
-        if 'pan_photo' in request.FILES: emp.pan_photo = request.FILES['pan_photo']
-        if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
-
-        emp.save()
-        def _get_full_url(file_field):
-            if not file_field:
-                return None
+        def _to_float(v, default=0.0):
             try:
-                url = file_field.url
-                if url.startswith('http://') or url.startswith('https://'):
-                    return url
-                return request.build_absolute_uri(url)
-            except Exception:
-                return None
+                return float(v) if v not in (None, '', 'null', 'undefined') else default
+            except (ValueError, TypeError):
+                return default
 
-        return send_success({
-            'id': emp.id,
-            'name': emp.name,
-            'employee_photo': _get_full_url(emp.employee_photo),
-            'aadhar_photo': _get_full_url(emp.aadhar_photo),
-            'pan_photo': _get_full_url(emp.pan_photo),
-            'bank_proof_photo': _get_full_url(emp.bank_proof_photo),
-            **data
-        }, 'Employee updated')
+        try:
+            name = str(data.get('name', emp.name)).strip()
+            if not name:
+                return send_error('Employee name is required', 400)
+            existing_emp = Labour.objects.filter(name__iexact=name, companyid=emp.companyid).exclude(id=emp.id).first()
+            if existing_emp:
+                return send_error(f'Another employee with name "{name}" already exists', 400)
+            emp.name = name
+
+            emp.employee_type = data.get('employee_type', emp.employee_type)
+            emp.base_salary_monthly = _to_float(data.get('base_salary_monthly'), emp.base_salary_monthly)
+            emp.dailywage = _to_float(data.get('dailywage'), emp.dailywage)
+            emp.overtime_hourly_rate = _to_float(data.get('overtime_hourly_rate'), emp.overtime_hourly_rate)
+            emp.late_deduction_rate = _to_float(data.get('late_deduction_rate'), emp.late_deduction_rate)
+            emp.bike_allowance_per_km = _to_float(data.get('bike_allowance_per_km'), emp.bike_allowance_per_km)
+            emp.car_allowance_per_km = _to_float(data.get('car_allowance_per_km'), emp.car_allowance_per_km)
+            emp.sales_incentive_pct = _to_float(data.get('sales_incentive_pct'), emp.sales_incentive_pct)
+            emp.bag_incentive_rate = _to_float(data.get('bag_incentive_rate'), emp.bag_incentive_rate)
+            emp.contactinfo = data.get('contactinfo', emp.contactinfo)
+            emp.department = data.get('department', emp.department) or None
+            emp.designation = data.get('designation', emp.designation) or None
+            
+            reports_to_val = data.get('reports_to', emp.reports_to_id)
+            if reports_to_val in (None, '', 'null', 'undefined', 'None'):
+                emp.reports_to_id = None
+            else:
+                try:
+                    emp.reports_to_id = int(reports_to_val)
+                except (ValueError, TypeError):
+                    pass
+            
+            if 'is_ot_eligible' in data: emp.is_ot_eligible = data.get('is_ot_eligible') == 'true' or data.get('is_ot_eligible') is True
+            if 'is_late_deduction_eligible' in data: emp.is_late_deduction_eligible = data.get('is_late_deduction_eligible') == 'true' or data.get('is_late_deduction_eligible') is True
+            if 'is_km_eligible' in data: emp.is_km_eligible = data.get('is_km_eligible') == 'true' or data.get('is_km_eligible') is True
+            if 'is_bag_eligible' in data: emp.is_bag_eligible = data.get('is_bag_eligible') == 'true' or data.get('is_bag_eligible') is True
+            
+            wh_val = data.get('warehouseid')
+            if wh_val in (None, '', 'null', 'undefined', 'None'):
+                emp.warehouseid_id = None
+            elif wh_val:
+                try:
+                    emp.warehouseid_id = int(wh_val)
+                except (ValueError, TypeError):
+                    pass
+                
+            if 'user_id' in data:
+                u_val = data.get('user_id')
+                user_id = str(u_val).strip() if u_val not in (None, '', 'null', 'undefined', 'None') else None
+                if user_id:
+                    existing_user_emp = Labour.objects.filter(user_id=user_id).exclude(id=emp.id).first()
+                    if existing_user_emp:
+                        return send_error(f'User account is already linked to employee {existing_user_emp.name}', 400)
+                emp.user_id = user_id
+
+            if 'doj' in data:
+                doj_val = data.get('doj')
+                if doj_val not in (None, '', 'null', 'undefined', 'None'):
+                    try:
+                        emp.doj = datetime.datetime.strptime(str(doj_val).strip()[:10], '%Y-%m-%d').date()
+                    except ValueError:
+                        emp.doj = None
+                else:
+                    emp.doj = None
+
+            if 'aadhar_number' in data: emp.aadhar_number = data.get('aadhar_number')
+            if 'pan_number' in data: emp.pan_number = data.get('pan_number')
+            if 'bank_name' in data: emp.bank_name = data.get('bank_name')
+            if 'bank_account_number' in data: emp.bank_account_number = data.get('bank_account_number')
+            if 'bank_ifsc' in data: emp.bank_ifsc = data.get('bank_ifsc')
+
+            if 'employee_photo' in request.FILES: emp.employee_photo = request.FILES['employee_photo']
+            if 'aadhar_photo' in request.FILES: emp.aadhar_photo = request.FILES['aadhar_photo']
+            if 'pan_photo' in request.FILES: emp.pan_photo = request.FILES['pan_photo']
+            if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
+
+            emp.save()
+            def _get_full_url(file_field):
+                if not file_field:
+                    return None
+                try:
+                    url = file_field.url
+                    if url.startswith('http://') or url.startswith('https://'):
+                        return url
+                    return request.build_absolute_uri(url)
+                except Exception:
+                    return None
+
+            return send_success({
+                'id': emp.id,
+                'name': emp.name,
+                'employee_photo': _get_full_url(emp.employee_photo),
+                'aadhar_photo': _get_full_url(emp.aadhar_photo),
+                'pan_photo': _get_full_url(emp.pan_photo),
+                'bank_proof_photo': _get_full_url(emp.bank_proof_photo),
+                **data
+            }, 'Employee updated')
+        except Exception as e:
+            return send_error(f'Failed to update employee: {str(e)}', 400)
 
     elif request.method == 'DELETE':
         emp.active = False

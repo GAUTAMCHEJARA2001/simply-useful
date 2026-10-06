@@ -259,10 +259,16 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
         final_credit_limit = Decimal(request.data.get('creditLimit', '0.00'))
         final_outstanding = Decimal(request.data.get('outstanding', '0.00'))
         final_territory = request.data.get('territory', '')
-        final_assigned_so = request.data.get('assignedSoEmail', obj.submitted_by_id)
         final_distributor = request.data.get('distributorName', '')
 
-        so_list = [final_assigned_so] if final_assigned_so else []
+        from core.models import User
+        assigned_email = request.data.get('assignedSoEmail')
+        if not assigned_email or '@' not in str(assigned_email):
+            so = User.objects.filter(id=obj.submitted_by_id).first()
+            if so and so.email:
+                assigned_email = so.email
+        so_list = [str(assigned_email).strip().lower()] if assigned_email else []
+
         # Create Dealer or Distributor
         if obj.party_type == 'DEALER':
             new_id = f"DLR-{uuid.uuid4().hex[:8].upper()}"
@@ -309,13 +315,11 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
         obj.status = 'COMPLETED'
         obj.save()
         
-        from core.models import User
-        so = User.objects.filter(id=obj.submitted_by_id).first()
-        if so and so.email:
+        if so_list:
             if obj.party_type == 'DEALER':
-                Dealer.objects.filter(dealercode=obj.created_party_id).update(assignedsoemails=[so.email])
+                Dealer.objects.filter(dealercode=obj.created_party_id).update(assignedsoemails=so_list)
             else:
-                Distributor.objects.filter(distributorcode=obj.created_party_id).update(assignedsoemails=[so.email])
+                Distributor.objects.filter(distributorcode=obj.created_party_id).update(assignedsoemails=so_list)
                 
         serializer = self.get_serializer(obj)
         return send_success(serializer.data, f"{obj.party_type} successfully created with code {new_id}")
