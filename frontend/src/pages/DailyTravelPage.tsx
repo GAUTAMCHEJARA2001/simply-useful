@@ -190,11 +190,20 @@ export const DailyTravelPage: React.FC = () => {
   });
 
   // Planner Tab State
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
   const tomorrowStr = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }, []);
   const [plannerDate, setPlannerDate] = useState<string>(tomorrowStr);
   const [plannerStops, setPlannerStops] = useState<TourPlanStopItem[]>([]);
@@ -349,7 +358,7 @@ export const DailyTravelPage: React.FC = () => {
   const loadTodayLog = async () => {
     try {
       setLoadingToday(true);
-      const res = await travelService.getToday();
+      const res = await travelService.getToday(todayStr);
       const data = res.data?.data || null;
       if (data) {
         if (data.has_plan_only) {
@@ -599,6 +608,7 @@ export const DailyTravelPage: React.FC = () => {
         start_photo: startPhoto,
         start_location: gpsLocation || gpsStatus,
         stops: reconcilingStops,
+        date: todayStr,
       });
       toast({ title: 'Trip Started! 🚀', description: `Recorded starting at ${startKm} KM (${vehicleType})` });
       const logData = res.data?.data || null;
@@ -695,6 +705,7 @@ export const DailyTravelPage: React.FC = () => {
         order_summary: orderSummary.trim(),
         so_notes: routeNotes.trim(),
         stops: reconcilingStops,
+        date: todayStr,
       });
 
       const data = res.data?.data;

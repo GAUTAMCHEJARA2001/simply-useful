@@ -70,7 +70,7 @@ export interface DailyTravelLogItem {
 }
 
 export const travelService = {
-  getToday: () => api.get('/travel/today'),
+  getToday: (date?: string) => api.get('/travel/today', { params: date ? { date } : {} }),
 
   getPlan: (date?: string) =>
     api.get('/travel/plan', { params: date ? { date } : {} }),
@@ -90,6 +90,7 @@ export const travelService = {
     start_photo?: string;
     start_location?: string;
     stops?: TourPlanStopItem[];
+    date?: string;
   }) => api.post('/travel/start', data),
 
   endTrip: (data: {
@@ -101,6 +102,7 @@ export const travelService = {
     order_summary?: string;
     so_notes?: string;
     stops?: TourPlanStopItem[];
+    date?: string;
   }) => api.post('/travel/end', data),
 
   getMyHistory: (month?: string) =>

@@ -262,6 +262,7 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
         final_assigned_so = request.data.get('assignedSoEmail', obj.submitted_by_id)
         final_distributor = request.data.get('distributorName', '')
 
+        so_list = [final_assigned_so] if final_assigned_so else []
         # Create Dealer or Distributor
         if obj.party_type == 'DEALER':
             new_id = f"DLR-{uuid.uuid4().hex[:8].upper()}"
@@ -270,7 +271,7 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
                 dealercode=new_id,
                 dealername=final_party_name,
                 city=final_city,
-                assignedsoemail=final_assigned_so, 
+                assignedsoemails=so_list, 
                 creditlimit=final_credit_limit,
                 outstanding=final_outstanding,
                 territory=final_territory,
@@ -291,7 +292,7 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
                 distributorcode=new_id,
                 distributorname=final_party_name,
                 area=final_city,
-                assignedsoemail=final_assigned_so,
+                assignedsoemails=so_list,
                 creditlimit=final_credit_limit,
                 outstanding=final_outstanding,
                 territory=final_territory,
@@ -310,11 +311,11 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
         
         from core.models import User
         so = User.objects.filter(id=obj.submitted_by_id).first()
-        if so:
+        if so and so.email:
             if obj.party_type == 'DEALER':
-                Dealer.objects.filter(dealercode=obj.created_party_id).update(assignedsoemail=so.email)
+                Dealer.objects.filter(dealercode=obj.created_party_id).update(assignedsoemails=[so.email])
             else:
-                Distributor.objects.filter(distributorcode=obj.created_party_id).update(assignedsoemail=so.email)
+                Distributor.objects.filter(distributorcode=obj.created_party_id).update(assignedsoemails=[so.email])
                 
         serializer = self.get_serializer(obj)
         return send_success(serializer.data, f"{obj.party_type} successfully created with code {new_id}")

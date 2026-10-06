@@ -163,11 +163,16 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
 USE_TZ = True
+
+# Upload limits (Supports high-res GPS stamped odometer photos)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
 
 # Static files (CSS, JavaScript, Images)

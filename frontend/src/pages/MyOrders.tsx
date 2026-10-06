@@ -159,13 +159,16 @@ const MyOrders: React.FC = () => {
     Cancelled: 'bg-destructive/15 text-destructive',
   };
 
-  const isSalesOnly = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER'].includes(user?.role?.toUpperCase() || '');
+  const isSalesOnly = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER'].includes(user?.role?.toUpperCase() || '');
 
   // Filtered dataset
   const baseOrders = useMemo(() => {
     if (isSalesOnly && user?.email) {
-      const userEmail = user.email.toLowerCase();
-      return (orders || []).filter(o => (o.soEmail || (o as any).so_email || '').toLowerCase() === userEmail);
+      const userEmail = user.email.toLowerCase().trim();
+      return (orders || []).filter(o => {
+        const orderEmail = (o.soEmail || (o as any).so_email || '').toLowerCase().trim();
+        return !orderEmail || orderEmail === userEmail;
+      });
     }
     return orders || [];
   }, [orders, isSalesOnly, user?.email]);

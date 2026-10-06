@@ -226,18 +226,33 @@ def search_busy_parties(request):
         from api.models import Dealer, Distributor
         from api.views import _get_company_id
         
+        from django.db.models import Q
+        
         query = request.GET.get('q', '').strip()
         user = request.user
         company_id = _get_company_id(request)
-        is_admin = user.is_authenticated and user.role in ['ADMIN', 'SUPERADMIN']
+        is_admin = user.is_authenticated and getattr(user, 'role', '') in ['ADMIN', 'SUPERADMIN']
         
-        dealers = Dealer.objects.filter(active=True, dealername__icontains=query)
-        distributors = Distributor.objects.filter(active=True, distributorname__icontains=query)
+        dealers = Dealer.objects.filter(active=True)
+        distributors = Distributor.objects.filter(active=True)
+        
+        if query:
+            dealers = dealers.filter(Q(dealername__icontains=query) | Q(dealercode__icontains=query))
+            distributors = distributors.filter(Q(distributorname__icontains=query) | Q(distributorcode__icontains=query))
+            
+        if company_id:
+            dealers = dealers.filter(companyid_id=company_id)
+            distributors = distributors.filter(companyid_id=company_id)
         
         if not is_admin:
             # Sales officers only see their own assigned customers
-            dealers = dealers.filter(assignedsoemail=user.email)
-            distributors = distributors.filter(assignedsoemail=user.email)
+            user_email = (getattr(user, 'email', '') or '').strip().lower()
+            if user_email:
+                dealers = dealers.filter(assignedsoemails__icontains=user_email)
+                distributors = distributors.filter(assignedsoemails__icontains=user_email)
+            else:
+                dealers = dealers.none()
+                distributors = distributors.none()
             
         data = []
         for d in dealers[:20]:

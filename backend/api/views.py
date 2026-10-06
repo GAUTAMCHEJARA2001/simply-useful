@@ -1475,7 +1475,8 @@ class OrderViewSet(viewsets.ModelViewSet):
         # Sales Officers only see their own orders
         SALES_ROLES = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER', 'SO', 'FIELD_OFFICER']
         if user_role in SALES_ROLES and getattr(self.request.user, 'email', None):
-            qs = qs.filter(soemail=self.request.user.email)
+            user_email = (getattr(self.request.user, 'email', '') or '').strip()
+            qs = qs.filter(Q(soemail__iexact=user_email) | Q(soemail=self.request.user))
 
         # Warehouse scoping: Inventory/Production users see orders for their assigned warehouse(s)
         if user_role in ('INVENTORY', 'PRODUCTION'):
@@ -1488,8 +1489,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             if assigned_wh_ids:
                 qs = qs.filter(warehouseid_id__in=assigned_wh_ids)
 
-        # Warehouse filter only applies on list action, not on detail/update/delete operations
-        if getattr(self, 'action', None) == 'list':
+        # Warehouse filter only applies on list action for non-sales roles (Sales Officers must see all their orders across all warehouses)
+        if getattr(self, 'action', None) == 'list' and user_role not in SALES_ROLES:
             wh_header = self.request.headers.get('X-Warehouse-Id') or self.request.headers.get('X-Warehouse-ID') or self.request.headers.get('x-warehouse-id')
             wh_query = self.request.GET.get('warehouse_id') or self.request.GET.get('warehouseId')
             wh_filter = wh_query or wh_header
@@ -1523,7 +1524,8 @@ class OrderViewSet(viewsets.ModelViewSet):
         if company_id and user_role != 'SUPERADMIN':
             base_qs = base_qs.filter(companyid_id=company_id)
         if user_role in SALES_ROLES and getattr(self.request.user, 'email', None):
-            base_qs = base_qs.filter(soemail=self.request.user.email)
+            user_email = (getattr(self.request.user, 'email', '') or '').strip()
+            base_qs = base_qs.filter(Q(soemail__iexact=user_email) | Q(soemail=self.request.user))
 
         obj = base_qs.filter(id=pk).first() or base_qs.filter(orderid=pk).first() or base_qs.filter(orderid__iexact=pk).first()
         if obj:
@@ -2167,24 +2169,6 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
         return send_success(serializer.data, 'Expense claim submitted', 201)
-
-    @action(detail=True, methods=['put'])
-    def status(self, request, pk=None):
-        expense = self.get_object()
-        status_val = request.data.get('status')
-        rejectReason = request.data.get('rejectReason')
-        if status_val:
-            expense.status = status_val
-        if rejectReason:
-            expense.rejectreason = rejectReason
-        expense.save()
-        serializer = self.get_serializer(expense)
-        try:
-            from api.views_logs import log_activity_internal
-            log_activity_internal(user=request.user, log_type='ACTION', feature='Expenses', action=f"Updated Expense Status for Rs. {float(expense.amount or 0):.2f} to {status_val}", details=request.data)
-        except Exception:
-            pass
-        return send_success(serializer.data, 'Expense status updated successfully')
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -2861,14 +2845,24 @@ def transaction_sales(request):
                     sale = d.copy()
                     sale['id'] = log.id
                     sale['originalOrderId'] = d['id']
+                    sale['partyName'] = log.orderid.partyname if (getattr(log, 'orderid', None) and getattr(log.orderid, 'partyname', None)) else (d.get('partyName') or '')
+                    sale['customerName'] = sale['partyName']
                     sale['invoiceNumber'] = log.invoicenumber
                     sale['challanNumber'] = log.invoicenumber
-                    sale['date'] = log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else (log.createdat.strftime('%Y-%m-%d') if log.createdat else '')
-                    sale['dispatchDate'] = log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else ''
+                    sale['date'] = d.get('date') or (log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else (log.createdat.strftime('%Y-%m-%d') if log.createdat else ''))
+                    sale['orderDate'] = d.get('date') or sale['date']
+                    sale['dispatchDate'] = log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else (d.get('dispatchDate') or '')
                     if log.createdat:
                         sale['createdAt'] = log.createdat.isoformat()
                     sale['isDispatchLog'] = True
-                    sale['driverMobileNumber'] = log.drivermobile
+                    sale['driverMobileNumber'] = log.drivermobile or d.get('driverMobileNumber') or d.get('driverMobile') or ''
+                    sale['driverMobile'] = sale['driverMobileNumber']
+                    sale['vehicleNumber'] = log.vehiclenumber or d.get('vehicleNumber') or ''
+                    sale['driverName'] = log.drivername or d.get('driverName') or ''
+                    wh_name = log.warehouseid.name if getattr(log, 'warehouseid', None) else None
+                    sale['warehouseName'] = wh_name or d.get('warehouseName') or d.get('dispatchWarehouse') or ''
+                    sale['remarks'] = log.remarks or d.get('remarks') or d.get('narration') or ''
+                    sale['narration'] = log.remarks or d.get('narration') or d.get('remarks') or ''
                     log_items = log.items.all()
                     dispatch_items = []
                     total_amount = 0
@@ -2889,7 +2883,8 @@ def transaction_sales(request):
                         actual_ret = specific_ret + glob_ret
                         total_returned += actual_ret
                         total_dispatched += li.qty
-                        dispatch_items.append({'productId': li.productid_id, 'productName': li.productid.name if li.productid else '', 'qty': li.qty, 'price': price, 'total': (li.qty - actual_ret) * price, 'sentQty': li.qty, 'returnedQty': actual_ret})
+                        prod_name = prod.name if prod else (li.productid_id or '')
+                        dispatch_items.append({'productId': li.productid_id, 'productName': prod_name, 'qty': li.qty, 'price': price, 'total': (li.qty - actual_ret) * price, 'sentQty': li.qty, 'returnedQty': actual_ret})
                         total_amount += (li.qty - actual_ret) * price
                         total_cost += (li.qty - actual_ret) * cost_price
                     sale['items'] = dispatch_items
@@ -2909,8 +2904,15 @@ def transaction_sales(request):
                 match = re.search('\\[CHALLAN:\\s*([^\\]]+)\\]', narration)
                 if not match:
                     match = re.search('\\[INVOICE:\\s*([^\\]]+)\\]', narration)
-                d['challanNumber'] = match.group(1) if match else ''
-                d['driverMobileNumber'] = _extract_order_tag(narration, 'DRIVER MOBILE')
+                d['challanNumber'] = match.group(1) if match else (d.get('invoiceNumber') or '')
+                d['customerName'] = d.get('partyName') or d.get('customerName') or ''
+                d['partyName'] = d['customerName']
+                d['driverMobileNumber'] = d.get('driverMobile') or _extract_order_tag(narration, 'DRIVER MOBILE') or ''
+                d['driverMobile'] = d.get('driverMobile') or d['driverMobileNumber']
+                d['vehicleNumber'] = d.get('vehicleNumber') or _extract_order_tag(narration, 'VEHICLE') or ''
+                d['driverName'] = d.get('driverName') or _extract_order_tag(narration, 'DRIVER') or ''
+                d['warehouseName'] = d.get('warehouseName') or d.get('dispatchWarehouse') or _extract_order_tag(narration, 'WAREHOUSE') or ''
+                d['dispatchDate'] = d.get('dispatchDate') or _extract_order_tag(narration, 'DISPATCH DATE') or ''
                 d['netAmount'] = d.get('grandTotal') or 0.0
                 total_profit = 0.0
                 order_items = d.get('items') or []
@@ -2960,8 +2962,6 @@ def transaction_sales_detail(request, pk):
         return send_error('Sale record not found', 404)
     if request.method == 'PUT':
         data = request.data.copy()
-        old_product_ids = list(order.orderitem_set.values_list('productid_id', flat=True))
-        order.orderitem_set.all().delete()
         import uuid
         items_list = data.get('items', [])
         for item in items_list:
@@ -2971,12 +2971,8 @@ def transaction_sales_detail(request, pk):
         if not serializer.is_valid():
             return send_error(f'Validation failed: {serializer.errors}', 400)
         updated_order = serializer.save()
-        new_product_ids = list(updated_order.orderitem_set.values_list('productid_id', flat=True))
-        all_product_ids = set(old_product_ids + new_product_ids)
-        for pid in all_product_ids:
-            if pid:
-                pass
-        return send_success(serializer.data, 'Sale updated successfully')
+        updated_order.refresh_from_db()
+        return send_success(OrderSerializer(updated_order).data, 'Sale updated successfully')
     elif request.method == 'DELETE':
         product_ids = list(order.orderitem_set.values_list('productid_id', flat=True))
         order.orderitem_set.all().delete()
@@ -3715,7 +3711,10 @@ def transaction_returns(request):
                         items = []
                         total_amt = 0.0
                         for rli in rl.items.all():
-                            name = rli.productid.name if rli.productid else ''
+                            try:
+                                name = rli.productid.name if rli.productid else ''
+                            except Exception:
+                                name = rli.productid_id or ''
                             price = orig_prices.get(rli.productid_id, 0.0)
                             items.append({'productId': rli.productid_id, 'productName': name, 'qty': float(rli.qty), 'originalQty': orig_qtys.get(name, 0), 'price': price, 'total': float(rli.qty * price)})
                             total_amt += float(rli.qty * price)
@@ -4077,7 +4076,7 @@ def transaction_dispatch_log_detail(request, pk):
         dispatch_log.invoicenumber = data.get('invoiceNumber', dispatch_log.invoicenumber)
         dispatch_log.vehiclenumber = data.get('vehicleNumber', dispatch_log.vehiclenumber)
         dispatch_log.drivername = data.get('driverName', dispatch_log.drivername)
-        dispatch_log.drivermobile = data.get('driverMobile', dispatch_log.drivermobile)
+        dispatch_log.drivermobile = data.get('driverMobile') or data.get('driverMobileNumber') or dispatch_log.drivermobile
         dispatch_log.remarks = data.get('remarks', dispatch_log.remarks)
         disp_raw = data.get('dispatchDate') or data.get('date')
         dt_obj = None
@@ -4130,10 +4129,42 @@ def transaction_dispatch_log_detail(request, pk):
                 all_dispatched = False
                 break
         order.status = 'Completed' if all_dispatched else 'Partially Dispatched'
+        if data.get('partyName') or data.get('customerName'):
+            order.partyname = data.get('partyName') or data.get('customerName')
+        if data.get('invoiceNumber'):
+            order.invoicenumber = data.get('invoiceNumber')
+        if data.get('vehicleNumber'):
+            order.vehiclenumber = data.get('vehicleNumber')
+        if data.get('driverName'):
+            order.drivername = data.get('driverName')
+        if data.get('driverMobile') or data.get('driverMobileNumber'):
+            order.drivermobile = data.get('driverMobile') or data.get('driverMobileNumber')
+        rem = data.get('remarks') or data.get('narration')
+        if rem is not None:
+            order.narration = rem
+            dispatch_log.remarks = rem
+        wh_id = data.get('warehouse_id') or data.get('warehouseId') or data.get('assignedWarehouse')
+        if wh_id:
+            from api.models import Warehouse
+            wh_obj = Warehouse.objects.filter(id=wh_id).first()
+            if wh_obj:
+                order.warehouseid = wh_obj
+                order.dispatchwarehouse = wh_obj.name
+                dispatch_log.warehouseid = wh_obj
+        order_date_raw = data.get('orderDate') or data.get('saleDate')
+        if order_date_raw:
+            from django.utils.dateparse import parse_datetime, parse_date
+            od_dt = parse_datetime(str(order_date_raw).strip())
+            if not od_dt:
+                od_d = parse_date(str(order_date_raw).strip())
+                if od_d:
+                    from django.utils import timezone
+                    from datetime import datetime, time
+                    od_dt = timezone.make_aware(datetime.combine(od_d, time.min))
+            if od_dt:
+                order.date = od_dt
         if disp_raw:
             order.dispatchdate = str(disp_raw).strip()
-            if dt_obj:
-                order.date = dt_obj
         order.save()
         return send_success(None, 'Dispatch transaction updated')
     elif request.method == 'DELETE':

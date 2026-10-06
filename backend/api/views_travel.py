@@ -186,7 +186,14 @@ def travel_today(request):
         return send_error('Unauthorized', 401)
 
     user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
-    today = timezone.localdate()
+    date_param = request.query_params.get('date')
+    if date_param:
+        try:
+            today = datetime.strptime(str(date_param).strip()[:10], '%Y-%m-%d').date()
+        except ValueError:
+            today = timezone.localdate()
+    else:
+        today = timezone.localdate()
     log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
     if not log:
         # Check if user has planned stops for today
@@ -527,7 +534,7 @@ def travel_start(request):
         return send_error('User ID not found', 400)
 
     data = request.data or {}
-    start_km_raw = data.get('start_km')
+    start_km_raw = data.get('start_km') if data.get('start_km') is not None else data.get('startKm')
     if start_km_raw is None or start_km_raw == '':
         return send_error('Start KM is required', 400)
 
@@ -538,11 +545,19 @@ def travel_start(request):
     except (ValueError, TypeError):
         return send_error('Invalid start KM value', 400)
 
-    vehicle_type = (data.get('vehicle_type') or 'BIKE').upper()
+    vehicle_type = (data.get('vehicle_type') or data.get('vehicleType') or 'BIKE').upper()
     if vehicle_type not in ['BIKE', 'CAR', 'OTHER']:
         vehicle_type = 'BIKE'
 
-    today = timezone.localdate()
+    date_param = data.get('date')
+    if date_param:
+        try:
+            today = datetime.strptime(str(date_param).strip()[:10], '%Y-%m-%d').date()
+        except ValueError:
+            today = timezone.localdate()
+    else:
+        today = timezone.localdate()
+
     log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
     if not log:
         log = DailyTravelLog(
@@ -554,8 +569,8 @@ def travel_start(request):
 
     log.start_km = start_km
     log.vehicle_type = vehicle_type
-    log.start_photo = data.get('start_photo') or log.start_photo
-    log.start_location = data.get('start_location') or log.start_location
+    log.start_photo = data.get('start_photo') or data.get('startPhoto') or log.start_photo
+    log.start_location = data.get('start_location') or data.get('startLocation') or log.start_location
     log.start_time = timezone.now()
     log.status = 'PENDING'
     log.save()
@@ -564,7 +579,7 @@ def travel_start(request):
     stops_input = data.get('stops', [])
     if isinstance(stops_input, list) and stops_input:
         for idx, item in enumerate(stops_input):
-            dealer_name = (item.get('dealer_name') or '').strip()
+            dealer_name = (item.get('dealer_name') or item.get('dealerName') or '').strip()
             if not dealer_name:
                 continue
 
@@ -583,15 +598,24 @@ def travel_start(request):
                 )
 
             stop.stop_order = idx + 1
-            stop.dealer_id = item.get('dealer_id') or None
+            stop.dealer_id = item.get('dealer_id') or item.get('dealerId') or None
             stop.dealer_name = dealer_name
-            stop.dealer_location = item.get('dealer_location') or ''
-            stop.visit_purpose = _clean_visit_purpose(item.get('visit_purpose'))
-            stop.target_order_bags = float(item.get('target_order_bags') or 0.0)
-            stop.target_order_value = float(item.get('target_order_value') or 0.0)
-            stop.target_collection_value = float(item.get('target_collection_value') or 0.0)
-            stop.plan_notes = item.get('plan_notes') or ''
-            stop.is_unplanned = bool(item.get('is_unplanned', False))
+            stop.dealer_location = item.get('dealer_location') or item.get('dealerLocation') or ''
+            stop.visit_purpose = _clean_visit_purpose(item.get('visit_purpose') or item.get('visitPurpose'))
+            try:
+                stop.target_order_bags = float(item.get('target_order_bags') or item.get('targetOrderBags') or 0.0)
+            except (ValueError, TypeError):
+                stop.target_order_bags = 0.0
+            try:
+                stop.target_order_value = float(item.get('target_order_value') or item.get('targetOrderValue') or 0.0)
+            except (ValueError, TypeError):
+                stop.target_order_value = 0.0
+            try:
+                stop.target_collection_value = float(item.get('target_collection_value') or item.get('targetCollectionValue') or 0.0)
+            except (ValueError, TypeError):
+                stop.target_collection_value = 0.0
+            stop.plan_notes = item.get('plan_notes') or item.get('planNotes') or ''
+            stop.is_unplanned = bool(item.get('is_unplanned', item.get('isUnplanned', False)))
             stop.travel_log = log
             stop.save()
 
@@ -617,13 +641,22 @@ def travel_end(request):
         return send_error('Unauthorized', 401)
 
     user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
-    today = timezone.localdate()
+    data = request.data or {}
+
+    date_param = data.get('date')
+    if date_param:
+        try:
+            today = datetime.strptime(str(date_param).strip()[:10], '%Y-%m-%d').date()
+        except ValueError:
+            today = timezone.localdate()
+    else:
+        today = timezone.localdate()
+
     log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
     if not log or log.start_km is None:
         return send_error('Please start your day trip first before ending it', 400)
 
-    data = request.data or {}
-    end_km_raw = data.get('end_km')
+    end_km_raw = data.get('end_km') if data.get('end_km') is not None else data.get('endKm')
     if end_km_raw is None or end_km_raw == '':
         return send_error('End KM is required', 400)
 
