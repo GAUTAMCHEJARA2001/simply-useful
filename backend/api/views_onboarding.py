@@ -8,17 +8,24 @@ from decimal import Decimal
 
 from api.models import PartyOnboardingRequest, Dealer, Distributor
 from api.serializers import PartyOnboardingSerializer
-from api.views import send_success, send_error
+from api.views import send_success, send_error, _get_company_id
 
 class PartyOnboardingViewSet(viewsets.ModelViewSet):
     serializer_class = PartyOnboardingSerializer
 
     def get_queryset(self):
         user = self.request.user
-        company_id = getattr(user, 'companyId', None)
-        if user.role in ['ADMIN', 'SUPERADMIN']:
-            return PartyOnboardingRequest.objects.filter(companyid_id=company_id).order_by('-created_at')
-        return PartyOnboardingRequest.objects.filter(companyid_id=company_id, submitted_by_id=user.id).order_by('-created_at')
+        from api.views import _get_company_id
+        company_id = _get_company_id(self.request)
+        user_role = (getattr(user, 'role', '') or '').upper()
+        qs = PartyOnboardingRequest.objects.all()
+        if company_id:
+            qs = qs.filter(companyid_id=company_id)
+        if user_role not in ['ADMIN', 'SUPERADMIN']:
+            user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
+            if user_id:
+                qs = qs.filter(submitted_by_id=user_id)
+        return qs.order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
         user = request.user
@@ -105,8 +112,8 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
             doc_security_cheques=doc_urls.get('doc_security_cheques', []),
             doc_person_photo=doc_urls.get('doc_person_photo'),
             doc_showroom_photos=doc_urls.get('doc_showroom_photos', []),
-            submitted_by_id=user.id,
-            companyid_id=getattr(user, 'companyId', None)
+            submitted_by_id=getattr(user, 'id', None) or getattr(user, 'userId', None),
+            companyid_id=_get_company_id(request)
         )
         
         serializer = self.get_serializer(request_obj)
@@ -190,7 +197,8 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['patch'])
     def verify(self, request, pk=None):
-        if request.user.role not in ['ADMIN', 'SUPERADMIN']:
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        if user_role not in ['ADMIN', 'SUPERADMIN']:
             return send_error("Unauthorized", 403)
             
         obj = self.get_object()
@@ -212,7 +220,7 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
                 obj.extended_data = {}
             obj.extended_data['fieldReviews'] = field_reviews
             
-        obj.reviewed_by_id = request.user.id
+        obj.reviewed_by_id = getattr(request.user, 'id', None) or getattr(request.user, 'userId', None)
         obj.reviewed_at = timezone.now()
         
         obj.save()
@@ -221,7 +229,8 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def finalize_and_create_dealer(self, request, pk=None):
-        if request.user.role not in ['ADMIN', 'SUPERADMIN']:
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        if user_role not in ['ADMIN', 'SUPERADMIN']:
             return send_error("Unauthorized", 403)
             
         obj = self.get_object()
@@ -256,70 +265,105 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
         final_email = request.data.get('email', obj.email)
         final_contact = request.data.get('contactPerson', obj.contact_person)
         
-        final_credit_limit = Decimal(request.data.get('creditLimit', '0.00'))
-        final_outstanding = Decimal(request.data.get('outstanding', '0.00'))
+        try:
+            final_credit_limit = Decimal(str(request.data.get('creditLimit') or '0.00'))
+        except Exception:
+            final_credit_limit = Decimal('0.00')
+        try:
+            final_outstanding = Decimal(str(request.data.get('outstanding') or '0.00'))
+        except Exception:
+            final_outstanding = Decimal('0.00')
         final_territory = request.data.get('territory', '')
         final_distributor = request.data.get('distributorName', '')
 
         from core.models import User
-        assigned_email = request.data.get('assignedSoEmail')
-        if not assigned_email or '@' not in str(assigned_email):
+        raw_sos = (
+            request.data.get('assignedSoEmails') or 
+            request.data.get('assignedsoemails') or 
+            request.data.get('assignedSoEmail') or 
+            request.data.get('assignedsoemail')
+        )
+        so_list = []
+        if isinstance(raw_sos, list):
+            for item in raw_sos:
+                if item and '@' in str(item):
+                    so_list.append(str(item).strip().lower())
+                elif item:
+                    u = User.objects.filter(id=str(item)).first()
+                    if u and u.email:
+                        so_list.append(u.email.strip().lower())
+        elif isinstance(raw_sos, str) and raw_sos.strip():
+            for item in raw_sos.split(','):
+                item = item.strip()
+                if item and '@' in item:
+                    so_list.append(item.lower())
+                elif item:
+                    u = User.objects.filter(id=item).first()
+                    if u and u.email:
+                        so_list.append(u.email.strip().lower())
+
+        if not so_list and obj.submitted_by_id:
             so = User.objects.filter(id=obj.submitted_by_id).first()
             if so and so.email:
-                assigned_email = so.email
-        so_list = [str(assigned_email).strip().lower()] if assigned_email else []
+                so_list.append(so.email.strip().lower())
 
-        # Create Dealer or Distributor
-        if obj.party_type == 'DEALER':
-            new_id = f"DLR-{uuid.uuid4().hex[:8].upper()}"
-            Dealer.objects.create(
-                id=f"dlr_{uuid.uuid4().hex[:16]}",
-                dealercode=new_id,
-                dealername=final_party_name,
-                city=final_city,
-                assignedsoemails=so_list, 
-                creditlimit=final_credit_limit,
-                outstanding=final_outstanding,
-                territory=final_territory,
-                distributorname=final_distributor,
-                active=True,
-                gst_number=final_gst,
-                address=final_address,
-                phone=final_phone,
-                email=final_email,
-                contact_person=final_contact,
-                companyid_id=obj.companyid_id
-            )
-            obj.created_party_id = new_id
-        else:
-            new_id = f"DIST-{uuid.uuid4().hex[:8].upper()}"
-            Distributor.objects.create(
-                id=f"dist_{uuid.uuid4().hex[:16]}",
-                distributorcode=new_id,
-                distributorname=final_party_name,
-                area=final_city,
-                assignedsoemails=so_list,
-                creditlimit=final_credit_limit,
-                outstanding=final_outstanding,
-                territory=final_territory,
-                active=True,
-                gst_number=final_gst,
-                address=final_address,
-                phone=final_phone,
-                email=final_email,
-                contact_person=final_contact,
-                companyid_id=obj.companyid_id
-            )
-            obj.created_party_id = new_id
-            
-        obj.status = 'COMPLETED'
-        obj.save()
-        
-        if so_list:
+        so_list = list(dict.fromkeys(so_list))
+        company_id = obj.companyid_id or _get_company_id(request)
+
+        try:
+            # Create Dealer or Distributor
             if obj.party_type == 'DEALER':
-                Dealer.objects.filter(dealercode=obj.created_party_id).update(assignedsoemails=so_list)
+                new_id = f"DLR-{uuid.uuid4().hex[:8].upper()}"
+                Dealer.objects.create(
+                    id=f"dlr_{uuid.uuid4().hex[:16]}",
+                    dealercode=new_id,
+                    dealername=final_party_name,
+                    city=final_city,
+                    assignedsoemails=so_list, 
+                    creditlimit=final_credit_limit,
+                    outstanding=final_outstanding,
+                    territory=final_territory,
+                    distributorname=final_distributor,
+                    active=True,
+                    gst_number=final_gst,
+                    address=final_address,
+                    phone=final_phone,
+                    email=final_email,
+                    contact_person=final_contact,
+                    companyid_id=company_id
+                )
+                obj.created_party_id = new_id
             else:
-                Distributor.objects.filter(distributorcode=obj.created_party_id).update(assignedsoemails=so_list)
+                new_id = f"DIST-{uuid.uuid4().hex[:8].upper()}"
+                Distributor.objects.create(
+                    id=f"dist_{uuid.uuid4().hex[:16]}",
+                    distributorcode=new_id,
+                    distributorname=final_party_name,
+                    area=final_city,
+                    assignedsoemails=so_list,
+                    creditlimit=final_credit_limit,
+                    outstanding=final_outstanding,
+                    territory=final_territory,
+                    active=True,
+                    gst_number=final_gst,
+                    address=final_address,
+                    phone=final_phone,
+                    email=final_email,
+                    contact_person=final_contact,
+                    companyid_id=company_id
+                )
+                obj.created_party_id = new_id
                 
-        serializer = self.get_serializer(obj)
-        return send_success(serializer.data, f"{obj.party_type} successfully created with code {new_id}")
+            obj.status = 'COMPLETED'
+            obj.save()
+            
+            if so_list:
+                if obj.party_type == 'DEALER':
+                    Dealer.objects.filter(dealercode=obj.created_party_id).update(assignedsoemails=so_list)
+                else:
+                    Distributor.objects.filter(distributorcode=obj.created_party_id).update(assignedsoemails=so_list)
+                    
+            serializer = self.get_serializer(obj)
+            return send_success(serializer.data, f"{obj.party_type} successfully created with code {new_id}")
+        except Exception as e:
+            return send_error(f"Failed to create {obj.party_type}: {str(e)}", 400)
