@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from api.models import DailyTravelLog, DailyTourPlanStop, DailyAttendance, Labour, User, Company
 from api.views import send_success, send_error, _get_company_id
+from api.request_context import get_company_id, get_user_id, safe_float, safe_int, safe_str, get_param
 
 
 def _clean_visit_purpose(raw_val):
@@ -286,15 +287,15 @@ def travel_plan(request):
                 )
 
             stop.stop_order = idx + 1
-            stop.dealer_id = item.get('dealer_id') or None
+            stop.dealer_id = get_param(item, 'dealer_id', 'dealerId') or None
             stop.dealer_name = dealer_name
-            stop.dealer_location = item.get('dealer_location') or ''
-            stop.visit_purpose = _clean_visit_purpose(item.get('visit_purpose'))
-            stop.target_order_bags = float(item.get('target_order_bags') or 0.0)
-            stop.target_order_value = float(item.get('target_order_value') or 0.0)
-            stop.target_collection_value = float(item.get('target_collection_value') or 0.0)
-            stop.plan_notes = item.get('plan_notes') or ''
-            stop.is_unplanned = bool(item.get('is_unplanned', False))
+            stop.dealer_location = safe_str(get_param(item, 'dealer_location', 'dealerLocation'))
+            stop.visit_purpose = _clean_visit_purpose(get_param(item, 'visit_purpose', 'visitPurpose'))
+            stop.target_order_bags = safe_float(get_param(item, 'target_order_bags', 'targetOrderBags'))
+            stop.target_order_value = safe_float(get_param(item, 'target_order_value', 'targetOrderValue'))
+            stop.target_collection_value = safe_float(get_param(item, 'target_collection_value', 'targetCollectionValue'))
+            stop.plan_notes = safe_str(get_param(item, 'plan_notes', 'planNotes'))
+            stop.is_unplanned = bool(get_param(item, 'is_unplanned', 'isUnplanned', default=False))
             if log and not stop.travel_log:
                 stop.travel_log = log
             stop.save()
@@ -339,14 +340,14 @@ def travel_add_unplanned_stop(request):
     log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
     highest_order = DailyTourPlanStop.objects.filter(user_id=user_id, date=today).count() + 1
 
-    is_unplanned = bool(data.get('is_unplanned', True))
-    visited = bool(data.get('visited', True if is_unplanned else False))
+    is_unplanned = bool(get_param(data, 'is_unplanned', 'isUnplanned', default=True))
+    visited = bool(get_param(data, 'visited', default=(True if is_unplanned else False)))
 
-    target_bags = float(data.get('target_order_bags') or 0.0)
-    actual_bags = float(data.get('actual_order_bags') or (target_bags if is_unplanned else 0.0))
+    target_bags = safe_float(get_param(data, 'target_order_bags', 'targetOrderBags'))
+    actual_bags = safe_float(get_param(data, 'actual_order_bags', 'actualOrderBags'), default=(target_bags if is_unplanned else 0.0))
 
-    target_col = float(data.get('target_collection_value') or 0.0)
-    actual_col = float(data.get('actual_collection_value') or (target_col if is_unplanned else 0.0))
+    target_col = safe_float(get_param(data, 'target_collection_value', 'targetCollectionValue'))
+    actual_col = safe_float(get_param(data, 'actual_collection_value', 'actualCollectionValue'), default=(target_col if is_unplanned else 0.0))
 
     stop = DailyTourPlanStop(
         id=f"STP-{uuid.uuid4().hex[:12].upper()}",
@@ -356,21 +357,21 @@ def travel_add_unplanned_stop(request):
         travel_log=log,
         stop_order=highest_order,
         is_unplanned=is_unplanned,
-        dealer_id=data.get('dealer_id') or None,
+        dealer_id=get_param(data, 'dealer_id', 'dealerId') or None,
         dealer_name=dealer_name,
-        dealer_location=data.get('dealer_location') or '',
-        visit_purpose=_clean_visit_purpose(data.get('visit_purpose')),
-        plan_notes=data.get('plan_notes') or ('Spot visit on route' if is_unplanned else ''),
+        dealer_location=safe_str(get_param(data, 'dealer_location', 'dealerLocation')),
+        visit_purpose=_clean_visit_purpose(get_param(data, 'visit_purpose', 'visitPurpose')),
+        plan_notes=safe_str(get_param(data, 'plan_notes', 'planNotes')) or ('Spot visit on route' if is_unplanned else ''),
         target_order_bags=target_bags,
-        target_order_value=float(data.get('target_order_value') or 0.0),
+        target_order_value=safe_float(get_param(data, 'target_order_value', 'targetOrderValue')),
         target_collection_value=target_col,
         visited=visited,
         actual_order_bags=actual_bags,
-        actual_order_value=float(data.get('actual_order_value') or 0.0),
+        actual_order_value=safe_float(get_param(data, 'actual_order_value', 'actualOrderValue')),
         actual_collection_value=actual_col,
-        actual_status=(data.get('actual_status') or ('COMPLETED' if visited else 'PENDING')).upper(),
-        shortfall_reason=data.get('shortfall_reason') or '',
-        actual_notes=data.get('actual_notes') or '',
+        actual_status=(get_param(data, 'actual_status', 'actualStatus') or ('COMPLETED' if visited else 'PENDING')).upper(),
+        shortfall_reason=safe_str(get_param(data, 'shortfall_reason', 'shortfallReason')),
+        actual_notes=safe_str(get_param(data, 'actual_notes', 'actualNotes')),
         completed_at=timezone.now() if visited else None,
     )
     stop.save()
@@ -436,17 +437,17 @@ def travel_punch_stop_visit(request):
             is_unplanned=bool(data.get('is_unplanned', False)),
         )
 
-    status_val = (data.get('actual_status') or 'COMPLETED').upper()
+    status_val = (get_param(data, 'actual_status', 'actualStatus') or 'COMPLETED').upper()
     is_skipped = status_val == 'SKIPPED'
 
     stop.actual_status = status_val
     stop.visited = not is_skipped
-    stop.actual_order_bags = float(data.get('actual_order_bags') or 0.0)
-    stop.actual_order_value = float(data.get('actual_order_value') or 0.0)
-    stop.actual_collection_value = float(data.get('actual_collection_value') or 0.0)
-    stop.shortfall_reason = data.get('shortfall_reason') or ''
-    stop.actual_notes = data.get('actual_notes') or ''
-    next_date_str = data.get('next_visit_date')
+    stop.actual_order_bags = safe_float(get_param(data, 'actual_order_bags', 'actualOrderBags'))
+    stop.actual_order_value = safe_float(get_param(data, 'actual_order_value', 'actualOrderValue'))
+    stop.actual_collection_value = safe_float(get_param(data, 'actual_collection_value', 'actualCollectionValue'))
+    stop.shortfall_reason = safe_str(get_param(data, 'shortfall_reason', 'shortfallReason'))
+    stop.actual_notes = safe_str(get_param(data, 'actual_notes', 'actualNotes'))
+    next_date_str = get_param(data, 'next_visit_date', 'nextVisitDate')
     if next_date_str:
         try:
             stop.next_visit_date = datetime.strptime(str(next_date_str).strip()[:10], '%Y-%m-%d').date()
