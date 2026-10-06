@@ -1,4 +1,5 @@
 import axios, { type AxiosRequestConfig } from 'axios';
+import { toast } from 'sonner';
 import { healApiPath } from './routeHealing';
 import { recordLog, logUserError, logPermissionError } from '@/utils/auditLogger';
 
@@ -181,15 +182,22 @@ api.interceptors.response.use(
       else if (url.includes('/dealers')) feature = 'Dealers';
       else if (url.includes('/suppliers')) feature = 'Suppliers';
 
+      const method = (config.method || 'get').toLowerCase();
+
       if (status === 403) {
+        toast.error(serverMsg || 'Access Denied: You do not have permission to perform this action.');
         logPermissionError(feature, `Access Denied — User does not have permission to perform this action in ${feature}`, {
           reason: serverMsg || 'Insufficient permissions',
         });
       } else if (status >= 500) {
+        toast.error(`Server Error: ${serverMsg || 'An unexpected error occurred. Please try again.'}`);
         logUserError(feature, `System Error — Something went wrong while processing a ${feature} request. Please try again.`, {
           reason: serverMsg || 'Internal server error',
         });
       } else if (status === 400 || status === 422) {
+        if (['post', 'put', 'patch', 'delete'].includes(method)) {
+          toast.error(serverMsg || 'Validation Error: Please check required fields.');
+        }
         logUserError(feature, `Invalid Data — The ${feature} form submission was rejected. ${serverMsg ? 'Reason: ' + serverMsg : 'Please check required fields.'}`, {
           reason: serverMsg || 'Validation failed',
         });
