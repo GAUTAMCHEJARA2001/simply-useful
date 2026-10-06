@@ -71,13 +71,33 @@ const extractDispatchDetails = (narration: string) => {
   };
 };
 
+const cleanGeneralNarration = (narration: string) => {
+  if (!narration) return '';
+  return narration
+    .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
+    .replace(/\[CHALLAN:\s*[^\]]+\]/gi, '')
+    .replace(/\[WAREHOUSE:\s*[^\]]+\]/gi, '')
+    .replace(/\[WAREHOUSE ID:\s*[^\]]+\]/gi, '')
+    .replace(/\[VEHICLE:\s*[^\]]+\]/gi, '')
+    .replace(/\[DRIVER:\s*[^\]]+\]/gi, '')
+    .replace(/\[DRIVER MOBILE:\s*[^\]]+\]/gi, '')
+    .replace(/\[DISPATCH DATE:\s*[^\]]+\]/gi, '')
+    .replace(/\[DISPATCH TIME:\s*[^\]]+\]/gi, '')
+    .replace(/\[DISPATCH REMARKS:\s*([^\]]+)\]/gi, '$1')
+    .replace(/\[REJECTION REASON:\s*[^\]]+\]/gi, '')
+    .replace(/\[REJECTION DATE:\s*[^\]]+\]/gi, '')
+    .replace(/\[RETURN REASON:\s*[^\]]+\]/gi, '')
+    .replace(/\[RETURN DATE:\s*[^\]]+\]/gi, '')
+    .trim();
+};
+
 export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, readOnly, isDispatchLog }) => {
   const { data: warehouses = [] } = useWarehouses();
   const { saveSale, saveDispatchLog } = useSaleMutations();
   const extractedDetails = extractDispatchDetails(sale?.narration || '');
 
   const [form, setForm] = useState<any>({
-    lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18 }]
+    lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0, itemRemark: '' }]
   });
 
   const { data: products = [] } = useProducts({ warehouseId: form.warehouse_id });
@@ -93,33 +113,22 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
     if (sale && isOpen && initializedSaleId !== sale.id) {
       // Map Order object to SalesModal form shape
       const mappedLineItems = (sale.items || []).map((it: any) => ({
+        id: it.id || '',
         productId: it.productId || it.product_id || it.productid_id || it.product?.id || '',
         quantity: it.qty || 0,
         rate: it.price || 0,
         tax_percent: it.tax_percent || 18,
-        returnedQty: it.returnedQty || 0
+        returnedQty: it.returnedQty || 0,
+        itemRemark: it.itemRemark || it.item_remark || it.remark || ''
       }));
       
       const whId = sale.assignedWarehouse || extractWarehouseId(sale.narration) || sale.warehouseId || sale.warehouse_id || '';
       
-      const cleanNarration = sale.narration ? sale.narration
-        .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
-        .replace(/\[CHALLAN:\s*[^\]]+\]/gi, '')
-        .replace(/\[WAREHOUSE:\s*[^\]]+\]/gi, '')
-        .replace(/\[WAREHOUSE ID:\s*[^\]]+\]/gi, '')
-        .replace(/\[VEHICLE:\s*[^\]]+\]/gi, '')
-        .replace(/\[DRIVER:\s*[^\]]+\]/gi, '')
-        .replace(/\[DRIVER MOBILE:\s*[^\]]+\]/gi, '')
-        .replace(/\[DISPATCH DATE:\s*[^\]]+\]/gi, '')
-        .replace(/\[DISPATCH TIME:\s*[^\]]+\]/gi, '')
-        .replace(/\[REJECTION REASON:\s*[^\]]+\]/gi, '')
-        .replace(/\[REJECTION DATE:\s*[^\]]+\]/gi, '')
-        .replace(/\[RETURN REASON:\s*[^\]]+\]/gi, '')
-        .replace(/\[RETURN DATE:\s*[^\]]+\]/gi, '')
-        .trim() : '';
+      const rawNarration = sale.narration || sale.remarks || '';
+      const cleanNarration = cleanGeneralNarration(rawNarration);
 
-      const parsedDispatchDate = formatDateForInput(sale.dispatchDate || extractedDetails.dispatchDate || sale.date) || new Date().toISOString().split('T')[0];
-      const parsedSaleDate = formatDateForInput(sale.date || sale.createdAt) || new Date().toISOString().split('T')[0];
+      const parsedDispatchDate = formatDateForInput(sale.dispatchDate || extractedDetails.dispatchDate || '') || new Date().toISOString().split('T')[0];
+      const parsedSaleDate = formatDateForInput(sale.date || sale.orderDate || sale.createdAt) || new Date().toISOString().split('T')[0];
 
       setForm({
         ...sale,
@@ -128,20 +137,22 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         warehouse_id: whId,
         date: parsedSaleDate,
         dispatchDate: parsedDispatchDate,
-        narration: cleanNarration || sale.narration || '',
-        lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }],
-        vehicleNumber: sale.vehicleNumber || sale.vehiclenumber || extractedDetails.vehicle || '',
-        driverName: sale.driverName || sale.drivername || extractedDetails.driver || '',
-        driverMobile: sale.driverMobileNumber || sale.drivermobile || extractedDetails.mobile || '',
+        narration: cleanNarration || rawNarration || '',
+        lineItems: mappedLineItems.length > 0 ? mappedLineItems : [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0, itemRemark: '' }],
+        vehicleNumber: sale.vehicleNumber || sale.vehiclenumber || sale.vehicle_number || extractedDetails.vehicle || '',
+        driverName: sale.driverName || sale.drivername || sale.driver_name || extractedDetails.driver || '',
+        driverMobile: sale.driverMobileNumber || sale.driverMobile || sale.drivermobile || sale.driver_mobile || extractedDetails.mobile || '',
       });
-    } else {
+      setInitializedSaleId(sale.id);
+    } else if (!sale && isOpen && initializedSaleId !== 'new') {
       setForm({ 
         date: new Date().toISOString().split('T')[0],
         dispatchDate: new Date().toISOString().split('T')[0],
-        lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }] 
+        lineItems: [{ productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0, itemRemark: '' }] 
       });
+      setInitializedSaleId('new');
     }
-  }, [sale, isOpen]);
+  }, [sale, isOpen, initializedSaleId]);
 
   // Resolve warehouse name (e.g. "NASHIK") to numeric ID (e.g. 7) once warehouses load
   useEffect(() => {
@@ -163,7 +174,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
   }, [warehouses, isOpen]); // Note: deliberately excludes form.warehouse_id to prevent loops
 
   const addLineItem = () => {
-    setForm({ ...form, lineItems: [...(form.lineItems || []), { productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0 }] });
+    setForm({ ...form, lineItems: [...(form.lineItems || []), { productId: '', quantity: 0, rate: 0, tax_percent: 18, returnedQty: 0, itemRemark: '' }] });
   };
 
   const removeLineItem = (index: number) => {
@@ -194,19 +205,10 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
 
   const handleSave = async () => {
     const rawNarration = form.narration || '';
-    const cleanNarration = rawNarration
-      .replace(/\[CHALLAN:\s*[^\]]+\]/gi, '')
-      .replace(/\[WAREHOUSE:\s*[^\]]+\]/gi, '')
-      .replace(/\[WAREHOUSE ID:\s*[^\]]+\]/gi, '')
-      .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
-      .replace(/\[VEHICLE:\s*[^\]]+\]/gi, '')
-      .replace(/\[DRIVER:\s*[^\]]+\]/gi, '')
-      .replace(/\[DRIVER MOBILE:\s*[^\]]+\]/gi, '')
-      .replace(/\[DISPATCH DATE:\s*[^\]]+\]/gi, '')
-      .replace(/\[DISPATCH TIME:\s*[^\]]+\]/gi, '')
-      .trim();
+    const cleanNarration = cleanGeneralNarration(rawNarration);
 
     const selectedWh = warehouses.find((w: any) => String(w.id) === String(form.warehouse_id));
+    const finalRemarks = form.narration || cleanNarration;
 
     const payload = {
       ...form,
@@ -214,23 +216,29 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
       partyType: form.partyType || 'Dealer',
       status: form.status || 'Completed',
       grandTotal: grandTotal,
-      narration: cleanNarration,
+      narration: finalRemarks,
+      remarks: finalRemarks,
       date: form.date || new Date().toISOString().split('T')[0],
+      assignedWarehouse: form.warehouse_id || '',
       warehouse_id: form.warehouse_id || '',
       invoiceNumber: form.challanNumber || '',
       dispatchWarehouse: selectedWh ? selectedWh.name : '',
       dispatchDate: form.dispatchDate || sale?.dispatchDate || '',
+      vehicleNumber: form.vehicleNumber || '',
+      driverName: form.driverName || '',
+      driverMobile: form.driverMobile || '',
+      driverMobileNumber: form.driverMobile || '',
       items: (form.lineItems || []).map((it: any) => ({
+        id: it.id || undefined,
         productId: it.productId,
         qty: it.quantity,
         price: it.rate,
         total: (it.quantity || 0) * (it.rate || 0),
         tax_percent: it.tax_percent || 18,
-        returnedQty: it.returnedQty || 0
+        returnedQty: it.returnedQty || 0,
+        itemRemark: it.itemRemark || ''
       }))
     };
-    
-    const effectiveDate = form.dispatchDate || form.date || new Date().toISOString().split('T')[0];
     
     if (isDispatchLog) {
       await saveDispatchLog({
@@ -239,12 +247,25 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         vehicleNumber: form.vehicleNumber || extractedDetails.vehicle || '',
         driverName: form.driverName || extractedDetails.driver || '',
         driverMobile: form.driverMobile || extractedDetails.mobile || '',
-        dispatchDate: effectiveDate,
-        date: effectiveDate,
+        driverMobileNumber: form.driverMobile || extractedDetails.mobile || '',
+        dispatchDate: form.dispatchDate || new Date().toISOString().split('T')[0],
+        orderDate: form.date,
+        date: form.date,
+        partyName: form.customerName || form.partyName || '',
+        customerName: form.customerName || form.partyName || '',
         warehouse_id: form.warehouse_id || '',
-        remarks: cleanNarration,
+        remarks: finalRemarks,
+        narration: finalRemarks,
         items: payload.items
       });
+      if (sale.originalOrderId) {
+        try {
+          await saveSale({
+            ...payload,
+            id: sale.originalOrderId,
+          });
+        } catch (_) {}
+      }
     } else {
       await saveSale(payload);
     }
@@ -276,31 +297,79 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
               <div>
                 <span className="font-bold text-foreground/80 block">Order Placed Date</span>
                 <span className="text-foreground font-medium">
-                  {sale.date ? new Date(sale.date).toLocaleString('en-IN') : '—'}
+                  {(() => {
+                    const rawO = sale.orderDate || sale.date || sale.createdAt;
+                    if (!rawO) return '—';
+                    try {
+                      if (typeof rawO === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawO.trim())) {
+                        const [y, m, d] = rawO.trim().split('-');
+                        return `${parseInt(d, 10)}/${parseInt(m, 10)}/${y}`;
+                      }
+                      const parsed = new Date(rawO);
+                      return isNaN(parsed.getTime()) ? String(rawO) : parsed.toLocaleString('en-IN');
+                    } catch {
+                      return String(rawO);
+                    }
+                  })()}
                 </span>
               </div>
               <div>
                 <span className="font-bold text-foreground/80 block">Dispatched Date / Time</span>
                 <span className="text-foreground font-medium">
-                  {extractedDetails.dispatchDate || extractedDetails.dispatchTime || sale.dispatchDate || '—'}
+                  {(() => {
+                    const rawDate = extractedDetails.dispatchDate || extractedDetails.dispatchTime || sale.dispatchDate || sale.dispatchdate || sale.dispatch_date || form.dispatchDate;
+                    if (!rawDate) return '—';
+                    try {
+                      if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate.trim())) {
+                        const [y, m, d] = rawDate.trim().split('-');
+                        return `${parseInt(d, 10)}/${parseInt(m, 10)}/${y}`;
+                      }
+                      const parsed = new Date(rawDate);
+                      return isNaN(parsed.getTime()) ? String(rawDate) : parsed.toLocaleString('en-IN');
+                    } catch {
+                      return String(rawDate);
+                    }
+                  })()}
                 </span>
               </div>
               <div>
                 <span className="font-bold text-foreground/80 block">Dispatch Vehicle Number</span>
-                <span className="text-foreground font-medium">{extractedDetails.vehicle || sale.vehicleNumber || '—'}</span>
+                <span className="text-foreground font-medium">
+                  {extractedDetails.vehicle || sale.vehicleNumber || sale.vehiclenumber || sale.vehicle_number || form.vehicleNumber || '—'}
+                </span>
               </div>
               <div>
                 <span className="font-bold text-foreground/80 block">Driver Details</span>
                 <span className="text-foreground font-medium">
-                  {extractedDetails.driver ? `${extractedDetails.driver} ${extractedDetails.mobile ? `(${extractedDetails.mobile})` : ''}` : (sale.driverName ? `${sale.driverName} ${sale.driverMobileNumber ? `(${sale.driverMobileNumber})` : ''}` : '—')}
+                  {(() => {
+                    const dName = extractedDetails.driver || sale.driverName || sale.drivername || sale.driver_name || form.driverName || '';
+                    const dMobile = extractedDetails.mobile || sale.driverMobileNumber || sale.driverMobile || sale.drivermobile || sale.driver_mobile || form.driverMobile || form.driverMobileNumber || '';
+                    if (!dName && !dMobile) return '—';
+                    if (dName && dMobile) return `${dName} (${dMobile})`;
+                    return dName || dMobile || '—';
+                  })()}
                 </span>
               </div>
               <div className="col-span-2 md:col-span-3">
                 <span className="font-bold text-foreground/80 block">Fulfillment Location (Warehouse)</span>
                 <span className="text-foreground font-semibold">
-                  {extractedDetails.warehouseName || sale.warehouseName || '—'}
+                  {(() => {
+                    const whId = sale.warehouseid_id || sale.warehouse_id || sale.warehouseId || sale.assignedWarehouse || form.warehouse_id;
+                    const matchedWh = warehouses.find((w: any) => String(w.id) === String(whId));
+                    return extractedDetails.warehouseName || sale.warehouseName || sale.dispatchWarehouse || matchedWh?.name || '—';
+                  })()}
                 </span>
               </div>
+              {cleanGeneralNarration(sale.narration || sale.remarks || '') && (
+                <div className="col-span-2 md:col-span-3 pt-2.5 mt-1 border-t border-purple-500/20">
+                  <span className="font-bold text-purple-700 block text-[10px] uppercase tracking-wider mb-1">
+                    📝 General Narration (From Sales Order)
+                  </span>
+                  <div className="bg-background/90 p-2.5 rounded-lg border border-purple-500/25 text-xs text-foreground font-medium leading-relaxed whitespace-pre-wrap">
+                    {cleanGeneralNarration(sale.narration || sale.remarks || '')}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -326,40 +395,47 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
           </div>
           <div>
             <label className="text-[11px] font-semibold block mb-1">
-              {isDispatchLog ? 'Dispatch Date' : 'Sale / Order Date'}
+              Order Placed Date
             </label>
             <input 
               type="date" 
-              value={isDispatchLog ? (form.dispatchDate || form.date || '') : (form.date || '')} 
-              onChange={e => setForm({ ...form, date: e.target.value, dispatchDate: e.target.value })}
+              value={form.date || ''} 
+              onChange={e => setForm({ ...form, date: e.target.value })}
+              className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" 
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold block mb-1">
+              Dispatch Date
+            </label>
+            <input 
+              type="date" 
+              value={form.dispatchDate || ''} 
+              onChange={e => setForm({ ...form, dispatchDate: e.target.value })}
               className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" 
             />
           </div>
           <div className="col-span-2">
-            <label className="text-[11px] font-semibold block mb-1">Remarks / Narration</label>
+            <label className="text-[11px] font-semibold block mb-1">📝 General Narration / Remarks</label>
             <textarea value={form.narration || ''} onChange={e => setForm({ ...form, narration: e.target.value })}
               placeholder="Enter remarks/narration notes..."
               className="w-full border border-border rounded-lg px-3 py-2 bg-background text-xs min-h-16" />
           </div>
-          {isDispatchLog && (
-            <>
-              <div>
-                <label className="text-[11px] font-semibold block mb-1">Vehicle Number</label>
-                <input value={form.vehicleNumber || ''} onChange={e => setForm({ ...form, vehicleNumber: e.target.value })}
-                  placeholder="MH-15-AB-1234" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
-              </div>
-              <div>
-                <label className="text-[11px] font-semibold block mb-1">Driver Name</label>
-                <input value={form.driverName || ''} onChange={e => setForm({ ...form, driverName: e.target.value })}
-                  placeholder="Driver Name" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
-              </div>
-              <div>
-                <label className="text-[11px] font-semibold block mb-1">Driver Mobile</label>
-                <input value={form.driverMobile || ''} onChange={e => setForm({ ...form, driverMobile: e.target.value })}
-                  placeholder="9876543210" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
-              </div>
-            </>
-          )}
+          <div>
+            <label className="text-[11px] font-semibold block mb-1">Vehicle Number</label>
+            <input value={form.vehicleNumber || ''} onChange={e => setForm({ ...form, vehicleNumber: e.target.value.toUpperCase() })}
+              placeholder="MH-15-AB-1234" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold block mb-1">Driver Name</label>
+            <input value={form.driverName || ''} onChange={e => setForm({ ...form, driverName: e.target.value })}
+              placeholder="Driver Name" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+          </div>
+          <div className="col-span-2">
+            <label className="text-[11px] font-semibold block mb-1">Driver Mobile</label>
+            <input value={form.driverMobile || ''} onChange={e => setForm({ ...form, driverMobile: e.target.value })}
+              placeholder="9876543210" className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+          </div>
         </div>
 
         <div className="space-y-2.5">
@@ -409,6 +485,20 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
                       <X className="w-4 h-4" />
                     </button>
                   </div>
+                </div>
+
+                {/* Product Narration / Item Remark */}
+                <div className="pt-2 border-t border-border/30 flex items-center gap-2">
+                  <label className="text-[10px] font-semibold text-muted-foreground whitespace-nowrap flex items-center gap-1">
+                    <span>🏷️ Product Narration:</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={item.itemRemark || ''}
+                    onChange={e => updateLineItem(i, 'itemRemark', e.target.value)}
+                    placeholder={readOnly ? '— No product narration —' : 'Enter product narration / item remark...'}
+                    className="w-full border border-border/60 rounded-md px-2.5 py-1 bg-background text-xs text-foreground placeholder:text-muted-foreground/50"
+                  />
                 </div>
               </div>
             ))}
