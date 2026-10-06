@@ -9,16 +9,16 @@ from decimal import Decimal
 from api.models import PartyOnboardingRequest, Dealer, Distributor
 from api.serializers import PartyOnboardingSerializer
 from api.views import send_success, send_error, _get_company_id
+from api.services.onboarding_service import OnboardingService
 
 class PartyOnboardingViewSet(viewsets.ModelViewSet):
     serializer_class = PartyOnboardingSerializer
 
     def get_queryset(self):
         user = self.request.user
-        from api.views import _get_company_id
         company_id = _get_company_id(self.request)
         user_role = (getattr(user, 'role', '') or '').upper()
-        qs = PartyOnboardingRequest.objects.all()
+        qs = PartyOnboardingRequest.objects.select_related('submitted_by', 'reviewed_by').all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
         if user_role not in ['ADMIN', 'SUPERADMIN']:
@@ -204,28 +204,23 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
         obj = self.get_object()
         status_val = request.data.get('status')
         remarks = request.data.get('remarks')
-        
-        if status_val not in ['APPROVED', 'REJECTED']:
-            return send_error("Invalid status", 400)
-            
-        if obj.status not in ['PENDING', 'REJECTED']:
-            return send_error(f"Request is currently {obj.status} and cannot be verified", 400)
-            
-        obj.status = status_val
-        obj.remarks = remarks
-        
         field_reviews = request.data.get('fieldReviews')
-        if field_reviews:
-            if not isinstance(obj.extended_data, dict):
-                obj.extended_data = {}
-            obj.extended_data['fieldReviews'] = field_reviews
-            
-        obj.reviewed_by_id = getattr(request.user, 'id', None) or getattr(request.user, 'userId', None)
-        obj.reviewed_at = timezone.now()
+        reviewer_id = getattr(request.user, 'id', None) or getattr(request.user, 'userId', None)
         
-        obj.save()
-        serializer = self.get_serializer(obj)
-        return send_success(serializer.data, f"Onboarding request marked as {status_val}")
+        try:
+            updated_obj = OnboardingService.verify_request(
+                obj=obj,
+                status_val=status_val,
+                remarks=remarks,
+                field_reviews=field_reviews,
+                reviewer_id=reviewer_id
+            )
+            serializer = self.get_serializer(updated_obj)
+            return send_success(serializer.data, f"Onboarding request marked as {status_val}")
+        except ValueError as ve:
+            return send_error(str(ve), 400)
+        except Exception as e:
+            return send_error(f"Failed to verify request: {str(e)}", 500)
 
     @action(detail=True, methods=['post'])
     def finalize_and_create_dealer(self, request, pk=None):
@@ -249,121 +244,24 @@ class PartyOnboardingViewSet(viewsets.ModelViewSet):
                     upload_result = cloudinary.uploader.upload(file_obj, folder='onboarding_docs')
                     urls.append(upload_result.get('secure_url'))
                 
-                # If they were already some signed forms, append to them, else overwrite
+                # If there were already signed forms, append to them, else overwrite
                 if not isinstance(obj.doc_signed_form, list):
                     obj.doc_signed_form = []
                 obj.doc_signed_form.extend(urls)
+                obj.save(update_fields=['doc_signed_form'])
             except Exception as e:
                 return send_error(f"Failed to upload Signed Form: {str(e)}", 500)
-            
-        # Get fields from request data (edited by Admin) or fallback to original request
-        final_party_name = request.data.get('partyName', obj.party_name)
-        final_city = request.data.get('cityOrArea', obj.city_or_area)
-        final_gst = request.data.get('gstNumber', obj.gst_number)
-        final_address = request.data.get('address', obj.address)
-        final_phone = request.data.get('phone', obj.phone)
-        final_email = request.data.get('email', obj.email)
-        final_contact = request.data.get('contactPerson', obj.contact_person)
-        
-        try:
-            final_credit_limit = Decimal(str(request.data.get('creditLimit') or '0.00'))
-        except Exception:
-            final_credit_limit = Decimal('0.00')
-        try:
-            final_outstanding = Decimal(str(request.data.get('outstanding') or '0.00'))
-        except Exception:
-            final_outstanding = Decimal('0.00')
-        final_territory = request.data.get('territory', '')
-        final_distributor = request.data.get('distributorName', '')
-
-        from core.models import User
-        raw_sos = (
-            request.data.get('assignedSoEmails') or 
-            request.data.get('assignedsoemails') or 
-            request.data.get('assignedSoEmail') or 
-            request.data.get('assignedsoemail')
-        )
-        so_list = []
-        if isinstance(raw_sos, list):
-            for item in raw_sos:
-                if item and '@' in str(item):
-                    so_list.append(str(item).strip().lower())
-                elif item:
-                    u = User.objects.filter(id=str(item)).first()
-                    if u and u.email:
-                        so_list.append(u.email.strip().lower())
-        elif isinstance(raw_sos, str) and raw_sos.strip():
-            for item in raw_sos.split(','):
-                item = item.strip()
-                if item and '@' in item:
-                    so_list.append(item.lower())
-                elif item:
-                    u = User.objects.filter(id=item).first()
-                    if u and u.email:
-                        so_list.append(u.email.strip().lower())
-
-        if not so_list and obj.submitted_by_id:
-            so = User.objects.filter(id=obj.submitted_by_id).first()
-            if so and so.email:
-                so_list.append(so.email.strip().lower())
-
-        so_list = list(dict.fromkeys(so_list))
-        company_id = obj.companyid_id or _get_company_id(request)
 
         try:
-            # Create Dealer or Distributor
-            if obj.party_type == 'DEALER':
-                new_id = f"DLR-{uuid.uuid4().hex[:8].upper()}"
-                Dealer.objects.create(
-                    id=f"dlr_{uuid.uuid4().hex[:16]}",
-                    dealercode=new_id,
-                    dealername=final_party_name,
-                    city=final_city,
-                    assignedsoemails=so_list, 
-                    creditlimit=final_credit_limit,
-                    outstanding=final_outstanding,
-                    territory=final_territory,
-                    distributorname=final_distributor,
-                    active=True,
-                    gst_number=final_gst,
-                    address=final_address,
-                    phone=final_phone,
-                    email=final_email,
-                    contact_person=final_contact,
-                    companyid_id=company_id
-                )
-                obj.created_party_id = new_id
-            else:
-                new_id = f"DIST-{uuid.uuid4().hex[:8].upper()}"
-                Distributor.objects.create(
-                    id=f"dist_{uuid.uuid4().hex[:16]}",
-                    distributorcode=new_id,
-                    distributorname=final_party_name,
-                    area=final_city,
-                    assignedsoemails=so_list,
-                    creditlimit=final_credit_limit,
-                    outstanding=final_outstanding,
-                    territory=final_territory,
-                    active=True,
-                    gst_number=final_gst,
-                    address=final_address,
-                    phone=final_phone,
-                    email=final_email,
-                    contact_person=final_contact,
-                    companyid_id=company_id
-                )
-                obj.created_party_id = new_id
-                
-            obj.status = 'COMPLETED'
-            obj.save()
-            
-            if so_list:
-                if obj.party_type == 'DEALER':
-                    Dealer.objects.filter(dealercode=obj.created_party_id).update(assignedsoemails=so_list)
-                else:
-                    Distributor.objects.filter(distributorcode=obj.created_party_id).update(assignedsoemails=so_list)
-                    
+            party, new_id = OnboardingService.finalize_party(
+                obj=obj,
+                data=request.data,
+                company_id=_get_company_id(request)
+            )
             serializer = self.get_serializer(obj)
             return send_success(serializer.data, f"{obj.party_type} successfully created with code {new_id}")
+        except ValueError as ve:
+            return send_error(str(ve), 400)
         except Exception as e:
             return send_error(f"Failed to create {obj.party_type}: {str(e)}", 400)
+
