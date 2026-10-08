@@ -2,12 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Printer, Download, FileText, Award, CreditCard, 
   Copy, RefreshCw, Sparkles, Briefcase, ShieldCheck, 
-  ChevronsUpDown, Check, User, ChevronRight, SlidersHorizontal
+  ChevronsUpDown, Check, User, SlidersHorizontal, UserPlus, UserCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useData } from '@/contexts/DataContext';
 import { useToast } from '@/hooks/use-toast';
-import { useHREmployees } from '@/hooks/hr/useHR';
+import { useHREmployees, useHREmployeeMutations, useHRDepartments, useHRDesignations } from '@/hooks/hr/useHR';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useSearchParams } from 'react-router-dom';
@@ -20,6 +20,9 @@ export const EmployeeDocumentsTab: React.FC = () => {
   const { settings } = useData();
   const { toast } = useToast();
   const { data: employees = [], isLoading } = useHREmployees();
+  const { data: departments = [] } = useHRDepartments();
+  const { data: designations = [] } = useHRDesignations();
+  const { saveEmployee } = useHREmployeeMutations();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const printContainerRef = useRef<HTMLDivElement>(null);
@@ -27,19 +30,39 @@ export const EmployeeDocumentsTab: React.FC = () => {
   const [activeDoc, setActiveDoc] = useState<DocumentType>('offer_letter');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRegisteringCandidate, setIsRegisteringCandidate] = useState(false);
   const [empSelectorOpen, setEmpSelectorOpen] = useState(false);
+
+  // Unregistered Candidate Mode State
+  const [isCandidateMode, setIsCandidateMode] = useState(false);
+  const [candidateData, setCandidateData] = useState({
+    name: 'Mr. Ramesh Kumar',
+    contactinfo: '+91 98765 43210',
+    department: 'Production',
+    designation: 'Production Executive',
+    base_salary_monthly: 15000,
+    dailywage: 0,
+    employee_type: 'FIXED',
+    employee_id: 'CAND-2026-001',
+    aadhar_number: '',
+    doj: new Date().toISOString().split('T')[0],
+  });
 
   // Set initial employee from query param or first available
   useEffect(() => {
     const paramId = searchParams.get('employeeId');
     if (paramId && employees.some((e: any) => String(e.id) === String(paramId))) {
       setSelectedEmployeeId(String(paramId));
+      setIsCandidateMode(false);
     } else if (employees.length > 0 && !selectedEmployeeId) {
       setSelectedEmployeeId(String(employees[0].id));
     }
   }, [employees, searchParams]);
 
   const selectedEmployee = employees.find((e: any) => String(e.id) === String(selectedEmployeeId)) || employees[0] || null;
+
+  // Active Person: either unregistered candidate or registered employee
+  const activePerson = isCandidateMode ? candidateData : selectedEmployee;
 
   // Company details
   const companyName = settings?.company_name || 'KAMLA CONCHEM PVT LTD';
@@ -71,16 +94,16 @@ export const EmployeeDocumentsTab: React.FC = () => {
     validUpto: `${new Date().getFullYear() + 3}-12-31`,
   });
 
-  // Keep joiningDate & contact synced when selectedEmployee changes
+  // Keep joiningDate & contact synced when activePerson changes
   useEffect(() => {
-    if (selectedEmployee) {
+    if (activePerson) {
       setDocConfig(prev => ({
         ...prev,
-        joiningDate: selectedEmployee.doj || prev.joiningDate,
-        emergencyContact: selectedEmployee.contactinfo || prev.emergencyContact,
+        joiningDate: activePerson.doj || prev.joiningDate,
+        emergencyContact: activePerson.contactinfo || prev.emergencyContact,
       }));
     }
-  }, [selectedEmployee]);
+  }, [activePerson]);
 
   const resolveMediaUrl = (url: string | null | undefined): string => {
     if (!url) return '';
@@ -91,7 +114,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
     return `http://${hostname}:4000${url.startsWith('/') ? '' : '/'}${url}`;
   };
 
-  const monthlyBase = Number(selectedEmployee?.base_salary_monthly || (selectedEmployee?.dailywage ? selectedEmployee.dailywage * 26 : 0) || 0);
+  const monthlyBase = Number(activePerson?.base_salary_monthly || (activePerson?.dailywage ? activePerson.dailywage * 26 : 0) || 0);
   const annualCtc = monthlyBase * 12;
 
   const formatCurrency = (val: number) => {
@@ -111,9 +134,48 @@ export const EmployeeDocumentsTab: React.FC = () => {
     }
   };
 
+  // Register Candidate into database
+  const handleRegisterCandidate = async () => {
+    if (!candidateData.name || candidateData.name === 'Candidate Full Name') {
+      toast({ title: 'Validation Error', description: 'Please enter a valid candidate name.', variant: 'destructive' });
+      return;
+    }
+    setIsRegisteringCandidate(true);
+    try {
+      const payload = {
+        name: candidateData.name,
+        contactinfo: candidateData.contactinfo,
+        department: candidateData.department,
+        designation: candidateData.designation,
+        employee_type: candidateData.employee_type,
+        base_salary_monthly: candidateData.base_salary_monthly,
+        dailywage: candidateData.dailywage,
+        doj: candidateData.doj || todayStr,
+        aadhar_number: candidateData.aadhar_number,
+      };
+      const res = await saveEmployee(payload);
+      toast({ 
+        title: 'Candidate Registered Successfully!', 
+        description: `${candidateData.name} has been added to the Employee Master.` 
+      });
+      setIsCandidateMode(false);
+      if (res?.data?.id || res?.id) {
+        setSelectedEmployeeId(String(res.data?.id || res.id));
+      }
+    } catch (err: any) {
+      toast({ 
+        title: 'Registration Failed', 
+        description: err.message || 'Could not register candidate.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsRegisteringCandidate(false);
+    }
+  };
+
   // Download PDF Handler
   const handleDownloadPdf = async () => {
-    if (!printContainerRef.current || !selectedEmployee) return;
+    if (!printContainerRef.current || !activePerson) return;
     setIsGenerating(true);
     try {
       const docNameMapping: Record<DocumentType, string> = {
@@ -124,7 +186,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
         id_card: 'Employee_ID_Card',
       };
 
-      const filename = `${docNameMapping[activeDoc]}_${selectedEmployee.name.replace(/\s+/g, '_')}_${selectedEmployee.employee_id || 'EMP'}.pdf`;
+      const filename = `${docNameMapping[activeDoc]}_${(activePerson.name || 'Candidate').replace(/\s+/g, '_')}_${activePerson.employee_id || 'REF'}.pdf`;
 
       const opt: any = {
         margin: activeDoc === 'id_card' ? [5, 5, 5, 5] : [10, 10, 10, 10],
@@ -149,7 +211,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
 
   // Print Handler
   const handlePrint = () => {
-    if (!printContainerRef.current || !selectedEmployee) return;
+    if (!printContainerRef.current || !activePerson) return;
     const printContent = printContainerRef.current.innerHTML;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -161,7 +223,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>${selectedEmployee.name} - ${activeDoc.toUpperCase()}</title>
+          <title>${activePerson.name} - ${activeDoc.toUpperCase()}</title>
           <link rel="preconnect" href="https://fonts.googleapis.com">
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
@@ -217,7 +279,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
         <div className="text-right shrink-0 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-md min-w-[120px]">
           <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest block font-bold">DATE OF ISSUE</span>
           <span className="text-xs font-black text-slate-900">{formatDate(docConfig.issueDate)}</span>
-          <span className="text-[9px] font-mono text-slate-400 block mt-0.5">REF: {selectedEmployee?.employee_id || 'EMP'}</span>
+          <span className="text-[9px] font-mono text-slate-400 block mt-0.5">REF: {activePerson?.employee_id || (isCandidateMode ? 'CAND-REF' : 'EMP')}</span>
         </div>
       </div>
       <div className="h-0.5 w-full bg-gradient-to-r from-purple-700 via-indigo-600 to-transparent mt-3.5"></div>
@@ -240,11 +302,11 @@ export const EmployeeDocumentsTab: React.FC = () => {
       </div>
 
       <div className="text-right flex flex-col justify-end items-end">
-        <p className="text-slate-500 mb-1">Employee Acceptance / Acknowledgement</p>
-        <p className="font-bold text-slate-900">{selectedEmployee?.name}</p>
+        <p className="text-slate-500 mb-1">Employee / Candidate Acceptance</p>
+        <p className="font-bold text-slate-900">{activePerson?.name}</p>
         <div className="h-16 flex items-end">
           <div className="border-b border-slate-400 w-44 pb-1 text-right">
-            <span className="text-[10px] italic text-slate-400 block">[Signature of Employee]</span>
+            <span className="text-[10px] italic text-slate-400 block">[Signature of Candidate]</span>
           </div>
         </div>
         <p className="text-slate-500 text-[11px] mt-1">Date: ____________________</p>
@@ -258,7 +320,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
       {/* ── UNIFIED EXECUTIVE CONTROL BAR (COMBINED HEADER + SELECTOR + ACTIONS + TABS) ── */}
       <div className="bg-card border border-border rounded-2xl shadow-sm p-4 space-y-3.5">
         
-        {/* Row 1: Title, Searchable Employee Picker & Action Buttons */}
+        {/* Row 1: Title, Searchable Employee Picker / Candidate Mode & Action Buttons */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           
           {/* Left: Module Title */}
@@ -277,91 +339,125 @@ export const EmployeeDocumentsTab: React.FC = () => {
             </div>
           </div>
 
-          {/* Center: Searchable Employee Dropdown Selector */}
-          <div className="flex items-center gap-2 flex-1 max-w-xl">
-            <div className="w-full">
-              <Popover open={empSelectorOpen} onOpenChange={setEmpSelectorOpen}>
-                <PopoverTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    role="combobox" 
-                    aria-expanded={empSelectorOpen} 
-                    className="w-full justify-between font-normal text-xs px-3 py-2 h-10 text-left bg-background/60 hover:bg-background border-border"
-                  >
-                    {selectedEmployee ? (
-                      <div className="flex items-center gap-2.5 truncate">
-                        {selectedEmployee.employee_photo ? (
-                          <img 
-                            src={resolveMediaUrl(selectedEmployee.employee_photo)} 
-                            alt={selectedEmployee.name} 
-                            className="w-6 h-6 rounded-full object-cover shrink-0 border" 
-                          />
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[10px] font-black flex items-center justify-center shrink-0">
-                            {selectedEmployee.name.slice(0, 2).toUpperCase()}
-                          </div>
-                        )}
-                        <span className="font-bold text-foreground truncate">{selectedEmployee.name}</span>
-                        <span className="text-[11px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800 shrink-0">
-                          {selectedEmployee.employee_id || 'ID Pending'}
-                        </span>
-                        <span className="text-muted-foreground truncate hidden md:inline text-[11px]">
-                          • {selectedEmployee.designation || 'Staff'} ({selectedEmployee.department || 'Production'})
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">Select an employee...</span>
-                    )}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[360px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search employee by name, ID, post..." />
-                    <CommandList>
-                      <CommandEmpty>No employee found.</CommandEmpty>
-                      <CommandGroup>
-                        {employees.map((emp: any) => (
-                          <CommandItem 
-                            key={emp.id} 
-                            value={`${emp.name} ${emp.employee_id} ${emp.department} ${emp.designation}`}
-                            onSelect={() => {
-                              setSelectedEmployeeId(String(emp.id));
-                              setSearchParams({ tab: 'documents', employeeId: String(emp.id) });
-                              setEmpSelectorOpen(false);
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <Check className={cn("mr-2 h-4 w-4 shrink-0", String(selectedEmployeeId) === String(emp.id) ? "opacity-100" : "opacity-0")} />
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              {emp.employee_photo ? (
-                                <img src={resolveMediaUrl(emp.employee_photo)} alt={emp.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
-                              ) : (
-                                <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-                                  {emp.name.slice(0, 2).toUpperCase()}
-                                </div>
-                              )}
-                              <div className="truncate">
-                                <p className="text-xs font-semibold truncate leading-tight">{emp.name}</p>
-                                <p className="text-[10px] text-muted-foreground truncate">{emp.designation || 'Staff'} • {emp.department || 'Operations'}</p>
-                              </div>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+          {/* Center: Mode Switcher + Employee Dropdown Selector OR Candidate Card */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 max-w-2xl">
+            
+            {/* Mode Switcher */}
+            <div className="flex items-center gap-1 bg-muted/70 p-1 rounded-xl shrink-0 border border-border/40">
+              <button
+                type="button"
+                onClick={() => setIsCandidateMode(false)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  !isCandidateMode 
+                    ? 'bg-background text-foreground shadow-sm' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                👤 Registered Staff
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCandidateMode(true)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  isCandidateMode 
+                    ? 'bg-purple-600 text-white shadow-sm' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                ✍️ New / Unregistered
+              </button>
             </div>
 
-            {selectedEmployee && (
-              <div className="hidden xl:flex items-center gap-1.5 shrink-0 text-[11px]">
-                <span className="px-2 py-1 rounded-md bg-muted text-muted-foreground font-medium">
-                  {selectedEmployee.department || 'Production'}
-                </span>
-                <span className="px-2 py-1 rounded-md bg-purple-500/10 text-purple-700 dark:text-purple-300 font-semibold border border-purple-500/20">
-                  {formatCurrency(monthlyBase)}/mo
+            {/* If Registered Mode: Show Searchable Dropdown */}
+            {!isCandidateMode ? (
+              <div className="w-full">
+                <Popover open={empSelectorOpen} onOpenChange={setEmpSelectorOpen}>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      role="combobox" 
+                      aria-expanded={empSelectorOpen} 
+                      className="w-full justify-between font-normal text-xs px-3 py-2 h-10 text-left bg-background/60 hover:bg-background border-border"
+                    >
+                      {selectedEmployee ? (
+                        <div className="flex items-center gap-2.5 truncate">
+                          {selectedEmployee.employee_photo ? (
+                            <img 
+                              src={resolveMediaUrl(selectedEmployee.employee_photo)} 
+                              alt={selectedEmployee.name} 
+                              className="w-6 h-6 rounded-full object-cover shrink-0 border" 
+                            />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[10px] font-black flex items-center justify-center shrink-0">
+                              {selectedEmployee.name.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="font-bold text-foreground truncate">{selectedEmployee.name}</span>
+                          <span className="text-[11px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800 shrink-0">
+                            {selectedEmployee.employee_id || 'ID Pending'}
+                          </span>
+                          <span className="text-muted-foreground truncate hidden md:inline text-[11px]">
+                            • {selectedEmployee.designation || 'Staff'} ({selectedEmployee.department || 'Production'})
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">Select an employee...</span>
+                      )}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[360px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search employee by name, ID, post..." />
+                      <CommandList>
+                        <CommandEmpty>No employee found.</CommandEmpty>
+                        <CommandGroup>
+                          {employees.map((emp: any) => (
+                            <CommandItem 
+                              key={emp.id} 
+                              value={`${emp.name} ${emp.employee_id} ${emp.department} ${emp.designation}`}
+                              onSelect={() => {
+                                setSelectedEmployeeId(String(emp.id));
+                                setSearchParams({ tab: 'documents', employeeId: String(emp.id) });
+                                setEmpSelectorOpen(false);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <Check className={cn("mr-2 h-4 w-4 shrink-0", String(selectedEmployeeId) === String(emp.id) ? "opacity-100" : "opacity-0")} />
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                {emp.employee_photo ? (
+                                  <img src={resolveMediaUrl(emp.employee_photo)} alt={emp.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                    {emp.name.slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                                <div className="truncate">
+                                  <p className="text-xs font-semibold truncate leading-tight">{emp.name}</p>
+                                  <p className="text-[10px] text-muted-foreground truncate">{emp.designation || 'Staff'} • {emp.department || 'Operations'}</p>
+                                </div>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            ) : (
+              /* If Candidate Mode: Show Candidate Indicator */
+              <div className="w-full bg-purple-500/10 border border-purple-500/30 rounded-xl px-3 py-1.5 flex items-center justify-between">
+                <div className="truncate">
+                  <span className="text-xs font-bold text-purple-900 dark:text-purple-200 truncate block">
+                    {candidateData.name || 'Prospective Recruit'}
+                  </span>
+                  <span className="text-[10px] text-purple-700 dark:text-purple-300">
+                    {candidateData.designation} • {candidateData.department} • Ref: {candidateData.employee_id}
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-200 shrink-0">
+                  Unregistered
                 </span>
               </div>
             )}
@@ -390,7 +486,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
             <Button 
               size="sm" 
               onClick={handleDownloadPdf} 
-              disabled={isGenerating || !selectedEmployee} 
+              disabled={isGenerating || !activePerson} 
               className="text-xs gap-1.5 h-10 px-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-sm transition-all"
             >
               {isGenerating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -474,6 +570,117 @@ export const EmployeeDocumentsTab: React.FC = () => {
             </h3>
             <span className="text-[10px] text-muted-foreground">Live updates on right</span>
           </div>
+
+          {/* Section 0: Unregistered Candidate Details Form (Shown in Candidate Mode) */}
+          {isCandidateMode && (
+            <div className="space-y-3 bg-purple-500/5 border border-purple-500/20 p-3.5 rounded-xl">
+              <div className="flex items-center justify-between pb-1 border-b border-purple-500/20">
+                <span className="font-bold text-purple-700 dark:text-purple-300 uppercase text-[11px] tracking-wider flex items-center gap-1.5">
+                  <UserPlus className="w-3.5 h-3.5" /> Candidate Information
+                </span>
+                <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-mono font-bold">
+                  Unregistered
+                </span>
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1 text-foreground">Candidate Full Name <span className="text-red-500">*</span></label>
+                <input 
+                  type="text" 
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-bold"
+                  placeholder="e.g. Ramesh Kumar"
+                  value={candidateData.name}
+                  onChange={(e) => setCandidateData({ ...candidateData, name: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Department</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-medium"
+                    list="hr-departments-list"
+                    placeholder="e.g. Production"
+                    value={candidateData.department}
+                    onChange={(e) => setCandidateData({ ...candidateData, department: e.target.value })}
+                  />
+                  <datalist id="hr-departments-list">
+                    {departments.map((d: any) => <option key={d.id} value={d.name} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Designation / Role</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-medium"
+                    list="hr-designations-list"
+                    placeholder="e.g. Executive"
+                    value={candidateData.designation}
+                    onChange={(e) => setCandidateData({ ...candidateData, designation: e.target.value })}
+                  />
+                  <datalist id="hr-designations-list">
+                    {designations.map((d: any) => <option key={d.id} value={d.name} />)}
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Monthly Salary (₹)</label>
+                  <input 
+                    type="number" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-semibold text-purple-700 dark:text-purple-300"
+                    value={candidateData.base_salary_monthly}
+                    onChange={(e) => setCandidateData({ ...candidateData, base_salary_monthly: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Contact Mobile</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-medium"
+                    placeholder="+91 ..."
+                    value={candidateData.contactinfo}
+                    onChange={(e) => setCandidateData({ ...candidateData, contactinfo: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Reference / Candidate ID</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-mono"
+                    value={candidateData.employee_id}
+                    onChange={(e) => setCandidateData({ ...candidateData, employee_id: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">National ID / Aadhaar</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-mono"
+                    placeholder="Optional"
+                    value={candidateData.aadhar_number}
+                    onChange={(e) => setCandidateData({ ...candidateData, aadhar_number: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleRegisterCandidate}
+                disabled={isRegisteringCandidate}
+                className="w-full mt-1 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+              >
+                {isRegisteringCandidate ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <UserCheck className="w-3.5 h-3.5" />}
+                Save &amp; Register as Permanent Employee
+              </Button>
+            </div>
+          )}
 
           {/* Section A: Signatory & Dates */}
           <div className="space-y-3">
@@ -684,12 +891,14 @@ export const EmployeeDocumentsTab: React.FC = () => {
           )}
 
           {/* Quick Snapshot Footer */}
-          {selectedEmployee && (
+          {activePerson && (
             <div className="pt-3 border-t border-border space-y-1.5 text-muted-foreground text-[11px] bg-muted/20 p-3 rounded-xl">
-              <span className="font-bold text-foreground block">Employee Snapshot:</span>
-              <p>Name: <strong className="text-foreground">{selectedEmployee.name}</strong></p>
-              <p>Designation: <strong className="text-foreground">{selectedEmployee.designation || 'Staff'}</strong></p>
-              <p>Department: <strong className="text-foreground">{selectedEmployee.department || 'Operations'}</strong></p>
+              <span className="font-bold text-foreground block">
+                {isCandidateMode ? 'Candidate Snapshot:' : 'Employee Snapshot:'}
+              </span>
+              <p>Name: <strong className="text-foreground">{activePerson.name}</strong></p>
+              <p>Designation: <strong className="text-foreground">{activePerson.designation || 'Staff'}</strong></p>
+              <p>Department: <strong className="text-foreground">{activePerson.department || 'Operations'}</strong></p>
               <p>Base Compensation: <strong className="text-foreground">{formatCurrency(monthlyBase)}/mo</strong></p>
             </div>
           )}
@@ -698,11 +907,11 @@ export const EmployeeDocumentsTab: React.FC = () => {
         {/* RIGHT COLUMN: Live Document Canvas Staging Area (8 cols) */}
         <div className="lg:col-span-8 flex justify-center items-start bg-slate-100/60 dark:bg-slate-900/40 p-4 sm:p-6 rounded-2xl border border-border">
           
-          {!selectedEmployee ? (
+          {!activePerson ? (
             <div className="w-full bg-card border border-border rounded-xl p-12 text-center text-muted-foreground space-y-3">
               <User className="w-12 h-12 mx-auto text-muted-foreground/40" />
-              <h3 className="font-bold text-foreground text-base">No Employee Selected</h3>
-              <p className="text-xs">Please select an employee from the dropdown above to generate official documents.</p>
+              <h3 className="font-bold text-foreground text-base">No Employee or Candidate Selected</h3>
+              <p className="text-xs">Please select a registered employee or switch to Candidate Mode.</p>
             </div>
           ) : (
             <div 
@@ -720,9 +929,9 @@ export const EmployeeDocumentsTab: React.FC = () => {
 
                   <div className="text-xs space-y-1 mb-4">
                     <p className="font-semibold text-slate-500">To,</p>
-                    <p className="font-bold text-base text-slate-900">{selectedEmployee.name}</p>
-                    {selectedEmployee.contactinfo && <p className="text-slate-600">Mobile: {selectedEmployee.contactinfo}</p>}
-                    {selectedEmployee.aadhar_number && <p className="text-slate-600">Aadhaar Ref: {selectedEmployee.aadhar_number}</p>}
+                    <p className="font-bold text-base text-slate-900">{activePerson.name}</p>
+                    {activePerson.contactinfo && <p className="text-slate-600">Mobile: {activePerson.contactinfo}</p>}
+                    {activePerson.aadhar_number && <p className="text-slate-600">Aadhaar Ref: {activePerson.aadhar_number}</p>}
                   </div>
 
                   <div className="bg-purple-50/70 border border-purple-200 p-2.5 rounded text-center">
@@ -731,12 +940,12 @@ export const EmployeeDocumentsTab: React.FC = () => {
                     </h2>
                   </div>
 
-                  <p>Dear <strong>{selectedEmployee.name}</strong>,</p>
+                  <p>Dear <strong>{activePerson.name}</strong>,</p>
 
                   <p>
                     We are pleased to extend an offer of employment with <strong>{companyName}</strong> for the position of{' '}
-                    <strong>{selectedEmployee.designation || 'Team Associate'}</strong> in our{' '}
-                    <strong>{selectedEmployee.department || 'Operations'}</strong> Department.
+                    <strong>{activePerson.designation || 'Team Associate'}</strong> in our{' '}
+                    <strong>{activePerson.department || 'Operations'}</strong> Department.
                   </p>
 
                   <p>
@@ -752,11 +961,11 @@ export const EmployeeDocumentsTab: React.FC = () => {
                       <tbody>
                         <tr className="border-b border-slate-200">
                           <td className="px-3 py-2 font-semibold bg-slate-50 w-1/3">Designation / Role:</td>
-                          <td className="px-3 py-2">{selectedEmployee.designation || 'Staff'}</td>
+                          <td className="px-3 py-2">{activePerson.designation || 'Staff'}</td>
                         </tr>
                         <tr className="border-b border-slate-200">
                           <td className="px-3 py-2 font-semibold bg-slate-50">Department:</td>
-                          <td className="px-3 py-2">{selectedEmployee.department || 'General'}</td>
+                          <td className="px-3 py-2">{activePerson.department || 'General'}</td>
                         </tr>
                         <tr className="border-b border-slate-200">
                           <td className="px-3 py-2 font-semibold bg-slate-50">Proposed Date of Joining:</td>
@@ -769,14 +978,14 @@ export const EmployeeDocumentsTab: React.FC = () => {
                         <tr className="border-b border-slate-200">
                           <td className="px-3 py-2 font-semibold bg-slate-50">Employment Type:</td>
                           <td className="px-3 py-2 font-medium">
-                            {selectedEmployee.employee_type === 'FIXED' ? 'Regular Monthly Salaried' : 'Daily Wage Variable'}
+                            {activePerson.employee_type === 'FIXED' ? 'Regular Monthly Salaried' : 'Daily Wage Variable'}
                           </td>
                         </tr>
                         <tr className="border-b border-slate-200">
                           <td className="px-3 py-2 font-semibold bg-slate-50">Gross Base Monthly Salary:</td>
                           <td className="px-3 py-2 font-bold text-purple-800 text-sm">{formatCurrency(monthlyBase)} / month</td>
                         </tr>
-                        {selectedEmployee.employee_type === 'FIXED' && (
+                        {activePerson.employee_type === 'FIXED' && (
                           <tr className="border-b border-slate-200">
                             <td className="px-3 py-2 font-semibold bg-slate-50">Annual Cost to Company (CTC):</td>
                             <td className="px-3 py-2 font-bold text-slate-900">{formatCurrency(annualCtc)} per annum</td>
@@ -814,9 +1023,9 @@ export const EmployeeDocumentsTab: React.FC = () => {
 
                   <div className="text-xs space-y-1 mb-4">
                     <p className="font-semibold text-slate-500">To,</p>
-                    <p className="font-bold text-base text-slate-900">{selectedEmployee.name}</p>
-                    <p className="font-mono text-purple-700">Employee ID: {selectedEmployee.employee_id || 'EMP-TEMP'}</p>
-                    {selectedEmployee.contactinfo && <p className="text-slate-600">Mobile: {selectedEmployee.contactinfo}</p>}
+                    <p className="font-bold text-base text-slate-900">{activePerson.name}</p>
+                    <p className="font-mono text-purple-700">Employee / Ref ID: {activePerson.employee_id || 'CAND-REF'}</p>
+                    {activePerson.contactinfo && <p className="text-slate-600">Mobile: {activePerson.contactinfo}</p>}
                   </div>
 
                   <div className="bg-purple-50/70 border border-purple-200 p-2.5 rounded text-center">
@@ -825,12 +1034,12 @@ export const EmployeeDocumentsTab: React.FC = () => {
                     </h2>
                   </div>
 
-                  <p>Dear <strong>{selectedEmployee.name}</strong>,</p>
+                  <p>Dear <strong>{activePerson.name}</strong>,</p>
 
                   <p>
                     Further to your acceptance of our offer, the management of <strong>{companyName}</strong> is pleased to confirm your appointment as{' '}
-                    <strong>{selectedEmployee.designation || 'Executive'}</strong> in the{' '}
-                    <strong>{selectedEmployee.department || 'Operations'}</strong> Department, effective from{' '}
+                    <strong>{activePerson.designation || 'Executive'}</strong> in the{' '}
+                    <strong>{activePerson.department || 'Operations'}</strong> Department, effective from{' '}
                     <strong>{formatDate(docConfig.joiningDate)}</strong>.
                   </p>
 
@@ -886,7 +1095,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                   </div>
 
                   <div className="text-xs text-right font-semibold text-slate-600">
-                    Ref No: CERT/{selectedEmployee.employee_id || 'HR'}/{new Date().getFullYear()}
+                    Ref No: CERT/{activePerson.employee_id || 'HR'}/{new Date().getFullYear()}
                   </div>
 
                   <div className="text-xs font-bold text-slate-900">
@@ -894,17 +1103,17 @@ export const EmployeeDocumentsTab: React.FC = () => {
                   </div>
 
                   <p className="text-justify leading-7">
-                    This is to formally certify that <strong>{selectedEmployee.name}</strong> (Employee ID:{' '}
-                    <strong className="font-mono">{selectedEmployee.employee_id || 'N/A'}</strong>) was employed with{' '}
+                    This is to formally certify that <strong>{activePerson.name}</strong> (Employee ID:{' '}
+                    <strong className="font-mono">{activePerson.employee_id || 'N/A'}</strong>) was employed with{' '}
                     <strong>{companyName}</strong> from{' '}
-                    <strong>{formatDate(selectedEmployee.doj || '2023-01-01')}</strong> to{' '}
+                    <strong>{formatDate(activePerson.doj || '2023-01-01')}</strong> to{' '}
                     <strong>{formatDate(docConfig.relievingDate)}</strong>.
                   </p>
 
                   <p className="text-justify leading-7">
                     At the time of leaving the services of the organization, they were designated as{' '}
-                    <strong>{selectedEmployee.designation || 'Executive'}</strong> in the{' '}
-                    <strong>{selectedEmployee.department || 'Operations'}</strong> Department.
+                    <strong>{activePerson.designation || 'Executive'}</strong> in the{' '}
+                    <strong>{activePerson.department || 'Operations'}</strong> Department.
                   </p>
 
                   <p className="text-justify leading-7">
@@ -913,7 +1122,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                   </p>
 
                   <p className="text-justify leading-7">
-                    {selectedEmployee.name} has been formally relieved from all responsibilities and company duties at the close of working hours on{' '}
+                    {activePerson.name} has been formally relieved from all responsibilities and company duties at the close of working hours on{' '}
                     <strong>{formatDate(docConfig.relievingDate)}</strong> following{' '}
                     {docConfig.relievingReason}. All company assets, tools, and dues have been properly cleared and accounted for.
                   </p>
@@ -945,12 +1154,12 @@ export const EmployeeDocumentsTab: React.FC = () => {
                   </div>
 
                   <p className="text-justify leading-7">
-                    This is to certify that <strong>{selectedEmployee.name}</strong> (Employee Code:{' '}
-                    <strong className="font-mono">{selectedEmployee.employee_id || 'N/A'}</strong>) is a bona fide employee of{' '}
+                    This is to certify that <strong>{activePerson.name}</strong> (Employee Code:{' '}
+                    <strong className="font-mono">{activePerson.employee_id || 'N/A'}</strong>) is associated with{' '}
                     <strong>{companyName}</strong>, working as{' '}
-                    <strong>{selectedEmployee.designation || 'Staff'}</strong> in our{' '}
-                    <strong>{selectedEmployee.department || 'Operations'}</strong> Department since{' '}
-                    <strong>{formatDate(selectedEmployee.doj || '2023-01-01')}</strong>.
+                    <strong>{activePerson.designation || 'Staff'}</strong> in our{' '}
+                    <strong>{activePerson.department || 'Operations'}</strong> Department since{' '}
+                    <strong>{formatDate(activePerson.doj || '2023-01-01')}</strong>.
                   </p>
 
                   <p>
@@ -989,15 +1198,15 @@ export const EmployeeDocumentsTab: React.FC = () => {
                     </table>
                   </div>
 
-                  {selectedEmployee.bank_account_number && (
+                  {activePerson.bank_account_number && (
                     <div className="p-3 bg-slate-50 border border-slate-200 rounded text-xs space-y-1">
                       <span className="font-bold text-slate-700 block">Bank Disbursement Account Details:</span>
-                      <p>Bank: <strong>{selectedEmployee.bank_name || 'Designated Bank'}</strong> • A/C No: <strong className="font-mono">{selectedEmployee.bank_account_number}</strong> • IFSC: <strong className="font-mono">{selectedEmployee.bank_ifsc || '—'}</strong></p>
+                      <p>Bank: <strong>{activePerson.bank_name || 'Designated Bank'}</strong> • A/C No: <strong className="font-mono">{activePerson.bank_account_number}</strong> • IFSC: <strong className="font-mono">{activePerson.bank_ifsc || '—'}</strong></p>
                     </div>
                   )}
 
                   <p className="text-xs text-slate-700 pt-2">
-                    This certificate is issued at the specific request of the employee {docConfig.certificatePurpose}, without any financial liability or warranty on the part of the company or its signatories.
+                    This certificate is issued at the specific request of the individual {docConfig.certificatePurpose}, without any financial liability or warranty on the part of the company or its signatories.
                   </p>
 
                   {renderSignatory()}
@@ -1030,23 +1239,23 @@ export const EmployeeDocumentsTab: React.FC = () => {
                       {/* Employee Photo */}
                       <div className="flex flex-col items-center px-4 -mt-2">
                         <div className="w-24 h-24 rounded-full border-4 border-white shadow-lg overflow-hidden bg-white flex items-center justify-center">
-                          {selectedEmployee.employee_photo ? (
+                          {activePerson.employee_photo ? (
                             <img 
-                              src={resolveMediaUrl(selectedEmployee.employee_photo)} 
-                              alt={selectedEmployee.name} 
+                              src={resolveMediaUrl(activePerson.employee_photo)} 
+                              alt={activePerson.name} 
                               className="w-full h-full object-cover" 
                             />
                           ) : (
                             <div className="w-full h-full bg-purple-100 text-purple-700 font-extrabold text-2xl flex items-center justify-center">
-                              {selectedEmployee.name ? selectedEmployee.name.slice(0, 2).toUpperCase() : 'EM'}
+                              {activePerson.name ? activePerson.name.slice(0, 2).toUpperCase() : 'EM'}
                             </div>
                           )}
                         </div>
 
-                        <h4 className="font-black text-base text-slate-900 mt-2 text-center leading-tight">{selectedEmployee.name}</h4>
-                        <span className="text-xs font-bold text-purple-800 uppercase tracking-wide">{selectedEmployee.designation || 'Staff'}</span>
+                        <h4 className="font-black text-base text-slate-900 mt-2 text-center leading-tight">{activePerson.name}</h4>
+                        <span className="text-xs font-bold text-purple-800 uppercase tracking-wide">{activePerson.designation || 'Staff'}</span>
                         <span className="text-[11px] font-mono font-bold bg-purple-100 text-purple-900 px-2 py-0.5 rounded-full mt-1 border border-purple-200">
-                          {selectedEmployee.employee_id || 'ID Pending'}
+                          {activePerson.employee_id || 'ID Pending'}
                         </span>
                       </div>
 
@@ -1054,7 +1263,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                       <div className="px-5 py-2 text-[10px] space-y-1 text-slate-700">
                         <div className="flex justify-between border-b border-slate-200 pb-0.5">
                           <span className="text-slate-500 font-semibold">Department:</span>
-                          <span className="font-bold text-slate-900">{selectedEmployee.department || 'Operations'}</span>
+                          <span className="font-bold text-slate-900">{activePerson.department || 'Operations'}</span>
                         </div>
                         <div className="flex justify-between border-b border-slate-200 pb-0.5">
                           <span className="text-slate-500 font-semibold">Blood Group:</span>
@@ -1062,7 +1271,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                         </div>
                         <div className="flex justify-between border-b border-slate-200 pb-0.5">
                           <span className="text-slate-500 font-semibold">Joining Date:</span>
-                          <span className="font-bold">{formatDate(selectedEmployee.doj || todayStr)}</span>
+                          <span className="font-bold">{formatDate(activePerson.doj || todayStr)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-500 font-semibold">Valid Upto:</span>
@@ -1073,7 +1282,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                       {/* Bottom Visual Barcode Bar */}
                       <div className="bg-slate-900 text-white p-2 text-center">
                         <div className="font-mono text-[9px] tracking-[4px] uppercase text-slate-300">
-                          * {selectedEmployee.employee_id || 'EMP-0001'} *
+                          * {activePerson.employee_id || 'CAND-0001'} *
                         </div>
                       </div>
                     </div>
