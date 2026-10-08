@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Printer, Download, FileText, Award, CreditCard, 
   Copy, RefreshCw, Sparkles, Briefcase, ShieldCheck, 
-  ChevronsUpDown, Check, User, SlidersHorizontal, UserPlus, UserCheck
+  ChevronsUpDown, Check, User, SlidersHorizontal, UserPlus, UserCheck,
+  RotateCcw, Save, Edit3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useData } from '@/contexts/DataContext';
@@ -33,6 +34,8 @@ export const EmployeeDocumentsTab: React.FC = () => {
   const [isRegisteringCandidate, setIsRegisteringCandidate] = useState(false);
   const [empSelectorOpen, setEmpSelectorOpen] = useState(false);
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   // Unregistered Candidate Mode State
   const [isCandidateMode, setIsCandidateMode] = useState(false);
   const [candidateData, setCandidateData] = useState({
@@ -45,7 +48,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
     employee_type: 'FIXED',
     employee_id: 'CAND-2026-001',
     aadhar_number: '',
-    doj: new Date().toISOString().split('T')[0],
+    doj: todayStr,
   });
 
   // Set initial employee from query param or first available
@@ -61,8 +64,113 @@ export const EmployeeDocumentsTab: React.FC = () => {
 
   const selectedEmployee = employees.find((e: any) => String(e.id) === String(selectedEmployeeId)) || employees[0] || null;
 
-  // Active Person: either unregistered candidate or registered employee
-  const activePerson = isCandidateMode ? candidateData : selectedEmployee;
+  // Flexible On-the-fly Overrides for Registered Staff (allows adapting role, position, salary, dates without breaking DB)
+  const [empOverrides, setEmpOverrides] = useState({
+    name: '',
+    designation: '',
+    department: '',
+    base_salary_monthly: 0,
+    employee_type: 'FIXED',
+    contactinfo: '',
+    employee_id: '',
+    aadhar_number: '',
+    doj: todayStr,
+  });
+  const [isUpdatingDb, setIsUpdatingDb] = useState(false);
+
+  // Sync overrides whenever selected employee changes
+  useEffect(() => {
+    if (selectedEmployee) {
+      setEmpOverrides({
+        name: selectedEmployee.name || '',
+        designation: selectedEmployee.designation || '',
+        department: selectedEmployee.department || '',
+        base_salary_monthly: Number(selectedEmployee.base_salary_monthly || (selectedEmployee.dailywage ? selectedEmployee.dailywage * 26 : 0) || 0),
+        employee_type: selectedEmployee.employee_type || 'FIXED',
+        contactinfo: selectedEmployee.contactinfo || '',
+        employee_id: selectedEmployee.employee_id || '',
+        aadhar_number: selectedEmployee.aadhar_number || '',
+        doj: selectedEmployee.doj || todayStr,
+      });
+    }
+  }, [selectedEmployee?.id]);
+
+  // Check if current values differ from database profile
+  const isOverridden = Boolean(!isCandidateMode && selectedEmployee && (
+    empOverrides.name !== (selectedEmployee.name || '') ||
+    empOverrides.designation !== (selectedEmployee.designation || '') ||
+    empOverrides.department !== (selectedEmployee.department || '') ||
+    empOverrides.base_salary_monthly !== Number(selectedEmployee.base_salary_monthly || (selectedEmployee.dailywage ? selectedEmployee.dailywage * 26 : 0) || 0) ||
+    empOverrides.contactinfo !== (selectedEmployee.contactinfo || '') ||
+    empOverrides.employee_id !== (selectedEmployee.employee_id || '') ||
+    empOverrides.doj !== (selectedEmployee.doj || '')
+  ));
+
+  const handleResetOverrides = () => {
+    if (selectedEmployee) {
+      setEmpOverrides({
+        name: selectedEmployee.name || '',
+        designation: selectedEmployee.designation || '',
+        department: selectedEmployee.department || '',
+        base_salary_monthly: Number(selectedEmployee.base_salary_monthly || (selectedEmployee.dailywage ? selectedEmployee.dailywage * 26 : 0) || 0),
+        employee_type: selectedEmployee.employee_type || 'FIXED',
+        contactinfo: selectedEmployee.contactinfo || '',
+        employee_id: selectedEmployee.employee_id || '',
+        aadhar_number: selectedEmployee.aadhar_number || '',
+        doj: selectedEmployee.doj || todayStr,
+      });
+      toast({ title: 'Defaults Restored', description: 'Reverted all fields back to database profile values.' });
+    }
+  };
+
+  const handleSaveToDatabase = async () => {
+    if (!selectedEmployee?.id) return;
+    setIsUpdatingDb(true);
+    try {
+      await saveEmployee({
+        ...selectedEmployee,
+        name: empOverrides.name,
+        designation: empOverrides.designation,
+        department: empOverrides.department,
+        base_salary_monthly: empOverrides.base_salary_monthly,
+        employee_type: empOverrides.employee_type,
+        contactinfo: empOverrides.contactinfo,
+        employee_id: empOverrides.employee_id,
+        aadhar_number: empOverrides.aadhar_number,
+        doj: empOverrides.doj,
+      });
+      toast({ 
+        title: 'Database Profile Updated', 
+        description: `Permanent changes saved to Employee Master for ${empOverrides.name}.` 
+      });
+    } catch (err: any) {
+      toast({ 
+        title: 'Update Failed', 
+        description: err.message || 'Could not update employee in database.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsUpdatingDb(false);
+    }
+  };
+
+  // Active Person: either unregistered candidate or overridden registered employee
+  const activePerson = isCandidateMode 
+    ? candidateData 
+    : selectedEmployee 
+      ? {
+          ...selectedEmployee,
+          name: empOverrides.name || selectedEmployee.name,
+          designation: empOverrides.designation ?? selectedEmployee.designation,
+          department: empOverrides.department ?? selectedEmployee.department,
+          base_salary_monthly: empOverrides.base_salary_monthly,
+          employee_type: empOverrides.employee_type || selectedEmployee.employee_type,
+          contactinfo: empOverrides.contactinfo ?? selectedEmployee.contactinfo,
+          employee_id: empOverrides.employee_id ?? selectedEmployee.employee_id,
+          aadhar_number: empOverrides.aadhar_number ?? selectedEmployee.aadhar_number,
+          doj: empOverrides.doj ?? selectedEmployee.doj,
+        }
+      : null;
 
   // Company details
   const companyName = settings?.company_name || 'KAMLA CONCHEM PVT LTD';
@@ -71,8 +179,6 @@ export const EmployeeDocumentsTab: React.FC = () => {
   const companyPhone = settings?.company_phone || '+91 81559 31559';
   const companyGst = settings?.company_gst || '24AALCK3507C1ZX';
   const companyLogo = settings?.company_logo || '';
-
-  const todayStr = new Date().toISOString().split('T')[0];
 
   // Configurable fields state
   const [docConfig, setDocConfig] = useState({
@@ -92,6 +198,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
     bloodGroup: 'B+',
     emergencyContact: '+91 98765 43210',
     validUpto: `${new Date().getFullYear() + 3}-12-31`,
+    customClause: '',
   });
 
   // Keep joiningDate & contact synced when activePerson changes
@@ -103,7 +210,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
         emergencyContact: activePerson.contactinfo || prev.emergencyContact,
       }));
     }
-  }, [activePerson]);
+  }, [activePerson?.doj, activePerson?.contactinfo]);
 
   const resolveMediaUrl = (url: string | null | undefined): string => {
     if (!url) return '';
@@ -682,6 +789,133 @@ export const EmployeeDocumentsTab: React.FC = () => {
             </div>
           )}
 
+          {/* Section 0B: Flexible Employee Details & Overrides Form (Shown in Registered Mode) */}
+          {!isCandidateMode && selectedEmployee && (
+            <div className="space-y-3 bg-muted/30 border border-border/80 p-3.5 rounded-xl">
+              <div className="flex items-center justify-between pb-1 border-b border-border/60">
+                <span className="font-bold text-foreground uppercase text-[11px] tracking-wider flex items-center gap-1.5">
+                  <Edit3 className="w-3.5 h-3.5 text-purple-600" /> Role &amp; Salary Overrides
+                </span>
+                {isOverridden ? (
+                  <span className="text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-amber-500/30">
+                    <Sparkles className="w-3 h-3" /> Customized
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground">Default Profile</span>
+                )}
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1 text-muted-foreground">Employee Full Name</label>
+                <input 
+                  type="text" 
+                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs font-bold"
+                  value={empOverrides.name}
+                  onChange={(e) => setEmpOverrides({ ...empOverrides, name: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Designation / Role</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-medium"
+                    list="hr-designations-list-reg"
+                    placeholder="e.g. Senior Operator"
+                    value={empOverrides.designation}
+                    onChange={(e) => setEmpOverrides({ ...empOverrides, designation: e.target.value })}
+                  />
+                  <datalist id="hr-designations-list-reg">
+                    {designations.map((d: any) => <option key={d.id} value={d.name} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Department</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-medium"
+                    list="hr-departments-list-reg"
+                    placeholder="e.g. Operations"
+                    value={empOverrides.department}
+                    onChange={(e) => setEmpOverrides({ ...empOverrides, department: e.target.value })}
+                  />
+                  <datalist id="hr-departments-list-reg">
+                    {departments.map((d: any) => <option key={d.id} value={d.name} />)}
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Monthly Salary (₹)</label>
+                  <input 
+                    type="number" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-semibold text-purple-700 dark:text-purple-300"
+                    value={empOverrides.base_salary_monthly}
+                    onChange={(e) => setEmpOverrides({ ...empOverrides, base_salary_monthly: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Contact Mobile</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-medium"
+                    value={empOverrides.contactinfo}
+                    onChange={(e) => setEmpOverrides({ ...empOverrides, contactinfo: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">Employee / Ref ID</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-mono"
+                    value={empOverrides.employee_id}
+                    onChange={(e) => setEmpOverrides({ ...empOverrides, employee_id: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1 text-muted-foreground">DOJ / Effective Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-medium"
+                    value={empOverrides.doj}
+                    onChange={(e) => setEmpOverrides({ ...empOverrides, doj: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Action buttons: Reset to Profile & Optional Save to DB Profile */}
+              {isOverridden && (
+                <div className="pt-1 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetOverrides}
+                    className="flex-1 text-[11px] h-8 gap-1 hover:bg-muted"
+                  >
+                    <RotateCcw className="w-3 h-3" /> Reset Defaults
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={handleSaveToDatabase}
+                    disabled={isUpdatingDb}
+                    className="flex-1 text-[11px] h-8 gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                  >
+                    {isUpdatingDb ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    Update in DB
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Section A: Signatory & Dates */}
           <div className="space-y-3">
             <div>
@@ -711,6 +945,20 @@ export const EmployeeDocumentsTab: React.FC = () => {
                 className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                 value={docConfig.signatoryDesignation}
                 onChange={(e) => setDocConfig({ ...docConfig, signatoryDesignation: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="font-semibold block mb-1 text-muted-foreground flex items-center justify-between">
+                <span>Special Terms &amp; Clauses (Optional)</span>
+                <span className="text-[10px] text-purple-600 font-normal">Appends to letter</span>
+              </label>
+              <textarea 
+                rows={2}
+                className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs resize-y"
+                placeholder="e.g. Promoted to Senior Grade with immediate effect; special site allowance of ₹2,000/mo."
+                value={docConfig.customClause}
+                onChange={(e) => setDocConfig({ ...docConfig, customClause: e.target.value })}
               />
             </div>
           </div>
@@ -893,9 +1141,16 @@ export const EmployeeDocumentsTab: React.FC = () => {
           {/* Quick Snapshot Footer */}
           {activePerson && (
             <div className="pt-3 border-t border-border space-y-1.5 text-muted-foreground text-[11px] bg-muted/20 p-3 rounded-xl">
-              <span className="font-bold text-foreground block">
-                {isCandidateMode ? 'Candidate Snapshot:' : 'Employee Snapshot:'}
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-foreground">
+                  {isCandidateMode ? 'Candidate Snapshot:' : 'Live Letter Snapshot:'}
+                </span>
+                {isOverridden && (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold font-mono">
+                    ✨ Customized
+                  </span>
+                )}
+              </div>
               <p>Name: <strong className="text-foreground">{activePerson.name}</strong></p>
               <p>Designation: <strong className="text-foreground">{activePerson.designation || 'Staff'}</strong></p>
               <p>Department: <strong className="text-foreground">{activePerson.department || 'Operations'}</strong></p>
@@ -999,6 +1254,13 @@ export const EmployeeDocumentsTab: React.FC = () => {
                     </table>
                   </div>
 
+                  {docConfig.customClause && (
+                    <div className="my-3 p-3 bg-purple-50/70 border border-purple-200 rounded-lg text-xs space-y-1">
+                      <span className="font-bold text-purple-900 block uppercase tracking-wide text-[10px]">Special Clauses / Additional Terms:</span>
+                      <p className="text-slate-700 whitespace-pre-line">{docConfig.customClause}</p>
+                    </div>
+                  )}
+
                   <p className="text-xs text-slate-700">
                     Your appointment will be subject to satisfactory verification of your professional credentials, identity documents (Aadhaar, PAN), and background checks. A formal Appointment Letter containing detailed terms and conditions of employment will be issued to you upon your formal joining.
                   </p>
@@ -1073,6 +1335,12 @@ export const EmployeeDocumentsTab: React.FC = () => {
                       <strong>6. Termination &amp; Notice Period:</strong> During probation, either party may terminate this employment by giving 15 days written notice. Post confirmation, the notice period shall be{' '}
                       <strong>{docConfig.noticePeriod}</strong> or salary in lieu thereof.
                     </p>
+
+                    {docConfig.customClause && (
+                      <p>
+                        <strong>7. Special Terms &amp; Provisions:</strong> {docConfig.customClause}
+                      </p>
+                    )}
                   </div>
 
                   <p className="text-xs pt-2">
@@ -1126,6 +1394,12 @@ export const EmployeeDocumentsTab: React.FC = () => {
                     <strong>{formatDate(docConfig.relievingDate)}</strong> following{' '}
                     {docConfig.relievingReason}. All company assets, tools, and dues have been properly cleared and accounted for.
                   </p>
+
+                  {docConfig.customClause && (
+                    <div className="my-2 bg-slate-50 p-2.5 rounded border border-slate-200 text-xs text-slate-700">
+                      <strong className="text-slate-900">Additional Remarks / Service Note:</strong> {docConfig.customClause}
+                    </div>
+                  )}
 
                   <p className="pt-2">
                     We sincerely thank them for their contributions and wish them the very best in all their future endeavors and career pursuits.
@@ -1197,6 +1471,12 @@ export const EmployeeDocumentsTab: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+
+                  {docConfig.customClause && (
+                    <div className="my-2 p-2.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-700">
+                      <strong className="text-slate-900">Remarks / Special Allowances Note:</strong> {docConfig.customClause}
+                    </div>
+                  )}
 
                   {activePerson.bank_account_number && (
                     <div className="p-3 bg-slate-50 border border-slate-200 rounded text-xs space-y-1">
