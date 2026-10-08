@@ -1,9 +1,10 @@
 import React from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart, Gauge, Target } from 'lucide-react';
+import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart, Gauge, Target, Receipt } from 'lucide-react';
 
 import { EmployeeMasterTab } from './HRManagement/components/EmployeeMasterTab';
+import { EmployeeDocumentsTab } from './HRManagement/components/EmployeeDocumentsTab';
 import { AdvancedAttendanceTab } from './HRManagement/components/AdvancedAttendanceTab';
 import { MonthlyAttendanceTab } from './HRManagement/components/MonthlyAttendanceTab';
 import { OrgChartTab } from './HRManagement/components/OrgChartTab';
@@ -12,11 +13,10 @@ import { EmployeeLedgerTab } from './HRManagement/components/EmployeeLedgerTab';
 import { LeaveManagementTab } from './HRManagement/components/LeaveManagementTab';
 import { TravelApprovalsTab } from './HRManagement/components/TravelApprovalsTab';
 import { SalesTargetManagementTab } from './HRManagement/components/SalesTargetManagementTab';
+import { ExpenseApprovalsTab } from './HRManagement/components/ExpenseApprovalsTab';
+import { Award } from 'lucide-react';
 
-
-
-
-export type HRTab = 'employees' | 'targets' | 'attendance' | 'travel' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
+export type HRTab = 'employees' | 'documents' | 'targets' | 'attendance' | 'travel' | 'expenses' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
 
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
@@ -29,10 +29,12 @@ const HRManagement: React.FC = () => {
 
   const navItems = [
     { id: 'employees', label: 'Employee Master', icon: Users },
+    { id: 'documents', label: 'Employee Documents', icon: Award },
     { id: 'targets', label: 'Sales Targets & KPIs', icon: Target },
     { id: 'orgchart', label: 'Organization Chart', icon: Users },
     { id: 'attendance', label: 'Daily Attendance', icon: Clock },
     { id: 'travel', label: 'Travel & KM Approvals', icon: Gauge },
+    { id: 'expenses', label: 'Spend & Bill Approvals', icon: Receipt },
     { id: 'leaves', label: 'Leave Management', icon: CalendarCheck },
     { id: 'ledger', label: 'Employee Ledger', icon: Wallet },
     { id: 'payroll', label: 'Payroll & Slips', icon: FileBarChart },
@@ -81,10 +83,12 @@ const HRManagement: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background">
         {tab === 'employees' && <EmployeeMasterTab />}
+        {tab === 'documents' && <EmployeeDocumentsTab />}
         {tab === 'targets' && <SalesTargetManagementTab />}
         {tab === 'orgchart' && <OrgChartTab />}
         {tab === 'attendance' && <AdvancedAttendanceTab />}
         {tab === 'travel' && <TravelApprovalsTab />}
+        {tab === 'expenses' && <ExpenseApprovalsTab />}
         {tab === 'leaves' && <LeaveManagementTab />}
         {tab === 'ledger' && <EmployeeLedgerTab />}
         {tab === 'payroll' && <MonthlyAttendanceTab />}
