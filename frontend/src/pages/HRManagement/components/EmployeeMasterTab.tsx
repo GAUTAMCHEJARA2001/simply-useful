@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from '@/hooks/use-toast';
 import { PromotionDemotionModal } from './PromotionDemotionModal';
+import { EmployeeDocumentsModal } from './EmployeeDocumentsModal';
 import { generatePromotionLetter } from '@/utils/promotionPdfGenerator';
 import { useData } from '@/contexts/DataContext';
 import { cn } from "@/lib/utils";
@@ -86,6 +87,7 @@ export const EmployeeMasterTab: React.FC = () => {
   // Viewing Window State & Lightbox State
   const [viewEmployee, setViewEmployee] = useState<any>(null);
   const [lightboxDoc, setLightboxDoc] = useState<{ url: string; title: string; isPdf?: boolean } | null>(null);
+  const [docsModalEmployee, setDocsModalEmployee] = useState<any>(null);
 
   const handleEdit = (emp: any) => {
     setFormData(emp);
@@ -686,6 +688,15 @@ export const EmployeeMasterTab: React.FC = () => {
               <Button 
                 variant="outline" 
                 size="sm" 
+                className="h-8 text-xs text-purple-600 hover:text-purple-700 bg-purple-50/50 hover:bg-purple-50 border-purple-200"
+                onClick={(e) => { e.stopPropagation(); setDocsModalEmployee(filteredEmployees[idx]); }}
+                title="Generate Offer Letter, Appointment Letter, Experience Certificate, Salary Certificate, ID Card"
+              >
+                <FileText className="w-3.5 h-3.5 mr-1" /> Letters &amp; ID
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
                 className="h-8 text-xs text-emerald-600 hover:text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 border-emerald-200"
                 onClick={(e) => { e.stopPropagation(); setViewEmployee(filteredEmployees[idx]); }}
                 title="View Full Profile & Uploaded Documents"
@@ -779,6 +790,16 @@ export const EmployeeMasterTab: React.FC = () => {
                 </div>
 
                 <div className="shrink-0 flex sm:flex-col gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      setDocsModalEmployee(viewEmployee);
+                    }}
+                    className="text-xs text-purple-600 border-purple-200 hover:bg-purple-50 gap-1.5"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> Generate Letters &amp; ID
+                  </Button>
                   <Button 
                     size="sm" 
                     variant="outline"
@@ -1243,6 +1264,14 @@ export const EmployeeMasterTab: React.FC = () => {
           onClose={() => { setPromoModalOpen(false); setPromoEmployee(null); }}
           employee={promoEmployee}
           onSubmit={handlePromoSubmit}
+        />
+      )}
+
+      {docsModalEmployee && (
+        <EmployeeDocumentsModal
+          isOpen={!!docsModalEmployee}
+          onClose={() => setDocsModalEmployee(null)}
+          employee={docsModalEmployee}
         />
       )}
     </div>
