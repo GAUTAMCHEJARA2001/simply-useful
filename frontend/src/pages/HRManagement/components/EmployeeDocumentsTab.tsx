@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Printer, Download, FileText, Award, CreditCard, 
-  CheckCircle, Copy, RefreshCw, Eye, Sparkles, Building2,
-  Briefcase, ShieldCheck, Mail, Phone, MapPin, User,
-  ChevronsUpDown, Check, Search, Calendar, ChevronRight
+  Copy, RefreshCw, Sparkles, Briefcase, ShieldCheck, 
+  ChevronsUpDown, Check, User, ChevronRight, SlidersHorizontal
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useData } from '@/contexts/DataContext';
@@ -43,11 +42,11 @@ export const EmployeeDocumentsTab: React.FC = () => {
   const selectedEmployee = employees.find((e: any) => String(e.id) === String(selectedEmployeeId)) || employees[0] || null;
 
   // Company details
-  const companyName = settings?.company_name || 'KAMLA INDUSTRIES';
-  const companyAddress = settings?.company_address || 'Phase-1, Industrial Area, Rajasthan, India';
-  const companyEmail = settings?.company_email || 'office@kamlaerl.com';
-  const companyPhone = settings?.company_phone || '+91 98765 43210';
-  const companyGst = settings?.company_gst || '08ABCDE1234F1Z5';
+  const companyName = settings?.company_name || 'KAMLA CONCHEM PVT LTD';
+  const companyAddress = settings?.company_address || 'Phase-1, Industrial Area, Gujarat, India';
+  const companyEmail = settings?.company_email || 'support@kamla.com';
+  const companyPhone = settings?.company_phone || '+91 81559 31559';
+  const companyGst = settings?.company_gst || '24AALCK3507C1ZX';
   const companyLogo = settings?.company_logo || '';
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -194,260 +193,295 @@ export const EmployeeDocumentsTab: React.FC = () => {
 
   // Render Letterhead Header
   const renderHeader = () => (
-    <div className="border-b-2 border-primary/30 pb-4 mb-6 flex items-start justify-between">
-      <div className="flex items-center gap-3">
-        {companyLogo ? (
-          <img src={resolveMediaUrl(companyLogo)} alt={companyName} className="h-14 w-auto object-contain" />
-        ) : (
-          <div className="h-12 w-12 rounded-xl bg-primary text-primary-foreground font-black flex items-center justify-center text-xl tracking-wider">
-            {companyName.slice(0, 2).toUpperCase()}
-          </div>
-        )}
-        <div>
-          <h1 className="text-xl font-extrabold tracking-tight text-foreground uppercase">{companyName}</h1>
-          <p className="text-xs text-muted-foreground max-w-md">{companyAddress}</p>
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
-            {companyEmail && <span>Email: {companyEmail}</span>}
-            {companyPhone && <span>• Tel: {companyPhone}</span>}
-            {companyGst && <span>• GSTIN: {companyGst}</span>}
+    <div className="border-b-2 border-slate-800 pb-4 mb-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          {companyLogo ? (
+            <img src={resolveMediaUrl(companyLogo)} alt={companyName} className="h-14 max-w-[180px] object-contain shrink-0" />
+          ) : (
+            <div className="h-12 w-12 rounded-lg bg-slate-900 text-white font-black flex items-center justify-center text-xl tracking-wider shrink-0">
+              {companyName.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <div className="space-y-0.5">
+            <h1 className="text-lg font-black tracking-tight text-slate-900 uppercase leading-snug">{companyName}</h1>
+            <p className="text-xs text-slate-600 font-medium leading-relaxed">{companyAddress}</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 font-medium pt-0.5">
+              {companyEmail && <span>Email: <strong className="text-slate-700 font-normal">{companyEmail}</strong></span>}
+              {companyPhone && <span>• Tel: <strong className="text-slate-700 font-normal">{companyPhone}</strong></span>}
+              {companyGst && <span>• GSTIN: <strong className="text-slate-700 font-normal">{companyGst}</strong></span>}
+            </div>
           </div>
         </div>
+
+        <div className="text-right shrink-0 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-md min-w-[120px]">
+          <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest block font-bold">DATE OF ISSUE</span>
+          <span className="text-xs font-black text-slate-900">{formatDate(docConfig.issueDate)}</span>
+          <span className="text-[9px] font-mono text-slate-400 block mt-0.5">REF: {selectedEmployee?.employee_id || 'EMP'}</span>
+        </div>
       </div>
-      <div className="text-right">
-        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block">Ref Date</span>
-        <span className="text-xs font-bold text-foreground">{formatDate(docConfig.issueDate)}</span>
-      </div>
+      <div className="h-0.5 w-full bg-gradient-to-r from-purple-700 via-indigo-600 to-transparent mt-3.5"></div>
     </div>
   );
 
   // Render Signatory Section
   const renderSignatory = () => (
-    <div className="pt-10 mt-6 border-t border-border/40 grid grid-cols-2 gap-8 text-xs">
+    <div className="pt-10 mt-6 border-t border-slate-200 grid grid-cols-2 gap-8 text-xs">
       <div>
-        <p className="text-muted-foreground mb-1">For &amp; on behalf of</p>
-        <p className="font-bold text-foreground">{companyName}</p>
+        <p className="text-slate-500 mb-1">For &amp; on behalf of</p>
+        <p className="font-bold text-slate-900">{companyName}</p>
         <div className="h-16 flex items-end">
-          <div className="border-b border-foreground/30 w-44 pb-1">
-            <span className="text-[10px] italic text-muted-foreground block">[Authorized Signature &amp; Stamp]</span>
+          <div className="border-b border-slate-400 w-44 pb-1">
+            <span className="text-[10px] italic text-slate-400 block">[Authorized Signature &amp; Stamp]</span>
           </div>
         </div>
-        <p className="font-semibold text-foreground mt-1">{docConfig.signatoryName}</p>
-        <p className="text-muted-foreground text-[11px]">{docConfig.signatoryDesignation}</p>
+        <p className="font-semibold text-slate-900 mt-1">{docConfig.signatoryName}</p>
+        <p className="text-slate-500 text-[11px]">{docConfig.signatoryDesignation}</p>
       </div>
 
       <div className="text-right flex flex-col justify-end items-end">
-        <p className="text-muted-foreground mb-1">Employee Acceptance / Acknowledgement</p>
-        <p className="font-bold text-foreground">{selectedEmployee?.name}</p>
+        <p className="text-slate-500 mb-1">Employee Acceptance / Acknowledgement</p>
+        <p className="font-bold text-slate-900">{selectedEmployee?.name}</p>
         <div className="h-16 flex items-end">
-          <div className="border-b border-foreground/30 w-44 pb-1 text-right">
-            <span className="text-[10px] italic text-muted-foreground block">[Signature of Employee]</span>
+          <div className="border-b border-slate-400 w-44 pb-1 text-right">
+            <span className="text-[10px] italic text-slate-400 block">[Signature of Employee]</span>
           </div>
         </div>
-        <p className="text-muted-foreground text-[11px] mt-1">Date: ____________________</p>
+        <p className="text-slate-500 text-[11px] mt-1">Date: ____________________</p>
       </div>
     </div>
   );
 
   return (
-    <div className="space-y-4">
-      {/* Page Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card border border-border p-4 sm:p-5 rounded-2xl shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 border border-purple-500/20">
+    <div className="space-y-4 max-w-[1600px] mx-auto">
+      
+      {/* ── UNIFIED EXECUTIVE CONTROL BAR (COMBINED HEADER + SELECTOR + ACTIONS + TABS) ── */}
+      <div className="bg-card border border-border rounded-2xl shadow-sm p-4 space-y-3.5">
+        
+        {/* Row 1: Title, Searchable Employee Picker & Action Buttons */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          
+          {/* Left: Module Title */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 border border-purple-500/20 shrink-0">
               <Award className="w-5 h-5" />
             </div>
-            <h2 className="text-xl font-bold tracking-tight text-foreground">Employee Documents &amp; Letters</h2>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-foreground tracking-tight">Documents &amp; Letters</h2>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 border border-purple-500/20">
+                  HR Studio
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground hidden sm:block">Generate official employment letters &amp; ID cards</p>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Generate, customize, print and download official HR letters (Offer Letter, Appointment Letter, Relieving Certificate, Salary Certificate, ID Card)
-          </p>
-        </div>
 
-        {/* Action Toolbar */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={handleCopyText} className="text-xs gap-1.5 h-9">
-            <Copy className="w-3.5 h-3.5" /> Copy Text
-          </Button>
-          <Button variant="outline" size="sm" onClick={handlePrint} className="text-xs gap-1.5 h-9">
-            <Printer className="w-3.5 h-3.5" /> Print
-          </Button>
-          <Button 
-            size="sm" 
-            onClick={handleDownloadPdf} 
-            disabled={isGenerating || !selectedEmployee} 
-            className="text-xs gap-1.5 h-9 bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
-          >
-            {isGenerating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            {isGenerating ? 'Generating...' : 'Download PDF'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Employee Selector Bar */}
-      <div className="bg-card border border-border p-3.5 rounded-xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
-            Select Employee:
-          </span>
-          <Popover open={empSelectorOpen} onOpenChange={setEmpSelectorOpen}>
-            <PopoverTrigger asChild>
-              <Button 
-                variant="outline" 
-                role="combobox" 
-                aria-expanded={empSelectorOpen} 
-                className="w-full sm:w-[320px] justify-between font-normal text-sm px-3 py-2 h-auto text-left bg-background"
-              >
-                {selectedEmployee ? (
-                  <div className="flex items-center gap-2 truncate">
-                    {selectedEmployee.employee_photo ? (
-                      <img 
-                        src={resolveMediaUrl(selectedEmployee.employee_photo)} 
-                        alt={selectedEmployee.name} 
-                        className="w-6 h-6 rounded-full object-cover shrink-0" 
-                      />
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-                        {selectedEmployee.name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    <span className="font-semibold text-foreground truncate">{selectedEmployee.name}</span>
-                    <span className="text-xs text-muted-foreground font-mono">({selectedEmployee.employee_id || 'ID Pending'})</span>
-                  </div>
-                ) : (
-                  <span>Select an employee...</span>
-                )}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[340px] p-0" align="start">
-              <Command>
-                <CommandInput placeholder="Search employee name, ID, department..." />
-                <CommandList>
-                  <CommandEmpty>No employee found.</CommandEmpty>
-                  <CommandGroup>
-                    {employees.map((emp: any) => (
-                      <CommandItem 
-                        key={emp.id} 
-                        value={`${emp.name} ${emp.employee_id} ${emp.department}`}
-                        onSelect={() => {
-                          setSelectedEmployeeId(String(emp.id));
-                          setSearchParams({ tab: 'documents', employeeId: String(emp.id) });
-                          setEmpSelectorOpen(false);
-                        }}
-                        className="cursor-pointer"
-                      >
-                        <Check className={cn("mr-2 h-4 w-4", String(selectedEmployeeId) === String(emp.id) ? "opacity-100" : "opacity-0")} />
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          {emp.employee_photo ? (
-                            <img src={resolveMediaUrl(emp.employee_photo)} alt={emp.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-                              {emp.name.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                          <div className="truncate">
-                            <p className="text-xs font-semibold truncate leading-tight">{emp.name}</p>
-                            <p className="text-[10px] text-muted-foreground truncate">{emp.designation || 'Staff'} • {emp.department || 'Operations'}</p>
+          {/* Center: Searchable Employee Dropdown Selector */}
+          <div className="flex items-center gap-2 flex-1 max-w-xl">
+            <div className="w-full">
+              <Popover open={empSelectorOpen} onOpenChange={setEmpSelectorOpen}>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    role="combobox" 
+                    aria-expanded={empSelectorOpen} 
+                    className="w-full justify-between font-normal text-xs px-3 py-2 h-10 text-left bg-background/60 hover:bg-background border-border"
+                  >
+                    {selectedEmployee ? (
+                      <div className="flex items-center gap-2.5 truncate">
+                        {selectedEmployee.employee_photo ? (
+                          <img 
+                            src={resolveMediaUrl(selectedEmployee.employee_photo)} 
+                            alt={selectedEmployee.name} 
+                            className="w-6 h-6 rounded-full object-cover shrink-0 border" 
+                          />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[10px] font-black flex items-center justify-center shrink-0">
+                            {selectedEmployee.name.slice(0, 2).toUpperCase()}
                           </div>
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+                        )}
+                        <span className="font-bold text-foreground truncate">{selectedEmployee.name}</span>
+                        <span className="text-[11px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800 shrink-0">
+                          {selectedEmployee.employee_id || 'ID Pending'}
+                        </span>
+                        <span className="text-muted-foreground truncate hidden md:inline text-[11px]">
+                          • {selectedEmployee.designation || 'Staff'} ({selectedEmployee.department || 'Production'})
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">Select an employee...</span>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[360px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search employee by name, ID, post..." />
+                    <CommandList>
+                      <CommandEmpty>No employee found.</CommandEmpty>
+                      <CommandGroup>
+                        {employees.map((emp: any) => (
+                          <CommandItem 
+                            key={emp.id} 
+                            value={`${emp.name} ${emp.employee_id} ${emp.department} ${emp.designation}`}
+                            onSelect={() => {
+                              setSelectedEmployeeId(String(emp.id));
+                              setSearchParams({ tab: 'documents', employeeId: String(emp.id) });
+                              setEmpSelectorOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Check className={cn("mr-2 h-4 w-4 shrink-0", String(selectedEmployeeId) === String(emp.id) ? "opacity-100" : "opacity-0")} />
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              {emp.employee_photo ? (
+                                <img src={resolveMediaUrl(emp.employee_photo)} alt={emp.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                  {emp.name.slice(0, 2).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="truncate">
+                                <p className="text-xs font-semibold truncate leading-tight">{emp.name}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">{emp.designation || 'Staff'} • {emp.department || 'Operations'}</p>
+                              </div>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {selectedEmployee && (
+              <div className="hidden xl:flex items-center gap-1.5 shrink-0 text-[11px]">
+                <span className="px-2 py-1 rounded-md bg-muted text-muted-foreground font-medium">
+                  {selectedEmployee.department || 'Production'}
+                </span>
+                <span className="px-2 py-1 rounded-md bg-purple-500/10 text-purple-700 dark:text-purple-300 font-semibold border border-purple-500/20">
+                  {formatCurrency(monthlyBase)}/mo
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Right: Action Buttons Group */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleCopyText} 
+              className="text-xs gap-1.5 h-10 px-3 hover:bg-muted"
+              title="Copy plain text"
+            >
+              <Copy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy Text</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handlePrint} 
+              className="text-xs gap-1.5 h-10 px-3 hover:bg-muted"
+              title="Print directly"
+            >
+              <Printer className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Print</span>
+            </Button>
+            <Button 
+              size="sm" 
+              onClick={handleDownloadPdf} 
+              disabled={isGenerating || !selectedEmployee} 
+              className="text-xs gap-1.5 h-10 px-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-sm transition-all"
+            >
+              {isGenerating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              <span>Download PDF</span>
+            </Button>
+          </div>
         </div>
 
-        {selectedEmployee && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-            <span className="px-2 py-1 rounded bg-muted text-foreground font-medium">
-              Role: <strong>{selectedEmployee.designation || 'Staff'}</strong>
-            </span>
-            <span className="px-2 py-1 rounded bg-muted text-foreground font-medium">
-              Dept: <strong>{selectedEmployee.department || 'General'}</strong>
-            </span>
-            <span className="px-2 py-1 rounded bg-purple-500/10 text-purple-700 font-semibold border border-purple-500/20">
-              Pay: {formatCurrency(monthlyBase)}/mo
-            </span>
-          </div>
-        )}
+        {/* Row 2: 5-Segment Document Switcher Tabs (Responsive Grid, NO SCROLLBAR) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-2.5 border-t border-border/60">
+          <button
+            onClick={() => setActiveDoc('offer_letter')}
+            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeDoc === 'offer_letter'
+                ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-600/20'
+                : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Briefcase className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">1. Offer Letter</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDoc('appointment_letter')}
+            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeDoc === 'appointment_letter'
+                ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-600/20'
+                : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">2. Appointment Letter</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDoc('relieving_letter')}
+            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeDoc === 'relieving_letter'
+                ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-600/20'
+                : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Award className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">3. Experience &amp; Relieving</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDoc('salary_certificate')}
+            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeDoc === 'salary_certificate'
+                ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-600/20'
+                : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <CreditCard className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">4. Salary Certificate</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDoc('id_card')}
+            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all col-span-2 sm:col-span-1 ${
+              activeDoc === 'id_card'
+                ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-600/20'
+                : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">5. Employee ID Card</span>
+          </button>
+        </div>
       </div>
 
-      {/* Document Type Selector Tabs */}
-      <div className="flex overflow-x-auto p-1.5 bg-card border border-border rounded-xl gap-2 shrink-0 scrollbar-hide shadow-sm">
-        <button
-          onClick={() => setActiveDoc('offer_letter')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeDoc === 'offer_letter'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-          }`}
-        >
-          <Briefcase className="w-4 h-4" /> 1. Offer Letter
-        </button>
-        <button
-          onClick={() => setActiveDoc('appointment_letter')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeDoc === 'appointment_letter'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-          }`}
-        >
-          <FileText className="w-4 h-4" /> 2. Appointment Letter
-        </button>
-        <button
-          onClick={() => setActiveDoc('relieving_letter')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeDoc === 'relieving_letter'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-          }`}
-        >
-          <Award className="w-4 h-4" /> 3. Experience / Relieving Certificate
-        </button>
-        <button
-          onClick={() => setActiveDoc('salary_certificate')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeDoc === 'salary_certificate'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-          }`}
-        >
-          <CreditCard className="w-4 h-4" /> 4. Salary Certificate
-        </button>
-        <button
-          onClick={() => setActiveDoc('id_card')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeDoc === 'id_card'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" /> 5. Employee ID Card
-        </button>
-      </div>
-
-      {/* Main Split: Left Configuration Form & Right Live Document Preview */}
+      {/* ── MAIN WORKSPACE (LEFT SETTINGS SIDEBAR + RIGHT STAGED DOCUMENT CANVAS) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
-        {/* LEFT: Customization Form (4 cols) */}
-        <div className="lg:col-span-4 bg-card border border-border rounded-xl p-4 sm:p-5 shadow-sm space-y-4 text-xs">
+        {/* LEFT COLUMN: Document Customizer Sidebar (4 cols, Sticky) */}
+        <div className="lg:col-span-4 bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-sm space-y-4 text-xs lg:sticky lg:top-4">
           <div className="flex items-center justify-between pb-2 border-b border-border">
             <h3 className="font-bold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-purple-600" /> Document Configuration
+              <SlidersHorizontal className="w-3.5 h-3.5 text-purple-600" /> Document Configuration
             </h3>
-            <span className="text-[10px] text-muted-foreground">Live real-time preview</span>
+            <span className="text-[10px] text-muted-foreground">Live updates on right</span>
           </div>
 
-          {/* Common Inputs */}
+          {/* Section A: Signatory & Dates */}
           <div className="space-y-3">
             <div>
               <label className="font-semibold block mb-1 text-muted-foreground">Document Issue Date</label>
               <input 
                 type="date" 
-                className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                 value={docConfig.issueDate}
                 onChange={(e) => setDocConfig({ ...docConfig, issueDate: e.target.value })}
               />
@@ -457,7 +491,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
               <label className="font-semibold block mb-1 text-muted-foreground">Authorized Signatory Name</label>
               <input 
                 type="text" 
-                className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                 value={docConfig.signatoryName}
                 onChange={(e) => setDocConfig({ ...docConfig, signatoryName: e.target.value })}
               />
@@ -467,22 +501,22 @@ export const EmployeeDocumentsTab: React.FC = () => {
               <label className="font-semibold block mb-1 text-muted-foreground">Signatory Designation / Title</label>
               <input 
                 type="text" 
-                className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                 value={docConfig.signatoryDesignation}
                 onChange={(e) => setDocConfig({ ...docConfig, signatoryDesignation: e.target.value })}
               />
             </div>
           </div>
 
-          {/* Document Specific Options */}
+          {/* Section B: Dynamic Document Specific Options */}
           {activeDoc === 'offer_letter' && (
             <div className="space-y-3 pt-3 border-t border-border">
-              <span className="font-bold text-purple-600 uppercase text-[10px] tracking-wider block">Offer Parameters</span>
+              <span className="font-bold text-purple-600 uppercase text-[10px] tracking-wider block">Offer Terms</span>
               <div>
-                <label className="font-semibold block mb-1 text-muted-foreground">Joining Acceptance Deadline</label>
+                <label className="font-semibold block mb-1 text-muted-foreground">Proposed Joining Date</label>
                 <input 
                   type="date" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.joiningDate}
                   onChange={(e) => setDocConfig({ ...docConfig, joiningDate: e.target.value })}
                 />
@@ -491,7 +525,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                 <label className="font-semibold block mb-1 text-muted-foreground">Probation Period</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.probationPeriod}
                   onChange={(e) => setDocConfig({ ...docConfig, probationPeriod: e.target.value })}
                 />
@@ -500,7 +534,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                 <label className="font-semibold block mb-1 text-muted-foreground">Work Location</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.workLocation}
                   onChange={(e) => setDocConfig({ ...docConfig, workLocation: e.target.value })}
                 />
@@ -512,10 +546,10 @@ export const EmployeeDocumentsTab: React.FC = () => {
             <div className="space-y-3 pt-3 border-t border-border">
               <span className="font-bold text-purple-600 uppercase text-[10px] tracking-wider block">Appointment Clauses</span>
               <div>
-                <label className="font-semibold block mb-1 text-muted-foreground">Effective Date of Joining</label>
+                <label className="font-semibold block mb-1 text-muted-foreground">Date of Joining (DOJ)</label>
                 <input 
                   type="date" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.joiningDate}
                   onChange={(e) => setDocConfig({ ...docConfig, joiningDate: e.target.value })}
                 />
@@ -524,16 +558,16 @@ export const EmployeeDocumentsTab: React.FC = () => {
                 <label className="font-semibold block mb-1 text-muted-foreground">Probation Period</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.probationPeriod}
                   onChange={(e) => setDocConfig({ ...docConfig, probationPeriod: e.target.value })}
                 />
               </div>
               <div>
-                <label className="font-semibold block mb-1 text-muted-foreground">Notice Period</label>
+                <label className="font-semibold block mb-1 text-muted-foreground">Notice Period on Separation</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.noticePeriod}
                   onChange={(e) => setDocConfig({ ...docConfig, noticePeriod: e.target.value })}
                 />
@@ -542,7 +576,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                 <label className="font-semibold block mb-1 text-muted-foreground">Work Hours Schedule</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.workHours}
                   onChange={(e) => setDocConfig({ ...docConfig, workHours: e.target.value })}
                 />
@@ -552,12 +586,12 @@ export const EmployeeDocumentsTab: React.FC = () => {
 
           {activeDoc === 'relieving_letter' && (
             <div className="space-y-3 pt-3 border-t border-border">
-              <span className="font-bold text-purple-600 uppercase text-[10px] tracking-wider block">Experience &amp; Relieving</span>
+              <span className="font-bold text-purple-600 uppercase text-[10px] tracking-wider block">Relieving &amp; Experience Details</span>
               <div>
                 <label className="font-semibold block mb-1 text-muted-foreground">Last Working Date</label>
                 <input 
                   type="date" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.relievingDate}
                   onChange={(e) => setDocConfig({ ...docConfig, relievingDate: e.target.value })}
                 />
@@ -566,16 +600,16 @@ export const EmployeeDocumentsTab: React.FC = () => {
                 <label className="font-semibold block mb-1 text-muted-foreground">Conduct Statement</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.conductRating}
                   onChange={(e) => setDocConfig({ ...docConfig, conductRating: e.target.value })}
                 />
               </div>
               <div>
-                <label className="font-semibold block mb-1 text-muted-foreground">Reason for Relieving</label>
+                <label className="font-semibold block mb-1 text-muted-foreground">Reason for Separation</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.relievingReason}
                   onChange={(e) => setDocConfig({ ...docConfig, relievingReason: e.target.value })}
                 />
@@ -585,13 +619,13 @@ export const EmployeeDocumentsTab: React.FC = () => {
 
           {activeDoc === 'salary_certificate' && (
             <div className="space-y-3 pt-3 border-t border-border">
-              <span className="font-bold text-purple-600 uppercase text-[10px] tracking-wider block">Salary Certificate</span>
+              <span className="font-bold text-purple-600 uppercase text-[10px] tracking-wider block">Certificate Recipient &amp; Purpose</span>
               <div>
                 <label className="font-semibold block mb-1 text-muted-foreground">Addressed To (Recipient)</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
-                  placeholder="e.g. To Whom It May Concern / The Branch Manager, HDFC Bank"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
+                  placeholder="e.g. To Whom It May Concern / Branch Manager, Bank"
                   value={docConfig.addressedTo}
                   onChange={(e) => setDocConfig({ ...docConfig, addressedTo: e.target.value })}
                 />
@@ -600,7 +634,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                 <label className="font-semibold block mb-1 text-muted-foreground">Certificate Purpose</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.certificatePurpose}
                   onChange={(e) => setDocConfig({ ...docConfig, certificatePurpose: e.target.value })}
                 />
@@ -614,7 +648,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
               <div>
                 <label className="font-semibold block mb-1 text-muted-foreground">Blood Group</label>
                 <select 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.bloodGroup}
                   onChange={(e) => setDocConfig({ ...docConfig, bloodGroup: e.target.value })}
                 >
@@ -632,7 +666,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                 <label className="font-semibold block mb-1 text-muted-foreground">Emergency Contact Phone</label>
                 <input 
                   type="text" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.emergencyContact}
                   onChange={(e) => setDocConfig({ ...docConfig, emergencyContact: e.target.value })}
                 />
@@ -641,7 +675,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                 <label className="font-semibold block mb-1 text-muted-foreground">Valid Upto Date</label>
                 <input 
                   type="date" 
-                  className="w-full border rounded-lg px-3 py-1.5 bg-background text-xs"
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
                   value={docConfig.validUpto}
                   onChange={(e) => setDocConfig({ ...docConfig, validUpto: e.target.value })}
                 />
@@ -649,21 +683,20 @@ export const EmployeeDocumentsTab: React.FC = () => {
             </div>
           )}
 
-          {/* Quick Snapshot Card */}
+          {/* Quick Snapshot Footer */}
           {selectedEmployee && (
-            <div className="pt-3 border-t border-border space-y-1.5 text-muted-foreground text-[11px]">
+            <div className="pt-3 border-t border-border space-y-1.5 text-muted-foreground text-[11px] bg-muted/20 p-3 rounded-xl">
               <span className="font-bold text-foreground block">Employee Snapshot:</span>
               <p>Name: <strong className="text-foreground">{selectedEmployee.name}</strong></p>
               <p>Designation: <strong className="text-foreground">{selectedEmployee.designation || 'Staff'}</strong></p>
               <p>Department: <strong className="text-foreground">{selectedEmployee.department || 'Operations'}</strong></p>
-              <p>Pay Type: <strong className="text-foreground">{selectedEmployee.employee_type}</strong></p>
               <p>Base Compensation: <strong className="text-foreground">{formatCurrency(monthlyBase)}/mo</strong></p>
             </div>
           )}
         </div>
 
-        {/* RIGHT: Live High-Resolution Document Canvas (8 cols) */}
-        <div className="lg:col-span-8 flex justify-center items-start">
+        {/* RIGHT COLUMN: Live Document Canvas Staging Area (8 cols) */}
+        <div className="lg:col-span-8 flex justify-center items-start bg-slate-100/60 dark:bg-slate-900/40 p-4 sm:p-6 rounded-2xl border border-border">
           
           {!selectedEmployee ? (
             <div className="w-full bg-card border border-border rounded-xl p-12 text-center text-muted-foreground space-y-3">
@@ -686,7 +719,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                   {renderHeader()}
 
                   <div className="text-xs space-y-1 mb-4">
-                    <p className="font-semibold">To,</p>
+                    <p className="font-semibold text-slate-500">To,</p>
                     <p className="font-bold text-base text-slate-900">{selectedEmployee.name}</p>
                     {selectedEmployee.contactinfo && <p className="text-slate-600">Mobile: {selectedEmployee.contactinfo}</p>}
                     {selectedEmployee.aadhar_number && <p className="text-slate-600">Aadhaar Ref: {selectedEmployee.aadhar_number}</p>}
@@ -780,7 +813,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                   {renderHeader()}
 
                   <div className="text-xs space-y-1 mb-4">
-                    <p className="font-semibold">To,</p>
+                    <p className="font-semibold text-slate-500">To,</p>
                     <p className="font-bold text-base text-slate-900">{selectedEmployee.name}</p>
                     <p className="font-mono text-purple-700">Employee ID: {selectedEmployee.employee_id || 'EMP-TEMP'}</p>
                     {selectedEmployee.contactinfo && <p className="text-slate-600">Mobile: {selectedEmployee.contactinfo}</p>}
