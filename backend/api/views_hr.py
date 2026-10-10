@@ -330,8 +330,7 @@ def hr_employees_detail(request, pk):
                 'employee_photo': _get_full_url(emp.employee_photo),
                 'aadhar_photo': _get_full_url(emp.aadhar_photo),
                 'pan_photo': _get_full_url(emp.pan_photo),
-                'bank_proof_photo': _get_full_url(emp.bank_proof_photo),
-                **data
+                'bank_proof_photo': _get_full_url(emp.bank_proof_photo)
             }, 'Employee updated')
         except Exception as e:
             return send_error(f'Failed to update employee: {str(e)}', 400)
