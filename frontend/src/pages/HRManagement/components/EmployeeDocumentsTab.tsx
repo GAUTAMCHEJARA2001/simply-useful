@@ -3,7 +3,7 @@ import {
   Printer, Download, FileText, Award, CreditCard, 
   Copy, RefreshCw, Sparkles, Briefcase, ShieldCheck, 
   ChevronsUpDown, Check, User, SlidersHorizontal, UserPlus, UserCheck,
-  RotateCcw, Save, Edit3
+  RotateCcw, Save, Edit3, AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useData } from '@/contexts/DataContext';
@@ -15,7 +15,7 @@ import { useSearchParams } from 'react-router-dom';
 import { cn } from "@/lib/utils";
 import html2pdf from 'html2pdf.js';
 
-export type DocumentType = 'offer_letter' | 'appointment_letter' | 'relieving_letter' | 'salary_certificate' | 'id_card';
+export type DocumentType = 'offer_letter' | 'appointment_letter' | 'relieving_letter' | 'salary_certificate' | 'id_card' | 'notice_letter';
 
 export const EmployeeDocumentsTab: React.FC = () => {
   const { settings } = useData();
