@@ -181,10 +181,12 @@ export const EmployeeMasterTab: React.FC = () => {
     e.preventDefault();
     const submitData = new FormData();
     Object.keys(formData).forEach(key => {
-      // For document fields: ONLY append if the user selected a new File object
+      // For document fields: ONLY append if the user selected a new File object, or explicitly cleared it (empty string)
       if (['employee_photo', 'aadhar_photo', 'pan_photo', 'bank_proof_photo'].includes(key)) {
         if (formData[key] instanceof File) {
           submitData.append(key, formData[key]);
+        } else if (formData[key] === '') {
+          submitData.append(key, '');
         }
       } else if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
         submitData.append(key, formData[key]);
@@ -277,17 +279,29 @@ export const EmployeeMasterTab: React.FC = () => {
               </span>
               <p className="text-[11px] text-muted-foreground truncate">{existingUrl.split('/').pop() || 'Document on File'}</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setLightboxDoc({ 
-                url: existingUrl, 
-                title: `${formData.name || 'Employee'} - ${label}`,
-                isPdf: isPdf(existingUrl)
-              })}
-              className="px-2.5 py-1 text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 rounded border border-primary/20 flex items-center gap-1"
-            >
-              <Eye className="w-3 h-3" /> View
-            </button>
+            <div className="flex flex-col sm:flex-row items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setLightboxDoc({ 
+                  url: existingUrl, 
+                  title: `${formData.name || 'Employee'} - ${label}`,
+                  isPdf: isPdf(existingUrl)
+                })}
+                className="px-2.5 py-1 text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 rounded border border-primary/20 flex items-center gap-1"
+              >
+                <Eye className="w-3 h-3" /> View
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData((prev: any) => ({ ...prev, [field]: '' }));
+                }}
+                className="px-2.5 py-1 text-xs font-semibold bg-destructive/10 text-destructive hover:bg-destructive/20 rounded border border-destructive/20 flex items-center gap-1"
+                title="Remove Document"
+              >
+                <X className="w-3 h-3" /> Remove
+              </button>
+            </div>
           </div>
         ) : null}
 
