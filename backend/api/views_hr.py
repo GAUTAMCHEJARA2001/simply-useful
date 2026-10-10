@@ -191,10 +191,10 @@ def hr_employees(request):
                 department=data.get('department') or None,
                 designation=data.get('designation') or None,
                 reports_to_id=reports_to_id,
-                is_ot_eligible=bool(data.get('is_ot_eligible')),
-                is_late_deduction_eligible=data.get('is_late_deduction_eligible') == 'true' or data.get('is_late_deduction_eligible') is True,
-                is_km_eligible=data.get('is_km_eligible') == 'true' or data.get('is_km_eligible') is True,
-                is_bag_eligible=data.get('is_bag_eligible') == 'true' or data.get('is_bag_eligible') is True,
+                is_ot_eligible=str(data.get('is_ot_eligible')).lower() == 'true' or data.get('is_ot_eligible') is True,
+                is_late_deduction_eligible=str(data.get('is_late_deduction_eligible')).lower() == 'true' or data.get('is_late_deduction_eligible') is True,
+                is_km_eligible=str(data.get('is_km_eligible')).lower() == 'true' or data.get('is_km_eligible') is True,
+                is_bag_eligible=str(data.get('is_bag_eligible')).lower() == 'true' or data.get('is_bag_eligible') is True,
                 user_id=user_id,
                 doj=doj_val,
                 aadhar_number=data.get('aadhar_number', ''),
@@ -217,8 +217,7 @@ def hr_employees(request):
                 'employee_photo': _get_full_url(emp.employee_photo),
                 'aadhar_photo': _get_full_url(emp.aadhar_photo),
                 'pan_photo': _get_full_url(emp.pan_photo),
-                'bank_proof_photo': _get_full_url(emp.bank_proof_photo),
-                **data
+                'bank_proof_photo': _get_full_url(emp.bank_proof_photo)
             }, 'Employee created')
         except Exception as e:
             return send_error(f'Failed to create employee: {str(e)}', 400)
