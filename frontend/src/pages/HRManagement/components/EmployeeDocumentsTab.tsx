@@ -554,16 +554,16 @@ export const EmployeeDocumentsTab: React.FC = () => {
               </div>
             ) : (
               /* If Candidate Mode: Show Candidate Indicator */
-              <div className="w-full bg-purple-500/10 border border-purple-500/30 rounded-xl px-3 py-1.5 flex items-center justify-between">
-                <div className="truncate">
+              <div className="w-full min-w-0 bg-purple-500/10 border border-purple-500/30 rounded-xl px-3 py-1.5 flex items-center justify-between gap-2">
+                <div className="truncate min-w-0">
                   <span className="text-xs font-bold text-purple-900 dark:text-purple-200 truncate block">
                     {candidateData.name || 'Prospective Recruit'}
                   </span>
-                  <span className="text-[10px] text-purple-700 dark:text-purple-300">
+                  <span className="text-[10px] text-purple-700 dark:text-purple-300 truncate block">
                     {candidateData.designation} • {candidateData.department} • Ref: {candidateData.employee_id}
                   </span>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-200 shrink-0">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-200 shrink-0 hidden xl:block">
                   Unregistered
                 </span>
               </div>
