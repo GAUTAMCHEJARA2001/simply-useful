@@ -222,6 +222,7 @@ export const SalesTab: React.FC = () => {
               Currency((s.items || []).reduce((acc: number, it: any) => 
                 acc + ((it.qty || 0) - (it.returnedqty || it.returnedQty || 0)) * (it.price || it.rate || 0) * (1 + (it.tax_percent || 0) / 100)
               , 0) || s.netAmount || s.grandTotal || s.totalAmount || 0),
+              <span key={`status-${s.id}`} className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusColor}`}>{status}</span>,
               (() => {
                 const dVal = s.date || s.dispatchDate || s.createdAt;
                 if (!dVal) return '—';
@@ -254,7 +255,11 @@ export const SalesTab: React.FC = () => {
 
       <SalesModal 
         isOpen={modalOpen} 
-        onClose={() => setModalOpen(false)} 
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedSale(null);
+          refetch();
+        }} 
         sale={selectedSale} 
         readOnly={viewOnly}
         isDispatchLog={selectedSale?.isDispatchLog}
