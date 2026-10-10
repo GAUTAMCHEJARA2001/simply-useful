@@ -487,7 +487,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
                       className="w-full justify-between font-normal text-xs px-3 py-2 h-10 text-left bg-background/60 hover:bg-background border-border overflow-hidden"
                     >
                       {selectedEmployee ? (
-                        <div className="flex items-center gap-2.5 flex-1 min-w-0 truncate">
+                        <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden pr-2">
                           {selectedEmployee.employee_photo ? (
                             <img 
                               src={resolveMediaUrl(selectedEmployee.employee_photo)} 
@@ -499,11 +499,11 @@ export const EmployeeDocumentsTab: React.FC = () => {
                               {selectedEmployee.name.slice(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <span className="font-bold text-foreground truncate">{selectedEmployee.name}</span>
-                          <span className="text-[11px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800 shrink-0">
+                          <span className="font-bold text-foreground truncate min-w-0 shrink flex-1 max-w-fit">{selectedEmployee.name}</span>
+                          <span className="text-[11px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-1 py-0.5 rounded border border-purple-200 dark:border-purple-800 shrink-0">
                             {selectedEmployee.employee_id || 'ID Pending'}
                           </span>
-                          <span className="text-muted-foreground truncate hidden md:inline text-[11px]">
+                          <span className="text-muted-foreground truncate hidden md:block text-[11px] min-w-0 shrink">
                             • {selectedEmployee.designation || 'Staff'} ({selectedEmployee.department || 'Production'})
                           </span>
                         </div>
