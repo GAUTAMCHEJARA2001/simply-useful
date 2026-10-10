@@ -199,6 +199,11 @@ export const EmployeeDocumentsTab: React.FC = () => {
     emergencyContact: '+91 98765 43210',
     validUpto: `${new Date().getFullYear() + 3}-12-31`,
     customClause: '',
+    
+    // Notice Letter Specifics
+    noticeSubject: 'Warning: Late Coming / Attendance Irregularity',
+    noticeSeverity: 'Warning',
+    noticeBody: 'It has been observed from our attendance records that you have been arriving late to work repeatedly without prior approval or valid justification. Such irregular attendance disrupts workflow and violates company policy.\n\nYou are hereby advised to strictly adhere to the designated working hours. Failure to show immediate improvement may lead to further disciplinary action.',
   });
 
   // Keep joiningDate & contact synced when activePerson changes
@@ -654,7 +659,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
 
           <button
             onClick={() => setActiveDoc('id_card')}
-            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all col-span-2 sm:col-span-1 ${
+            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
               activeDoc === 'id_card'
                 ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-600/20'
                 : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground'
@@ -662,6 +667,18 @@ export const EmployeeDocumentsTab: React.FC = () => {
           >
             <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">5. Employee ID Card</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDoc('notice_letter')}
+            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeDoc === 'notice_letter'
+                ? 'bg-red-600 text-white shadow-sm ring-2 ring-red-600/20'
+                : 'bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">6. Notice Letter</span>
           </button>
         </div>
       </div>
@@ -1138,6 +1155,43 @@ export const EmployeeDocumentsTab: React.FC = () => {
             </div>
           )}
 
+          {activeDoc === 'notice_letter' && (
+            <div className="space-y-3 pt-3 border-t border-border">
+              <span className="font-bold text-red-600 uppercase text-[10px] tracking-wider block">Notice Details</span>
+              <div>
+                <label className="font-semibold block mb-1 text-muted-foreground">Notice Topic / Subject</label>
+                <input 
+                  type="text" 
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
+                  placeholder="e.g. Target Not Met, Late Coming"
+                  value={docConfig.noticeSubject}
+                  onChange={(e) => setDocConfig({ ...docConfig, noticeSubject: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="font-semibold block mb-1 text-muted-foreground">Severity</label>
+                <select 
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium"
+                  value={docConfig.noticeSeverity}
+                  onChange={(e) => setDocConfig({ ...docConfig, noticeSeverity: e.target.value })}
+                >
+                  <option value="Advisory">Advisory Notice</option>
+                  <option value="Warning">Warning Notice</option>
+                  <option value="Show Cause">Show Cause Notice</option>
+                  <option value="Termination">Termination Notice</option>
+                </select>
+              </div>
+              <div>
+                <label className="font-semibold block mb-1 text-muted-foreground">Notice Body</label>
+                <textarea 
+                  className="w-full border rounded-lg px-3 py-2 bg-background text-xs font-medium h-24 resize-none"
+                  value={docConfig.noticeBody}
+                  onChange={(e) => setDocConfig({ ...docConfig, noticeBody: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Quick Snapshot Footer */}
           {activePerson && (
             <div className="pt-3 border-t border-border space-y-1.5 text-muted-foreground text-[11px] bg-muted/20 p-3 rounded-xl">
@@ -1602,6 +1656,56 @@ export const EmployeeDocumentsTab: React.FC = () => {
                     </div>
 
                   </div>
+                </div>
+              )}
+
+              {/* ────────────────── 6. NOTICE LETTER ────────────────── */}
+              {activeDoc === 'notice_letter' && (
+                <div className="space-y-5 text-sm leading-relaxed">
+                  {renderHeader()}
+
+                  <div className="text-xs space-y-1 mb-4">
+                    <p className="font-semibold text-slate-500">To,</p>
+                    <p className="font-bold text-base text-slate-900">{activePerson.name}</p>
+                    <p className="font-mono text-purple-700">Employee / Ref ID: {activePerson.employee_id || 'N/A'}</p>
+                    <p className="text-slate-600">Designation: {activePerson.designation || 'Staff'}</p>
+                    <p className="text-slate-600">Department: {activePerson.department || 'Operations'}</p>
+                  </div>
+
+                  <div className={`border p-2.5 rounded text-center ${
+                    docConfig.noticeSeverity === 'Warning' ? 'bg-amber-50/70 border-amber-200' :
+                    docConfig.noticeSeverity === 'Show Cause' ? 'bg-orange-50/70 border-orange-200' :
+                    docConfig.noticeSeverity === 'Termination' ? 'bg-red-50/70 border-red-200' :
+                    'bg-purple-50/70 border-purple-200'
+                  }`}>
+                    <h2 className={`font-bold text-base tracking-wide uppercase ${
+                      docConfig.noticeSeverity === 'Warning' ? 'text-amber-900' :
+                      docConfig.noticeSeverity === 'Show Cause' ? 'text-orange-900' :
+                      docConfig.noticeSeverity === 'Termination' ? 'text-red-900' :
+                      'text-purple-900'
+                    }`}>
+                      {docConfig.noticeSeverity} Notice
+                    </h2>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p>
+                      <strong>Subject: {docConfig.noticeSubject}</strong>
+                    </p>
+                    <p>Dear <strong>{activePerson.name}</strong>,</p>
+                    <div className="whitespace-pre-wrap text-slate-800">
+                      {docConfig.noticeBody}
+                    </div>
+                  </div>
+
+                  <p className="text-xs pt-4 font-semibold text-slate-700">
+                    You are required to submit a written explanation to the undersigned within 48 hours of receiving this notice.
+                  </p>
+                  <p className="text-xs pt-1 text-slate-700">
+                    Please sign and return the duplicate copy of this letter as an acknowledgment of receipt.
+                  </p>
+
+                  {renderSignatory()}
                 </div>
               )}
 
