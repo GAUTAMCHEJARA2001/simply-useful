@@ -181,8 +181,8 @@ DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATIC_ROOT.mkdir(parents=True, exist_ok=True)
+MEDIA_URL = '/media/'
 
-MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 
