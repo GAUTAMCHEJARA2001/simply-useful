@@ -428,7 +428,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
       <div className="bg-card border border-border rounded-2xl shadow-sm p-4 space-y-3.5">
         
         {/* Row 1: Title, Searchable Employee Picker / Candidate Mode & Action Buttons */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           
           {/* Left: Module Title */}
           <div className="flex items-center gap-3 shrink-0">
@@ -447,7 +447,7 @@ export const EmployeeDocumentsTab: React.FC = () => {
           </div>
 
           {/* Center: Mode Switcher + Employee Dropdown Selector OR Candidate Card */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 max-w-2xl">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 min-w-[280px] max-w-2xl">
             
             {/* Mode Switcher */}
             <div className="flex items-center gap-1 bg-muted/70 p-1 rounded-xl shrink-0 border border-border/40">
@@ -484,10 +484,10 @@ export const EmployeeDocumentsTab: React.FC = () => {
                       variant="outline" 
                       role="combobox" 
                       aria-expanded={empSelectorOpen} 
-                      className="w-full justify-between font-normal text-xs px-3 py-2 h-10 text-left bg-background/60 hover:bg-background border-border"
+                      className="w-full justify-between font-normal text-xs px-3 py-2 h-10 text-left bg-background/60 hover:bg-background border-border overflow-hidden"
                     >
                       {selectedEmployee ? (
-                        <div className="flex items-center gap-2.5 truncate">
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0 truncate">
                           {selectedEmployee.employee_photo ? (
                             <img 
                               src={resolveMediaUrl(selectedEmployee.employee_photo)} 
