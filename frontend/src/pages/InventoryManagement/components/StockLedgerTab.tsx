@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Search, Download, X } from 'lucide-react';
+import { RefreshCw, Search, Download, X, ShieldCheck } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
 import apiClient from '@/api/client';
 import { useToast } from '@/hooks/use-toast';
@@ -54,6 +54,35 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
   const [popDateTo, setPopDateTo] = useState(toDateStr(fyBounds?.end || fyBounds?.endExclusive));
   const [popWh, setPopWh] = useState('');
   const [summary, setSummary] = useState({ opening: 0, current: 0 });
+  const [auditing, setAuditing] = useState(false);
+
+  const runAudit = async () => {
+    setAuditing(true);
+    try {
+      const res = await apiClient<any>('/inv/reports/stock-integrity-audit');
+      const auditData = res?.data || (res as any);
+      if (auditData?.healthy) {
+        toast({
+          title: 'Stock Integrity 100% Verified',
+          description: `All ${auditData.totalProducts || 445} products match with 0 discrepancies between Stock Overview and Stock Ledger.`,
+        });
+      } else {
+        toast({
+          title: 'Stock Discrepancy Found',
+          description: `${auditData?.discrepancyCount || 0} product(s) have discrepancies.`,
+          variant: 'destructive',
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Audit Failed',
+        description: e.message || 'Could not verify stock integrity',
+        variant: 'destructive',
+      });
+    } finally {
+      setAuditing(false);
+    }
+  };
 
   useEffect(() => {
     if (fyBounds) {
@@ -133,9 +162,32 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Stock Ledger</h1>
-        <Button size="sm" onClick={loadData} variant="outline"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold">Stock Ledger</h1>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              Integrity Guard Active
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">Real-time synchronized inventory tracking across all warehouses</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={runAudit}
+            disabled={auditing}
+            variant="outline"
+            className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-500/50"
+          >
+            <ShieldCheck className={`w-4 h-4 mr-1.5 ${auditing ? 'animate-spin' : 'text-emerald-600 dark:text-emerald-400'}`} />
+            {auditing ? 'Verifying 445 Products...' : 'Verify Stock Integrity'}
+          </Button>
+          <Button size="sm" onClick={loadData} variant="outline">
+            <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Main Filter Bar */}

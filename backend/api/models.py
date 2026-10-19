@@ -10,7 +10,7 @@ from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.utils import timezone
 from decimal import Decimal
-from core.models import Company, User, Warehouse, Userwarehouseaccess
+from core.models import Company, User, Warehouse, Userwarehouseaccess, TenantUserMapping
 
 
 
@@ -517,6 +517,7 @@ class Purchase(models.Model):
 class Purchaseitem(models.Model):
     id = models.TextField(primary_key=True)
     purchaseid = models.ForeignKey(Purchase, models.DO_NOTHING, db_column='purchaseId', db_constraint=False)  # Field name made lowercase.
+    productid = models.ForeignKey('Product', models.DO_NOTHING, db_column='productId', blank=True, null=True, db_constraint=False)
     productname = models.TextField(db_column='productName')  # Field name made lowercase.
     qty = models.IntegerField()
     rate = models.FloatField()
@@ -792,6 +793,35 @@ class Stocktransaction(models.Model):
             models.Index(fields=['transactiontype', 'createdat'], name='idx_st_type_date'),
         ]
 
+
+class StockLedgerEntry(models.Model):
+    id = models.CharField(primary_key=True, max_length=64)
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    warehouseid = models.ForeignKey('core.Warehouse', models.DO_NOTHING, db_column='warehouseId', db_constraint=False, null=True, blank=True)
+    productid = models.ForeignKey(Product, models.DO_NOTHING, db_column='productId', db_constraint=False)
+    posting_date = models.DateTimeField(db_column='postingDate', default=timezone.now)
+    voucher_type = models.CharField(max_length=40, db_column='voucherType')  # OPENING_STOCK, PURCHASE_RECEIPT, SALES_DISPATCH, SALES_RETURN, PRODUCTION_IN, RAW_CONSUMED, PURCHASE_RETURN, ADJUSTMENT
+    voucher_id = models.CharField(max_length=64, db_column='voucherId', null=True, blank=True)
+    voucher_number = models.CharField(max_length=100, db_column='voucherNumber', null=True, blank=True)
+    batch_number = models.CharField(max_length=64, db_column='batchNumber', null=True, blank=True)
+    quantity_change = models.DecimalField(max_digits=18, decimal_places=4, db_column='quantityChange')
+    balance_after = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0.0000'), db_column='balanceAfter')
+    unit_cost = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0.0000'), db_column='unitCost')
+    narration = models.TextField(null=True, blank=True)
+    created_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='createdBy', null=True, blank=True, db_constraint=False)
+    created_at = models.DateTimeField(db_column='createdAt', default=timezone.now)
+    is_cancelled = models.BooleanField(default=False, db_column='isCancelled')
+
+    class Meta:
+        db_table = 'StockLedgerEntry'
+        indexes = [
+            models.Index(fields=['companyid', 'posting_date'], name='idx_sle_comp_date'),
+            models.Index(fields=['warehouseid', 'productid', 'posting_date'], name='idx_sle_wh_prod_date'),
+            models.Index(fields=['productid', 'posting_date'], name='idx_sle_prod_date'),
+            models.Index(fields=['voucher_type', 'voucher_id'], name='idx_sle_vtype_vid'),
+        ]
+
+
 class PushSubscription(models.Model):
     user = models.ForeignKey('core.User', models.CASCADE, related_name='push_subscriptions', db_constraint=False)
     endpoint = models.TextField(unique=True)
@@ -801,6 +831,107 @@ class PushSubscription(models.Model):
 
     class Meta:
         db_table = 'PushSubscription'
+
+
+class UomConversion(models.Model):
+    id = models.CharField(primary_key=True, max_length=64)
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    productid = models.ForeignKey(Product, models.DO_NOTHING, db_column='productId', db_constraint=False)
+    from_uom = models.CharField(max_length=30, db_column='fromUom')
+    to_uom = models.CharField(max_length=30, db_column='toUom')
+    conversion_factor = models.DecimalField(max_digits=14, decimal_places=6, db_column='conversionFactor')
+    is_base_uom = models.BooleanField(default=False, db_column='isBaseUom')
+    created_at = models.DateTimeField(db_column='createdAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'UomConversion'
+        unique_together = (('productid', 'from_uom', 'to_uom'),)
+        indexes = [
+            models.Index(fields=['productid', 'from_uom'], name='idx_uom_prod_from'),
+        ]
+
+
+class PaymentAllocation(models.Model):
+    id = models.CharField(primary_key=True, max_length=64)
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    payment_receipt_id = models.CharField(max_length=64, db_column='paymentReceiptId')
+    order_id = models.CharField(max_length=64, db_column='orderId')
+    invoice_number = models.CharField(max_length=100, db_column='invoiceNumber', blank=True, null=True)
+    allocated_amount = models.DecimalField(max_digits=14, decimal_places=2, db_column='allocatedAmount')
+    allocated_at = models.DateTimeField(db_column='allocatedAt', default=timezone.now)
+    allocated_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='allocatedBy', null=True, blank=True, db_constraint=False)
+
+    class Meta:
+        db_table = 'PaymentAllocation'
+        indexes = [
+            models.Index(fields=['payment_receipt_id'], name='idx_payalloc_rcpt'),
+            models.Index(fields=['order_id'], name='idx_payalloc_ord'),
+        ]
+
+
+class ProductBatch(models.Model):
+    id = models.CharField(primary_key=True, max_length=64)
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    productid = models.ForeignKey(Product, models.DO_NOTHING, db_column='productId', db_constraint=False)
+    batch_number = models.CharField(max_length=64, db_column='batchNumber')
+    mfg_date = models.DateField(db_column='mfgDate')
+    expiry_date = models.DateField(db_column='expiryDate', null=True, blank=True)
+    mrp = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    cost_price = models.DecimalField(max_digits=14, decimal_places=4, default=Decimal('0.0000'), db_column='costPrice')
+    qc_status = models.CharField(max_length=20, default='APPROVED', db_column='qcStatus')  # PENDING_QC, APPROVED, REJECTED, QUARANTINE
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(db_column='createdAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'ProductBatch'
+        unique_together = (('productid', 'batch_number'),)
+        indexes = [
+            models.Index(fields=['productid', 'batch_number'], name='idx_batch_prod_num'),
+            models.Index(fields=['qc_status'], name='idx_batch_qc_status'),
+        ]
+
+
+class StockTransfer(models.Model):
+    id = models.CharField(primary_key=True, max_length=64)
+    companyid = models.ForeignKey('core.Company', models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    transfer_number = models.CharField(max_length=64, unique=True, db_column='transferNumber')
+    from_warehouse = models.ForeignKey('core.Warehouse', models.DO_NOTHING, related_name='transfers_out', db_column='fromWarehouseId', db_constraint=False)
+    to_warehouse = models.ForeignKey('core.Warehouse', models.DO_NOTHING, related_name='transfers_in', db_column='toWarehouseId', db_constraint=False)
+    status = models.CharField(max_length=20, default='DRAFT')  # DRAFT, DISPATCHED, RECEIVED, CANCELLED
+    vehicle_number = models.CharField(max_length=50, blank=True, null=True, db_column='vehicleNumber')
+    driver_name = models.CharField(max_length=100, blank=True, null=True, db_column='driverName')
+    driver_mobile = models.CharField(max_length=20, blank=True, null=True, db_column='driverMobile')
+    eway_bill_number = models.CharField(max_length=50, blank=True, null=True, db_column='ewayBillNumber')
+    dispatched_at = models.DateTimeField(null=True, blank=True, db_column='dispatchedAt')
+    received_at = models.DateTimeField(null=True, blank=True, db_column='receivedAt')
+    remarks = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='createdBy', null=True, blank=True, db_constraint=False)
+    created_at = models.DateTimeField(db_column='createdAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'StockTransfer'
+        indexes = [
+            models.Index(fields=['companyid', 'status'], name='idx_transfer_comp_status'),
+            models.Index(fields=['from_warehouse', 'to_warehouse'], name='idx_transfer_wh_route'),
+        ]
+
+
+class StockTransferItem(models.Model):
+    id = models.CharField(primary_key=True, max_length=64)
+    transfer = models.ForeignKey(StockTransfer, models.CASCADE, related_name='items', db_column='transferId', db_constraint=False)
+    product = models.ForeignKey(Product, models.DO_NOTHING, db_column='productId', db_constraint=False)
+    dispatched_qty = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0.0000'), db_column='dispatchedQty')
+    received_qty = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0.0000'), db_column='receivedQty')
+    shortage_qty = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0.0000'), db_column='shortageQty')
+    damage_qty = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal('0.0000'), db_column='damageQty')
+    unit_rate = models.DecimalField(max_digits=14, decimal_places=4, default=Decimal('0.0000'), db_column='unitRate')
+
+    class Meta:
+        db_table = 'StockTransferItem'
+        indexes = [
+            models.Index(fields=['transfer', 'product'], name='idx_transferitem_tf_prod'),
+        ]
+
 
 
 class BusyParty(models.Model):

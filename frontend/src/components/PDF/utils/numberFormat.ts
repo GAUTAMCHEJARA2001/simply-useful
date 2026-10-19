@@ -3,7 +3,7 @@ export const formatIndianNumber = (num: number, decimals: number = 2): string =>
   if (num === null || num === undefined || isNaN(num)) return '0.00';
   
   const parts = Number(num).toFixed(decimals).split('.');
-  let integerPart = parts[0];
+  const integerPart = parts[0];
   const decimalPart = parts[1] ? `.${parts[1]}` : '';
 
   // Reverse integer to group from right to left

@@ -63,7 +63,9 @@ export const ProductionApprovalsTab: React.FC = () => {
       await approve(id);
       setSelected(null);
       refetch();
-    } catch (err) {}
+    } catch {
+      // error toast is handled by mutation hook
+    }
   };
 
   const handleReject = async (id: string, e?: React.MouseEvent) => {
@@ -73,7 +75,9 @@ export const ProductionApprovalsTab: React.FC = () => {
       await reject(id);
       setSelected(null);
       refetch();
-    } catch (err) {}
+    } catch {
+      // error toast is handled by mutation hook
+    }
   };
 
   return (

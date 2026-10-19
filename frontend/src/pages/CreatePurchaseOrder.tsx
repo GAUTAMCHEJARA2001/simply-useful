@@ -309,32 +309,65 @@ const CreatePurchaseOrder: React.FC = () => {
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[300px] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Search product..." className="h-9" />
-                            <CommandList>
-                              <CommandEmpty>No product found.</CommandEmpty>
+                        <PopoverContent className="w-[460px] sm:w-[520px] max-w-[95vw] p-0 shadow-2xl rounded-xl border border-border/80" align="start">
+                          <Command className="rounded-xl">
+                            <CommandInput placeholder="Search by product name, code, category..." className="h-10 text-sm" />
+                            <CommandList className="max-h-[340px] overflow-y-auto p-1.5">
+                              <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">
+                                No product found matching your search.
+                              </CommandEmpty>
                               <CommandGroup>
                                 {products.map((p) => {
                                   const parentCat = p.categoryRef?.parent?.name || p.categoryRef?.parentName || p.parentCategoryName;
                                   const subCat = p.categoryRef?.name || p.categoryName || (typeof p.category === 'string' ? p.category : p.category?.name);
-                                  const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} > ${subCat}` : (parentCat || subCat || '');
+                                  const catText = parentCat && subCat && parentCat !== subCat ? `${parentCat} › ${subCat}` : (parentCat || subCat || '');
+                                  const isSelected = item.product_id === p.id;
                                   return (
-                                    <CommandItem key={p.id} value={`${p.name} ${p.brand?.name || ''} ${catText} - ${p.productCode || p.product_code || ''} - ${p.id}`} onSelect={() => {
-                                      updateItem(idx, 'product_id', p.id);
-                                      setOpenProducts(prev => ({...prev, [idx]: false}));
-                                    }}>
-                                      <Check className={`mr-2 h-4 w-4 ${item.product_id === p.id ? "opacity-100" : "opacity-0"}`} />
-                                      <div className="flex items-center justify-between w-full pr-1 gap-2">
-                                        <div className="flex flex-col truncate">
-                                          <span className="font-medium">{p.name}</span>
-                                          <span className="text-[10px] text-muted-foreground">₹{p.rate || 0} / {p.unit?.name || (typeof p.unit === 'string' ? p.unit : '') || 'Unit'}{p.brand?.name ? ` - ${p.brand.name}` : ''}</span>
+                                    <CommandItem
+                                      key={p.id}
+                                      value={`${p.name} ${p.brand?.name || ''} ${catText} ${p.productCode || p.product_code || ''} ${p.id}`}
+                                      onSelect={() => {
+                                        updateItem(idx, 'product_id', p.id);
+                                        setOpenProducts(prev => ({...prev, [idx]: false}));
+                                      }}
+                                      className={`px-3 py-2.5 rounded-lg cursor-pointer transition-colors my-0.5 border ${
+                                        isSelected 
+                                          ? "bg-primary/10 border-primary/30 text-foreground font-semibold" 
+                                          : "border-transparent hover:bg-muted/70 text-foreground"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between w-full gap-3">
+                                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                          <Check className={`h-4 w-4 shrink-0 transition-opacity ${isSelected ? "text-primary opacity-100" : "opacity-0"}`} />
+                                          <div className="flex flex-col min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className="font-semibold text-sm truncate">{p.name}</span>
+                                              {p.brand?.name && (
+                                                <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-muted text-muted-foreground border border-border/40 shrink-0">
+                                                  {p.brand.name}
+                                                </span>
+                                              )}
+                                              {(p.productCode || p.product_code) && (
+                                                <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                                                  #{p.productCode || p.product_code}
+                                                </span>
+                                              )}
+                                            </div>
+                                            {catText && (
+                                              <span className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                                                <span className="font-medium text-primary/80">{catText}</span>
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
-                                        {catText ? (
-                                          <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20 shrink-0">
-                                            {catText}
+                                        <div className="flex flex-col items-end shrink-0 pl-2 text-right">
+                                          <span className="font-bold text-sm text-primary">
+                                            ₹{Number(p.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                           </span>
-                                        ) : null}
+                                          <span className="text-[10px] text-muted-foreground">
+                                            per {p.unit?.name || (typeof p.unit === 'string' ? p.unit : '') || 'Unit'}
+                                          </span>
+                                        </div>
                                       </div>
                                     </CommandItem>
                                   );

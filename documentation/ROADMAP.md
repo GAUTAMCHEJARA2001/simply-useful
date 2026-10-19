@@ -45,3 +45,14 @@ This document outlines the planned feature additions, enhancements, and technolo
 * **Key Capabilities:**
   * Scan barcodes to log stock-in/stock-out transactions.
   * Scan barcodes to verify product codes during order dispatch processes.
+
+---
+
+## 📑 6. Indian Compliance HR Letters & Document Generator
+* **Goal:** Provide a comprehensive document generation suite inside the HR & Payroll console covering the full employee lifecycle under Indian labor laws.
+* **Key Capabilities:**
+  * Pre-built standard templates for all 19 statutory and operational company letters (Offer, Appointment, Confirmation, Increment, Relieving, Experience, Show Cause, etc.).
+  * Dynamic token replacement binding directly with employee records (`Labour`), organization letterhead (`Company`), and salary structures (`SalarySlip`).
+  * Live split-screen interactive A4 document preview with print and high-resolution PDF download using `html2pdf.js`.
+  * Direct email dispatch of issued letters to employees with audit logging and reference numbering.
+

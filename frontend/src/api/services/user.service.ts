@@ -24,6 +24,15 @@ export const userService = {
   resetPassword: (id: string | number, password: string) =>
     api.put(`${API_ENDPOINTS.USERS}/${id}/password`, { password }),
 
+  changePassword: (id: string | number, data: { current_password?: string; password: string }) =>
+    api.put(`${API_ENDPOINTS.USERS}/${id}/password`, data),
+
+  getProfileDetails: () =>
+    api.get(`${API_ENDPOINTS.USERS}/profile-details`),
+
+  updateProfile: (id: string | number, data: { name?: string }) =>
+    api.put(`${API_ENDPOINTS.USERS}/${id}`, data),
+
   updateTarget: (id: string | number, target: number) =>
     api.put(`${API_ENDPOINTS.USERS}/${id}/target`, { target }),
 

@@ -1,7 +1,10 @@
+import logging
 from typing import Any, Optional
 from datetime import datetime, date
 from django.utils import timezone
 from core.models import Company
+
+logger = logging.getLogger(__name__)
 
 def get_company_id(request) -> Optional[str]:
     """Safely extract company ID from JWT or Django session user.
@@ -17,6 +20,7 @@ def get_company_id(request) -> Optional[str]:
             first_comp = Company.objects.first()
             if first_comp:
                 company_id = first_comp.id
+                logger.debug(f"[TenantContext] Fallback to primary Company '{first_comp.name}' ({company_id}) for user '{user}'")
         except Exception:
             pass
     return company_id
@@ -78,3 +82,44 @@ def safe_date(val: Any, default: Optional[date] = None) -> Optional[date]:
         return datetime.strptime(str_val, '%Y-%m-%d').date()
     except (ValueError, TypeError):
         return default
+
+def tenant_scope(queryset, request):
+    """
+    Universal Automatic Tenant Filter.
+    Inspects model metadata at runtime to safely apply company isolation:
+    1. Direct company field ('companyid' or 'company_id')
+    2. Foreign key relations (e.g. Market -> regionid -> companyid)
+    3. Handles SUPERADMIN cross-company scenarios gracefully.
+    Never throws 'Cannot resolve keyword' exceptions.
+    """
+    if not request or queryset is None:
+        return queryset
+
+    company_id = get_company_id(request)
+    if not company_id:
+        return queryset
+
+    model = getattr(queryset, 'model', None)
+    if not model:
+        return queryset
+
+    # Check direct model fields
+    field_names = {f.name for f in model._meta.get_fields()}
+
+    if 'companyid' in field_names:
+        return queryset.filter(companyid_id=company_id)
+    elif 'company_id' in field_names:
+        return queryset.filter(company_id=company_id)
+    elif 'company' in field_names:
+        return queryset.filter(company_id=company_id)
+    # Check related models
+    elif 'regionid' in field_names:
+        return queryset.filter(regionid__companyid_id=company_id)
+    elif 'orderid' in field_names:
+        return queryset.filter(orderid__companyid_id=company_id)
+    elif 'dispatchlogid' in field_names:
+        return queryset.filter(dispatchlogid__orderid__companyid_id=company_id)
+    elif 'productid' in field_names:
+        return queryset.filter(productid__companyid_id=company_id)
+
+    return queryset

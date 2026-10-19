@@ -5,7 +5,7 @@ import apiClient, { api } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Package, CheckCircle, AlertTriangle, Truck, ShoppingBag, XCircle, Users, Star, Warehouse, Search, ChevronDown, ChevronRight } from 'lucide-react';
+import { Package, CheckCircle, AlertTriangle, Truck, ShoppingBag, XCircle, Users, Star, Warehouse, Search, ChevronDown, ChevronRight, Clock, Eye, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
@@ -17,6 +17,9 @@ import { OrderStatus, Order } from '@/types';
 import { orderService } from '@/api/services/order.service';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
 import { UserAuditTag } from '@/components/UserAuditTag';
+import { ViewOrderModal } from '@/components/ViewOrderModal';
+import { DeleteOrderModal } from '@/components/DeleteOrderModal';
+import { ProductDemandDetailModal, DemandProductInfo } from '@/components/ProductDemandDetailModal';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -34,7 +37,7 @@ const InventoryDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { activeWarehouseId } = useWarehouse();
   const { data: stocksByWarehouse = {} } = useStocksByWarehouse();
-  const { orders, products, warehouses, updateOrderStatus, updateOrderItems, dealers, loading: dataLoading, refreshAll } = useData();
+  const { orders, products, warehouses, updateOrderStatus, updateOrderItems, deleteOrder, dealers, loading: dataLoading, refreshAll } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
 
@@ -69,6 +72,8 @@ const InventoryDashboard: React.FC = () => {
   } | null>(null);
 
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
+  const [selectedDemandProduct, setSelectedDemandProduct] = useState<DemandProductInfo | null>(null);
+  const [deletingOrder, setDeletingOrder] = useState<{ id: string; orderId: string; partyName?: string } | null>(null);
   
   const [dispatchItems, setDispatchItems] = useState<Record<string, number>>({});
   const [returnItems, setReturnItems] = useState<Record<string, number>>({});
@@ -76,7 +81,7 @@ const InventoryDashboard: React.FC = () => {
   const [boms, setBoms] = useState<any[]>([]);
   const [loadingBoms, setLoadingBoms] = useState<boolean>(true);
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
-  const [orderStatusFilter, setOrderStatusFilter] = useState<'ACTIVE' | 'APPROVED' | 'UNAPPROVED' | 'DISPATCHED' | 'COMPLETED' | 'ALL'>('ACTIVE');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | 'APPROVED' | 'UNAPPROVED' | 'DISPATCHED'>('ALL');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -321,7 +326,8 @@ const InventoryDashboard: React.FC = () => {
     };
   }, [productMaps, bomMaps, warehouseMaps, getWhAvailableStock]);
 
-  if (dataLoading || loadingBoms) {
+  // Only show full-screen loader on initial mount when there is no data loaded yet
+  if ((dataLoading || loadingBoms) && orders.length === 0 && products.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -343,38 +349,34 @@ const InventoryDashboard: React.FC = () => {
     String(o.assignedWarehouse) === String(activeWarehouseId)
   );
 
-  const approvedOrders = assignedOrders.filter(o => o.status === 'Approved');
-  const dispatchedOrders = assignedOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
-  const pendingOrders = assignedOrders.filter(o => o.status === 'Pending' || o.status === 'Approved');
-  const completedOrders = assignedOrders.filter(o => o.status === 'Completed');
+  // Actionable orders for pack and dispatch queue (Completed, Cancelled, and Rejected orders are strictly excluded)
+  const activeOrders = assignedOrders.filter(o => 
+    !['Completed', 'Cancelled', 'Rejected', 'Returned'].includes(o.status)
+  );
 
-  const unapprovedOrdersCount = assignedOrders.filter(o => o.status === 'Pending').length;
-  const approvedOrdersCount = assignedOrders.filter(o => o.status === 'Approved').length;
-  const dispatchedOrdersCount = assignedOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status)).length;
-  const completedOrdersCount = assignedOrders.filter(o => o.status === 'Completed').length;
-  const activeOrdersCount = assignedOrders.filter(o => ['Pending', 'Approved', 'Partially Dispatched', 'Dispatched', 'Partially Returned'].includes(o.status)).length;
-  const totalOrdersCount = assignedOrders.length;
+  const approvedOrders = activeOrders.filter(o => o.status === 'Approved');
+  const dispatchedOrders = activeOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
+  const unapprovedOrders = activeOrders.filter(o => o.status === 'Pending');
+
+  const unapprovedOrdersCount = unapprovedOrders.length;
+  const approvedOrdersCount = approvedOrders.length;
+  const dispatchedOrdersCount = dispatchedOrders.length;
+  const activeOrdersCount = activeOrders.length;
 
   const filterTabs = [
-    { key: 'ACTIVE', label: 'All Active', count: activeOrdersCount },
+    { key: 'ALL', label: 'All Active', count: activeOrdersCount },
     { key: 'APPROVED', label: 'Approved', count: approvedOrdersCount },
     { key: 'UNAPPROVED', label: 'Unapproved', count: unapprovedOrdersCount },
     { key: 'DISPATCHED', label: 'Dispatched', count: dispatchedOrdersCount },
-    { key: 'COMPLETED', label: 'Completed', count: completedOrdersCount },
-    { key: 'ALL', label: 'All Orders', count: totalOrdersCount },
   ] as const;
 
-  let filteredQueueOrders = assignedOrders;
+  let filteredQueueOrders = activeOrders;
   if (orderStatusFilter === 'APPROVED') {
-    filteredQueueOrders = filteredQueueOrders.filter(o => o.status === 'Approved');
+    filteredQueueOrders = approvedOrders;
   } else if (orderStatusFilter === 'UNAPPROVED') {
-    filteredQueueOrders = filteredQueueOrders.filter(o => o.status === 'Pending');
+    filteredQueueOrders = unapprovedOrders;
   } else if (orderStatusFilter === 'DISPATCHED') {
-    filteredQueueOrders = filteredQueueOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
-  } else if (orderStatusFilter === 'COMPLETED') {
-    filteredQueueOrders = filteredQueueOrders.filter(o => o.status === 'Completed');
-  } else if (orderStatusFilter === 'ACTIVE') {
-    filteredQueueOrders = filteredQueueOrders.filter(o => ['Pending', 'Approved', 'Partially Dispatched', 'Dispatched', 'Partially Returned'].includes(o.status));
+    filteredQueueOrders = dispatchedOrders;
   }
 
   if (orderSearchTerm.trim()) {
@@ -390,46 +392,87 @@ const InventoryDashboard: React.FC = () => {
 
   const productDemand = (assignedOrders || [])
     .filter(o => o.status === 'Pending' || o.status === 'Approved' || o.status === 'Partially Dispatched')
-    .flatMap(o => o.items || [])
-    .reduce((acc, item) => {
-      const itAny = item as any;
-      const itemProductId = itAny.productId || itAny.productid_id || (typeof itAny.product === 'object' ? itAny.product?.id : itAny.product);
-      const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
-      let productName = pObj?.name || pObj?.productName || itAny.productName || 'Unknown Product';
-      
-      if (productName === 'Unknown Product' && itAny.product) {
-        if (typeof itAny.product === 'object') {
-          productName = itAny.product.name || itAny.product.productName || 'Unknown Product';
-        } else if (typeof itAny.product === 'string') {
-          productName = itAny.product;
+    .reduce((acc, o) => {
+      const oId = o.orderId || (o as any).order_id || o.id || 'Unknown';
+      const pName = o.partyName || (o as any).party_name || 'Party';
+      const pType = o.partyType || (o as any).party_type || 'Party';
+      const oStatus = o.status || 'Pending';
+      const so = o.soEmail || (o as any).so_email || '';
+      const orderDate = o.date || (o as any).createdAt || '';
+
+      (o.items || []).forEach((item: any) => {
+        const itAny = item as any;
+        const itemProductId = itAny.productId || itAny.productid_id || (typeof itAny.product === 'object' ? itAny.product?.id : itAny.product);
+        const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
+        let productName = pObj?.name || pObj?.productName || itAny.productName || 'Unknown Product';
+        
+        if (productName === 'Unknown Product' && itAny.product) {
+          if (typeof itAny.product === 'object') {
+            productName = itAny.product.name || itAny.product.productName || 'Unknown Product';
+          } else if (typeof itAny.product === 'string') {
+            productName = itAny.product;
+          }
         }
-      }
-      
-      if (typeof productName === 'object' && productName !== null) {
+        
+        if (typeof productName === 'object' && productName !== null) {
           productName = (productName as any).name || (productName as any).productName || 'Unknown Product';
-      }
-      
-      // Final fallback to ensure it is always a string
-      if (typeof productName !== 'string') {
+        }
+        
+        // Final fallback to ensure it is always a string
+        if (typeof productName !== 'string') {
           productName = String(productName);
-      }
+        }
 
-      const pendingQty = Math.max(0, item.qty - (item.sentQty || 0));
-      if (pendingQty <= 0) return acc;
+        const pendingQty = Math.max(0, (item.qty || 0) - (item.sentQty || 0));
+        if (pendingQty <= 0) return;
 
-      const existing = acc.find(a => a.product === productName);
-      if (existing) {
-        existing.qty += pendingQty;
-        existing.orders++;
-      } else {
-        acc.push({
-          product: productName,
-          qty: pendingQty,
-          orders: 1
-        });
-      }
+        const breakdownEntry = {
+          orderId: oId,
+          orderDbId: o.id,
+          partyName: pName,
+          partyType: pType,
+          qtyNeeded: pendingQty,
+          orderedQty: Number(item.qty) || 0,
+          sentQty: Number(item.sentQty) || 0,
+          status: oStatus,
+          soEmail: so,
+          date: orderDate,
+          rawOrder: o
+        };
+
+        const existing = acc.find(a => a.product === productName);
+        if (existing) {
+          existing.qty += pendingQty;
+          existing.orders++;
+          existing.orderBreakdown.push(breakdownEntry);
+        } else {
+          acc.push({
+            product: productName,
+            qty: pendingQty,
+            orders: 1,
+            orderBreakdown: [breakdownEntry]
+          });
+        }
+      });
       return acc;
-    }, [] as { product: string; qty: number; orders: number }[])
+    }, [] as Array<{
+      product: string;
+      qty: number;
+      orders: number;
+      orderBreakdown: Array<{
+        orderId: string;
+        orderDbId?: string;
+        partyName: string;
+        partyType?: string;
+        qtyNeeded: number;
+        orderedQty: number;
+        sentQty: number;
+        status: string;
+        soEmail?: string;
+        date?: string;
+        rawOrder?: any;
+      }>;
+    }>)
     .sort((a, b) => b.qty - a.qty);
 
   const enrichedProductDemand = productDemand.map(p => {
@@ -553,7 +596,7 @@ const InventoryDashboard: React.FC = () => {
           remarks: confirmOrder.reason || '',
         });
       } else {
-        let narrationStr = confirmOrder.reason || '';
+        const narrationStr = confirmOrder.reason || '';
         await updateOrderStatus(confirmOrder.id, confirmOrder.action, narrationStr, confirmOrder.action_date);
       }
     } catch (err: any) {
@@ -574,7 +617,7 @@ const InventoryDashboard: React.FC = () => {
       title: `Order ${label}`,
       description: `Order ${confirmOrder.id} marked as ${confirmOrder.action}. SO and Admin have been notified in the system.`,
     });
-    refreshAll();
+    refreshAll(true);
     setConfirmOrder(null);
   };
 
@@ -587,15 +630,18 @@ const InventoryDashboard: React.FC = () => {
     
     if (o.items) {
       hasRemainingToDispatch = o.items.some((item: any) => {
-        const ordered = item.qty || 0;
-        const sent = item.sentQty || 0;
-        return ordered - sent > 0;
+        const ordered = Number(item.qty || 0);
+        const sent = Number(item.sentQty || (item as any).sentqty || 0);
+        const returned = Number(item.returnedQty || (item as any).returnedqty || 0);
+        return (ordered - (sent - returned)) > 0;
       });
     }
 
     const actions = [];
     
-    if (status === 'Pending' || status === 'Approved' || status === 'Partially Dispatched' || (status === 'Partially Returned' && hasRemainingToDispatch)) {
+    // Only approved or partially dispatched/returned orders can be sent out.
+    // Unapproved (Pending) orders strictly require Admin approval first.
+    if (status === 'Approved' || status === 'Partially Dispatched' || (status === 'Partially Returned' && hasRemainingToDispatch)) {
       actions.push({ next: 'Dispatched' as OrderStatus, label: 'Send Out Now', icon: Truck, color: 'bg-purple-600 hover:bg-purple-700 text-white' });
     }
 
@@ -627,9 +673,9 @@ const InventoryDashboard: React.FC = () => {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Ready to Send', value: approvedOrders.length, icon: ShoppingBag, color: 'bg-blue-500/10 text-blue-600' },
-          { label: 'Sent Out', value: dispatchedOrders.length, icon: Truck, color: 'bg-purple-500/10 text-purple-600' },
-          { label: 'Completed', value: completedOrders.length, icon: CheckCircle, color: 'bg-success/10 text-success' },
+          { label: 'Unapproved', value: unapprovedOrdersCount, icon: Clock, color: 'bg-amber-500/10 text-amber-600' },
+          { label: 'Ready to Send', value: approvedOrdersCount, icon: ShoppingBag, color: 'bg-blue-500/10 text-blue-600' },
+          { label: 'Sent Out', value: dispatchedOrdersCount, icon: Truck, color: 'bg-purple-500/10 text-purple-600' },
           { label: 'Total Items', value: products.length, icon: Package, color: 'bg-primary/10 text-primary' },
         ].map((kpi, i) => (
           <motion.div key={kpi.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
@@ -645,7 +691,12 @@ const InventoryDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Product Demand Table */}
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">What Customers Need (Active Orders)</CardTitle></CardHeader>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-base">What Customers Need (Active Orders)</CardTitle>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Click any product to see which orders & parties need it</p>
+            </div>
+          </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto w-full">
               <table className="w-full text-xs">
@@ -660,12 +711,26 @@ const InventoryDashboard: React.FC = () => {
                 </thead>
                 <tbody>
                   {enrichedProductDemand.map((p, index) => (
-                     <tr key={`${p.product || 'unknown-product'}-${index}`} className="border-b border-border/50 hover:bg-accent/5 transition-colors">
-                      <td className="px-3 py-2 font-medium">{p.product}</td>
+                    <tr 
+                      key={`${p.product || 'unknown-product'}-${index}`} 
+                      className="border-b border-border/50 hover:bg-primary/5 cursor-pointer transition-colors group select-none"
+                      onClick={() => setSelectedDemandProduct(p)}
+                      title="Click to view which customers & orders need this product"
+                    >
+                      <td className="px-3 py-2 font-medium">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="group-hover:text-primary font-semibold transition-colors">{p.product}</span>
+                          <span className="text-[10px] text-primary opacity-0 group-hover:opacity-100 transition-opacity font-bold shrink-0">View Orders &rarr;</span>
+                        </div>
+                      </td>
                       <td className="px-3 py-2 text-right font-bold text-primary">{p.qty.toLocaleString()}</td>
                       <td className="px-3 py-2 text-right text-green-700 font-semibold">{p.readyQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                       <td className={`px-3 py-2 text-right font-bold ${p.deficit > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>{p.deficit > 0 ? p.deficit.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
-                      <td className="px-3 py-2 text-right">{p.orders}</td>
+                      <td className="px-3 py-2 text-right font-bold text-foreground">
+                        <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-muted group-hover:bg-primary/10 group-hover:text-primary text-xs transition-colors">
+                          {p.orders}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                   {enrichedProductDemand.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">No active orders</td></tr>}
@@ -685,7 +750,6 @@ const InventoryDashboard: React.FC = () => {
                   orderStatusFilter === 'APPROVED' ? 'bg-blue-100 text-blue-700' :
                   orderStatusFilter === 'UNAPPROVED' ? 'bg-yellow-100 text-yellow-800' :
                   orderStatusFilter === 'DISPATCHED' ? 'bg-purple-100 text-purple-700' :
-                  orderStatusFilter === 'COMPLETED' ? 'bg-green-100 text-green-700' :
                   'bg-blue-100 text-blue-700'
                 }`}>
                   {filteredQueueOrders.length} {orderStatusFilter === 'APPROVED' ? 'READY' : orderStatusFilter}
@@ -740,11 +804,11 @@ const InventoryDashboard: React.FC = () => {
                 <p className="text-xs text-muted-foreground">
                   {orderSearchTerm ? `No orders matching "${orderSearchTerm}" in this filter` : `No orders in ${orderStatusFilter.toLowerCase()} status`}
                 </p>
-                {(orderStatusFilter !== 'ACTIVE' || orderSearchTerm) && (
+                {(orderStatusFilter !== 'ALL' || orderSearchTerm) && (
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    onClick={() => { setOrderStatusFilter('ACTIVE'); setOrderSearchTerm(''); }}
+                    onClick={() => { setOrderStatusFilter('ALL'); setOrderSearchTerm(''); }}
                     className="text-xs mt-2 h-7"
                   >
                     Reset Filter
@@ -893,8 +957,43 @@ const InventoryDashboard: React.FC = () => {
                         </div>
                       )}
 
+                      {/* Informative indicator when order is pending approval */}
+                      {o.status === 'Pending' && user?.role === 'INVENTORY' && (
+                        <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shrink-0" title="This order requires Admin approval before dispatch">
+                          <Clock className="w-3 h-3 text-amber-600" /> Awaiting Approval
+                        </span>
+                      )}
+
                       {user?.role !== 'INVENTORY' && (
                         <span className="font-bold text-primary text-sm whitespace-nowrap">₹{grandTotal.toLocaleString()}</span>
+                      )}
+
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title="View Order Details"
+                        className="h-6 w-6 rounded-full hover:bg-primary/10 text-muted-foreground hover:text-primary shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewOrder(o);
+                        }}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </Button>
+
+                      {user?.role === 'SUPERADMIN' && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Delete Order (Super Admin)"
+                          className="h-6 w-6 rounded-full hover:bg-destructive/10 text-destructive/80 hover:text-destructive shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingOrder({ id: o.id || orderId, orderId: orderId, partyName: partyName });
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -909,8 +1008,13 @@ const InventoryDashboard: React.FC = () => {
                       >
 
                         <div className="flex justify-between items-start text-xs text-muted-foreground mb-1.5">
-                          <div className="flex-1">
+                          <div className="flex-1 flex items-center gap-2 flex-wrap">
                              <p className="font-medium text-foreground text-[10px] uppercase" title={`${soEmail} · ${o.date}`}>Rep: {soEmail} · {o.date}</p>
+                             {(o.expectedDeliveryDate || (o as any).expected_delivery_date) && (
+                               <span className="inline-flex items-center gap-1 text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20">
+                                 <Clock className="w-3 h-3 text-primary" /> Delivery: {new Date(o.expectedDeliveryDate || (o as any).expected_delivery_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                               </span>
+                             )}
                           </div>
                           <div className="text-right">
                              <span className="text-[10px] text-primary hover:underline">Click for full details →</span>
@@ -1190,10 +1294,20 @@ const InventoryDashboard: React.FC = () => {
                 />
 
                 {/* Header Info */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/20 border-y border-border">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-muted/20 border-y border-border">
                     <div>
                       <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Order Date</p>
                       <p className="font-medium text-sm">{date}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Exp. Delivery</p>
+                      <p className="font-bold text-sm text-primary">
+                        {(viewOrder.expectedDeliveryDate || (viewOrder as any).expected_delivery_date) ? (
+                          new Date(viewOrder.expectedDeliveryDate || (viewOrder as any).expected_delivery_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                        ) : (
+                          <span className="text-muted-foreground font-normal">Immediate</span>
+                        )}
+                      </p>
                     </div>
                     <div>
                       <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">Status</p>
@@ -1789,6 +1903,51 @@ const InventoryDashboard: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Product Demand Customer Orders Breakdown Modal */}
+      <ProductDemandDetailModal
+        isOpen={!!selectedDemandProduct}
+        onClose={() => setSelectedDemandProduct(null)}
+        productDemand={selectedDemandProduct}
+        onViewOrder={(order) => {
+          setSelectedDemandProduct(null);
+          setViewOrder(order);
+        }}
+      />
+
+      {/* Full Order Details View Modal */}
+      <ViewOrderModal
+        isOpen={!!viewOrder}
+        onClose={() => setViewOrder(null)}
+        order={viewOrder}
+        warehouses={warehouses}
+        products={products}
+      />
+
+      {/* Super Admin Order Deletion Confirmation Modal */}
+      <DeleteOrderModal
+        isOpen={!!deletingOrder}
+        onClose={() => setDeletingOrder(null)}
+        orderId={deletingOrder?.orderId || ''}
+        partyName={deletingOrder?.partyName}
+        onConfirm={async () => {
+          if (deletingOrder) {
+            try {
+              await deleteOrder(deletingOrder.id);
+              toast({
+                title: 'Order Deleted',
+                description: `Order ${deletingOrder.orderId} was permanently deleted.`,
+              });
+            } catch (err: any) {
+              toast({
+                title: 'Deletion Failed',
+                description: err?.message || 'Failed to delete order.',
+                variant: 'destructive',
+              });
+            }
+          }
+        }}
+      />
     </div>
   );
 };

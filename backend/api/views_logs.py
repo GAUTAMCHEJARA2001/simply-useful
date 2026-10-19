@@ -46,22 +46,48 @@ def create_system_log(request):
         data = request.data or {}
         user = request.user if getattr(request.user, 'is_authenticated', False) else None
         
-        # Can accept single log or array of batch logs
+        # Can accept single log or array of batch logs (capped at 20 to prevent DoS)
         logs = data if isinstance(data, list) else [data]
+        if len(logs) > 20:
+            logs = logs[:20]
         
         client_ip = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip() or request.META.get('REMOTE_ADDR', '')
 
         for item in logs:
+            if not isinstance(item, dict):
+                continue
+            # Enforce verified identity from request.user to prevent audit log spoofing
+            if user:
+                real_email = getattr(user, 'email', None)
+                real_name = getattr(user, 'name', None) or real_email
+                real_role = getattr(user, 'role', 'USER')
+                company_id = getattr(user, 'companyid_id', None) or getattr(user, 'companyId', None)
+            else:
+                real_email = 'anonymous'
+                real_name = 'Anonymous Visitor'
+                real_role = 'ANONYMOUS'
+                company_id = _get_company_id(request)
+
+            details_data = item.get('details') or item.get('detailsJson') or item.get('error')
+            if isinstance(details_data, dict):
+                scrubbed_details = {}
+                for k, v in details_data.items():
+                    if any(s in str(k).lower() for s in ('password', 'token', 'secret', 'auth')):
+                        scrubbed_details[k] = '******'
+                    else:
+                        scrubbed_details[k] = v
+                details_data = scrubbed_details
+
             log_activity_internal(
                 user=user,
-                user_email=item.get('userEmail') or item.get('user_email') or (user.email if user else None),
-                user_name=item.get('userName') or item.get('user_name') or (user.name if user else None),
-                user_role=item.get('userRole') or item.get('user_role') or (getattr(user, 'role', '') if user else None),
-                company_id=item.get('companyId') or _get_company_id(request),
+                user_email=real_email,
+                user_name=real_name,
+                user_role=real_role,
+                company_id=company_id,
                 log_type=item.get('logType') or item.get('log_type') or 'ACTION',
                 feature=item.get('feature') or 'General',
                 action=item.get('action') or 'System Event',
-                details=item.get('details') or item.get('detailsJson') or item.get('error'),
+                details=details_data,
                 ip_address=client_ip
             )
         return send_success(None, 'Logs recorded successfully')

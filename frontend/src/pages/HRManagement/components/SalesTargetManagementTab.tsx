@@ -354,7 +354,7 @@ export const SalesTargetManagementTab: React.FC = () => {
 
   // Target Handlers (Product SKU, Category, Brand)
   const handleAddProductTarget = (type: 'product' | 'category' | 'brand' = 'product') => {
-    let newItem: any = {
+    const newItem: any = {
       target_type: type,
       target_qty: 100,
       target_amount: 35000,

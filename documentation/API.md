@@ -44,6 +44,18 @@ Exposes CRUD resources managed via standard DRF ViewSets:
 
 ---
 
+## Planned: HR & Employee Letters Endpoints
+
+These endpoints are planned and should be treated as roadmap items until backend routes and persistence models are implemented.
+
+* **GET** `/api/v1/hr/letters` — Fetches issued letters history with filters (`employee_id`, `letter_type`, `status`).
+* **GET** `/api/v1/hr/letters/templates` — Retrieves available letter templates and customizable token placeholders.
+* **POST** `/api/v1/hr/letters/generate` — Pre-populates dynamic fields from employee records and renders live HTML/A4 preview.
+* **POST** `/api/v1/hr/letters/{id}/issue` — Officially issues the letter, assigns permanent reference ID, and saves PDF snapshot.
+* **POST** `/api/v1/hr/letters/{id}/email` — Dispatches the issued letter PDF directly to the employee's registered email.
+
+---
+
 ## 🔄 Transactional Custom Routes
 
 To support custom states and approvals, the system routes these endpoints specifically:

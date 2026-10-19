@@ -13,6 +13,11 @@ export const authService = {
     return res.data;
   },
 
+  createCompany: async (data: import('@/types').CreateCompanyInput) => {
+    const res = await api.post<ApiResponse<AuthResponse>>('/auth/create-company', data);
+    return res.data;
+  },
+
   logout: () => {
     clearTokens();
     localStorage.removeItem('app_user');

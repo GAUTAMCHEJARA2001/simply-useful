@@ -128,8 +128,7 @@ export const NotificationDropdown: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  if (!user) return null;
-  const role = user.role.toUpperCase();
+  const role = user?.role ? user.role.toUpperCase() : '';
 
   // Generate dynamic, discrete notification list based on active user role
   const rawNotifications: NotificationItem[] = [];
@@ -289,7 +288,7 @@ export const NotificationDropdown: React.FC = () => {
           date: (e as any).createdAt || new Date().toISOString(),
           icon: Receipt,
           color: 'text-teal-600 bg-teal-500/15 dark:text-teal-400 dark:bg-teal-950/60',
-          link: '/hr',
+          link: '/hr/manage?tab=expenses',
           category: 'general'
         });
       }
@@ -407,6 +406,8 @@ export const NotificationDropdown: React.FC = () => {
       return 'Just now';
     }
   };
+
+  if (!user) return null;
 
   const dropdown = isOpen ? createPortal(
     <AnimatePresence>

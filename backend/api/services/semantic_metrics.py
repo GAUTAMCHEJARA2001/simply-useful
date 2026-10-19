@@ -57,7 +57,7 @@ def get_governed_kpis(company_id=None):
 
         # D. SLA Compliance (Dispatched within 48h)
         # In this operational model, orders with a dispatched timestamp within 48h of approved/created are counted
-        cursor.execute("SELECT id, createdAt, narration FROM `Order` WHERE status IN ('Dispatched', 'Completed')")
+        cursor.execute('SELECT id, "createdAt", narration FROM "Order" WHERE status IN (\'Dispatched\', \'Completed\')')
         order_rows = cursor.fetchall()
         
         dispatched_in_time = 0

@@ -53,6 +53,27 @@ The platform enforces permissions on the frontend (views and buttons) and the ba
 | **View Local Inventory** | ✅ | ✅ | ❌ | ❌ | ✅ |
 | **Access Global Inventory** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Manage Staff Directory** | ✅ | ✅ | ❌ | ✅ | ❌ |
+| **Generate & Issue HR Letters** | ✅ | ✅ | ❌ | ✅ | ❌ |
+
+---
+
+## 📜 Indian Labor & Statutory HR Letter Compliance Rules
+
+All HR letters generated in the system must comply with mandatory Indian employment legislation:
+
+1. **Offer & Appointment Letters:**
+   * Basic Salary must represent at least **40% to 50%** of monthly Gross CTC.
+   * Statutory Deductions (EPF at 12% on Basic up to wage ceiling ₹15,000, ESIC at 0.75% employee / 3.25% employer if Gross $\le$ ₹21,000/month, and Professional Tax per state schedule).
+   * Payment of Gratuity Act provision calculated at $4.81\%$ of Basic Salary.
+   * Probation period standard duration must be explicitly stated (typically 3 or 6 months) along with notice period terms.
+
+2. **Disciplinary & Show Cause Notices:**
+   * Must uphold the **Principles of Natural Justice** (audi alteram partem): employees must be granted a fair window (minimum 48 to 72 hours) to submit a formal written explanation before adverse disciplinary actions or termination.
+   * Warning memos must cite specific date, clause, and incident details.
+
+3. **Separation & Exit Compliance:**
+   * Resignation acceptance must specify the official **Last Working Day (LWD)** and notice period buyout/waiver terms.
+   * Relieving Letter and Experience Certificate can only be issued upon completion of Full & Final (F&F) settlement and departmental clearance.
 
 ---
 

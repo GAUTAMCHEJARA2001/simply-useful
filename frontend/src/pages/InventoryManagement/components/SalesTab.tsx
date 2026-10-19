@@ -132,7 +132,7 @@ export const SalesTab: React.FC = () => {
   };
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('Completed');
+  const [statusFilter, setStatusFilter] = useState('AllSales');
 
   const { filterBySelectedFY } = useFinancialYear();
 
@@ -143,8 +143,8 @@ export const SalesTab: React.FC = () => {
     
     const matchesSearch = customer.includes(searchTerm.toLowerCase()) || challan.includes(searchTerm.toLowerCase());
     const matchesStatus = 
-      statusFilter === 'Completed'
-        ? (status === 'Completed' || status === 'Dispatched')
+      (statusFilter === 'AllSales' || statusFilter === 'Completed')
+        ? ['Completed', 'Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(status)
         : statusFilter === 'All'
         ? true
         : status === statusFilter;
@@ -170,14 +170,15 @@ export const SalesTab: React.FC = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
           >
-            <option value="Completed">Completed Orders</option>
+            <option value="AllSales">All Invoices (Completed & Partial)</option>
             <option value="All">All Statuses</option>
+            <option value="Partially Returned">Partially Returned</option>
+            <option value="Partially Dispatched">Partially Dispatched</option>
             <option value="Dispatched">Dispatched</option>
+            <option value="Completed">Completed</option>
+            <option value="Returned">Returned</option>
             <option value="Pending">Pending</option>
             <option value="Approved">Approved</option>
-            <option value="Partially Dispatched">Partially Dispatched</option>
-            <option value="Partially Returned">Partially Returned</option>
-            <option value="Returned">Returned</option>
             <option value="Cancelled">Cancelled</option>
           </select>
           <Button size="sm" onClick={handleAdd} className="shrink-0">
@@ -216,12 +217,26 @@ export const SalesTab: React.FC = () => {
               status === 'Completed' ? 'bg-green-100 text-green-700 border-green-200' :
               'bg-gray-100 text-gray-700 border-gray-200';
 
+            const items = s.items || [];
+            const netBase = items.reduce((acc: number, it: any) => 
+              acc + Math.max(0, (it.qty || 0) - (it.returnedqty || it.returnedQty || 0)) * (it.price || it.rate || 0)
+            , 0);
+            const netGross = items.reduce((acc: number, it: any) => 
+              acc + Math.max(0, (it.qty || 0) - (it.returnedqty || it.returnedQty || 0)) * (it.price || it.rate || 0) * (1 + (it.tax_percent || 0) / 100)
+            , 0) || s.netAmount || s.grandTotal || s.totalAmount || 0;
+            const gstAmount = Math.max(0, netGross - netBase);
+
             return [
               s.customerName || s.partyName || '—', 
               s.challanNumber || s.invoiceNumber || extractChallanNumber(s.narration) || '—', 
-              Currency((s.items || []).reduce((acc: number, it: any) => 
-                acc + ((it.qty || 0) - (it.returnedqty || it.returnedQty || 0)) * (it.price || it.rate || 0) * (1 + (it.tax_percent || 0) / 100)
-              , 0) || s.netAmount || s.grandTotal || s.totalAmount || 0),
+              <div key={`amt-${s.id}`} className="flex flex-col">
+                <span className="font-semibold text-xs sm:text-sm">{Currency(netGross)}</span>
+                {gstAmount > 0.01 && (
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    Base {Currency(netBase)} + Tax {Currency(gstAmount)}
+                  </span>
+                )}
+              </div>,
               <span key={`status-${s.id}`} className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusColor}`}>{status}</span>,
               (() => {
                 const dVal = s.date || s.dispatchDate || s.createdAt;

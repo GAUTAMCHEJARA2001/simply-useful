@@ -51,7 +51,9 @@ const LedgerModal: React.FC<LedgerModalProps> = ({ isOpen, onClose, defaultSearc
       } else {
         setRequestStatus(null);
       }
-    } catch (err) {}
+    } catch {
+      // ignore ledger request fetch errors
+    }
   };
 
   const handleRequestUpdate = async () => {

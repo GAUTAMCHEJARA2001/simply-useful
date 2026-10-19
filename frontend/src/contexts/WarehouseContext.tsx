@@ -51,7 +51,7 @@ export const WarehouseProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       if (user.authorizedWarehouses && user.authorizedWarehouses.length > 0) {
         // Check if current active warehouse is valid for this user
-        let currentValid = user.authorizedWarehouses.find(w => String(w.id) === String(activeWarehouseId));
+        const currentValid = user.authorizedWarehouses.find(w => String(w.id) === String(activeWarehouseId));
         
         // If no valid active warehouse, default to the first one
         if (!currentValid) {

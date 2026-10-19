@@ -8,6 +8,7 @@ vi.mock("react-router-dom", () => ({
   useParams: () => ({ id: undefined }),
   navigate: () => vi.fn(),
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: "/sales/order", search: "", hash: "", state: null, key: "test" }),
 }));
 
 // Mock AuthContext hook

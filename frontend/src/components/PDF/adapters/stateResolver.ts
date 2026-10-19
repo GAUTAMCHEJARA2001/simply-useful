@@ -80,7 +80,7 @@ export const getDetailsFromAddressOrGst = (gstin?: string, address?: string): { 
     }
 
     for (const [code, name] of Object.entries(STATE_CODE_MAP)) {
-      const escapedName = name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const escapedName = name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
       const regex = new RegExp(`\\b${escapedName}\\b`, 'i');
       if (regex.test(cleanAddress)) {
         return { state: name, stateCode: code };

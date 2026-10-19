@@ -3,9 +3,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Edit, Truck, XCircle } from 'lucide-react';
+import { Edit, Truck, XCircle, Eye, Trash2, Clock, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
+import { ViewOrderModal } from '@/components/ViewOrderModal';
+import { DeleteOrderModal } from '@/components/DeleteOrderModal';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -47,7 +49,9 @@ const extractDispatchDetails = (order: any) => {
 
 const MyOrders: React.FC = () => {
   const { user } = useAuth();
-  const { orders, products, users, warehouses, updateOrderItems } = useData();
+  const { orders, products, users, warehouses, updateOrderItems, deleteOrder } = useData();
+  const [viewOrder, setViewOrder] = useState<any | null>(null);
+  const [deletingOrder, setDeletingOrder] = useState<{ id: string; orderId: string; partyName?: string } | null>(null);
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
   const { filterBySelectedFY, fyLabel } = useFinancialYear();
@@ -154,8 +158,11 @@ const MyOrders: React.FC = () => {
   const statusStyles: Record<string, string> = {
     Pending: 'bg-warning/15 text-warning', 
     Approved: 'bg-accent/15 text-accent',
+    'Partially Dispatched': 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
     Dispatched: 'bg-primary/15 text-primary', 
     Completed: 'bg-success/15 text-success',
+    'Partially Returned': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    Returned: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
     Cancelled: 'bg-destructive/15 text-destructive',
   };
 
@@ -246,6 +253,7 @@ const MyOrders: React.FC = () => {
             { id: 'Dispatched', label: 'Dispatched' },
             { id: 'Completed', label: 'Completed' },
             { id: 'Partially Returned', label: 'P. Returned' },
+            { id: 'Returned', label: 'Returned' },
             { id: 'Cancelled', label: 'Cancelled' }
           ] as const
         ).map(f => {
@@ -306,6 +314,15 @@ const MyOrders: React.FC = () => {
                         <span>{formatDate(order.date)}</span>
                         <span>·</span>
                         <span>{displayPartyType}: {displayPartyName}</span>
+                        {(order.expectedDeliveryDate || (order as any).expected_delivery_date) && (
+                          <>
+                            <span>·</span>
+                            <span className="inline-flex items-center gap-1 font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded text-[11px]">
+                              <Clock className="w-3 h-3 text-primary" />
+                              Exp. Delivery: {new Date(order.expectedDeliveryDate || (order as any).expected_delivery_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </span>
+                          </>
+                        )}
                         <span>·</span>
                         {isAdmin ? (
                           <div className="inline-flex items-center gap-1.5">
@@ -396,26 +413,24 @@ const MyOrders: React.FC = () => {
                     <span className="font-bold text-primary">{getOrderWeight(order)} kg</span>
                   </div>
                   
-                  {(isAdmin || true) && (
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-xs text-muted-foreground">Grand Total</span>
-                      <span className="font-bold text-success">
-                        ₹{(() => {
-                          let displayTotal = Number(order.grandTotal) || Number(order.grand_total) || 0;
-                          if (orderItems && orderItems.length > 0) {
-                            const recalculated = orderItems.reduce((sum: number, item: any) => {
-                              const netQty = Math.max(0, (Number(item.qty) || 0) - (Number(item.returnedQty) || Number(item.returnedqty) || 0));
-                              return sum + (netQty * (Number(item.price) || 0));
-                            }, 0);
-                            if (recalculated > 0 && displayStatus !== 'Pending') {
-                              displayTotal = recalculated;
-                            }
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-muted-foreground">Grand Total</span>
+                    <span className="font-bold text-success">
+                      ₹{(() => {
+                        let displayTotal = Number(order.grandTotal) || Number(order.grand_total) || 0;
+                        if (orderItems && orderItems.length > 0) {
+                          const recalculated = orderItems.reduce((sum: number, item: any) => {
+                            const netQty = Math.max(0, (Number(item.qty) || 0) - (Number(item.returnedQty) || Number(item.returnedqty) || 0));
+                            return sum + (netQty * (Number(item.price) || 0));
+                          }, 0);
+                          if (recalculated > 0 && displayStatus !== 'Pending') {
+                            displayTotal = recalculated;
                           }
-                          return displayTotal.toLocaleString();
-                        })()}
-                      </span>
-                    </div>
-                  )}
+                        }
+                        return displayTotal.toLocaleString();
+                      })()}
+                    </span>
+                  </div>
 
                   {/* Rejection / Cancellation Reason */}
                   {displayStatus === 'Cancelled' && (order.narration || (order as any).reason) && (
@@ -459,42 +474,86 @@ const MyOrders: React.FC = () => {
                     );
                   })()}
                   
-                  {displayStatus === 'Pending' && (
-                    <div className="flex justify-end mt-4 gap-2 border-t pt-3 border-border/50">
-                      <PDFGenerator 
-                        type="SALES_ORDER" 
-                        data={order}
-                        filename={`Order_${displayId}.pdf`}
-                        buttonLabel="Print"
-                        variant="outline"
-                      />
+                  <div className="flex flex-wrap items-center justify-end mt-4 gap-2 border-t pt-3 border-border/50">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="text-xs h-8 px-3 gap-1 hover:bg-primary/10 hover:text-primary transition-colors"
+                      onClick={() => setViewOrder(order)}
+                    >
+                      <Eye className="w-3.5 h-3.5 text-primary" /> View Order
+                    </Button>
+
+                    <PDFGenerator 
+                      type="SALES_ORDER" 
+                      data={order}
+                      filename={`Order_${displayId}.pdf`}
+                      buttonLabel="Print"
+                      variant="outline"
+                    />
+
+                    {displayStatus === 'Pending' && (
                       <Button 
                         size="sm" 
                         variant="outline" 
                         className="text-xs h-8 px-3" 
                         onClick={() => navigate(`/sales/order/${order.orderId || order.order_id || order.id}`)}
                       >
-                        <Edit className="w-3.5 h-3.5 mr-1 text-primary" /> Edit Order
+                        <Edit className="w-3.5 h-3.5 mr-1 text-primary" /> Edit
                       </Button>
-                    </div>
-                  )}
-                  
-                  {displayStatus !== 'Pending' && (
-                    <div className="flex justify-end mt-4 gap-2 border-t pt-3 border-border/50">
-                      <PDFGenerator 
-                        type="SALES_ORDER" 
-                        data={order}
-                        filename={`Order_${displayId}.pdf`}
-                        buttonLabel="Print Sales Order"
-                      />
-                    </div>
-                  )}
+                    )}
+
+                    {user?.role === 'SUPERADMIN' && (
+                      <Button 
+                        size="sm" 
+                        variant="destructive" 
+                        className="text-xs h-8 px-3 gap-1 bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground border border-destructive/20 transition-colors"
+                        onClick={() => setDeletingOrder({ id: order.id || displayId, orderId: displayId, partyName: displayPartyName })}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             );
           })
         )}
       </div>
+
+      {/* View Order Modal */}
+      <ViewOrderModal
+        isOpen={!!viewOrder}
+        onClose={() => setViewOrder(null)}
+        order={viewOrder}
+        warehouses={warehouses}
+        products={products}
+      />
+
+      {/* Super Admin Delete Order Modal */}
+      <DeleteOrderModal
+        isOpen={!!deletingOrder}
+        onClose={() => setDeletingOrder(null)}
+        orderId={deletingOrder?.orderId || ''}
+        partyName={deletingOrder?.partyName}
+        onConfirm={async () => {
+          if (deletingOrder) {
+            try {
+              await deleteOrder(deletingOrder.id);
+              toast({
+                title: 'Order Deleted',
+                description: `Order ${deletingOrder.orderId} was permanently deleted.`,
+              });
+            } catch (err: any) {
+              toast({
+                title: 'Deletion Failed',
+                description: err?.message || 'Failed to delete order.',
+                variant: 'destructive',
+              });
+            }
+          }
+        }}
+      />
     </div>
   );
 };

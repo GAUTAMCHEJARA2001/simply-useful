@@ -373,11 +373,8 @@ def compile_analytical_warehouse(company_id=None):
 
         sales_records = []
         for wh in Warehouse.objects.filter(active=True):
-            if not wh.db_name:
-                continue
-            
-            # Fetch orders and items using Django ORM
-            orders = Order.objects.all().prefetch_related('orderitem_set')
+            # Fetch orders and items for this warehouse using Django ORM
+            orders = Order.objects.filter(warehouseid=wh).prefetch_related('orderitem_set')
             
             for o in orders:
                 for oi in o.orderitem_set.all():

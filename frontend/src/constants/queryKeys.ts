@@ -9,13 +9,32 @@
  */
 export const QUERY_KEYS = {
   // ── Master / static data (not FY-scoped) ──────────────────────────────────
-  brands:     ['brands']     as const,
-  categories: ['categories'] as const,
-  products:   ['products']   as const,
-  warehouses: ['warehouses'] as const,
-  units:      ['units']      as const,
-  users:      ['users']      as const,
-  inventory:  ['inventory']  as const,
+  brands:       ['brands']       as const,
+  categories:   ['categories']   as const,
+  products:     ['products']     as const,
+  warehouses:   ['warehouses']   as const,
+  units:        ['units']        as const,
+  users:        ['users']        as const,
+  inventory:    ['inventory']    as const,
+  dealers:      ['dealers']      as const,
+  distributors: ['distributors'] as const,
+  visits:       ['visits']       as const,
+  expenses:     ['expenses']     as const,
+  settings:     ['settings']     as const,
+
+  // ── Transactions ────────────────────────────────────────────────────────
+  sales:         ['sales']         as const,
+  purchases:     ['purchases']     as const,
+  productions:   ['productions']   as const,
+  approvals:     ['approvals']     as const,
+  returns:       ['returns']       as const,
+
+  // ── HR & Travel ─────────────────────────────────────────────────────────
+  employees:     ['hr_employees']  as const,
+  attendance:    ['hr_attendance'] as const,
+  payroll:       (month?: string) => month ? ['hr_payroll', month] as const : ['hr_payroll'] as const,
+  travelToday:   ['travel_today']  as const,
+  travelHistory: (month?: string) => month ? ['travel_history', month] as const : ['travel_history'] as const,
 
   // ── Time-series data (FY-scoped factory functions) ────────────────────────
   /**

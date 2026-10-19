@@ -215,10 +215,11 @@ const VisitTracking: React.FC = () => {
     const radius = Math.max(10, mapSize * 0.08);
 
     ctx.save();
-    ctx.beginPath();
-    (ctx as any).roundRect
-      ? (ctx as any).roundRect(mapX, mapY, mapSize, mapSize, radius)
-      : ctx.rect(mapX, mapY, mapSize, mapSize);
+    if (typeof (ctx as any).roundRect === 'function') {
+      (ctx as any).roundRect(mapX, mapY, mapSize, mapSize, radius);
+    } else {
+      ctx.rect(mapX, mapY, mapSize, mapSize);
+    }
     ctx.clip();
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(mapX, mapY, mapSize, mapSize);

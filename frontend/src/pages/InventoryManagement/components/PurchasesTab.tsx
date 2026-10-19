@@ -56,25 +56,48 @@ export const PurchasesTab: React.FC = () => {
     await deletePurchase(id);
   };
 
+  const [returnQtys, setReturnQtys] = useState<Record<number, number>>({});
+
   const openReturn = (purchase: any) => {
     setReturnPurchase(purchase);
     setReturnForm({
-      vehicleNumber: (purchase.vehicleNumber || '').toUpperCase(),
+      vehicleNumber: (purchase.vehicleNumber || purchase.vehicle_number || '').toUpperCase(),
       returnBillNumber: '',
       returnDate: new Date().toISOString().split('T')[0],
       returnReason: '',
     });
+    const initial: Record<number, number> = {};
+    (purchase.items || []).forEach((it: any, idx: number) => {
+      const origQty = Number(it.qty || it.quantity || 0);
+      const retQty = Number(it.returnedQty || 0);
+      const rem = it.remainingQty !== undefined ? Number(it.remainingQty) : Math.max(0, origQty - retQty);
+      initial[idx] = rem;
+    });
+    setReturnQtys(initial);
   };
 
   const submitReturn = async () => {
     if (!returnPurchase) return;
+    const itemsPayload = (returnPurchase.items || []).map((it: any, idx: number) => ({
+      productId: it.productId || it.product_id,
+      productName: it.productName || it.product_name,
+      qty: Number(returnQtys[idx] ?? it.qty ?? it.quantity ?? 0),
+      rate: Number(it.rate || it.price || 0),
+    })).filter((it: any) => it.qty > 0);
+
+    if (itemsPayload.length === 0) {
+      alert('Please specify a return quantity greater than 0 for at least one item.');
+      return;
+    }
+
     await saveReturn({
       returnType: 'PURCHASE',
-      purchaseId: returnPurchase.id,
+      purchaseId: returnPurchase.id || returnPurchase.purchaseId,
       vehicleNumber: returnForm.vehicleNumber,
       returnBillNumber: returnForm.returnBillNumber,
       returnDate: returnForm.returnDate,
       returnReason: returnForm.returnReason,
+      items: itemsPayload,
     });
     setReturnPurchase(null);
     refetch();
@@ -103,24 +126,40 @@ export const PurchasesTab: React.FC = () => {
 
       <SafeDataView data={filteredPurchases} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable 
-          columns={['Supplier', 'Items', 'Qty', 'Challan', 'Vehicle', 'Tax', 'Net Amount', 'Date', 'Return']}
-          rows={filteredPurchases.map((p: any) => [
-            p.supplierName || p.supplier?.name || '—', 
-            (p.items || []).map((it: any) => it.productName || it.product_name || '—').join(', ') || '—',
-            (p.items || []).map((it: any) => `${Number(it.qty || it.quantity || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`).join(', ') || '—',
-            p.challanNumber || '—', 
-            (p.vehicleNumber || p.vehicle_number || '—').toUpperCase(), 
-            Currency(p.totalTax || 0), 
-            Currency(p.netAmount || p.total_amount || p.grandTotal || 0), 
-            p.date || p.createdAt ? new Date(p.date || p.createdAt).toLocaleDateString('en-IN') : '—',
-            (p.status === 'Returned' || p.status === 'CANCELLED') ? (
-              <span key={`ret-${p.id}`} className="text-muted-foreground text-xs">{p.status}</span>
-            ) : (
-              <Button key={p.id} size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openReturn(p); }}>
-                <RotateCcw className="w-3.5 h-3.5 mr-1" /> Return
-              </Button>
-            )
-          ])}
+          columns={['Supplier', 'Items', 'Qty', 'Challan', 'Vehicle', 'Tax', 'Net Amount', 'Date', 'Status / Return']}
+          rows={filteredPurchases.map((p: any) => {
+            const isFullyReturned = p.status === 'Returned' || p.status === 'CANCELLED' || (p.purchaseId && String(p.purchaseId).startsWith('PRET-'));
+            const isPartiallyReturned = p.status === 'Partially Returned';
+
+            return [
+              p.supplierName || p.supplier?.name || '—', 
+              (p.items || []).map((it: any) => it.productName || it.product_name || '—').join(', ') || '—',
+              (p.items || []).map((it: any) => `${Number(it.qty || it.quantity || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`).join(', ') || '—',
+              p.challanNumber || '—', 
+              (p.vehicleNumber || p.vehicle_number || '—').toUpperCase(), 
+              Currency(p.totalTax || 0), 
+              Currency(p.netAmount || p.total_amount || p.grandTotal || 0), 
+              p.date || p.createdAt ? new Date(p.date || p.createdAt).toLocaleDateString('en-IN') : '—',
+              isFullyReturned ? (
+                <span key={`ret-${p.id}`} className="px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                  {String(p.purchaseId).startsWith('PRET-') ? 'Return Note' : (p.status || 'Returned')}
+                </span>
+              ) : isPartiallyReturned ? (
+                <div key={`ret-${p.id}`} className="flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
+                    P. Returned
+                  </span>
+                  <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={(e) => { e.stopPropagation(); openReturn(p); }}>
+                    <RotateCcw className="w-3 h-3 mr-1" /> Return More
+                  </Button>
+                </div>
+              ) : (
+                <Button key={p.id} size="sm" variant="outline" className="h-7 text-xs px-2" onClick={(e) => { e.stopPropagation(); openReturn(p); }}>
+                  <RotateCcw className="w-3.5 h-3.5 mr-1" /> Return
+                </Button>
+              )
+            ];
+          })}
           onEdit={i => handleEdit(filteredPurchases[i])}
           onDelete={i => handleDelete(filteredPurchases[i].id)}
         />
@@ -128,7 +167,11 @@ export const PurchasesTab: React.FC = () => {
 
       <PurchaseModal 
         isOpen={modalOpen} 
-        onClose={() => setModalOpen(false)} 
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedPurchase(null);
+          refetch();
+        }} 
         purchase={selectedPurchase} 
       />
 
@@ -153,7 +196,55 @@ export const PurchasesTab: React.FC = () => {
             <div className="sm:col-span-2">
               <label className="text-[11px] font-semibold block mb-1">Return Reason</label>
               <textarea value={returnForm.returnReason} onChange={e => setReturnForm({ ...returnForm, returnReason: e.target.value })}
-                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm min-h-24" />
+                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm min-h-20" />
+            </div>
+          </div>
+
+          {/* Items selection for partial/full return */}
+          <div className="border border-border/60 rounded-xl overflow-hidden bg-muted/10 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-foreground uppercase tracking-wide">
+                Items to Return (Partial or Full)
+              </label>
+              <span className="text-[11px] text-muted-foreground">Adjust return quantity per item</span>
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {(returnPurchase?.items || []).map((it: any, idx: number) => {
+                const origQty = Number(it.qty || it.quantity || 0);
+                const retQty = Number(it.returnedQty || 0);
+                const maxReturnable = it.remainingQty !== undefined ? Number(it.remainingQty) : Math.max(0, origQty - retQty);
+                const curVal = returnQtys[idx] ?? maxReturnable;
+                return (
+                  <div key={idx} className="flex items-center justify-between gap-3 p-2 bg-background rounded-lg border border-border/50 text-xs">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">{it.productName || it.product_name || `Item #${idx + 1}`}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Purchased: <span className="font-medium">{origQty}</span>
+                        {retQty > 0 && <span> · Returned: <span className="text-amber-600 font-semibold">{retQty}</span></span>}
+                        <span> · Available: <span className="font-bold text-foreground">{maxReturnable}</span></span>
+                        <span> @ ₹{Number(it.rate || it.price || 0).toLocaleString('en-IN')}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[11px] text-muted-foreground">Return:</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={maxReturnable}
+                        value={curVal}
+                        disabled={maxReturnable <= 0}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(maxReturnable, Number(e.target.value)));
+                          setReturnQtys(prev => ({ ...prev, [idx]: val }));
+                        }}
+                        className={`w-20 px-2 py-1 text-xs border rounded-md bg-background text-right font-bold ${
+                          maxReturnable <= 0 ? 'opacity-50 cursor-not-allowed border-border' : 'border-border text-destructive'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">

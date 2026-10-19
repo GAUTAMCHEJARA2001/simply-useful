@@ -1,7 +1,7 @@
 import React from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/contexts/AuthContext';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { Users, FileText, CalendarCheck, Clock, Wallet, FileBarChart, Gauge, Target, Receipt } from 'lucide-react';
 
 import { EmployeeMasterTab } from './HRManagement/components/EmployeeMasterTab';
 import { EmployeeDocumentsTab } from './HRManagement/components/EmployeeDocumentsTab';
@@ -14,74 +14,23 @@ import { LeaveManagementTab } from './HRManagement/components/LeaveManagementTab
 import { TravelApprovalsTab } from './HRManagement/components/TravelApprovalsTab';
 import { SalesTargetManagementTab } from './HRManagement/components/SalesTargetManagementTab';
 import { ExpenseApprovalsTab } from './HRManagement/components/ExpenseApprovalsTab';
-import { Award } from 'lucide-react';
 
 export type HRTab = 'employees' | 'documents' | 'targets' | 'attendance' | 'travel' | 'expenses' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
 
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const tab = (searchParams.get('tab') as HRTab) || 'employees';
-  const setTab = (newTab: HRTab) => setSearchParams({ tab: newTab });
 
-  // We reuse inventory permission or introduce a new 'view_hr_dashboard'
-  if (!can('view_inventory_dashboard')) return <Navigate to="/" replace />;
-
-  const navItems = [
-    { id: 'employees', label: 'Employee Master', icon: Users },
-    { id: 'documents', label: 'Employee Documents', icon: Award },
-    { id: 'targets', label: 'Sales Targets & KPIs', icon: Target },
-    { id: 'orgchart', label: 'Organization Chart', icon: Users },
-    { id: 'attendance', label: 'Daily Attendance', icon: Clock },
-    { id: 'travel', label: 'Travel & KM Approvals', icon: Gauge },
-    { id: 'expenses', label: 'Spend & Bill Approvals', icon: Receipt },
-    { id: 'leaves', label: 'Leave Management', icon: CalendarCheck },
-    { id: 'ledger', label: 'Employee Ledger', icon: Wallet },
-    { id: 'payroll', label: 'Payroll & Slips', icon: FileBarChart },
-    { id: 'config', label: 'HR Config', icon: FileText },
-  ];
+  const hasAccess = can('view_inventory_dashboard') || can('view_hr_dashboard') || ['SUPERADMIN', 'ADMIN', 'HR'].includes(user?.role || '');
+  if (!hasAccess) return <Navigate to="/" replace />;
 
   return (
-    <div className="flex-1 flex flex-col sm:flex-row h-full overflow-hidden bg-background">
-      
-      {/* Mobile Top Bar (Hidden on Desktop) */}
-      <div className="sm:hidden w-full flex-none border-b border-border bg-card">
-        <div className="p-3">
-          <div className="mb-2">
-            <h2 className="text-lg font-bold text-foreground leading-tight">HR & Payroll</h2>
-            <p className="text-xs text-muted-foreground">Manage staff, attendance, and Indian norms payroll</p>
-          </div>
-          <div className="flex overflow-x-auto p-1 bg-muted/50 rounded-lg shrink-0 gap-1 snap-x scrollbar-hide">
-            {navItems.map(n => (
-              <button key={n.id} onClick={() => setTab(n.id as HRTab)}
-                className={`flex-none snap-start flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${tab === n.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-background/50'}`}>
-                <n.icon className="w-4 h-4" />
-                {n.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+    <div className="flex-1 w-full min-w-0 p-3 sm:p-5 lg:p-6 bg-background overflow-y-auto space-y-5">
 
-      {/* Desktop Sidebar (Hidden on Mobile) */}
-      <div className="hidden sm:block w-64 flex-none border-r border-border bg-card overflow-y-auto">
-        <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-bold text-foreground">HR & Payroll</h2>
-          <p className="text-xs text-muted-foreground mt-1">Manage staff, attendance, and Indian norms payroll</p>
-        </div>
-        <div className="p-3 space-y-1">
-          {navItems.map(n => (
-            <button key={n.id} onClick={() => setTab(n.id as HRTab)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${tab === n.id ? 'bg-primary text-primary-foreground shadow' : 'hover:bg-muted text-muted-foreground hover:text-foreground'}`}>
-              <n.icon className="w-4 h-4 shrink-0" />
-              {n.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background">
+      {/* ── ACTIVE TAB VIEW ── */}
+      <div className="w-full">
         {tab === 'employees' && <EmployeeMasterTab />}
         {tab === 'documents' && <EmployeeDocumentsTab />}
         {tab === 'targets' && <SalesTargetManagementTab />}

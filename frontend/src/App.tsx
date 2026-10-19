@@ -10,10 +10,8 @@ import { getRoleDashboard } from "@/contexts/AuthContext";
 import React from "react";
 
 import Login from "./features/auth/Login";
-import Signup from "./features/auth/Signup";
 import AppLayout from "./components/AppLayout";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { GlobalTableSorter } from "./components/GlobalTableSorter";
 
 import { Suspense, lazy } from "react";
 
@@ -86,6 +84,7 @@ const AdminOnboardingPage = safeLazy(() => import("./pages/AdminOnboardingPage")
 const PrintableOnboardingForm = safeLazy(() => import("./pages/PrintableOnboardingForm"), "PrintableOnboardingForm");
 const DailyTravelPage = safeLazy(() => import("./pages/DailyTravelPage"), "DailyTravelPage");
 const SalesTargetsPage = safeLazy(() => import("./pages/SalesTargetsPage"), "SalesTargetsPage");
+const PublicLandingPage = safeLazy(() => import("./pages/PublicLandingPage"), "PublicLandingPage");
 
 
 
@@ -114,7 +113,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode, allowedRoles?: strin
   }
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) return <Navigate to="/dashboard" replace />;
   return <AppLayout>{children}</AppLayout>;
 };
 
@@ -201,8 +200,14 @@ const App = () => {
                   <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
                     <Routes>
                       <Route path="/login" element={<Login />} />
-                      <Route path="/signup" element={<Signup />} />
-                      <Route path="/" element={<HomeRedirect />} />
+                      <Route path="/signup" element={<Navigate to="/login" replace />} />
+                      <Route path="/register-company" element={<Navigate to="/" replace />} />
+                      <Route path="/signup-company" element={<Navigate to="/" replace />} />
+                      <Route path="/" element={<PublicLandingPage />} />
+                      <Route path="/landing" element={<PublicLandingPage />} />
+                      <Route path="/home" element={<PublicLandingPage />} />
+                      <Route path="/dashboard" element={<HomeRedirect />} />
+                      <Route path="/portal" element={<HomeRedirect />} />
 
                       {/* Sales */}
                       <Route path="/sales" element={<ProtectedRoute><SalesDashboard /></ProtectedRoute>} />
@@ -226,25 +231,23 @@ const App = () => {
                       <Route path="/sales/onboarding/:id/print" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><PrintableOnboardingForm /></ProtectedRoute>} />
 
                       {/* Admin */}
-                      <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
-                      <Route path="/admin/global-inventory" element={<ProtectedRoute><GlobalInventory /></ProtectedRoute>} />
-                      <Route path="/admin/rejected" element={<ProtectedRoute><RejectedOrders /></ProtectedRoute>} />
-                      <Route path="/admin/dealers" element={<ProtectedRoute><DealerManagement /></ProtectedRoute>} />
-                      <Route path="/admin/distributors" element={<ProtectedRoute><DistributorManagement /></ProtectedRoute>} />
-                      <Route path="/admin/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
-                      <Route path="/admin/warehouses" element={<ProtectedRoute><WarehouseManagement /></ProtectedRoute>} />
-                      <Route path="/admin/bom" element={<ProtectedRoute><BOMManagement /></ProtectedRoute>} />
-                      <Route path="/admin/so-mapping" element={<ProtectedRoute><SOMapping /></ProtectedRoute>} />
-                      <Route path="/admin/activity-logs" element={<ProtectedRoute><AuditLogsPage /></ProtectedRoute>} />
-                      <Route path="/admin/ledger-requests" element={<ProtectedRoute><AdminLedgerRequestsPage /></ProtectedRoute>} />
-                      <Route path="/admin/payments" element={<ProtectedRoute><AdminPaymentsPage /></ProtectedRoute>} />
-                      <Route path="/admin/onboarding" element={<ProtectedRoute><AdminOnboardingPage /></ProtectedRoute>} />
-                      <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-
-                      {/* HR */}
-                      <Route path="/hr" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR']}><HRDashboard /></ProtectedRoute>} />
+                      <Route path="/admin" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><AdminDashboard /></ProtectedRoute>} />
+                      <Route path="/admin/global-inventory" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><GlobalInventory /></ProtectedRoute>} />
+                      <Route path="/admin/rejected" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><RejectedOrders /></ProtectedRoute>} />
+                      <Route path="/admin/dealers" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><DealerManagement /></ProtectedRoute>} />
+                      <Route path="/admin/distributors" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><DistributorManagement /></ProtectedRoute>} />
+                      <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><UserManagement /></ProtectedRoute>} />
+                      <Route path="/admin/warehouses" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><WarehouseManagement /></ProtectedRoute>} />
+                      <Route path="/admin/bom" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><BOMManagement /></ProtectedRoute>} />
+                      <Route path="/admin/so-mapping" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><SOMapping /></ProtectedRoute>} />
+                      <Route path="/admin/activity-logs" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><AuditLogsPage /></ProtectedRoute>} />
+                      <Route path="/admin/ledger-requests" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><AdminLedgerRequestsPage /></ProtectedRoute>} />
+                      <Route path="/admin/payments" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><AdminPaymentsPage /></ProtectedRoute>} />
+                      <Route path="/admin/onboarding" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><AdminOnboardingPage /></ProtectedRoute>} />
+                      <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><SettingsPage /></ProtectedRoute>} />
 
                       {/* HR Module */}
+                      <Route path="/hr" element={<Navigate to="/hr/manage" replace />} />
                       <Route path="/hr/manage" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR']}><HRManagement /></ProtectedRoute>} />
 
                       {/* Inventory */}
@@ -266,7 +269,6 @@ const App = () => {
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
-      <GlobalTableSorter />
     </ErrorBoundary>
   );
 };

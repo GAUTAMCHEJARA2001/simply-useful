@@ -24,13 +24,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-$i4*@rc4@*ovcrer&7)*c^@!5qt0xm+c_e%0z1bcc0s_$=8cr8')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 't')
+is_production = bool(os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RENDER') or os.environ.get('DATABASE_URL'))
+DEBUG = os.environ.get('DEBUG', 'False' if is_production else 'True').lower() in ('true', '1', 't')
 
-allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '*')
-if allowed_hosts_env == '*':
+allowed_hosts_env = os.environ.get('ALLOWED_HOSTS')
+if allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(',') if h.strip()]
+elif DEBUG:
     ALLOWED_HOSTS = ['*']
 else:
-    ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_env.split(',') if h.strip()]
+    ALLOWED_HOSTS = [
+        'simply-useful.vercel.app',
+        'simply-useful.run.place',
+        'api.simply-useful.run.place',
+        'erp.kamlaconchem.com',
+        'api.kamlaconchem.com',
+        'erp.etac.in',
+        'api.etac.in',
+        '.up.railway.app',
+        '.onrender.com',
+        'localhost',
+        '127.0.0.1',
+    ]
 
 
 # Application definition
@@ -201,7 +216,7 @@ STORAGES = {
 }
 
 # CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False').lower() in ('true', '1', 't')
 CORS_ALLOW_CREDENTIALS = True
 
 from corsheaders.defaults import default_headers
@@ -213,6 +228,8 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https:\/\/.*\.vercel\.app$",
     r"^https:\/\/.*\.up\.railway\.app$",
     r"^https:\/\/.*\.onrender\.com$",
+    r"^http:\/\/localhost:\d+$",
+    r"^http:\/\/127\.0\.0\.1:\d+$",
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -224,8 +241,14 @@ CORS_ALLOWED_ORIGINS = [
     'https://api.kamlaconchem.com',
     'https://erp.etac.in',
     'https://api.etac.in',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
     'http://localhost:5173',
+    'http://127.0.0.1:5173',
     'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:4000',
+    'http://127.0.0.1:4000',
 ]
 
 # CSRF Trusted Origins
@@ -245,13 +268,26 @@ else:
         'https://api.etac.in',
         'https://*.up.railway.app',
         'https://*.onrender.com',
+        'http://localhost:8080',
+        'http://127.0.0.1:8080',
         'http://localhost:5173',
+        'http://127.0.0.1:5173',
         'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:4000',
+        'http://127.0.0.1:4000',
     ]
 
 
 
 
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'simply-useful-cache',
+    }
+}
 
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
@@ -265,6 +301,15 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 25,
     'URL_FORMAT_OVERRIDE': None,
     'EXCEPTION_HANDLER': 'api.exceptions.custom_exception_handler',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '180/minute',
+        'user': '1200/minute',
+        'login': '20/minute',
+    },
 }
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'simply-useful-secret-key-123-super-secure-key-2026')
@@ -283,6 +328,6 @@ cloudinary.config(
 )
 
 # VAPID Keys
-VAPID_PRIVATE_KEY = 'rAOGyrUNZNYBKe92vKNlvMd9YkVnGHQGQcq1QBfMFaQ'
-VAPID_PUBLIC_KEY = 'BCkG42Eu-0utUsFsyX4PtXpC2w_nONCIWQDY9BhMNMI_cDNC7_Rc6l3RrfXKwVsc0bVi2ABf41uLdStO94OAPAo'
-VAPID_ADMIN_EMAIL = 'mailto:admin@example.com'
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', 'rAOGyrUNZNYBKe92vKNlvMd9YkVnGHQGQcq1QBfMFaQ')
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', 'BCkG42Eu-0utUsFsyX4PtXpC2w_nONCIWQDY9BhMNMI_cDNC7_Rc6l3RrfXKwVsc0bVi2ABf41uLdStO94OAPAo')
+VAPID_ADMIN_EMAIL = os.environ.get('VAPID_ADMIN_EMAIL', 'mailto:admin@example.com')

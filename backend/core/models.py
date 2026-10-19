@@ -11,9 +11,27 @@ class Company(models.Model):
     updatedat = models.DateTimeField(db_column='updatedAt', default=timezone.now)
     stockmethod = models.TextField(db_column='stockMethod')
     settings_json = models.TextField(db_column='settingsJson', blank=True, null=True, default='{}')
+    schemaname = models.TextField(db_column='schemaName', blank=True, null=True)
+    activated_at = models.DateTimeField(db_column='activatedAt', blank=True, null=True, default=timezone.now)
+    valid_until = models.DateTimeField(db_column='validUntil', blank=True, null=True)
+
+    @property
+    def is_expired(self):
+        if not self.valid_until:
+            return False
+        return timezone.now() > self.valid_until
+
+    @property
+    def is_subscription_active(self):
+        return bool(self.active and not self.is_expired)
+
+    def __str__(self):
+        return f"{self.name} ({self.skuprefix or 'NO-PREFIX'})"
 
     class Meta:
         db_table = 'Company'
+        verbose_name = 'Company / Organization'
+        verbose_name_plural = 'Companies / Organizations'
 
 
 class User(models.Model):
@@ -36,6 +54,18 @@ class User(models.Model):
     @property
     def is_anonymous(self):
         return False
+
+    @property
+    def userId(self):
+        return self.id
+
+    @property
+    def companyId(self):
+        return self.companyid_id if hasattr(self, 'companyid_id') else (self.companyid.id if self.companyid else None)
+
+    @property
+    def is_staff(self):
+        return (self.role or '').upper() in ['ADMIN', 'SUPERADMIN']
 
     class Meta:
         db_table = 'User'
@@ -82,3 +112,18 @@ class Broadcast(models.Model):
     class Meta:
         db_table = 'Broadcast'
         ordering = ['-created_at']
+
+
+class TenantUserMapping(models.Model):
+    email = models.TextField(primary_key=True)
+    companyid = models.TextField(db_column='companyId')
+    schemaname = models.TextField(db_column='schemaName')
+    role = models.TextField()
+    active = models.BooleanField(default=True)
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'TenantUserMapping'
+        verbose_name = 'Tenant Superadmin'
+        verbose_name_plural = 'Tenant Superadmins (Main Accounts)'
+

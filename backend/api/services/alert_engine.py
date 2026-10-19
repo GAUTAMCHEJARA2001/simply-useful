@@ -66,7 +66,7 @@ def compile_exception_alerts(cursor, company_id=None):
     # ──────────────────────────────────────────────────────────────────
     # 2. SCAN FOR LOGISTICS SLA DELAYS (Warehouse dispatch TAT > 48h / 2.0 days)
     # ──────────────────────────────────────────────────────────────────
-    cursor.execute("SELECT id, createdAt, narration, status FROM `Order` WHERE status IN ('Dispatched', 'Completed') AND date >= %s", (date_30_days_ago,))
+    cursor.execute('SELECT id, "createdAt", narration, status FROM "Order" WHERE status IN (\'Dispatched\', \'Completed\') AND date >= %s', (date_30_days_ago,))
     orders = cursor.fetchall()
     
     warehouse_tats = {} # {wh_id: [days, ...]}

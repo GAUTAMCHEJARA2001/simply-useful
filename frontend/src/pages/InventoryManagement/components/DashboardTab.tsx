@@ -36,6 +36,53 @@ import { orderService } from '@/api/services/order.service';
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const Num = (v: number | string) => Number(v || 0).toLocaleString('en-IN');
 
+const getDeliveryUrgency = (dateStr?: string) => {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  const formattedDate = target.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+  if (diffDays < 0) {
+    return {
+      label: `Overdue by ${Math.abs(diffDays)}d (${formattedDate})`,
+      days: diffDays,
+      status: 'overdue' as const,
+      color: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800',
+      badge: 'Overdue'
+    };
+  }
+  if (diffDays === 0) {
+    return {
+      label: `Deliver Today (${formattedDate})`,
+      days: diffDays,
+      status: 'today' as const,
+      color: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-300 dark:border-amber-800 animate-pulse',
+      badge: 'Today'
+    };
+  }
+  if (diffDays <= 3) {
+    return {
+      label: `Due in ${diffDays}d (${formattedDate})`,
+      days: diffDays,
+      status: 'urgent' as const,
+      color: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+      badge: 'Urgent'
+    };
+  }
+  return {
+    label: `Deliver by ${formattedDate} (${diffDays}d)`,
+    days: diffDays,
+    status: 'normal' as const,
+    color: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+    badge: 'Scheduled'
+  };
+};
+
 // Custom Modal component
 const CustomModal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -76,6 +123,7 @@ export const DashboardTab: React.FC = () => {
 
   // Tab State for "Today's Work"
   const [activeWorkTab, setActiveWorkTab] = useState<'dispatch' | 'po' | 'production' | 'issues'>('dispatch');
+  const [dispatchUrgencyFilter, setDispatchUrgencyFilter] = useState<'ALL' | 'URGENT' | 'TODAY' | 'READY' | 'SHORTAGE'>('ALL');
   
   // Tab State for "Business Insights"
   const [activeInsightTab, setActiveInsightTab] = useState<'sales' | 'production' | 'inventory' | 'purchase'>('sales');
@@ -183,27 +231,69 @@ export const DashboardTab: React.FC = () => {
     let ready = 0;
     let waiting = 0;
     let overdue = 0;
-    const twoDaysAgo = new Date();
-    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    let dueToday = 0;
+    let urgent = 0;
 
-    orders.forEach(o => {
-      if (o.status === 'Approved' || o.status === 'Partially Dispatched') {
-        const check = checkOrderShortage(o);
-        if (check.hasShortage) {
-          waiting++;
-        } else {
-          ready++;
-        }
-        
+    const dispatchOrders = orders.filter(o => o.status === 'Approved' || o.status === 'Partially Dispatched');
+
+    dispatchOrders.forEach(o => {
+      const check = checkOrderShortage(o);
+      if (check.hasShortage) {
+        waiting++;
+      } else {
+        ready++;
+      }
+      
+      const dDate = o.expectedDeliveryDate || (o as any).expected_delivery_date;
+      const urg = getDeliveryUrgency(dDate);
+      if (urg?.status === 'overdue') {
+        overdue++;
+      } else if (urg?.status === 'today') {
+        dueToday++;
+      } else if (urg?.status === 'urgent') {
+        urgent++;
+      } else if (!dDate) {
         const dateObj = new Date(o.date || o.createdAt || '');
+        const twoDaysAgo = new Date();
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
         if (!isNaN(dateObj.getTime()) && dateObj < twoDaysAgo) {
           overdue++;
         }
       }
     });
 
-    return { ready, waiting, overdue, totalToday: ready + waiting };
+    return { ready, waiting, overdue, dueToday, urgent, totalToday: dispatchOrders.length };
   }, [orders, checkOrderShortage]);
+
+  // Filtered and prioritized dispatch queue
+  const filteredDispatchQueue = useMemo(() => {
+    return dispatchTodayQueue.filter(o => {
+      const { hasShortage } = checkOrderShortage(o);
+      const dDate = o.expectedDeliveryDate || (o as any).expected_delivery_date;
+      const urg = getDeliveryUrgency(dDate);
+
+      if (dispatchUrgencyFilter === 'URGENT') {
+        return urg?.status === 'overdue' || urg?.status === 'today' || urg?.status === 'urgent';
+      }
+      if (dispatchUrgencyFilter === 'TODAY') {
+        return urg?.status === 'today';
+      }
+      if (dispatchUrgencyFilter === 'READY') {
+        return !hasShortage;
+      }
+      if (dispatchUrgencyFilter === 'SHORTAGE') {
+        return hasShortage;
+      }
+      return true;
+    }).sort((a, b) => {
+      const aDate = a.expectedDeliveryDate || (a as any).expected_delivery_date;
+      const bDate = b.expectedDeliveryDate || (b as any).expected_delivery_date;
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+      return new Date(aDate).getTime() - new Date(bDate).getTime();
+    });
+  }, [dispatchTodayQueue, dispatchUrgencyFilter, checkOrderShortage]);
 
   // Pending purchase orders (ordered or pending receipt)
   const pendingPOs = useMemo(() => {
@@ -362,16 +452,29 @@ export const DashboardTab: React.FC = () => {
       });
     });
 
-    // Rule 4: Prioritize dispatch for high value
-    orders.filter(o => o.status === 'Approved' && o.grandTotal > 50000).forEach(o => {
-      recs.push({
-        title: `Prioritize shipment to ${o.partyName}`,
-        category: 'VIP Dispatch Priority',
-        description: `Order ${o.orderId} carries a high transaction value of ₹${o.grandTotal.toLocaleString()}. Ensure immediate logistics dispatch and assign packing layout.`,
-        actionText: 'Assign Dispatch Vehicle',
-        actionType: 'dispatch',
-        target: o
-      });
+    // Rule 4: Prioritize dispatch for high value or approaching delivery deadlines
+    orders.filter(o => (o.status === 'Approved' || o.status === 'Partially Dispatched')).forEach(o => {
+      const dDate = o.expectedDeliveryDate || (o as any).expected_delivery_date;
+      const urg = getDeliveryUrgency(dDate);
+      if (urg?.status === 'overdue' || urg?.status === 'today') {
+        recs.unshift({
+          title: `Urgent Dispatch: ${o.partyName}`,
+          category: 'Delivery Schedule Deadline',
+          description: `Order ${o.orderId} is ${urg.label}! Goods must be dispatched immediately to fulfill customer delivery schedule.`,
+          actionText: 'Dispatch Order Now',
+          actionType: 'dispatch',
+          target: o
+        });
+      } else if (o.grandTotal > 50000 && o.status === 'Approved') {
+        recs.push({
+          title: `Prioritize shipment to ${o.partyName}`,
+          category: 'VIP Dispatch Priority',
+          description: `Order ${o.orderId} carries a high transaction value of ₹${o.grandTotal.toLocaleString()}. Ensure immediate logistics dispatch and assign packing layout.`,
+          actionText: 'Assign Dispatch Vehicle',
+          actionType: 'dispatch',
+          target: o
+        });
+      }
     });
 
     // Default recommendation if empty
@@ -492,7 +595,7 @@ export const DashboardTab: React.FC = () => {
         description: `Order ${orderId} has been successfully dispatched via vehicle ${vehicle}.`,
       });
       setSelectedDispatchOrder(null);
-      refreshAll();
+      refreshAll(true);
     } catch (err: any) {
       toast({
         title: 'Dispatch Failed',
@@ -615,7 +718,16 @@ export const DashboardTab: React.FC = () => {
         {/* 1. Header KPIs Section */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Dispatch Today', value: dispatchesCount.totalToday, sub: `${dispatchesCount.ready} Ready · ${dispatchesCount.waiting} Shortage`, icon: Truck, color: 'text-sky-500', bg: 'bg-sky-500/10' },
+            { 
+              label: 'Dispatch Queue', 
+              value: dispatchesCount.totalToday, 
+              sub: dispatchesCount.overdue > 0 
+                ? `${dispatchesCount.overdue} Overdue · ${dispatchesCount.ready} Ready` 
+                : `${dispatchesCount.ready} Ready · ${dispatchesCount.waiting} Shortage`, 
+              icon: Truck, 
+              color: dispatchesCount.overdue > 0 ? 'text-rose-500' : 'text-sky-500', 
+              bg: dispatchesCount.overdue > 0 ? 'bg-rose-500/10' : 'bg-sky-500/10' 
+            },
             { label: 'Production Logged', value: productions.filter((p: any) => p.createdAt?.includes(todayStr)).length, sub: 'runs completed today', icon: Activity, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
             { label: 'Low Stock Items', value: lowStock.length, sub: `${products.filter(p => (p.availableStock ?? 0) <= 0).length} completely out`, icon: Package, color: 'text-orange-500', bg: 'bg-orange-500/10' },
             { label: 'Pending Sales Orders', value: orders.filter(o => o.status === 'Pending').length, sub: 'awaiting approval', icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' }
@@ -667,16 +779,82 @@ export const DashboardTab: React.FC = () => {
                   {/* Tab 1: Dispatch queue */}
                   {activeWorkTab === 'dispatch' && (
                     <div className="space-y-3">
-                      {dispatchTodayQueue.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-10 italic">No shipments scheduled to deliver today.</p>
+                      {/* Delivery Urgency Filters */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[10px] font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setDispatchUrgencyFilter('ALL')}
+                          className={`px-2.5 py-1 rounded-lg border transition-all ${
+                            dispatchUrgencyFilter === 'ALL'
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-card border-border/70 text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          All ({dispatchTodayQueue.length})
+                        </button>
+                        {dispatchesCount.overdue + dispatchesCount.urgent > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setDispatchUrgencyFilter('URGENT')}
+                            className={`px-2.5 py-1 rounded-lg border transition-all ${
+                              dispatchUrgencyFilter === 'URGENT'
+                                ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                                : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                            }`}
+                          >
+                            🔥 Urgent / Overdue ({dispatchesCount.overdue + dispatchesCount.urgent})
+                          </button>
+                        )}
+                        {dispatchesCount.dueToday > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setDispatchUrgencyFilter('TODAY')}
+                            className={`px-2.5 py-1 rounded-lg border transition-all ${
+                              dispatchUrgencyFilter === 'TODAY'
+                                ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                            }`}
+                          >
+                            ⚡ Deliver Today ({dispatchesCount.dueToday})
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setDispatchUrgencyFilter('READY')}
+                          className={`px-2.5 py-1 rounded-lg border transition-all ${
+                            dispatchUrgencyFilter === 'READY'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-card border-border/70 text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          ✅ Ready ({dispatchesCount.ready})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDispatchUrgencyFilter('SHORTAGE')}
+                          className={`px-2.5 py-1 rounded-lg border transition-all ${
+                            dispatchUrgencyFilter === 'SHORTAGE'
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                              : 'bg-card border-border/70 text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          ⚠️ Shortage ({dispatchesCount.waiting})
+                        </button>
+                      </div>
+
+                      {filteredDispatchQueue.length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-10 italic">No shipments match your active filter.</p>
                       )}
-                      {dispatchTodayQueue.map((o) => {
+                      {filteredDispatchQueue.map((o) => {
                         const { hasShortage, shortages } = checkOrderShortage(o);
                         const isPartial = o.status === 'Partially Dispatched';
+                        const dDate = o.expectedDeliveryDate || (o as any).expected_delivery_date;
+                        const urgency = getDeliveryUrgency(dDate);
+
                         return (
-                          <div key={o.orderId} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border border-border/60 bg-card/80 hover:bg-muted/10 transition-colors gap-3">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
+                          <div key={o.orderId} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border border-border/70 bg-card hover:bg-muted/10 transition-colors gap-3 shadow-xs">
+                            <div className="space-y-1.5 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-bold text-xs">{o.orderId}</span>
                                 {isPartial && (
                                   <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase bg-violet-100 text-violet-700 border border-violet-200">Partially Sent</span>
@@ -684,8 +862,20 @@ export const DashboardTab: React.FC = () => {
                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${hasShortage ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
                                   {hasShortage ? 'Shortage Warning' : 'Stock Ready'}
                                 </span>
+                                
+                                {/* Expected Delivery Urgency Pill */}
+                                {urgency ? (
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 ${urgency.color}`}>
+                                    <Calendar className="w-3 h-3" />
+                                    <span>{urgency.label}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full text-muted-foreground bg-muted border border-border">
+                                    Standard Dispatch
+                                  </span>
+                                )}
                               </div>
-                              <p className="text-xs font-semibold text-foreground/80">{o.partyName}</p>
+                              <p className="text-xs font-semibold text-foreground/90">{o.partyName}</p>
                               <p className="text-[10px] text-muted-foreground line-clamp-1">
                                 {o.items?.map((it: any) => {
                                   const sent = it.sentQty || 0;
@@ -699,7 +889,7 @@ export const DashboardTab: React.FC = () => {
                                 </p>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 self-end sm:self-center">
+                            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                               <span className="text-xs font-black text-primary mr-2">₹{(o.grandTotal || 0).toLocaleString()}</span>
                               <Button size="sm" onClick={() => openDispatchModal(o)} className="h-8 px-3 text-[11px] font-bold bg-primary hover:bg-primary/90 text-white rounded-lg flex items-center gap-1 shadow-sm">
                                 <Truck className="w-3.5 h-3.5" /> {isPartial ? 'Continue Dispatch' : 'Dispatch'}
@@ -1112,6 +1302,27 @@ export const DashboardTab: React.FC = () => {
         {selectedDispatchOrder && (
           <CustomModal title={`Dispatch Shipments: Order #${selectedDispatchOrder.orderId || selectedDispatchOrder.id}`} onClose={() => setSelectedDispatchOrder(null)}>
             <form onSubmit={handleDispatchSubmit} className="space-y-4">
+              {/* Delivery Target Urgency Card */}
+              {(() => {
+                const dDate = selectedDispatchOrder.expectedDeliveryDate || (selectedDispatchOrder as any).expected_delivery_date;
+                const urg = getDeliveryUrgency(dDate);
+                if (!dDate) return null;
+                return (
+                  <div className={`p-3 rounded-xl border flex items-center justify-between text-xs ${urg?.color || 'bg-secondary/40'}`}>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-primary" />
+                      <span className="font-semibold text-foreground">Target Delivery Date:</span>
+                      <span className="font-bold">{new Date(dDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                    </div>
+                    {urg && (
+                      <span className="font-extrabold px-2 py-0.5 rounded-full text-[10px] bg-background/80 shadow-2xs">
+                        {urg.badge}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Item-level dispatch quantities */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Items to Dispatch</label>

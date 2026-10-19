@@ -78,9 +78,23 @@ export default defineConfig(({ mode }) => ({
         manualChunks(id) {
           if (id.includes('node_modules')) {
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) return 'vendor';
-            if (id.includes('@radix-ui') || id.includes('lucide-react') || id.includes('framer-motion')) return 'ui';
+            if (
+              id.includes('@radix-ui') ||
+              id.includes('lucide-react') ||
+              id.includes('framer-motion') ||
+              id.includes('cmdk') ||
+              id.includes('vaul') ||
+              id.includes('embla-carousel') ||
+              id.includes('react-day-picker')
+            ) return 'ui';
             if (id.includes('@tanstack/react-query')) return 'query';
             if (id.includes('recharts')) return 'charts';
+            if (id.includes('axios')) return 'network';
+            if (id.includes('date-fns')) return 'date';
+            if (id.includes('zod') || id.includes('react-hook-form') || id.includes('@hookform')) return 'forms';
+            if (id.includes('@react-pdf') || id.includes('pdf-lib') || id.includes('pdfkit') || id.includes('fontkit')) return 'pdf';
+            if (id.includes('html2pdf') || id.includes('html2canvas') || id.includes('jspdf')) return 'html2pdf';
+            if (id.includes('buffer') || id.includes('process')) return 'polyfills';
             return 'modules';
           }
         }

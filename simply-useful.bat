@@ -58,10 +58,10 @@ goto MENU
 :: =================================================================
 echo.
 echo  [MASTER AUDIT] Running Complete Full-Stack Audit & E2E Verification...
-if exist "%BASE_DIR%run_master_audit.py" (
-    "%BASE_DIR%backend\venv\Scripts\python" "%BASE_DIR%run_master_audit.py"
+if exist "%BASE_DIR%backend\run_master_audit.py" (
+    "%BASE_DIR%backend\venv\Scripts\python" "%BASE_DIR%backend\run_master_audit.py"
 ) else (
-    echo  [ERROR] run_master_audit.py not found in root directory.
+    echo  [ERROR] run_master_audit.py not found in backend directory.
 )
 echo.
 pause
@@ -321,7 +321,7 @@ if exist "%BASE_DIR%frontend" (
 )
 
 echo.
-echo  [5/5] Dependency Drift Check...
+echo  [5/6] Dependency Drift Check...
 echo  Python packages:
 if exist "%BASE_DIR%backend" (
     cd /d "%BASE_DIR%backend"
@@ -333,6 +333,14 @@ if exist "%BASE_DIR%frontend" (
     cd /d "%BASE_DIR%frontend"
     npm outdated 2>nul
     if !errorlevel! neq 0 ( echo  [OK] All NPM packages up to date. )
+)
+
+echo.
+echo  [6/6] API Endpoints Audit Probe (Node.js)...
+if exist "%BASE_DIR%backend\audit_all_apis.mjs" (
+    node "%BASE_DIR%backend\audit_all_apis.mjs"
+) else (
+    echo  [!] audit_all_apis.mjs not found.
 )
 
 echo.

@@ -40,6 +40,7 @@ Holds data that is shared globally across the company and does not belong to an 
 * **Domain:** Schema routing domain mappings (`DomainMixin`).
 * **UserWarehouseAccess:** A join table defining which users are permitted to select and view specific warehouses.
 * **Broadcast:** Regional notices displayed on dashboard feeds.
+* **HR & Staff Profiles (`Labour`, `SalarySlip`, `EmployeeLetter`):** Central organization staff records, monthly payroll slips, salary structures, and statutory employee letters.
 
 ### 2. Tenant Schemas (`wh_XXX`)
 Each active warehouse has its own dedicated schema (e.g. `wh_1`, `wh_2`), which isolates the daily operational transactions:

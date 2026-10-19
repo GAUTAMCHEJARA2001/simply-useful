@@ -19,7 +19,7 @@ def run_data_quality_validations(cursor, company_id=None):
     # Check 1: Orphaned Sales Orders Key Check
     # ──────────────────────────────────────────────────────────────────
     cursor.execute("""
-        SELECT COUNT(*), GROUP_CONCAT(order_id)
+        SELECT COUNT(*), STRING_AGG(CAST(order_id AS TEXT), ',')
         FROM FactSales
         WHERE product_key NOT IN (SELECT product_key FROM DimProduct)
            OR so_key NOT IN (SELECT so_surrogate_key FROM DimSO)
@@ -38,7 +38,7 @@ def run_data_quality_validations(cursor, company_id=None):
     # Check 2: Orphaned Visits Key Check
     # ──────────────────────────────────────────────────────────────────
     cursor.execute("""
-        SELECT COUNT(*), GROUP_CONCAT(visit_id)
+        SELECT COUNT(*), STRING_AGG(CAST(visit_id AS TEXT), ',')
         FROM FactVisits
         WHERE customer_key IS NOT NULL AND customer_key NOT IN (SELECT customer_key FROM DimCustomer)
     """)
@@ -56,7 +56,7 @@ def run_data_quality_validations(cursor, company_id=None):
     # Check 3: Transaction Date Bounds Assertion
     # ──────────────────────────────────────────────────────────────────
     cursor.execute("""
-        SELECT COUNT(*), GROUP_CONCAT(order_id)
+        SELECT COUNT(*), STRING_AGG(CAST(order_id AS TEXT), ',')
         FROM FactSales
         WHERE date_key > %s OR date_key < '2024-01-01'
     """, (today_str,))
@@ -74,7 +74,7 @@ def run_data_quality_validations(cursor, company_id=None):
     # Check 4: Non-Negative Value Integrity
     # ──────────────────────────────────────────────────────────────────
     cursor.execute("""
-        SELECT COUNT(*), GROUP_CONCAT(sku)
+        SELECT COUNT(*), STRING_AGG(CAST(sku AS TEXT), ',')
         FROM DimProduct
         WHERE rate < 0 OR landed_cost < 0
     """)
@@ -91,7 +91,7 @@ def run_data_quality_validations(cursor, company_id=None):
     # ──────────────────────────────────────────────────────────────────
     # Check 5: Vehicle Number standard casing
     # ──────────────────────────────────────────────────────────────────
-    cursor.execute("SELECT orderId, narration FROM `Order` WHERE narration LIKE '%[VEHICLE:%'")
+    cursor.execute('SELECT "orderId", narration FROM "Order" WHERE narration LIKE \'%[VEHICLE:%\'')
     order_narrations = cursor.fetchall()
     casing_failures = 0
     failing_orders = []
@@ -117,9 +117,9 @@ def run_data_quality_validations(cursor, company_id=None):
     # Check 6: Invoice Uniqueness Integrity
     # ──────────────────────────────────────────────────────────────────
     cursor.execute("""
-        SELECT COUNT(*), GROUP_CONCAT(orderId) FROM (
-            SELECT orderId FROM `Order` GROUP BY orderId HAVING COUNT(*) > 1
-        )
+        SELECT COUNT(*), STRING_AGG(CAST("orderId" AS TEXT), ',') FROM (
+            SELECT "orderId" FROM "Order" GROUP BY "orderId" HAVING COUNT(*) > 1
+        ) sub
     """)
     dup_count, samples = cursor.fetchone()
     dup_count = dup_count or 0
@@ -134,9 +134,9 @@ def run_data_quality_validations(cursor, company_id=None):
     # ──────────────────────────────────────────────────────────────────
     # Check 7: Sync Freshness Observation
     # ──────────────────────────────────────────────────────────────────
-    cursor.execute("SELECT MAX(updatedAt) FROM `Order`")
+    cursor.execute('SELECT MAX("updatedAt") FROM "Order"')
     max_order_updated = cursor.fetchone()[0]
-    cursor.execute("SELECT MAX(updatedat) FROM Inventory")
+    cursor.execute('SELECT MAX("updatedat") FROM "Product"')
     max_inv_updated = cursor.fetchone()[0]
 
     latest_sync_time = None
@@ -273,9 +273,9 @@ def get_data_quality_report(company_id=None):
             report["health_score"] = round((passing_count / total_rules) * 100, 1)
 
         # Freshness offsets calculation
-        cursor.execute("SELECT MAX(updatedAt) FROM `Order`")
+        cursor.execute('SELECT MAX("updatedAt") FROM "Order"')
         max_order_updated = cursor.fetchone()[0]
-        cursor.execute("SELECT MAX(updatedat) FROM Inventory")
+        cursor.execute('SELECT MAX("updatedat") FROM "Product"')
         max_inv_updated = cursor.fetchone()[0]
 
         latest_sync_time = None

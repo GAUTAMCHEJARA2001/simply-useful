@@ -9,6 +9,13 @@ export interface User {
   password?: string;
   territory?: string;
   authorizedWarehouses?: { id: string; name: string }[];
+  companyName?: string;
+  companyId?: string;
+  schemaName?: string;
+  validUntil?: string | null;
+  isSubscriptionActive?: boolean;
+  skuPrefix?: string | null;
+  stockMethod?: string;
 }
 
 export interface LoginInput {
@@ -21,6 +28,19 @@ export interface RegisterInput {
   password: string;
   name: string;
   role?: UserRole;
+}
+
+export interface CreateCompanyInput {
+  companyName: string;
+  adminEmail: string;
+  adminPassword: string;
+  adminName?: string;
+  skuPrefix?: string;
+  warehouseName?: string;
+  stockMethod?: string;
+  phone?: string;
+  gst?: string;
+  address?: string;
 }
 
 export interface AuthResponse {
@@ -150,6 +170,7 @@ export interface Order {
   totalAmount: number;
   grandTotal: number;
   dispatchDate?: string;
+  expectedDeliveryDate?: string;
   assignedWarehouse?: string | number | null;
   warehouseId?: string | number | null;
   warehouseid?: string | number | null;
@@ -161,6 +182,7 @@ export interface Order {
   party_name?: string;
   grand_total?: number;
   dispatch_date?: string;
+  expected_delivery_date?: string;
   return_date?: string;
   cancelled_date?: string;
 }
@@ -235,16 +257,16 @@ export interface Supplier {
 }
 
 export interface Warehouse {
-  id: string;
+  id: string | number;
   name: string;
   location?: string;
   gstNumber?: string;
 }
 
 export interface Labour {
-  id: string;
+  id: string | number;
   name: string;
-  dailyWage: number;
+  dailyWage?: number;
   contactInfo?: string;
 }
 
@@ -353,19 +375,19 @@ export interface Approval {
 }
 
 export interface Brand {
-  id: string;
+  id: string | number;
   name: string;
 }
 
 export interface Category {
-  id: string;
+  id: string | number;
   name: string;
-  parentId?: string | null;
-  parent_id?: string | null;
+  parentId?: string | number | null;
+  parent_id?: string | number | null;
 }
 
 export interface Unit {
-  id: string;
+  id: string | number;
   name: string;
   active?: boolean;
 }
@@ -456,3 +478,74 @@ export interface PartyOnboardingRequest {
   updatedAt?: string;
   reviewedAt?: string;
 }
+
+export interface Warehouse {
+  id: string | number;
+  name: string;
+  active: boolean;
+  gstNumber?: string;
+  gstnumber?: string;
+  location?: string;
+  companyId?: string;
+  companyid?: string;
+}
+
+export interface Unit {
+  id: string | number;
+  name: string;
+}
+
+export interface Category {
+  id: string | number;
+  name: string;
+  active: boolean;
+  parentId?: string | number | null;
+}
+
+export interface Brand {
+  id: string | number;
+  name: string;
+  active: boolean;
+}
+
+export interface Labour {
+  id: string | number;
+  name: string;
+  active: boolean;
+  employee_id?: string;
+  employee_type?: 'FIXED' | 'VARIABLE' | 'NONE';
+  department?: string;
+  designation?: string;
+  base_salary_monthly?: number;
+  dailywage?: number;
+  doj?: string;
+  contactinfo?: string;
+  bank_name?: string;
+  bank_account_number?: string;
+  bank_ifsc?: string;
+  aadhar_number?: string;
+  pan_number?: string;
+  reports_to?: number | string | null;
+}
+
+export interface StockTransaction {
+  id?: string | number;
+  date: string;
+  type: 'INWARD' | 'OUTWARD' | 'ADJUSTMENT' | 'PRODUCTION' | 'TRANSFER';
+  product: Product;
+  productId?: string | number;
+  quantity: number;
+  batchNumber?: string;
+  warehouseId?: string | number;
+  referenceId?: string;
+  remarks?: string;
+  createdAt?: string;
+}
+
+export interface StandardApiResponse<T = any> {
+  success: boolean;
+  data: T;
+  message?: string;
+  meta?: Record<string, any>;
+}
+

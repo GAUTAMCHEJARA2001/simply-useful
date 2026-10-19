@@ -11,9 +11,14 @@ class TenantQueryLoggingMiddleware:
 
     def __call__(self, request):
         from api.db_router import set_current_db
+        from api.tenant_manager import reset_search_path
         set_current_db('default')
         
-        response = self.get_response(request)
+        try:
+            response = self.get_response(request)
+        finally:
+            # Ensure connection search_path resets back to public when returning to pool
+            reset_search_path()
 
         path = request.path
         # Exclude static/media files and system logs listing endpoint to avoid infinite logging recursion
@@ -79,7 +84,7 @@ class TenantQueryLoggingMiddleware:
                     clean_endpoint = path.replace('/api/v1/', '/').replace('/api/', '/')
                     action_desc = f"{verb} entry via {method} {clean_endpoint}"
 
-                    # Try extracting request payload
+                    # Try extracting request payload and scrub sensitive credentials
                     payload = None
                     try:
                         if hasattr(request, 'data'):
@@ -88,6 +93,24 @@ class TenantQueryLoggingMiddleware:
                             payload = json.loads(request.body.decode('utf-8'))
                     except Exception:
                         pass
+
+                    def _scrub(val):
+                        if isinstance(val, dict):
+                            scrubbed = {}
+                            sensitive_keys = {'password', 'token', 'accesstoken', 'refreshtoken', 'secret', 'hashedpassword', 'authorization'}
+                            for k, v in val.items():
+                                if str(k).lower().replace('_', '') in sensitive_keys:
+                                    scrubbed[k] = '******'
+                                elif isinstance(v, (dict, list)):
+                                    scrubbed[k] = _scrub(v)
+                                else:
+                                    scrubbed[k] = v
+                            return scrubbed
+                        elif isinstance(val, list):
+                            return [_scrub(x) for x in val]
+                        return val
+
+                    safe_payload = _scrub(payload)
 
                     client_ip = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip() or request.META.get('REMOTE_ADDR', '')
 
@@ -104,7 +127,7 @@ class TenantQueryLoggingMiddleware:
                             'method': method,
                             'path': path,
                             'statusCode': status_code,
-                            'payload': payload,
+                            'payload': safe_payload,
                         },
                         ip_address=client_ip
                     )

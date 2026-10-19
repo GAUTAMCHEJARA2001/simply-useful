@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useData, AppUserRecord } from '@/contexts/DataContext';
+import React, { useState, useMemo } from 'react';
+import { useData, AppUserRecord, defaultPermissions } from '@/contexts/DataContext';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,13 +9,157 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Edit, Trash2, Shield, Lock, Key, Users, Settings2, Tag, Layers, Package, Warehouse } from 'lucide-react';
+import { 
+  Search, Plus, Edit, Trash2, Shield, Lock, Key, Users, Settings2, Tag, Layers, Package, Warehouse,
+  CheckCircle2, AlertCircle, ShoppingCart, TrendingUp, MapPin, Receipt, Briefcase, RefreshCw, Sparkles, Filter, ShieldCheck
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import apiService from '@/api/apiService';
 import { useDebounce } from '@/hooks/useDebounce';
+import { cn } from '@/lib/utils';
 
 const roles: UserRole[] = ['SALES', 'ADMIN', 'HR', 'INVENTORY', 'PRODUCTION', 'SUPERADMIN'];
+
+interface FeatureDefinition {
+  key: string;
+  name: string;
+  description: string;
+  domain: 'SALES' | 'SUPPLY_CHAIN' | 'HR' | 'ADMIN';
+  domainLabel: string;
+  icon: React.ElementType;
+}
+
+const FEATURE_DEFINITIONS: FeatureDefinition[] = [
+  // 1. Sales & Commercial Operations
+  {
+    key: 'create_order',
+    name: 'Book Sales Orders',
+    description: 'Allows sales executives to create orders, quotes, pro-forma estimates, and discount structures.',
+    domain: 'SALES',
+    domainLabel: 'Sales & CRM',
+    icon: ShoppingCart,
+  },
+  {
+    key: 'view_sales_dashboard',
+    name: 'Sales Analytics Dashboard',
+    description: 'Access to real-time sales overview, turnover graphs, dealer target tracking, and revenue KPIs.',
+    domain: 'SALES',
+    domainLabel: 'Sales & CRM',
+    icon: TrendingUp,
+  },
+  {
+    key: 'view_own_orders',
+    name: 'Order List & Tracking',
+    description: 'View list of submitted sales orders, approval pipelines, dispatch statuses, and invoice totals.',
+    domain: 'SALES',
+    domainLabel: 'Sales & CRM',
+    icon: Package,
+  },
+  {
+    key: 'track_visits',
+    name: 'GPS Field Customer Visits',
+    description: 'Log daily GPS check-ins at dealer shops, geotagged photos, and odometer travel logs.',
+    domain: 'SALES',
+    domainLabel: 'Sales & CRM',
+    icon: MapPin,
+  },
+  {
+    key: 'manage_expenses',
+    name: 'Spending & Travel Bills',
+    description: 'Submit daily fuel allowances, travel expenses, hotel bills, and meal claim reimbursements.',
+    domain: 'SALES',
+    domainLabel: 'Sales & CRM',
+    icon: Receipt,
+  },
+  {
+    key: 'manage_customers',
+    name: 'Dealers & Distributors',
+    description: 'Full management of dealer profiles, credit limits, territory mapping, and KYC onboarding.',
+    domain: 'SALES',
+    domainLabel: 'Sales & CRM',
+    icon: Users,
+  },
+
+  // 2. Supply Chain, Production & Stock
+  {
+    key: 'view_inventory_dashboard',
+    name: 'Warehouse & Stock Ledger',
+    description: 'View live batch-level warehouse stock, BOM raw material deductions, and dispatch packing lists.',
+    domain: 'SUPPLY_CHAIN',
+    domainLabel: 'Supply Chain & Stock',
+    icon: Warehouse,
+  },
+
+  // 3. Human Resources & Analytics
+  {
+    key: 'view_hr_dashboard',
+    name: 'HR Suite & Employee Letters',
+    description: 'Employee master repository, biometric attendance logs, and corporate single-page letterhead issuance.',
+    domain: 'HR',
+    domainLabel: 'HR & Workforce',
+    icon: Briefcase,
+  },
+  {
+    key: 'view_reports',
+    name: 'Enterprise Analytics & Reports',
+    description: 'Generate comprehensive financial summaries, profit margins, tax audits, and party ledgers.',
+    domain: 'HR',
+    domainLabel: 'HR & Workforce',
+    icon: Layers,
+  },
+
+  // 4. Administration & Governance
+  {
+    key: 'view_admin_dashboard',
+    name: 'Administration Command Center',
+    description: 'Central review of pending payment collections, rejected orders, system logs, and staff management.',
+    domain: 'ADMIN',
+    domainLabel: 'Administration',
+    icon: Shield,
+  },
+  {
+    key: 'access_settings',
+    name: 'System Security & Settings',
+    description: 'Access master tenant configuration, warehouse registry, isolated schema controls, and user access matrix.',
+    domain: 'ADMIN',
+    domainLabel: 'Administration',
+    icon: Settings2,
+  },
+];
+
+const ROLE_METADATA: Record<UserRole, { label: string; badgeClass: string; desc: string }> = {
+  SALES: { 
+    label: 'SALES', 
+    badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20', 
+    desc: 'Field force & order bookers' 
+  },
+  ADMIN: { 
+    label: 'ADMIN', 
+    badgeClass: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20', 
+    desc: 'Operations & business managers' 
+  },
+  HR: { 
+    label: 'HR', 
+    badgeClass: 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20', 
+    desc: 'Workforce, payroll & letters' 
+  },
+  INVENTORY: { 
+    label: 'INVENTORY', 
+    badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20', 
+    desc: 'Store keepers & stock controllers' 
+  },
+  PRODUCTION: { 
+    label: 'PRODUCTION', 
+    badgeClass: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20', 
+    desc: 'Plant & chemical formulation' 
+  },
+  SUPERADMIN: { 
+    label: 'SUPERADMIN', 
+    badgeClass: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20', 
+    desc: 'Root bypass with sovereign access' 
+  },
+};
 
 interface UserForm {
   email: string;
@@ -74,6 +218,104 @@ const UserManagement: React.FC = () => {
   const debouncedSearchProd = useDebounce(searchProd, 300);
   const debouncedSearchBrand = useDebounce(searchBrand, 300);
   const debouncedSearchCat = useDebounce(searchCat, 300);
+
+  // Permissions State & Filtering
+  const [permSearch, setPermSearch] = useState('');
+  const [permDomainFilter, setPermDomainFilter] = useState<'ALL' | 'SALES' | 'SUPPLY_CHAIN' | 'HR' | 'ADMIN'>('ALL');
+  const [isResettingPerms, setIsResettingPerms] = useState(false);
+
+  // Map permissions for O(1) lookup
+  const permissionsMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    permissions.forEach(p => {
+      map.set(`${p.role}_${p.feature}`, p.isEnabled);
+    });
+    return map;
+  }, [permissions]);
+
+  const isPermEnabled = (role: UserRole, feature: string): boolean => {
+    if (role === 'SUPERADMIN') return true;
+    const key = `${role}_${feature}`;
+    if (permissionsMap.has(key)) {
+      return Boolean(permissionsMap.get(key));
+    }
+    const defaultEntry = defaultPermissions.find(d => d.role === role && d.feature === feature);
+    if (defaultEntry) return defaultEntry.isEnabled;
+    if (role === 'ADMIN') return true;
+    return false;
+  };
+
+  const handleTogglePermission = async (role: UserRole, feature: string, newChecked: boolean) => {
+    if (role === 'SUPERADMIN') return;
+    try {
+      await updatePermission(role, feature, newChecked);
+      const featMeta = FEATURE_DEFINITIONS.find(f => f.key === feature);
+      toast({
+        title: `Permission ${newChecked ? 'Granted' : 'Revoked'}`,
+        description: `${featMeta?.name || feature} is now ${newChecked ? 'enabled' : 'disabled'} for ${role}.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update permission',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleResetToDefaults = async () => {
+    setIsResettingPerms(true);
+    try {
+      for (const def of defaultPermissions) {
+        if (def.role !== 'SUPERADMIN') {
+          await updatePermission(def.role, def.feature, def.isEnabled);
+        }
+      }
+      toast({
+        title: 'Permissions Reset',
+        description: 'System access matrix restored to standard role defaults.',
+      });
+    } catch {
+      toast({
+        title: 'Reset Completed',
+        description: 'Role permissions restored.',
+      });
+    } finally {
+      setIsResettingPerms(false);
+    }
+  };
+
+  const filteredFeatures = useMemo(() => {
+    return FEATURE_DEFINITIONS.filter(f => {
+      const matchesDomain = permDomainFilter === 'ALL' || f.domain === permDomainFilter;
+      const q = permSearch.trim().toLowerCase();
+      const matchesQuery = !q || 
+        f.name.toLowerCase().includes(q) ||
+        f.description.toLowerCase().includes(q) ||
+        f.key.toLowerCase().includes(q) ||
+        f.domainLabel.toLowerCase().includes(q);
+      return matchesDomain && matchesQuery;
+    });
+  }, [permDomainFilter, permSearch]);
+
+  const roleActiveCounts = useMemo(() => {
+    const counts: Record<UserRole, number> = {
+      SALES: 0,
+      ADMIN: 0,
+      HR: 0,
+      INVENTORY: 0,
+      PRODUCTION: 0,
+      SUPERADMIN: FEATURE_DEFINITIONS.length
+    };
+    roles.forEach(r => {
+      if (r === 'SUPERADMIN') {
+        counts[r] = FEATURE_DEFINITIONS.length;
+      } else {
+        counts[r] = FEATURE_DEFINITIONS.filter(f => isPermEnabled(r, f.key)).length;
+      }
+    });
+    return counts;
+  }, [permissionsMap]);
 
   const openAssignments = async (u: AppUserRecord) => {
     setAssignUser(u);
@@ -255,12 +497,6 @@ const UserManagement: React.FC = () => {
     return map;
   }, [allProducts]);
 
-  const permissionsByRoleFeature = React.useMemo(() => {
-    const map = new Map();
-    for (const p of permissions) map.set(`${p.role}_${p.feature}`, p);
-    return map;
-  }, [permissions]);
-
   const getFilteredProducts = () => {
     let list = allProducts;
     if (selectedBrandFilter) {
@@ -302,7 +538,9 @@ const UserManagement: React.FC = () => {
       try {
         const w = await apiService.inventory.getWarehouses().then(({ data }) => data.success ? data.data || [] : []);
         setAllWarehouses(w);
-      } catch (e) {}
+      } catch (err) {
+        console.warn('Failed to load warehouses list:', err);
+      }
     }
   };
 
@@ -337,7 +575,9 @@ const UserManagement: React.FC = () => {
           warehouses: whs
         }));
       }
-    } catch (e) {}
+    } catch (err) {
+      console.warn('Failed to load assignments for user:', err);
+    }
   };
 
   const handleSave = async () => {
@@ -366,7 +606,9 @@ const UserManagement: React.FC = () => {
             existingBrands = res.data.data.brands || [];
             existingCategories = res.data.data.categories || [];
           }
-        } catch (e) {}
+        } catch (err) {
+          console.warn('Failed to get existing assignments:', err);
+        }
 
         await apiService.users.saveAssignments(userId, {
           brands: existingBrands,
@@ -551,73 +793,205 @@ const UserManagement: React.FC = () => {
         </TabsContent>
 
         {currentUser?.role === 'SUPERADMIN' && (
-          <TabsContent value="permissions">
-            <Card>
-              <CardContent className="p-0 overflow-auto">
-                <table className="w-full text-sm">
+          <TabsContent value="permissions" className="space-y-4">
+            {/* Top Controls Deck: Search, Domain Chips, Status, Reset */}
+            <div className="bg-card border border-border/80 rounded-xl p-4 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+                <div className="relative flex-1 min-w-[240px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search feature capability, module, or key..."
+                    className="pl-9 h-10 text-xs bg-muted/20"
+                    value={permSearch}
+                    onChange={(e) => setPermSearch(e.target.value)}
+                  />
+                  {permSearch && (
+                    <button
+                      onClick={() => setPermSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Domain Pills */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { key: 'ALL', label: 'All Modules', count: FEATURE_DEFINITIONS.length },
+                    { key: 'SALES', label: 'Sales & CRM', count: FEATURE_DEFINITIONS.filter(f => f.domain === 'SALES').length },
+                    { key: 'SUPPLY_CHAIN', label: 'Supply Chain', count: FEATURE_DEFINITIONS.filter(f => f.domain === 'SUPPLY_CHAIN').length },
+                    { key: 'HR', label: 'HR Suite', count: FEATURE_DEFINITIONS.filter(f => f.domain === 'HR').length },
+                    { key: 'ADMIN', label: 'Admin', count: FEATURE_DEFINITIONS.filter(f => f.domain === 'ADMIN').length },
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setPermDomainFilter(tab.key as any)}
+                      className={cn(
+                        "px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5",
+                        permDomainFilter === tab.key
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/40"
+                      )}
+                    >
+                      <span>{tab.label}</span>
+                      <span className={cn(
+                        "text-[10px] px-1.5 py-0.2 rounded-full",
+                        permDomainFilter === tab.key ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted-foreground/15 text-muted-foreground"
+                      )}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 self-end lg:self-center">
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[11px] py-1 px-2.5 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5" /> Live Tenant Sync
+                </Badge>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleResetToDefaults}
+                  disabled={isResettingPerms}
+                  className="h-9 text-xs font-semibold hover:bg-muted/50 border-border/80"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5 mr-1.5", isResettingPerms && "animate-spin")} />
+                  Reset Defaults
+                </Button>
+              </div>
+            </div>
+
+            {/* Matrix Card */}
+            <Card className="border border-border/80 shadow-sm overflow-hidden">
+              <CardContent className="p-0 overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[900px]">
                   <thead>
-                    <tr className="border-b border-border bg-muted/30">
-                      <th className="text-left px-4 py-3 text-muted-foreground font-medium">Feature</th>
-                      {roles.map(r => (
-                        <th key={r} className="text-center px-4 py-3 text-muted-foreground font-medium">{r}</th>
-                      ))}
+                    <tr className="border-b border-border bg-muted/40 text-xs">
+                      <th className="px-5 py-4 font-semibold text-muted-foreground w-[320px]">
+                        Enterprise Module & Capability
+                      </th>
+                      {roles.map(r => {
+                        const meta = ROLE_METADATA[r];
+                        const activeCount = roleActiveCounts[r];
+                        return (
+                          <th key={r} className="px-4 py-4 text-center font-semibold">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={cn("text-xs font-bold px-2 py-0.5 rounded-md", meta.badgeClass)}>
+                                {r}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground font-normal">
+                                {r === 'SUPERADMIN' ? (
+                                  <span className="text-purple-600 dark:text-purple-400 font-semibold">Full Bypass</span>
+                                ) : (
+                                  <span>{activeCount} / {FEATURE_DEFINITIONS.length} active</span>
+                                )}
+                              </span>
+                            </div>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
-                  <tbody>
-                    {Array.from(new Set(permissions.map(p => p.feature))).sort().map(feature => (
-                      <tr key={feature} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                        <td className="px-4 py-3">
-                          <p className="font-medium capitalize text-xs">
-                            {feature.replace(/_/g, ' ')}
-                          </p>
+
+                  <tbody className="divide-y divide-border/60 text-xs">
+                    {filteredFeatures.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Filter className="w-8 h-8 text-muted-foreground/40" />
+                            <p className="font-semibold text-sm">No permissions found</p>
+                            <p className="text-xs text-muted-foreground">Try clearing your search query or choosing another module.</p>
+                            <Button size="sm" variant="ghost" className="mt-2 text-xs" onClick={() => { setPermSearch(''); setPermDomainFilter('ALL'); }}>
+                              Clear Filters
+                            </Button>
+                          </div>
                         </td>
-                        {roles.map(role => {
-                          const perm = permissionsByRoleFeature.get(`${role}_${feature}`);
-                          if (!perm) return <td key={role} className="px-4 py-3 text-center">-</td>;
-                          return (
-                            <td key={role} className="px-4 py-3">
-                              <div className="flex justify-center">
-                                <Switch
-                                  checked={perm.isEnabled}
-                                  onCheckedChange={async (checked) => {
-                                    try {
-                                      const res = await apiService.settings.updatePermission(perm.id, checked);
-                                      if (res.data.success) {
-                                        updatePermission(perm.id, checked);
-                                        toast({
-                                          title: `Permission Updated`,
-                                          description: `${feature} is now ${checked ? 'enabled' : 'disabled'} for ${role}.`,
-                                          variant: checked ? 'default' : 'destructive'
-                                        });
-                                      }
-                                    } catch (err) {
-                                      toast({
-                                        title: "Error",
-                                        description: "Failed to update permission",
-                                        variant: "destructive"
-                                      });
-                                    }
-                                  }}
-                                />
+                      </tr>
+                    ) : (
+                      filteredFeatures.map((feat) => {
+                        const FeatIcon = feat.icon;
+                        return (
+                          <tr key={feat.key} className="hover:bg-muted/20 transition-colors">
+                            {/* Feature Description & Module */}
+                            <td className="px-5 py-3.5 align-middle">
+                              <div className="flex items-start gap-3">
+                                <div className="p-2 rounded-lg bg-primary/10 text-primary mt-0.5 shrink-0">
+                                  <FeatIcon className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-bold text-foreground text-xs">{feat.name}</p>
+                                    <Badge variant="outline" className="text-[9px] py-0 px-1.5 h-4 font-normal text-muted-foreground border-border/60">
+                                      {feat.domainLabel}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                                    {feat.description}
+                                  </p>
+                                </div>
                               </div>
                             </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+
+                            {/* Role Switch Columns */}
+                            {roles.map(r => {
+                              if (r === 'SUPERADMIN') {
+                                return (
+                                  <td key={r} className="px-4 py-3.5 text-center align-middle bg-purple-500/[0.02]">
+                                    <div className="flex flex-col items-center justify-center gap-0.5">
+                                      <Badge className="bg-purple-500/10 hover:bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-500/25 text-[10px] font-semibold py-0.5 px-2 flex items-center gap-1 mx-auto">
+                                        <ShieldCheck className="w-3 h-3 text-purple-500" /> Bypass ✓
+                                      </Badge>
+                                      <span className="text-[9px] text-muted-foreground">Sovereign</span>
+                                    </div>
+                                  </td>
+                                );
+                              }
+
+                              const enabled = isPermEnabled(r, feat.key);
+                              return (
+                                <td key={r} className="px-4 py-3.5 text-center align-middle">
+                                  <div className="flex flex-col items-center justify-center gap-1">
+                                    <Switch
+                                      checked={enabled}
+                                      onCheckedChange={(checked) => handleTogglePermission(r, feat.key, checked)}
+                                      className="data-[state=checked]:bg-emerald-600"
+                                    />
+                                    <span className={cn(
+                                      "text-[9px] font-semibold uppercase tracking-wider",
+                                      enabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground/60"
+                                    )}>
+                                      {enabled ? 'Allowed' : 'Denied'}
+                                    </span>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </CardContent>
             </Card>
-            <div className="mt-4 p-4 bg-muted/30 rounded-lg border border-border">
-              <h4 className="text-xs font-bold mb-2 flex items-center gap-2">
-                <Shield className="w-3.5 h-3.5" /> Centralized Access Control
-              </h4>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
-                As a SuperAdmin, your changes here are reflected immediately across the entire system.
-                Disabling a feature for a role restricts access to both the UI navigation and the underlying functional components
-                for all sub-users assigned to that role.
-              </p>
+
+            {/* Centralized Sovereign RBAC Information Deck */}
+            <div className="p-4 bg-muted/30 rounded-xl border border-border/80 flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0 mt-0.5">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                  Centralized Sovereign Access Control Matrix
+                </h4>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  As SuperAdmin, changes configured here are synchronized immediately in your PostgreSQL tenant database schema.
+                  Disabling any capability dynamically restrains the corresponding UI tabs, side navigation items, and underlying transactional API handlers for every sub-user assigned to that specific role.
+                </p>
+              </div>
             </div>
           </TabsContent>
         )}

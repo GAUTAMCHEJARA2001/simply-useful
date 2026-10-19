@@ -16,4 +16,21 @@ coverage/
 temp_*.txt
 *.tsbuildinfo
 backend/scratch/
+backend/_scratch/
+frontend/_scratch/
 .vscode/
+
+# Database dumps, local sqlite, and sensitive/junk files
+*.dump
+*.sql.gz
+*.sqlite3
+backend/db.sqlite3
+backend/token.txt
+backend/error.html
+backend/diagnostic_output*.txt
+*_tmp.txt
+backend/audit_all_apis.mjs
+
+# Archive of legacy experimental systems
+archive/
+backend/scripts/legacy_scratch/

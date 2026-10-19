@@ -6,6 +6,7 @@ import { ShoppingCart, Clock, Users, ArrowUpRight, ArrowDownRight, IndianRupee, 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '@/hooks/usePermissions';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -55,14 +56,6 @@ const SalesDashboard: React.FC = () => {
   const { can } = usePermissions();
   const navigate = useNavigate();
 
-  if (!can('view_sales_dashboard')) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-3">
-        <p className="text-xl font-bold text-destructive">Access Denied</p>
-        <p className="text-muted-foreground text-sm">You do not have permission to view the Sales Dashboard. Contact HR/Admin.</p>
-      </div>
-    );
-  }
 
   const isSalesOnly = ['SALES', 'SALES_EXECUTIVE', 'SALES_OFFICER', 'SALES OFFICER'].includes(user?.role?.toUpperCase() || '');
   const currentOfficer = users.find(u => u.email?.toLowerCase() === user?.email?.toLowerCase());
@@ -289,6 +282,15 @@ const SalesDashboard: React.FC = () => {
     });
   };
 
+  if (!can('view_sales_dashboard')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-3">
+        <p className="text-xl font-bold text-destructive">Access Denied</p>
+        <p className="text-muted-foreground text-sm">You do not have permission to view the Sales Dashboard. Contact HR/Admin.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -300,24 +302,21 @@ const SalesDashboard: React.FC = () => {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {/* Period / Past Months Selector */}
-          <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-1.5 shadow-sm">
+          <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-3 py-1 shadow-sm">
             <CalendarDays className="w-4 h-4 text-primary shrink-0" />
             <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Period:</span>
-            <select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="bg-transparent text-xs sm:text-sm font-semibold text-foreground focus:outline-none cursor-pointer pr-1"
-            >
-              <option value="CURRENT_MONTH" className="bg-popover text-foreground font-medium">This Month ({currentMonthName})</option>
-              {availableMonths.filter(([k]) => k !== currentMonthKey).length > 0 && (
-                <optgroup label="Past Months in FY" className="bg-popover text-foreground font-semibold">
-                  {availableMonths.filter(([k]) => k !== currentMonthKey).map(([k, label]) => (
-                    <option key={k} value={k} className="bg-popover text-foreground font-normal">{label}</option>
-                  ))}
-                </optgroup>
-              )}
-              <option value="ALL_FY" className="bg-popover text-foreground font-medium">Full Financial Year ({fyLabel})</option>
-            </select>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger className="h-7 text-xs sm:text-sm font-semibold bg-transparent border-0 shadow-none focus:ring-0 focus:outline-none p-0 gap-1.5 text-foreground cursor-pointer">
+                <SelectValue placeholder="Select Period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CURRENT_MONTH" className="text-xs font-medium">This Month ({currentMonthName})</SelectItem>
+                {availableMonths.filter(([k]) => k !== currentMonthKey).map(([k, label]) => (
+                  <SelectItem key={k} value={k} className="text-xs">{label}</SelectItem>
+                ))}
+                <SelectItem value="ALL_FY" className="text-xs font-medium">Full Financial Year ({fyLabel})</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <Button onClick={() => navigate('/sales/order')} className="action-button">

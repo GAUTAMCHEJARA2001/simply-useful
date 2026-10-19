@@ -7,7 +7,6 @@ import { Loader2, Printer, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useData } from '@/contexts/DataContext';
 
-import html2pdf from 'html2pdf.js';
 
 const PrintableOnboardingForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -34,21 +33,26 @@ const PrintableOnboardingForm: React.FC = () => {
     fetchRequest();
   }, [id]);
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     setIsDownloading(true);
-    const element = document.getElementById('printable-form-container') as HTMLElement;
-    const opt: any = {
-      margin:       10,
-      filename:     `Application_Form_${request?.partyName || 'Download'}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak:    { mode: 'css', before: '.break-after-page' }
-    };
+    try {
+      const { default: html2pdf } = await import('html2pdf.js');
+      const element = document.getElementById('printable-form-container') as HTMLElement;
+      const opt: any = {
+        margin:       10,
+        filename:     `Application_Form_${request?.partyName || 'Download'}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: 'css', before: '.break-after-page' }
+      };
 
-    html2pdf().set(opt).from(element).save().then(() => {
+      await html2pdf().set(opt).from(element).save();
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+    } finally {
       setIsDownloading(false);
-    });
+    }
   };
 
   if (loading) {

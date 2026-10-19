@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { OrderItem, Order } from '@/types';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, ShoppingCart, AlertTriangle, Check, ChevronsUpDown, Activity, UserCheck, Edit } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, AlertTriangle, Check, ChevronsUpDown, Activity, UserCheck, Edit, Calendar, CalendarClock, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +46,7 @@ const OrderPage: React.FC = () => {
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [openProducts, setOpenProducts] = useState<Record<number, boolean>>({});
   const [orderDate, setOrderDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState<string>('');
 
   useEffect(() => {
     if (!id && user?.email) {
@@ -69,6 +70,7 @@ const OrderPage: React.FC = () => {
       })));
       setNarration(existing.narration || '');
       setOrderDate(existing.date ? existing.date.split('T')[0] : (existing.createdAt ? existing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]));
+      setExpectedDeliveryDate(existing.expectedDeliveryDate || existing.expected_delivery_date || '');
       if (existing.assignedWarehouse || existing.warehouseId) {
         setWarehouseId(existing.assignedWarehouse || existing.warehouseId);
       }
@@ -299,6 +301,7 @@ const OrderPage: React.FC = () => {
       assignedWarehouse: Number(warehouseId) || null,
       soEmail,
       date: orderDate,
+      expectedDeliveryDate: expectedDeliveryDate || null,
     };
 
     try {
@@ -319,6 +322,7 @@ const OrderPage: React.FC = () => {
           totalAmount: grandTotal,
           grandTotal: grandTotal,
           assignedWarehouse: Number(warehouseId) || null, 
+          expectedDeliveryDate: expectedDeliveryDate || null,
         };
         await addOrder(newOrder as any);
         toast({ title: 'Order Placed Successfully!', description: `Order ${newOrder.orderId} for ${selectedParty}` });
@@ -383,9 +387,9 @@ const OrderPage: React.FC = () => {
       </div>
 
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Party Details</CardTitle></CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Party &amp; Delivery Details</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Party Type</Label>
               <Select value={partyType} onValueChange={(v: 'Dealer' | 'Distributor' | 'Project') => { setPartyType(v); setSelectedParty(''); }}>
@@ -406,26 +410,42 @@ const OrderPage: React.FC = () => {
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[300px] sm:w-[400px] p-0" align="start">
+                <PopoverContent className="w-[360px] sm:w-[480px] p-0 shadow-lg border border-border" align="start">
                   <Command onValueChange={setHighlightedParty}>
                     <CommandInput placeholder={`Search ${partyType}...`} className="h-9" />
-                    <CommandList>
+                    <CommandList className="max-h-[260px] overflow-y-auto">
                       <CommandEmpty>No {partyType.toLowerCase()} found.</CommandEmpty>
                       <CommandGroup>
-                        {parties.filter(p => p).map(p => (
-                          <CommandItem
-                            key={p}
-                            value={p}
-                            onMouseEnter={() => setHighlightedParty(p)}
-                            onSelect={() => {
-                              setSelectedParty(p);
-                              setOpenPartyCombobox(false);
-                            }}
-                          >
-                            <Check className={`mr-2 h-4 w-4 shrink-0 ${selectedParty === p ? "opacity-100" : "opacity-0"}`} />
-                            <span className="truncate">{p}</span>
-                          </CommandItem>
-                        ))}
+                        {parties.filter(p => p).map(p => {
+                          const partyInfo = (dealersByName.get(p) || distributorsByName.get(p)) as any;
+                          const subtitle = partyInfo?.city || partyInfo?.address;
+                          const phone = partyInfo?.phone || partyInfo?.mobile || partyInfo?.contactPerson;
+                          const isSelected = selectedParty === p;
+
+                          return (
+                            <CommandItem
+                              key={p}
+                              value={p}
+                              onMouseEnter={() => setHighlightedParty(p)}
+                              onSelect={() => {
+                                setSelectedParty(p);
+                                setOpenPartyCombobox(false);
+                              }}
+                              className="py-2 px-3 cursor-pointer data-[selected=true]:bg-primary/10 transition-colors"
+                            >
+                              <Check className={`mr-2 h-4 w-4 shrink-0 ${isSelected ? "text-primary opacity-100" : "opacity-0"}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className={`text-xs truncate ${isSelected ? "font-bold text-primary" : "font-semibold text-foreground"}`}>{p}</span>
+                                  {phone && <span className="text-[10px] text-muted-foreground font-mono shrink-0">{phone}</span>}
+                                </div>
+                                {subtitle && (
+                                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">{subtitle}</p>
+                                )}
+                              </div>
+                            </CommandItem>
+                          );
+                        })}
                       </CommandGroup>
                     </CommandList>
                   </Command>
@@ -524,6 +544,76 @@ const OrderPage: React.FC = () => {
                 className="h-12 w-full"
               />
             </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5 font-bold text-foreground">
+                  <CalendarClock className="w-3.5 h-3.5 text-primary" />
+                  Expected Delivery Date
+                </Label>
+                {expectedDeliveryDate && (
+                  <span className="text-[10px] text-primary font-bold">
+                    {(() => {
+                      try {
+                        const ord = new Date(orderDate).getTime();
+                        const exp = new Date(expectedDeliveryDate).getTime();
+                        const diff = Math.round((exp - ord) / (1000 * 60 * 60 * 24));
+                        return diff > 0 ? `+${diff} days` : diff === 0 ? 'Same day' : 'Prior to order';
+                      } catch {
+                        return '';
+                      }
+                    })()}
+                  </span>
+                )}
+              </div>
+              <Input 
+                type="date" 
+                value={expectedDeliveryDate} 
+                onChange={(e) => setExpectedDeliveryDate(e.target.value)} 
+                className="h-12 w-full border-primary/30 focus:border-primary"
+                min={orderDate}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground bg-primary/5 border border-primary/15 rounded-lg px-3 py-2">
+            <span className="flex items-center gap-1.5 font-medium">
+              <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span>Expected Delivery Date guides the warehouse dispatch team on priority &amp; shipping deadlines.</span>
+            </span>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(orderDate || new Date());
+                  d.setDate(d.getDate() + 3);
+                  setExpectedDeliveryDate(d.toISOString().split('T')[0]);
+                }}
+                className="px-2 py-0.5 rounded bg-card hover:bg-muted border border-border text-[10px] font-semibold text-foreground cursor-pointer transition-colors"
+              >
+                +3 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(orderDate || new Date());
+                  d.setDate(d.getDate() + 7);
+                  setExpectedDeliveryDate(d.toISOString().split('T')[0]);
+                }}
+                className="px-2 py-0.5 rounded bg-card hover:bg-muted border border-border text-[10px] font-semibold text-foreground cursor-pointer transition-colors"
+              >
+                +7 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(orderDate || new Date());
+                  d.setDate(d.getDate() + 14);
+                  setExpectedDeliveryDate(d.toISOString().split('T')[0]);
+                }}
+                className="px-2 py-0.5 rounded bg-card hover:bg-muted border border-border text-[10px] font-semibold text-foreground cursor-pointer transition-colors"
+              >
+                +14 Days
+              </button>
+            </div>
           </div>
           {selectedParty && selectedDistInfo && (
             <div className="bg-secondary rounded-lg p-3 text-sm">
@@ -565,29 +655,60 @@ const OrderPage: React.FC = () => {
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[300px] sm:w-[400px] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search by product name, category..." className="h-9" />
-                        <CommandList>
-                          <CommandEmpty>No product found.</CommandEmpty>
+                    <PopoverContent className="w-[460px] sm:w-[520px] max-w-[95vw] p-0 shadow-2xl rounded-xl border border-border/80" align="start">
+                      <Command className="rounded-xl">
+                        <CommandInput placeholder="Search by product name, category, brand..." className="h-10 text-sm" />
+                        <CommandList className="max-h-[340px] overflow-y-auto p-1.5">
+                          <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">No product found.</CommandEmpty>
                           {Object.entries(groupedProducts).map(([category, prods]) => (
                             <CommandGroup key={category} heading={category}>
-                              {prods.map((p) => (
-                                <CommandItem
-                                  key={p.id}
-                                  value={`${p.productName} ${p.brand?.name || ''} ${category} - ${p.productCode || p.product_code || ''} - ${p.id}`}
-                                  onSelect={() => {
-                                    updateItem(idx, 'product', p.id!);
-                                    setOpenProducts(prev => ({...prev, [idx]: false}));
-                                  }}
-                                >
-                                  <Check className={`mr-2 h-4 w-4 shrink-0 ${item.product === p.id ? "opacity-100" : "opacity-0"}`} />
-                                  <div className="flex flex-col overflow-hidden">
-                                    <span className="truncate font-medium">{p.productName}</span>
-                                    <span className="text-[10px] text-muted-foreground">({p.bagSize}) - ₹{p.rate}{p.brand?.name ? ` - ${p.brand.name}` : ''}</span>
-                                  </div>
-                                </CommandItem>
-                              ))}
+                              {prods.map((p) => {
+                                const isSelected = item.product === p.id;
+                                return (
+                                  <CommandItem
+                                    key={p.id}
+                                    value={`${p.productName} ${p.brand?.name || ''} ${category} ${p.productCode || p.product_code || ''} ${p.id}`}
+                                    onSelect={() => {
+                                      updateItem(idx, 'product', p.id!);
+                                      setOpenProducts(prev => ({...prev, [idx]: false}));
+                                    }}
+                                    className={`px-3 py-2.5 rounded-lg cursor-pointer transition-colors my-0.5 border ${
+                                      isSelected 
+                                        ? "bg-primary/10 border-primary/30 text-foreground font-semibold" 
+                                        : "border-transparent hover:bg-muted/70 text-foreground"
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between w-full gap-3">
+                                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                        <Check className={`h-4 w-4 shrink-0 transition-opacity ${isSelected ? "text-primary opacity-100" : "opacity-0"}`} />
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-semibold text-sm truncate">{p.productName}</span>
+                                            {p.brand?.name && (
+                                              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-muted text-muted-foreground border border-border/40 shrink-0">
+                                                {p.brand.name}
+                                              </span>
+                                            )}
+                                            {(p.productCode || p.product_code) && (
+                                              <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                                                #{p.productCode || p.product_code}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                                            {p.bagSize && <span>({p.bagSize})</span>}
+                                            <span className="text-primary/75 font-medium">{category}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col items-end shrink-0 pl-2 text-right">
+                                        <span className="font-bold text-sm text-primary">₹{Number(p.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                        <span className="text-[10px] text-muted-foreground">per unit</span>
+                                      </div>
+                                    </div>
+                                  </CommandItem>
+                                );
+                              })}
                             </CommandGroup>
                           ))}
                         </CommandList>
@@ -600,7 +721,7 @@ const OrderPage: React.FC = () => {
                   <Input type="number" min={0} className="h-11" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Number(e.target.value))} placeholder="0" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Price per unit</Label>
+                  <Label className="text-xs">Price per unit (without GST)</Label>
                   <Input
                     type="number"
                     min={0}
@@ -676,6 +797,11 @@ const OrderPage: React.FC = () => {
               <span className="text-muted-foreground">Party Type:</span><span className="font-medium">{partyType}</span>
               <span className="text-muted-foreground">Party:</span><span className="font-medium">{selectedParty}</span>
               <span className="text-muted-foreground">Distributor:</span><span className="font-medium">{selectedDistInfo?.distributorName || '-'}</span>
+              <span className="text-muted-foreground">Order Date:</span><span className="font-medium">{orderDate}</span>
+              <span className="text-muted-foreground">Expected Delivery:</span>
+              <span className="font-bold text-primary">
+                {expectedDeliveryDate ? new Date(expectedDeliveryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'As early as possible'}
+              </span>
             </div>
             <div className="border border-border rounded-lg overflow-x-auto">
               <table className="w-full text-sm">

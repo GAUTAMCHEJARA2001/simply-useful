@@ -267,28 +267,47 @@ const EstimateGenerator: React.FC = () => {
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[300px] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search product..." />
-                        <CommandList>
-                          <CommandEmpty>No product found.</CommandEmpty>
+                    <PopoverContent className="w-[440px] sm:w-[500px] max-w-[95vw] p-0 shadow-2xl rounded-xl border border-border/80" align="start">
+                      <Command className="rounded-xl">
+                        <CommandInput placeholder="Search product by name, brand, size..." className="h-10 text-sm" />
+                        <CommandList className="max-h-[320px] overflow-y-auto p-1.5">
+                          <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">No product found.</CommandEmpty>
                           <CommandGroup>
-                            {products.map((p) => (
-                              <CommandItem
-                                key={p.id}
-                                value={p.name}
-                                onSelect={() => {
-                                  updateItem(idx, 'product', p.id!);
-                                  setOpenComboboxIndex(null);
-                                }}
-                              >
-                                <Check className={`mr-2 h-4 w-4 shrink-0 ${item.product === p.id ? "opacity-100" : "opacity-0"}`} />
-                                <div className="flex flex-col overflow-hidden">
-                                  <span className="truncate font-medium">{p.name}</span>
-                                  <span className="text-[10px] text-muted-foreground">({p.bagSize}) - ₹{p.rate}</span>
-                                </div>
-                              </CommandItem>
-                            ))}
+                            {products.map((p) => {
+                              const isSelected = item.product === p.id;
+                              return (
+                                <CommandItem
+                                  key={p.id}
+                                  value={`${p.name} ${p.brand?.name || ''} ${p.bagSize || ''} ${p.productCode || ''} ${p.id}`}
+                                  onSelect={() => {
+                                    updateItem(idx, 'product', p.id!);
+                                    setOpenComboboxIndex(null);
+                                  }}
+                                  className={`px-3 py-2.5 rounded-lg cursor-pointer transition-colors my-0.5 border ${
+                                    isSelected 
+                                      ? "bg-primary/10 border-primary/30 text-foreground font-semibold" 
+                                      : "border-transparent hover:bg-muted/70 text-foreground"
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between w-full gap-3">
+                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                      <Check className={`h-4 w-4 shrink-0 transition-opacity ${isSelected ? "text-primary opacity-100" : "opacity-0"}`} />
+                                      <div className="flex flex-col min-w-0 flex-1">
+                                        <span className="font-semibold text-sm truncate">{p.name}</span>
+                                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                                          {p.bagSize && <span>({p.bagSize})</span>}
+                                          {p.brand?.name && <span className="px-1.5 py-0.2 rounded bg-muted text-[10px] border border-border/40">{p.brand.name}</span>}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col items-end shrink-0 pl-2 text-right">
+                                      <span className="font-bold text-sm text-primary">₹{Number(p.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                      <span className="text-[10px] text-muted-foreground">per unit</span>
+                                    </div>
+                                  </div>
+                                </CommandItem>
+                              );
+                            })}
                           </CommandGroup>
                         </CommandList>
                       </Command>
@@ -300,7 +319,7 @@ const EstimateGenerator: React.FC = () => {
                   <Input type="number" min={0} className="h-11" value={item.qty || ''} onChange={e => updateItem(idx, 'qty', Number(e.target.value))} placeholder="0" />
                 </div>
                 <div className="md:col-span-3 space-y-1.5">
-                  <Label className="text-xs">Price per unit</Label>
+                  <Label className="text-xs">Price per unit (without GST)</Label>
                   <Input type="number" min={0} className="h-11" value={item.price || ''} onChange={e => updateItem(idx, 'price', Number(e.target.value))} placeholder="0" />
                 </div>
               </div>

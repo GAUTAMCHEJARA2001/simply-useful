@@ -12,6 +12,7 @@ from api.serializers import (
     WarehouseSerializer, RegionSerializer, MarketSerializer, SupplierSerializer, LabourSerializer
 )
 from api.views import send_success, send_error, _get_company_id, _get_request_warehouse_ids, get_allowed_product_ids_for_user, resolve_warehouse
+from api.request_context import tenant_scope
 
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -471,10 +472,7 @@ class MarketViewSet(viewsets.ModelViewSet):
     serializer_class = MarketSerializer
 
     def get_queryset(self):
-        company_id = _get_company_id(self.request)
-        if company_id:
-            return Market.objects.filter(companyid_id=company_id)
-        return Market.objects.all()
+        return tenant_scope(Market.objects.all(), self.request)
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()

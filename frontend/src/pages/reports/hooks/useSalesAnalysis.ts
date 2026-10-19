@@ -329,7 +329,7 @@ export function useSalesAnalysis({
         });
       });
 
-      let rows: ItemSalesRow[] = Array.from(itemMap.entries()).map(([sku, data]) => ({
+      const rows: ItemSalesRow[] = Array.from(itemMap.entries()).map(([sku, data]) => ({
         id: sku,
         product: data.productName,
         sku: data.sku,

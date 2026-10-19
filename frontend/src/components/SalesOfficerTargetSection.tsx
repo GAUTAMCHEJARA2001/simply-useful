@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   salesTargetService,
   OfficerSalesTargetRecord,
@@ -120,40 +121,46 @@ export const SalesOfficerTargetSection: React.FC<SalesOfficerTargetSectionProps>
             {/* Controls: Month Selector + Switch Officer (if Admin) + Quick Actions */}
             <div className="flex items-center gap-2 flex-wrap">
               {/* Month Selector */}
-              <div className="flex items-center gap-1.5 bg-background border border-border/70 rounded-lg px-2.5 py-1 text-xs shadow-2xs">
-                <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                  className="bg-transparent font-semibold text-foreground focus:outline-hidden cursor-pointer text-xs"
-                >
-                  <option value={8}>Aug 2026 (Active Orders)</option>
-                  <option value={9}>Sep 2026 (Current)</option>
-                  <option value={10}>Oct 2026</option>
-                  <option value={11}>Nov 2026</option>
-                  <option value={12}>Dec 2026</option>
-                </select>
+              <div className="flex items-center gap-1.5 bg-background border border-border/70 rounded-xl px-2.5 py-1 text-xs shadow-2xs">
+                <Calendar className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
+                  <SelectTrigger className="h-6 text-xs font-semibold bg-transparent border-0 shadow-none focus:ring-0 focus:outline-none p-0 gap-1 text-foreground cursor-pointer">
+                    <SelectValue placeholder="Select Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="8" className="text-xs">Aug 2026 (Active Orders)</SelectItem>
+                    <SelectItem value="9" className="text-xs">Sep 2026 (Current)</SelectItem>
+                    <SelectItem value="10" className="text-xs">Oct 2026</SelectItem>
+                    <SelectItem value="11" className="text-xs">Nov 2026</SelectItem>
+                    <SelectItem value="12" className="text-xs">Dec 2026</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {isAdmin && data?.officers && data.officers.length > 1 && (
-                <div className="flex items-center gap-1.5 bg-background border border-border/70 rounded-lg px-2.5 py-1 text-xs">
-                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                <div className="flex items-center gap-1.5 bg-background border border-border/70 rounded-xl px-2.5 py-1 text-xs">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <span className="text-muted-foreground font-medium">Officer:</span>
-                  <select
-                    value={selectedUserId || ''}
-                    onChange={(e) => {
-                      setSelectedUserId(e.target.value);
-                      if (onSelectOfficer) onSelectOfficer(e.target.value);
+                  <Select
+                    value={selectedUserId || 'ALL'}
+                    onValueChange={(val) => {
+                      const id = val === 'ALL' ? '' : val;
+                      setSelectedUserId(id);
+                      if (onSelectOfficer) onSelectOfficer(id);
                     }}
-                    className="bg-transparent font-bold text-primary focus:outline-hidden cursor-pointer text-xs"
                   >
-                    <option value="">Team Summary ({data.officers.length})</option>
-                    {data.officers.map(o => (
-                      <option key={o.user.id} value={o.user.id}>
-                        {o.user.name} ({o.user.territory || 'General'})
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="h-6 text-xs font-bold text-primary bg-transparent border-0 shadow-none focus:ring-0 focus:outline-none p-0 gap-1 cursor-pointer">
+                      <SelectValue placeholder="Select Officer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL" className="text-xs">Team Summary ({data.officers.length})</SelectItem>
+                      {data.officers.map(o => (
+                        <SelectItem key={o.user.id} value={o.user.id} className="text-xs">
+                          {o.user.name} ({o.user.territory || 'General'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 

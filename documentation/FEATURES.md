@@ -124,3 +124,32 @@ This document describes the key features, operational workflows, user interactio
   * File list of previous backups showing timestamps, files sizes, and download actions.
   * Recovery buttons that prompt for confirmation before restoring a backup.
 * **Dependencies:** `/api/v1/system/local-backups` routes, Django system handlers.
+
+---
+
+## 📄 9. HR Employee Letters & Document Generation (Indian Compliance)
+
+* **Purpose:** Automates drafting, verification, previewing, and PDF issuance of statutory and operational company letters for employees across their entire lifecycle, compliant with Indian labor laws and corporate standards.
+* **Letters Taxonomy (Lifecycle Stages):**
+  1. **Onboarding & Hiring:** Offer Letter, Appointment Letter (Employment Contract), Internship / Trainee Agreement.
+  2. **Probation & Confirmation:** Probation Confirmation Letter, Probation Extension Letter.
+  3. **Appraisal & Career Progression:** Salary Increment / Revision Letter, Promotion Letter, Transfer / Relocation Letter, Bonus / Incentive Letter.
+  4. **HR & Statutory Verifications:** Employment Verification / Bonafide Letter, Visa / Travel Support Letter, Address Proof Letter.
+  5. **Disciplinary & Natural Justice Compliance:** Show Cause Notice, Warning Letter / Memo, Suspension Letter.
+  6. **Separation & Exit:** Resignation Acceptance Letter, Relieving Letter, Experience Certificate, Termination Letter.
+* **End-to-End Operational Workflow:**
+  $$\text{Select/New Employee} \longrightarrow \text{Pick Letter Type} \longrightarrow \text{Auto-populate Labour/Salary/Org Data} \longrightarrow \text{Edit / Override Placeholders} \longrightarrow \text{Live A4 Preview} \longrightarrow \text{Issue & Export PDF}$$
+  1. **Initiation:** HR/Admin opens HR & Payroll $\rightarrow$ Employee Letters tab (or clicks "Generate Letter" on an employee row).
+  2. **Data Hydration:** Backend auto-populates employee profile details (`Labour`), current compensation (`SalarySlip` / `base_salary_monthly`), company letterhead metadata (`Company`), and reporting hierarchy.
+  3. **Field Adjustments:** HR reviews and edits letter-specific variables (e.g., probation duration, notice period, increment percentage, effective dates, or justification notes).
+  4. **Document Rendering & Approval:** System compiles the template with live token substitution (`{{employee_name}}`, `{{designation}}`, `{{annual_ctc}}`, etc.) into an interactive A4 formatted document preview.
+  5. **Issuance & Archival:** The letter is finalized with an auto-generated official reference number (`REF/YYYY/XXX`), logged in the employee's document record, and exported as a print-ready PDF with letterhead branding using `html2pdf.js`.
+* **User Interactions:**
+  * Interactive modal dialog with split-screen layout (input parameters on the left, live A4 document preview on the right).
+  * Print and single-click Download PDF actions.
+  * Audit history of past letters issued per employee with status badges (`DRAFT`, `ISSUED`, `ACCEPTED`).
+* **Dependencies:** `Labour` model, `SalarySlip` model, `Company` model, `amountToWords.ts`, `html2pdf.js`, `SalarySlipPdfModal` pattern.
+* **Compliance Safeguards:**
+  * Adherence to Indian salary breakups (Basic $\ge 40\%-50\%$, HRA, EPF under EPFO rules, ESIC thresholds, and Gratuity under Payment of Gratuity Act).
+  * Enforcement of domestic inquiry and natural justice notices prior to disciplinary action or termination.
+

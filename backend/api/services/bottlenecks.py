@@ -109,7 +109,7 @@ def get_operational_bottlenecks(company_id=None):
         # 4. If ledger is completely empty, backfill some nice operational ledger logs
         if not ledger_list:
             # Fetch recent orders to generate beautiful, authentic visual logs
-            cursor.execute("SELECT id, status, soEmail, updatedAt FROM `Order` ORDER BY date DESC LIMIT 4")
+            cursor.execute('SELECT id, status, "soEmail", "updatedAt" FROM "Order" ORDER BY date DESC LIMIT 4')
             recent_orders = cursor.fetchall()
             for i, (o_id, status, so_email, updated_at) in enumerate(recent_orders):
                 date_str = str(updated_at).split('.')[0].replace('T', ' ').replace('Z', '')

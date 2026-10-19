@@ -1,22 +1,32 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from api.views_push import subscribe, unsubscribe, vapid_public_key
-from api.views import (
-    auth_login, auth_register, auth_permissions, UserViewSet, ProductViewSet,
-    CategoryViewSet, BrandViewSet, UnitViewSet, WarehouseViewSet, RegionViewSet,
-    MarketViewSet, master_settings, DealerViewSet, DistributorViewSet, OrderViewSet,
-    VisitViewSet, ExpenseViewSet, BOMViewSet, SupplierViewSet, LabourViewSet,
-    BroadcastViewSet, CompanyViewSet,
-    user_assignments,
-    bulk_template, bulk_import, database_export, local_backup_status_view, download_postgres_dump_view, schedule_local_backup_view,
-    list_local_backups_view, restore_postgres_dump_view,
-    create_system_log, list_system_logs, clear_system_logs,
-    EstimateViewSet,
-    
-    # Reports
+from api.views_backups import (
+    local_backup_status_view, download_postgres_dump_view, schedule_local_backup_view,
+    list_local_backups_view, restore_postgres_dump_view
+)
+from api.views_logs import (
+    create_system_log, list_system_logs, clear_system_logs
+)
+from api.views_reports import (
     report_dashboard_kpis, report_sales_summary, report_low_stock, report_daily,
     report_current_stock, report_aggregate_stock, report_stock_ledger, report_global_inventory,
-    report_stocks_by_warehouse,
+    report_stocks_by_warehouse, report_stock_integrity_audit
+)
+from api.views_analytics import (
+    trigger_analytics_etl, get_analytics_kpis, get_analytics_predictions,
+    get_analytics_alerts, action_analytics_alert, get_analytics_cfo_liquidity,
+    get_analytics_bottlenecks, get_analytics_data_quality
+)
+from api.views_expenses import ExpenseViewSet
+from api.views import (
+    auth_login, auth_register, auth_create_company, auth_refresh, auth_permissions, UserViewSet, ProductViewSet,
+    CategoryViewSet, BrandViewSet, UnitViewSet, WarehouseViewSet, RegionViewSet,
+    MarketViewSet, master_settings, DealerViewSet, DistributorViewSet, OrderViewSet,
+    VisitViewSet, BOMViewSet, SupplierViewSet, LabourViewSet,
+    BroadcastViewSet, CompanyViewSet,
+    user_assignments, bulk_template, bulk_import, database_export,
+    EstimateViewSet,
     
     # Transactions
     transaction_purchases, transaction_purchase_detail, transaction_sales,
@@ -30,14 +40,10 @@ from api.views import (
     # Health & Metrics
     system_health, system_metrics,
     
-    # CRM
-    LeadViewSet,
-    
-    # Analytics & Decision Intelligence
-    trigger_analytics_etl, get_analytics_kpis,
-    get_analytics_predictions, get_analytics_alerts, action_analytics_alert, get_analytics_cfo_liquidity,
-    get_analytics_bottlenecks, get_analytics_data_quality, PaymentReceiptViewSet, PartyOnboardingViewSet
+    # CRM & Onboarding
+    LeadViewSet, PaymentReceiptViewSet, PartyOnboardingViewSet
 )
+
 from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties, import_busy_ledger, get_sync_status, ledger_requests_view, fulfill_ledger_request
 from api.views_travel import (
     travel_today, travel_start, travel_end, travel_my_history,
@@ -87,13 +93,16 @@ from api.leave_views import hr_leave_policies, hr_leave_policies_detail, hr_leav
 urlpatterns = [
     # Auth
     path('auth/login', auth_login, name='auth-login'),
+    path('auth/register', auth_register, name='auth-register'),
+    path('auth/create-company', auth_create_company, name='auth-create-company'),
+    path('auth/refresh', auth_refresh, name='auth-refresh'),
+    path('auth/permissions', auth_permissions, name='auth-permissions'),
+    path('auth/permissions/<str:perm_id>', auth_permissions, name='auth-permissions-detail'),
     
     # Push Notifications
     path('webpush/subscribe', subscribe, name='webpush-subscribe'),
     path('webpush/unsubscribe', unsubscribe, name='webpush-unsubscribe'),
     path('webpush/vapid-public-key', vapid_public_key, name='webpush-vapid-public-key'),
-    path('auth/register', auth_register, name='auth-register'),
-    path('auth/permissions', auth_permissions, name='auth-permissions'),
     
     # Master custom settings
     path('masters/settings', master_settings, name='master-settings'),
@@ -121,6 +130,7 @@ urlpatterns = [
     path('reports/aggregate-stock', report_aggregate_stock, name='report-aggregate-stock'),
     path('reports/global-inventory', report_global_inventory, name='report-global-inventory'),
     path('reports/stocks-by-warehouse', report_stocks_by_warehouse, name='report-stocks-by-warehouse'),
+    path('reports/stock-integrity-audit', report_stock_integrity_audit, name='report-stock-integrity-audit'),
 
     
     # Analytics & Decision Intelligence

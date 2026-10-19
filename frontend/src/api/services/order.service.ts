@@ -9,6 +9,7 @@ export const orderService = {
   getAll: () => api.get(API_ENDPOINTS.ORDERS),
   getById: (id: string | number) => api.get(`${API_ENDPOINTS.ORDERS}/${id}`),
   create: (data: any) => api.post(API_ENDPOINTS.ORDERS, data),
+  delete: (id: string | number) => api.delete(`${API_ENDPOINTS.ORDERS}/${id}`),
   
   updateStatus: (id: string | number, payload: { status: string; reason?: string; actionDate?: string }) => 
     api.post(`${API_ENDPOINTS.ORDERS}/${id}/update-status`, payload),

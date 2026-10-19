@@ -5,7 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from api.models import Order, Orderitem, Product, Expense, Visit, Stocktransaction, Userwarehouseaccess, Dealer, Warehouse
-from api.views import send_success, send_error, _get_company_id, _get_request_warehouse_ids, _compute_all_product_stocks
+from api.views import send_success, send_error, _get_company_id, _get_request_warehouse_ids, _compute_all_product_stocks, _extract_order_tag
 
 
 @api_view(['GET'])
@@ -219,7 +219,7 @@ def report_stock_ledger(request, pk):
     purchase_items_qs = Purchaseitem.objects.filter(
         productname=product.name
     ).filter(
-        purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Returned']
+        purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Partially Returned', 'Returned']
     )
     if company_id:
         purchase_items_qs = purchase_items_qs.filter(purchaseid__companyid_id=company_id)
@@ -244,9 +244,9 @@ def report_stock_ledger(request, pk):
 
         if t_type == 'OPENING_STOCK':
             in_qty = qty
-        elif t_type in ['PURCHASE', 'PRODUCTION', 'ADD_STOCK', 'RETURN_IN', 'IN']:
+        elif t_type in ['PURCHASE', 'PRODUCTION', 'ADD_STOCK', 'RETURN_IN', 'RETURN', 'SALES_RETURN', 'IN']:
             in_qty = qty
-        elif t_type in ['SALE', 'DISPATCH', 'CONSUMED', 'RETURN_OUT', 'OUT']:
+        elif t_type in ['SALE', 'DISPATCH', 'CONSUMED', 'RETURN_OUT', 'PURCHASE_RETURN', 'OUT']:
             out_qty = abs(qty)
         elif t_type in ['ADJUSTMENT', 'MANUAL_ADJUSTMENT']:
             if qty >= 0:
@@ -300,11 +300,51 @@ def report_stock_ledger(request, pk):
                 'remarks': f"Dispatched Order (Inv: {dl.invoicenumber or '-'}, Veh: {dl.vehiclenumber or '-'})"
             })
 
+    # Direct completed orders without dispatch log or Stocktransaction (fallback)
+    from api.models import Orderitem
+    direct_ois_qs = Orderitem.objects.filter(
+        Q(productid_id=product.id) | Q(productid__productcode=product.productcode),
+        orderid__status__in=['Completed', 'Delivered']
+    ).exclude(
+        orderid__orderid__in=st_ref_ids
+    ).exclude(
+        orderid__id__in=st_ref_ids
+    ).exclude(
+        orderid__dispatchlog__isnull=False
+    )
+    if company_id:
+        direct_ois_qs = direct_ois_qs.filter(orderid__companyid_id=company_id)
+    if target_wh_ids:
+        direct_ois_qs = direct_ois_qs.filter(orderid__warehouseid_id__in=target_wh_ids)
+        
+    for doi in direct_ois_qs.select_related('orderid'):
+        order = doi.orderid
+        order_id = order.orderid if order else '—'
+        qty = float(doi.qty or 0)
+        dt = order.date if (order and order.date) else (order.createdat if order else None)
+        wh = order.assigned_warehouse if (order and hasattr(order, 'assigned_warehouse')) else None
+        wh_name = wh.name if (wh and hasattr(wh, 'name')) else (order.dispatchwarehouse if order else 'Main Warehouse')
+        if qty > 0:
+            events.append({
+                'id': f"direct_ord_{doi.id}",
+                'datetime': dt,
+                'createdat': order.createdat if order else None,
+                'date_str': dt.strftime('%Y-%m-%d %H:%M') if dt else '',
+                'type': 'SALE',
+                'docNo': str(order_id),
+                'party': wh_name,
+                'inQty': 0.0,
+                'outQty': qty,
+                'credit': 0.0,
+                'debit': qty,
+                'remarks': f"Completed Order ({order_id})"
+            })
+
     for ri in return_items:
         rl = ri.returnlogid
         order = rl.orderid if rl else None
         order_id = order.orderid if order else '—'
-        if str(order_id) in st_ref_ids or str(rl.id) in st_ref_ids:
+        if f"ret_{ri.id}" in st_ref_ids or f"RET-{order_id}" in st_ref_ids or str(rl.id) in st_ref_ids:
             continue
         dt = rl.returndate if (rl and rl.returndate) else (rl.createdat if rl else None)
         wh = order.assigned_warehouse if (order and hasattr(order, 'assigned_warehouse')) else None
@@ -330,7 +370,17 @@ def report_stock_ledger(request, pk):
         p = pi.purchaseid
         if not p:
             continue
-        is_return = p.status == 'Returned'
+        is_return = bool(p.purchaseid and str(p.purchaseid).startswith('PRET-')) or ('[ORIGINAL PURCHASE:' in (p.narration or ''))
+        if is_return:
+            orig_ref = _extract_order_tag(p.narration, 'ORIGINAL PURCHASE')
+            if (f"PRET-{p.purchaseid}" in st_ref_ids or 
+                str(p.purchaseid) in st_ref_ids or 
+                str(p.id) in st_ref_ids or 
+                (orig_ref and f"PRET-{orig_ref}" in st_ref_ids)):
+                continue
+        else:
+            if str(p.purchaseid) in st_ref_ids or str(p.id) in st_ref_ids:
+                continue
         dt = p.date if p.date else p.createdat
         wh = p.warehouseid
         wh_name = wh.name if (wh and hasattr(wh, 'name')) else 'Main Warehouse'
@@ -505,3 +555,60 @@ def report_stocks_by_warehouse(request):
             wh_map[wh.name] = stock_by_prod
 
     return send_success(wh_map, 'Stocks by warehouse fetched successfully')
+
+@api_view(['GET'])
+def report_stock_integrity_audit(request):
+    """
+    Automated Self-Audit & Health Check.
+    Audits every active product comparing _compute_all_product_stocks against report_stock_ledger.
+    Ensures 100% mathematical stock integrity across the entire warehouse catalog.
+    """
+    from api.views import _compute_all_product_stocks
+    from django.utils import timezone
+    company_id = _get_company_id(request)
+    stocks = _compute_all_product_stocks(company_id=company_id, request=request)
+    stock_dict = {s['productId']: s for s in stocks}
+
+    discrepancies = []
+    checked_count = 0
+
+    from api.models import StockLedgerEntry
+    from django.db.models import Sum
+    sle_balances = {
+        s['productid_id']: float(s['total_balance'] or 0)
+        for s in StockLedgerEntry.objects.values('productid_id').annotate(total_balance=Sum('quantity_change'))
+    }
+
+    for prod_id, s_data in stock_dict.items():
+        checked_count += 1
+        ledger_res = report_stock_ledger(request._request if hasattr(request, '_request') else request, pk=prod_id)
+        if getattr(ledger_res, 'data', None) and ledger_res.data.get('success'):
+            l_data = ledger_res.data.get('data', {})
+            l_curr = float(l_data.get('currentStock') or 0.0)
+            c_curr = float(s_data.get('currentStock') or 0.0)
+            sle_curr = sle_balances.get(prod_id, 0.0)
+            diff_ledger = round(c_curr - l_curr, 4)
+            diff_sle = round(c_curr - sle_curr, 4)
+            if abs(diff_ledger) > 0.001 or abs(diff_sle) > 0.001:
+                discrepancies.append({
+                    'productId': prod_id,
+                    'productName': s_data.get('productName'),
+                    'sku': s_data.get('sku'),
+                    'overviewStock': c_curr,
+                    'ledgerStock': l_curr,
+                    'immutableLedgerStock': sle_curr,
+                    'discrepancy': diff_ledger or diff_sle
+                })
+
+    is_healthy = len(discrepancies) == 0
+    return send_success({
+        'healthy': is_healthy,
+        'status': 'HEALTHY' if is_healthy else 'DISCREPANCY_DETECTED',
+        'totalProducts': checked_count,
+        'verifiedProducts': checked_count - len(discrepancies),
+        'discrepancyCount': len(discrepancies),
+        'discrepancies': discrepancies,
+        'auditedAt': timezone.now().isoformat(),
+        'message': '100% Stock Integrity Verified across all products' if is_healthy else f'Discrepancies detected in {len(discrepancies)} products'
+    }, 'Stock audit complete')
+

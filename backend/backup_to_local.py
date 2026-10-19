@@ -100,6 +100,95 @@ def find_pg_restore():
     return "pg_restore" # fallback
 
 def restore_pg_dump(backup_file_path, db_name=DB_NAME, db_user=DB_USER, db_password=DB_PASSWORD, db_host=DB_HOST, db_port=DB_PORT):
+    # If the backup is in JSON format, restore via Python/psycopg2 table insertion
+    if backup_file_path.endswith('.json'):
+        print(f"Detected JSON backup file: {backup_file_path}. Restoring table data...")
+        try:
+            import json, psycopg2
+            with open(backup_file_path, 'r', encoding='utf-8') as f:
+                content = json.load(f)
+
+            # Check if this is a Django fixture list
+            if isinstance(content, list) and content and 'model' in content[0] and 'fields' in content[0]:
+                try:
+                    import django
+                    from django.core.management import call_command
+                    from django.db import connection
+                    call_command('loaddata', backup_file_path)
+                    try:
+                        with connection.cursor() as cursor:
+                            cursor.execute("""
+                                SELECT 
+                                    s.relname AS seq_name,
+                                    t.relname AS table_name,
+                                    a.attname AS col_name
+                                FROM pg_class s
+                                JOIN pg_depend d ON d.objid = s.oid AND d.classid = 'pg_class'::regclass AND d.refclassid = 'pg_class'::regclass
+                                JOIN pg_class t ON t.oid = d.refobjid
+                                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
+                                WHERE s.relkind = 'S';
+                            """)
+                            for seq, table, col in cursor.fetchall():
+                                try:
+                                    cursor.execute(f'SELECT setval(\'"{seq}"\', COALESCE((SELECT MAX("{col}") FROM "{table}"), 1));')
+                                except Exception:
+                                    pass
+                    except Exception as seq_err:
+                        print(f"Sequence update note: {seq_err}")
+                    print("Django JSON fixture data loaded successfully and sequences synchronized.")
+                    return True, "Database restored successfully from JSON fixture."
+                except Exception as dj_err:
+                    print(f"loaddata failed: {dj_err}")
+                    return False, f"JSON loaddata failed: {str(dj_err)}"
+
+            conn = psycopg2.connect(
+                dbname=db_name,
+                user=db_user,
+                password=db_password,
+                host=db_host,
+                port=db_port
+            )
+            conn.autocommit = False
+            cur = conn.cursor()
+            cur.execute("SET session_replication_role = 'replica';")
+
+            tables_dict = content.get('tables', {}) if isinstance(content, dict) and 'tables' in content else None
+            if not tables_dict and isinstance(content, dict) and 'table' in content:
+                tables_dict = {content['table']: {'columns': content.get('columns', []), 'rows': content.get('rows', [])}}
+
+            if not tables_dict:
+                conn.close()
+                return False, "Unrecognized JSON backup structure."
+
+            restored_count = 0
+            for t_name, t_data in tables_dict.items():
+                cols = t_data.get('columns', [])
+                rows = t_data.get('rows', [])
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' AND table_name = %s
+                    );
+                """, (t_name,))
+                if not cur.fetchone()[0]:
+                    continue
+
+                cur.execute(f'TRUNCATE TABLE "{t_name}" CASCADE;')
+                if rows and cols:
+                    cols_sql = ", ".join(f'"{c}"' for c in cols)
+                    placeholders = ", ".join(["%s"] * len(cols))
+                    cur.executemany(f'INSERT INTO "{t_name}" ({cols_sql}) VALUES ({placeholders})', rows)
+                restored_count += 1
+
+            cur.execute("SET session_replication_role = 'origin';")
+            conn.commit()
+            conn.close()
+            print(f"Database restored successfully from JSON ({restored_count} tables).")
+            return True, "Success"
+        except Exception as e:
+            print(f"[ERROR] JSON restore failed: {e}")
+            return False, str(e)
+
     pg_restore_path = find_pg_restore()
     print(f"Using pg_restore path: {pg_restore_path}")
     print(f"Restoring database '{db_name}' from {backup_file_path}...")
@@ -125,8 +214,17 @@ def restore_pg_dump(backup_file_path, db_name=DB_NAME, db_user=DB_USER, db_passw
         res = subprocess.run(cmd, env=env, capture_output=True, text=True)
         stderr_output = res.stderr or ""
         if res.returncode == 0 or (res.returncode == 1 and "ERROR:" not in stderr_output):
-            print("Database restored successfully.")
-            return True, "Success"
+            print("Database restored successfully from dump file.")
+            print("Running automated post-restore Enterprise Upgrade & Evolution Engine...")
+            try:
+                from scripts.upgrade_old_backup_to_new_db import run_full_upgrade
+                up_res = run_full_upgrade(silent=False)
+                msg = f"Database restored and auto-upgraded to Enterprise Structure! ({up_res['message']})"
+                print(f"[OK] {msg}")
+                return True, msg
+            except Exception as up_err:
+                print(f"[WARNING] Post-restore upgrade warning: {up_err}")
+                return True, f"Database restored successfully. Post-restore upgrade warning: {up_err}"
         else:
             error_msg = res.stderr or res.stdout or "Unknown pg_restore error"
             print(f"[ERROR] pg_restore failed: {error_msg}")
@@ -155,6 +253,7 @@ def take_pg_dump(dest_dir):
         '-h', DB_HOST,
         '-p', DB_PORT,
         '-U', DB_USER,
+        '-n', 'public', # Dump only the active clean public schema
         '-F', 'c', # Custom compressed format
         '-b',      # Include large objects
         '-O',      # Do not output commands to set ownership
@@ -168,14 +267,69 @@ def take_pg_dump(dest_dir):
         subprocess.run(cmd, env=env, check=True)
         print("Backup file created successfully.")
         
+        # Verify backup exists and has valid non-zero size
+        if not os.path.exists(local_temp_path) or os.path.getsize(local_temp_path) == 0:
+            raise ValueError(f"Backup file {local_temp_path} is missing or 0 bytes.")
+            
+        file_size_bytes = os.path.getsize(local_temp_path)
+        
+        # Compute SHA-256 Checksum for security and restore verification
+        import hashlib
+        hasher = hashlib.sha256()
+        with open(local_temp_path, 'rb') as f:
+            while chunk := f.read(65536):
+                hasher.update(chunk)
+        checksum = hasher.hexdigest()
+        
         # Copy to destination directory
         dest_path = os.path.join(dest_dir, backup_filename)
         shutil.copy2(local_temp_path, dest_path)
-        print(f"Backup saved to local folder: {dest_path}")
+        
+        # Write checksum manifest alongside dump
+        checksum_path = dest_path + '.sha256'
+        with open(checksum_path, 'w') as f:
+            f.write(f"{checksum}  {backup_filename}\n")
+            
+        print(f"Backup saved to local folder: {dest_path} (Size: {file_size_bytes} bytes, SHA256: {checksum[:8]}...)")
         return backup_filename
     except Exception as e:
-        print(f"\n[ERROR] pg_dump or copy failed: {e}")
-        sys.exit(1)
+        print(f"\n[WARNING] pg_dump failed ({e}). Attempting full JSON database dump fallback covering all tables...")
+        try:
+            import psycopg2, json
+            from decimal import Decimal
+            import datetime as dt
+
+            class SafeEncoder(json.JSONEncoder):
+                def default(self, obj):
+                    if isinstance(obj, (dt.date, dt.datetime)):
+                        return obj.isoformat()
+                    if isinstance(obj, Decimal):
+                        return float(obj)
+                    return str(obj)
+
+            json_backup_filename = f"db_backup_{timestamp}.json"
+            json_dest_path = os.path.join(dest_dir, json_backup_filename)
+
+            conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD, host=DB_HOST, port=DB_PORT)
+            cur = conn.cursor()
+            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name;")
+            tables = [r[0] for r in cur.fetchall()]
+
+            all_tables_data = {}
+            for t in tables:
+                cur.execute(f"SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=%s ORDER BY ordinal_position;", (t,))
+                cols = [r[0] for r in cur.fetchall()]
+                cur.execute(f'SELECT * FROM "{t}";')
+                all_tables_data[t] = {'columns': cols, 'rows': cur.fetchall()}
+            conn.close()
+
+            with open(json_dest_path, 'w', encoding='utf-8') as f:
+                json.dump({'created_at': dt.datetime.now().isoformat(), 'tables': all_tables_data}, f, indent=2, cls=SafeEncoder)
+            print(f"Fallback JSON backup successfully saved: {json_dest_path}")
+            return json_backup_filename
+        except Exception as json_err:
+            print(f"\n[ERROR] Both pg_dump and JSON fallback failed: {json_err}")
+            sys.exit(1)
     finally:
         # Clean up temporary local file if it exists in script folder
         if os.path.exists(local_temp_path):

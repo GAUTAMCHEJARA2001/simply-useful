@@ -11,35 +11,96 @@ from api.models import (
 
 class CompanySerializer(serializers.ModelSerializer):
     skuPrefix = serializers.CharField(source='skuprefix', required=False, allow_null=True)
+    schemaName = serializers.CharField(source='schemaname', required=False, allow_null=True)
+    activatedAt = serializers.DateTimeField(source='activated_at', required=False, allow_null=True)
+    validUntil = serializers.DateTimeField(source='valid_until', required=False, allow_null=True)
+    isExpired = serializers.BooleanField(source='is_expired', read_only=True)
+    isSubscriptionActive = serializers.BooleanField(source='is_subscription_active', read_only=True)
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
     stockMethod = serializers.CharField(source='stockmethod', default='FIFO')
 
     class Meta:
         model = Company
-        fields = ['id', 'name', 'skuPrefix', 'active', 'createdAt', 'updatedAt', 'stockMethod']
+        fields = [
+            'id', 'name', 'skuPrefix', 'schemaName', 'active',
+            'activatedAt', 'validUntil', 'isExpired', 'isSubscriptionActive',
+            'createdAt', 'updatedAt', 'stockMethod'
+        ]
 
 
 class UserSerializer(serializers.ModelSerializer):
     id = serializers.CharField(read_only=True)
     companyId = serializers.CharField(source='companyid_id', required=False, allow_null=True)
+    companyName = serializers.SerializerMethodField(read_only=True)
+    validUntil = serializers.SerializerMethodField(read_only=True)
+    isSubscriptionActive = serializers.SerializerMethodField(read_only=True)
+    skuPrefix = serializers.SerializerMethodField(read_only=True)
+    stockMethod = serializers.SerializerMethodField(read_only=True)
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
     monthlyTarget = serializers.FloatField(source='monthlytarget', required=False, allow_null=True)
 
+    def get_companyName(self, obj):
+        try:
+            return obj.companyid.name if obj.companyid else None
+        except Exception:
+            return None
+
+    def get_validUntil(self, obj):
+        try:
+            return obj.companyid.valid_until.isoformat() if (obj.companyid and obj.companyid.valid_until) else None
+        except Exception:
+            return None
+
+    def get_isSubscriptionActive(self, obj):
+        try:
+            return obj.companyid.is_subscription_active if obj.companyid else True
+        except Exception:
+            return True
+
+    def get_skuPrefix(self, obj):
+        try:
+            return obj.companyid.skuprefix if obj.companyid else None
+        except Exception:
+            return None
+
+    def get_stockMethod(self, obj):
+        try:
+            return obj.companyid.stockmethod if obj.companyid else 'FIFO'
+        except Exception:
+            return 'FIFO'
+
     class Meta:
         model = User
-        fields = ['id', 'email', 'name', 'role', 'active', 'monthlyTarget', 'companyId', 'createdAt', 'updatedAt', 'territory']
+        fields = [
+            'id', 'email', 'name', 'role', 'active', 'monthlyTarget', 
+            'companyId', 'companyName', 'validUntil', 'isSubscriptionActive',
+            'skuPrefix', 'stockMethod',
+            'createdAt', 'updatedAt', 'territory'
+        ]
 
 
-def _auto_assign_int_id(model_cls, validated_data):
-    if 'id' not in validated_data or not validated_data.get('id'):
+
+def _auto_assign_int_id(model_cls, validated_data, context=None):
+    pk_field = model_cls._meta.pk
+    from django.db import models
+    if ('id' not in validated_data or not validated_data.get('id')) and not isinstance(pk_field, (models.AutoField, models.BigAutoField, models.SmallAutoField)):
         next_id = (model_cls.objects.order_by('-id').values_list('id', flat=True).first() or 0) + 1
         validated_data['id'] = next_id
     if hasattr(model_cls, 'companyid') and ('companyid_id' not in validated_data or not validated_data.get('companyid_id')):
-        from core.models import Company
-        first_comp = Company.objects.first()
-        validated_data['companyid_id'] = first_comp.id if first_comp else 'cmo75yliq0000wesurjpett1n'
+        req_comp = None
+        if context and 'request' in context:
+            req = context['request']
+            req_comp = req.headers.get('X-Company-ID') or req.headers.get('X-Company-Id')
+            if not req_comp and hasattr(req, 'user') and req.user.is_authenticated:
+                req_comp = getattr(req.user, 'companyid_id', None) or getattr(req.user, 'companyId', None)
+        if req_comp:
+            validated_data['companyid_id'] = str(req_comp)
+        else:
+            from core.models import Company
+            first_comp = Company.objects.first()
+            validated_data['companyid_id'] = first_comp.id if first_comp else 'cmo75yliq0000wesurjpett1n'
     return validated_data
 
 
@@ -53,7 +114,7 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'active', 'companyId', 'parentId']
 
     def create(self, validated_data):
-        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data, getattr(self, 'context', None))
         return super().create(validated_data)
 
 
@@ -66,7 +127,7 @@ class BrandSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'active', 'companyId']
 
     def create(self, validated_data):
-        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data, getattr(self, 'context', None))
         return super().create(validated_data)
 
 
@@ -79,7 +140,7 @@ class UnitSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'active', 'companyId']
 
     def create(self, validated_data):
-        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data, getattr(self, 'context', None))
         return super().create(validated_data)
 
 
@@ -93,7 +154,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'active', 'companyId', 'gstNumber', 'location']
 
     def create(self, validated_data):
-        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data, getattr(self, 'context', None))
         return super().create(validated_data)
 
 
@@ -106,7 +167,7 @@ class RegionSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'active', 'companyId']
 
     def create(self, validated_data):
-        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data, getattr(self, 'context', None))
         return super().create(validated_data)
 
 
@@ -119,7 +180,7 @@ class MarketSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'active', 'regionId']
 
     def create(self, validated_data):
-        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data, getattr(self, 'context', None))
         return super().create(validated_data)
 
 
@@ -170,7 +231,7 @@ class LabourSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'dailyWage', 'contactInfo', 'contact_info', 'active', 'companyId', 'createdAt', 'updatedAt']
 
     def create(self, validated_data):
-        validated_data = _auto_assign_int_id(self.Meta.model, validated_data)
+        validated_data = _auto_assign_int_id(self.Meta.model, validated_data, getattr(self, 'context', None))
         return super().create(validated_data)
 
 
@@ -230,7 +291,13 @@ class ProductSerializer(serializers.ModelSerializer):
             if qs.exists():
                 raise serializers.ValidationError({"productCode": "A product with this SKU already exists."})
                 
-        return data
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, 'copy') else dict(data)
+        if 'name' not in data and 'productName' in data:
+            data['name'] = data['productName']
+        if 'productcode' not in data and 'productCode' in data:
+            data['productcode'] = data['productCode']
+        return super().to_internal_value(data)
 
     def create(self, validated_data):
         validated_data.pop('defaultwarehouseid', None)
@@ -505,6 +572,12 @@ class OrderitemSerializer(serializers.ModelSerializer):
             except Exception:
                 pass
 
+        if 'tax_percent' not in ret or ret.get('tax_percent') is None:
+            prod_gst = None
+            if hasattr(instance, 'productid') and instance.productid:
+                prod_gst = getattr(instance.productid, 'gst', None)
+            ret['tax_percent'] = float(prod_gst) if prod_gst is not None else 18.0
+
         return ret
 
 
@@ -525,19 +598,44 @@ class OrderSerializer(serializers.ModelSerializer):
     vehicleNumber = serializers.CharField(source='vehiclenumber', required=False, allow_null=True, allow_blank=True)
     driverName = serializers.CharField(source='drivername', required=False, allow_null=True, allow_blank=True)
     driverMobile = serializers.CharField(source='drivermobile', required=False, allow_null=True, allow_blank=True)
+    driverMobileNumber = serializers.CharField(source='drivermobile', required=False, allow_null=True, allow_blank=True)
     dispatchWarehouse = serializers.CharField(source='dispatchwarehouse', required=False, allow_null=True, allow_blank=True)
     dispatchDate = serializers.CharField(source='dispatchdate', required=False, allow_null=True, allow_blank=True)
+    expectedDeliveryDate = serializers.SerializerMethodField(read_only=True)
+    warehouseName = serializers.SerializerMethodField(read_only=True)
+
+    def get_warehouseName(self, obj):
+        if getattr(obj, 'warehouseid', None):
+            return obj.warehouseid.name
+        if getattr(obj, 'dispatchwarehouse', None):
+            return obj.dispatchwarehouse
+        return None
+
+    def get_expectedDeliveryDate(self, obj):
+        from api.views import _extract_order_tag
+        return _extract_order_tag(obj.narration, 'EXPECTED DELIVERY DATE') or _extract_order_tag(obj.narration, 'EXPECTED DELIVERY') or None
+
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, 'copy') else dict(data)
+        if 'assignedWarehouse' not in data:
+            if data.get('warehouse_id'):
+                data['assignedWarehouse'] = data['warehouse_id']
+            elif data.get('warehouseId'):
+                data['assignedWarehouse'] = data['warehouseId']
+        if 'driverMobile' not in data and data.get('driverMobileNumber'):
+            data['driverMobile'] = data['driverMobileNumber']
+        
+        # Capture and tag expectedDeliveryDate into narration
+        exp_date = data.get('expectedDeliveryDate') or data.get('expected_delivery_date') or data.get('deliveryDate')
+        if exp_date:
+            from api.views import _append_order_tags
+            raw_narr = data.get('narration') or ''
+            data['narration'] = _append_order_tags(raw_narr, {'EXPECTED DELIVERY DATE': str(exp_date).strip()})
+        return super().to_internal_value(data)
 
     createdBy = serializers.SerializerMethodField(read_only=True)
     lastEditedBy = serializers.SerializerMethodField(read_only=True)
-    narration = serializers.SerializerMethodField()
-
-    def get_narration(self, obj):
-        import re
-        text = obj.narration or ''
-        text = re.sub(r'\[CREATED BY:[^\]]+\]\s*', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'\[EDITED BY:[^\]]+\]\s*', '', text, flags=re.IGNORECASE)
-        return text.strip()
+    narration = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Order
@@ -545,12 +643,22 @@ class OrderSerializer(serializers.ModelSerializer):
             'id', 'orderId', 'date', 'soEmail', 'partyType', 'partyName', 'distributor',
             'narration', 'status', 'grandTotal', 'companyId', 'createdAt', 'updatedAt', 'items',
             'assignedWarehouse', 'partyDetails',
-            'invoiceNumber', 'vehicleNumber', 'driverName', 'driverMobile', 'dispatchWarehouse', 'dispatchDate',
+            'invoiceNumber', 'vehicleNumber', 'driverName', 'driverMobile', 'driverMobileNumber', 'dispatchWarehouse', 'dispatchDate', 'expectedDeliveryDate', 'warehouseName',
             'createdBy', 'lastEditedBy'
         ]
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
+        ret['customerName'] = instance.partyname
+        import re
+        raw_narr = instance.narration or ''
+        from api.views import _extract_order_tag
+        ret['expectedDeliveryDate'] = _extract_order_tag(raw_narr, 'EXPECTED DELIVERY DATE') or _extract_order_tag(raw_narr, 'EXPECTED DELIVERY') or None
+        clean_narr = re.sub(r'\[CREATED BY:[^\]]+\]\s*', '', raw_narr, flags=re.IGNORECASE)
+        clean_narr = re.sub(r'\[EDITED BY:[^\]]+\]\s*', '', clean_narr, flags=re.IGNORECASE)
+        clean_narr = re.sub(r'\[EXPECTED DELIVERY DATE:[^\]]+\]\s*', '', clean_narr, flags=re.IGNORECASE)
+        clean_narr = re.sub(r'\[EXPECTED DELIVERY:[^\]]+\]\s*', '', clean_narr, flags=re.IGNORECASE)
+        ret['narration'] = clean_narr.strip()
         try:
             from api.utils_gst import calculate_gst_split
             from api.models import Company
@@ -655,9 +763,10 @@ class OrderSerializer(serializers.ModelSerializer):
         instance.save()
         
         if items_data is not None:
-            # Build a map of existing items by ID for upsert
-            old_items = instance.orderitem_set.all()
+            # Build maps of existing items by ID and by product ID for upsert
+            old_items = list(instance.orderitem_set.all())
             old_by_id = {item.id: item for item in old_items if item.id}
+            old_by_pid = {item.productid_id: item for item in old_items if item.productid_id}
             
             # Track which item IDs are in the new items
             seen_ids = set()
@@ -679,21 +788,26 @@ class OrderSerializer(serializers.ModelSerializer):
                 item_data.pop('order_id', None)
                 
                 item_id = item_data.get('id')
-                
+                target_item = None
                 if item_id and item_id in old_by_id:
+                    target_item = old_by_id[item_id]
+                elif p_id in old_by_pid:
+                    target_item = old_by_pid[p_id]
+                
+                if target_item:
                     # UPDATE existing item - preserve sentqty/returnedqty
-                    seen_ids.add(item_id)
-                    old_item = old_by_id[item_id]
+                    seen_ids.add(target_item.id)
                     item_data.pop('sentqty', None)
                     item_data.pop('returnedqty', None)
+                    item_data.pop('id', None)
                     for attr, val in item_data.items():
-                        setattr(old_item, attr, val)
-                    old_item.save()
+                        setattr(target_item, attr, val)
+                    target_item.save()
                 else:
                     # CREATE new item
                     if not item_id:
                         item_id = 'c' + uuid.uuid4().hex[:23]
-                        item_data['id'] = item_id
+                    item_data['id'] = item_id
                     Orderitem.objects.create(orderid=instance, **item_data)
                     seen_ids.add(item_id)
             

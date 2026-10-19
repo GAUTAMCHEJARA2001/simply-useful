@@ -52,10 +52,6 @@ const Reports: React.FC = () => {
   const { user } = useAuth();
   const { orders, visits, expenses, users, products, warehouses, dealers, distributors } = useData();
 
-  // Route security
-  if (user?.role !== 'SUPERADMIN') {
-    return <Navigate to="/" replace />;
-  }
 
   // 1. Report Customizer States
   const [activeDomain, setActiveDomain] = useState<DomainType>('so-performance');
@@ -457,7 +453,8 @@ const Reports: React.FC = () => {
         } else if (activeSalesView === 'counter') {
           nameKey = (row as CounterSalesRow).name || '—';
         } else if (activeSalesView === 'area') {
-          nameKey = `${(row as AreaSalesRow).city}, ${(row as AreaSalesRow).state}` || '—';
+          const areaRow = row as AreaSalesRow;
+          nameKey = [areaRow.city, areaRow.state].filter(Boolean).join(', ') || '—';
         } else if (activeSalesView === 'category') {
           nameKey = (row as CategorySalesRow).category || '—';
         }
@@ -549,6 +546,10 @@ const Reports: React.FC = () => {
   ];
 
   const isHeatMap = activeDomain === 'sales-analysis' && activeSalesView === 'heatmap';
+
+  if (user?.role !== 'SUPERADMIN') {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="space-y-6">

@@ -29,18 +29,20 @@ class JWTUser:
     def is_staff(self):
         return self.role in ['ADMIN', 'SUPERADMIN']
 
-def generate_tokens(user_id, email, role, company_id=None):
+def generate_tokens(user_id, email, role, company_id=None, schema_name='public'):
     now = int(time.time())
     access_payload = {
         'userId': user_id,
         'email': email,
         'role': role,
         'companyId': company_id,
+        'schemaName': schema_name or 'public',
         'exp': now + 7 * 24 * 60 * 60
     }
     
     refresh_payload = {
         'userId': user_id,
+        'schemaName': schema_name or 'public',
         'exp': now + 7 * 24 * 60 * 60
     }
     
@@ -74,49 +76,36 @@ class JWTAuthentication(authentication.BaseAuthentication):
         email = payload.get('email')
         role = payload.get('role')
         company_id = payload.get('companyId')
+        schema_name = payload.get('schemaName') or 'public'
+
+        # Switch PostgreSQL search path to the tenant schema for physical table isolation
+        from api.tenant_manager import set_tenant_search_path
+        set_tenant_search_path(schema_name)
         
-        # Verify company existence in the public database to heal stale client-side tokens
+        # Check company active and valid_until expiration in the public database
         try:
-            if company_id and not Company.objects.filter(id=company_id).exists():
-                first_company = Company.objects.first()
-                company_id = first_company.id if first_company else None
+            from django.utils import timezone
+            reset_comp = Company.objects.filter(id=company_id).first()
+            if reset_comp:
+                if not reset_comp.active:
+                    raise exceptions.AuthenticationFailed('Your company account has been suspended by the platform administrator.')
+                if reset_comp.valid_until and timezone.now() > reset_comp.valid_until:
+                    exp_date = reset_comp.valid_until.strftime('%d-%b-%Y')
+                    raise exceptions.AuthenticationFailed(f"Your company subscription expired on {exp_date}. Access has been blocked until renewed.")
+        except exceptions.AuthenticationFailed:
+            raise
         except Exception:
             pass
         
-        # If it's a mock admin login
-        if user_id == 'superadmin-1' or email in ['admin@alpha.com', 'admin@simplyuseful.com']:
-            jwt_user = JWTUser(
-                user_id='superadmin-1',
-                email=email or 'admin@simplyuseful.com',
-                role='SUPERADMIN',
-                company_id=company_id or 'cmo75yliq0000wesurjpett1n',
-                name='System Admin'
-            )
-            return (jwt_user, token)
-            
         try:
-            # Query the user from the core User table (public schema)
+            # Query the user from the tenant-isolated User table
             user_model = User.objects.get(id=user_id)
             if not user_model.active:
                 raise exceptions.AuthenticationFailed('User is inactive')
                 
-            jwt_user = JWTUser(
-                user_id=user_model.id,
-                email=user_model.email,
-                role=user_model.role,
-                company_id=user_model.companyid_id if hasattr(user_model, 'companyid') else user_model.companyid,
-                name=user_model.name or ""
-            )
-
-            return (jwt_user, token)
+            user_model.tenant_schema = schema_name
+            user_model.company = reset_comp
+            # Return the authentic Django User instance so ORM foreign-key assignments succeed everywhere
+            return (user_model, token)
         except User.DoesNotExist:
-            # Recreate dynamic user fallback if user details were in payload
-            if email and role:
-                jwt_user = JWTUser(
-                    user_id=user_id,
-                    email=email,
-                    role=role,
-                    company_id=company_id
-                )
-                return (jwt_user, token)
             raise exceptions.AuthenticationFailed('User not found')

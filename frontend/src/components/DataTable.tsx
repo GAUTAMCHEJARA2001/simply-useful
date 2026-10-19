@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Trash2, Edit, ChevronUp, ChevronDown, Eye } from 'lucide-react';
+import { 
+  Trash2, Edit, ChevronUp, ChevronDown, Eye, Search, 
+  ChevronLeft, ChevronRight, Inbox, X 
+} from 'lucide-react';
 
 interface DataTableProps {
   columns: string[];
@@ -10,6 +13,9 @@ interface DataTableProps {
   onRowClick?: (idx: number) => void;
   customActions?: (idx: number) => React.ReactNode;
   columnWidths?: string[];
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  pageSize?: number;
 }
 
 const getCellValue = (cell: any): string | number => {
@@ -36,8 +42,14 @@ export const DataTable: React.FC<DataTableProps> = ({
   onView, 
   onRowClick,
   customActions,
-  columnWidths 
+  columnWidths,
+  searchable = false,
+  searchPlaceholder = 'Search records...',
+  pageSize
 }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
   const storageKey = useMemo(() => {
     return `datatable_sort_${columns.join('_').replace(/[^a-zA-Z0-9]/g, '_')}`;
   }, [columns]);
@@ -58,6 +70,11 @@ export const DataTable: React.FC<DataTableProps> = ({
     setSortAsc(savedAsc !== null ? savedAsc === 'true' : true);
   }, [storageKey]);
 
+  // Reset page when search or data changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, rows.length]);
+
   const mappedRows = useMemo(() => rows.map((row, index) => ({ row, index })), [rows]);
 
   const handleSort = (colIndex: number) => {
@@ -73,9 +90,22 @@ export const DataTable: React.FC<DataTableProps> = ({
     }
   };
 
+  // 1. Filter by search term if searchable
+  const filteredMappedRows = useMemo(() => {
+    if (!searchTerm.trim()) return mappedRows;
+    const term = searchTerm.toLowerCase().trim();
+    return mappedRows.filter(({ row }) => {
+      return row.some(cell => {
+        const val = getCellValue(cell);
+        return String(val).toLowerCase().includes(term);
+      });
+    });
+  }, [mappedRows, searchTerm]);
+
+  // 2. Sort filtered rows
   const sortedMappedRows = useMemo(() => {
-    if (sortCol === null) return mappedRows;
-    return [...mappedRows].sort((a, b) => {
+    if (sortCol === null) return filteredMappedRows;
+    return [...filteredMappedRows].sort((a, b) => {
       const valA = getCellValue(a.row[sortCol]);
       const valB = getCellValue(b.row[sortCol]);
 
@@ -113,14 +143,50 @@ export const DataTable: React.FC<DataTableProps> = ({
       if (normA > normB) return sortAsc ? 1 : -1;
       return 0;
     });
-  }, [mappedRows, sortCol, sortAsc]);
+  }, [filteredMappedRows, sortCol, sortAsc]);
+
+  // 3. Paginate if pageSize is specified and valid
+  const effectivePageSize = pageSize && pageSize > 0 ? pageSize : null;
+  const totalPages = effectivePageSize ? Math.max(1, Math.ceil(sortedMappedRows.length / effectivePageSize)) : 1;
+  const paginatedRows = useMemo(() => {
+    if (!effectivePageSize) return sortedMappedRows;
+    const start = (currentPage - 1) * effectivePageSize;
+    return sortedMappedRows.slice(start, start + effectivePageSize);
+  }, [sortedMappedRows, effectivePageSize, currentPage]);
 
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
+      {/* Optional Search Bar Header */}
+      {searchable && (
+        <div className="p-3 border-b border-border bg-muted/20 flex items-center justify-between gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full pl-8 pr-8 py-1.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+            />
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')} 
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {sortedMappedRows.length} {sortedMappedRows.length === 1 ? 'record' : 'records'}
+          </div>
+        </div>
+      )}
+
       {/* Desktop View */}
       <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-[80vh]">
         <table className="w-full text-sm" data-datatable="true">
-          <thead className="sticky top-0 bg-muted/95 backdrop-blur z-10 border-b border-border shadow-sm">
+          <thead className="sticky top-0 bg-muted/95 backdrop-blur z-10 border-b border-border shadow-xs">
             <tr className="bg-muted/50 border-b border-border">
               {columns.map((c, colIndex) => {
                 const isSorted = sortCol === colIndex;
@@ -146,19 +212,28 @@ export const DataTable: React.FC<DataTableProps> = ({
                   </th>
                 );
               })}
-              {(onView || onDelete || onEdit || customActions) && <th className="px-4 py-3 text-right text-muted-foreground font-medium">Action</th>}
+              {(onView || onDelete || onEdit || customActions) && (
+                <th className="px-4 py-3 text-right text-muted-foreground font-medium">Action</th>
+              )}
             </tr>
           </thead>
           <tbody>
-            {sortedMappedRows.length === 0 ? (
+            {paginatedRows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + (onDelete || onEdit || customActions ? 1 : 0)} className="px-4 py-8 text-center text-muted-foreground">
-                  No records found
+                <td colSpan={columns.length + (onDelete || onEdit || customActions ? 1 : 0)} className="px-4 py-12 text-center text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Inbox className="w-8 h-8 text-muted-foreground/40" />
+                    <p className="font-medium text-sm text-foreground">No records found</p>
+                    {searchTerm && (
+                      <p className="text-xs text-muted-foreground">No results matching "{searchTerm}"</p>
+                    )}
+                  </div>
                 </td>
               </tr>
             ) : (
-              sortedMappedRows.map(({ row, index }) => (
-                <tr key={index}
+              paginatedRows.map(({ row, index }) => (
+                <tr 
+                  key={index}
                   className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                   onClick={(e) => {
                     if (e.target instanceof HTMLElement && e.target.closest('button')) return;
@@ -203,11 +278,15 @@ export const DataTable: React.FC<DataTableProps> = ({
 
       {/* Mobile View */}
       <div className="sm:hidden flex flex-col divide-y divide-border/50">
-        {sortedMappedRows.length === 0 ? (
-          <div className="px-4 py-8 text-center text-muted-foreground text-sm">No records found</div>
+        {paginatedRows.length === 0 ? (
+          <div className="px-4 py-10 text-center text-muted-foreground text-sm flex flex-col items-center justify-center gap-2">
+            <Inbox className="w-7 h-7 text-muted-foreground/40" />
+            <p className="font-medium text-sm text-foreground">No records found</p>
+          </div>
         ) : (
-          sortedMappedRows.map(({ row, index }) => (
-            <div key={index} 
+          paginatedRows.map(({ row, index }) => (
+            <div 
+              key={index} 
               className={`p-4 space-y-3 ${onRowClick ? 'cursor-pointer active:bg-muted/30' : ''}`}
               onClick={(e) => {
                 if (e.target instanceof HTMLElement && e.target.closest('button')) return;
@@ -246,6 +325,34 @@ export const DataTable: React.FC<DataTableProps> = ({
           ))
         )}
       </div>
+
+      {/* Pagination Footer (when effectivePageSize is active and rows exist) */}
+      {effectivePageSize && sortedMappedRows.length > effectivePageSize && (
+        <div className="p-3 border-t border-border bg-muted/20 flex items-center justify-between text-xs text-muted-foreground">
+          <div>
+            Showing {((currentPage - 1) * effectivePageSize) + 1} to {Math.min(currentPage * effectivePageSize, sortedMappedRows.length)} of {sortedMappedRows.length} entries
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="p-1 rounded border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-2 font-medium text-foreground">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="p-1 rounded border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

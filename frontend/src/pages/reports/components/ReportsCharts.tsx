@@ -47,8 +47,6 @@ export const ReportsCharts: React.FC<ReportsChartsProps> = React.memo(({
   formatter,
   chartLabel
 }) => {
-  if (chartStyle === 'none' || data.length === 0) return null;
-
   // Clean data for charting (e.g. limit to top 10 items for Pie/Bar charts to avoid clutter)
   const chartDataset = useMemo(() => {
     if (chartStyle === 'pie' || chartStyle === 'bar') {
@@ -57,6 +55,8 @@ export const ReportsCharts: React.FC<ReportsChartsProps> = React.memo(({
     }
     return data;
   }, [data, chartStyle]);
+
+  if (chartStyle === 'none' || data.length === 0) return null;
 
   // Chart Titles mapping
   const titles: Record<string, string> = {

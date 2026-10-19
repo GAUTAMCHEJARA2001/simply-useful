@@ -1,17 +1,19 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { authService as authApi } from '@/api/services/auth.service';
 import { setTokens, getAccessToken, clearTokens } from '@/api/client';
-import { User, RegisterInput } from '@/types';
+import { User, RegisterInput, CreateCompanyInput } from '@/types';
 
 export type UserRole = 'SALES' | 'ADMIN' | 'HR' | 'INVENTORY' | 'SUPERADMIN' | 'PRODUCTION';
 
-export interface AppUser extends User {}
+export type AppUser = User;
 
 interface AuthContextType {
   user: AppUser | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: RegisterInput) => Promise<{ success: boolean; error?: string }>;
+  createCompany: (data: CreateCompanyInput) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  updateCurrentUser: (updated: Partial<AppUser>) => void;
   isAuthenticated: boolean;
   loading: boolean;
 }
@@ -103,16 +105,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  const createCompany = useCallback(async (data: CreateCompanyInput) => {
+    try {
+      const response = await authApi.createCompany(data);
+
+      if (!response.success) {
+        return { success: false, error: response.message };
+      }
+
+      if (!response.data) {
+        return { success: false, error: 'Failed to provision company workspace' };
+      }
+
+      const { user, accessToken, refreshToken } = response.data;
+
+      setUser(user);
+      setTokens(accessToken, refreshToken);
+      localStorage.setItem('app_user', JSON.stringify(user));
+      
+      return { success: true };
+    } catch (error: unknown) {
+      const err = error as Error;
+      return { success: false, error: err.message || 'Company registration failed' };
+    }
+  }, []);
+
   const logout = useCallback(() => {
     setUser(null);
     clearTokens();
     localStorage.removeItem('app_user');
-    window.location.href = '/login';
+    window.location.href = '/login?logged_out=true';
+  }, []);
+
+  const updateCurrentUser = useCallback((updated: Partial<AppUser>) => {
+    setUser(prev => {
+      if (!prev) return null;
+      const next = { ...prev, ...updated };
+      try {
+        localStorage.setItem('app_user', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isAuthenticated: !!user && !!localStorage.getItem('token'), loading }}>
-
+    <AuthContext.Provider value={{ user, login, register, createCompany, logout, updateCurrentUser, isAuthenticated: !!user && !!localStorage.getItem('token'), loading }}>
       {children}
     </AuthContext.Provider>
   );

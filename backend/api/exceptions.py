@@ -24,6 +24,52 @@ def custom_exception_handler(exc, context):
     user_str = f"{getattr(user_info, 'email', '') or getattr(user_info, 'id', '')}" if user_info else 'Anonymous'
 
     if response is None:
+        from django.db import IntegrityError
+        from django.db.models import ProtectedError
+        from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
+
+        # Convert database integrity & protected foreign key errors into clean 400/409 user messages
+        if isinstance(exc, ProtectedError):
+            clean_msg = "Cannot delete this record because it is referenced by other active records."
+            return Response({
+                'success': False,
+                'data': None,
+                'message': clean_msg,
+                'error': clean_msg
+            }, status=400)
+
+        if isinstance(exc, IntegrityError):
+            err_str = str(exc)
+            if 'unique constraint' in err_str.lower() or 'duplicate key' in err_str.lower():
+                clean_msg = "A record with this name or code already exists."
+            elif 'foreign key constraint' in err_str.lower():
+                clean_msg = "Referenced parent item not found or invalid."
+            else:
+                clean_msg = "Database integrity error. Please check submitted data."
+            return Response({
+                'success': False,
+                'data': None,
+                'message': clean_msg,
+                'error': clean_msg
+            }, status=400)
+
+        if isinstance(exc, ObjectDoesNotExist):
+            return Response({
+                'success': False,
+                'data': None,
+                'message': "The requested record was not found.",
+                'error': "Not Found"
+            }, status=404)
+
+        if isinstance(exc, DjangoValidationError):
+            msg = exc.message if hasattr(exc, 'message') else str(exc)
+            return Response({
+                'success': False,
+                'data': None,
+                'message': msg,
+                'error': msg
+            }, status=400)
+
         # Unhandled 500 error (Python/Django exceptions not derived from APIException)
         error_msg = str(exc) or 'An unexpected internal server error occurred.'
         logger.error(

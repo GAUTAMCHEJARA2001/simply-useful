@@ -4,21 +4,22 @@ import { useCallback } from "react";
 
 export const usePermissions = () => {
     const { user } = useAuth();
-    const { permissions } = useData();
+    const { permissions, settings } = useData();
 
     const can = useCallback((feature: string) => {
         if (!user) return false;
 
-        // SuperAdmin always has access unless explicitly disabled (unlikely)
-        // or we can just say if it's superadmin and no specific record exists, allow it.
+        // Prioritize freshly fetched role permissions from settings API if available
+        const effectivePerms = (settings?.role_permissions && Array.isArray(settings.role_permissions) && settings.role_permissions.length > 0)
+            ? settings.role_permissions
+            : permissions;
 
-        const perm = permissions.find(p => 
+        const perm = effectivePerms.find((p: any) => 
             (p.role || '').toUpperCase() === (user.role || '').toUpperCase() && 
             p.feature === feature
         );
 
-        // If no permission record exists for this role/feature, default to false
-        // unless it's a SUPERADMIN, which we might want to default to true for safety.
+        // If no permission record exists for this role/feature, default to standard role fallback
         if (!perm) {
             const role = (user.role || '').toUpperCase();
             if (role === 'SUPERADMIN' || role === 'ADMIN') return true;
@@ -29,6 +30,10 @@ export const usePermissions = () => {
             const inventoryFeatures = ['view_inventory_dashboard'];
             if ((role.startsWith('INVENTORY') || role === 'PRODUCTION') && inventoryFeatures.includes(feature)) return true;
             
+            // HR role specific
+            const hrFeatures = ['view_inventory_dashboard', 'view_hr_dashboard', 'manage_hr'];
+            if (role === 'HR' && hrFeatures.includes(feature)) return true;
+
             // Warehouse Manager specific
             const workerFeatures = ['view_inventory_dashboard', 'access_settings'];
             if (role === 'WAREHOUSE_MANAGER' && workerFeatures.includes(feature)) return true;
@@ -36,8 +41,8 @@ export const usePermissions = () => {
             return false;
         }
 
-        return perm.isEnabled;
-    }, [user, permissions]);
+        return Boolean(perm.isEnabled);
+    }, [user, permissions, settings?.role_permissions]);
 
     return { can };
 };

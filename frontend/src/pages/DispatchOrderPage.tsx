@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Truck, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Truck, AlertTriangle, CalendarClock } from 'lucide-react';
 import { orderService } from '@/api/services/order.service';
 import { useToast } from '@/hooks/use-toast';
 import { Order } from '@/types';
@@ -88,9 +88,43 @@ const DispatchOrderPage: React.FC = () => {
     );
   }
 
+  const isApprovedForDispatch = order.status === 'Approved' || order.status === 'Partially Dispatched' || order.status === 'Partially Returned';
+
+  if (!isApprovedForDispatch) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 max-w-lg mx-auto p-8 bg-card rounded-2xl border border-amber-500/30 shadow-lg text-center my-12">
+        <div className="p-3 bg-amber-500/10 rounded-full text-amber-600">
+          <AlertTriangle className="w-12 h-12" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Order Awaiting Admin Approval</h2>
+        <p className="text-sm text-muted-foreground">
+          Order <strong>#{order.orderId || order.id}</strong> is currently in <span className="font-semibold text-amber-600 uppercase px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">{order.status || 'Pending'}</span> status.
+        </p>
+        <p className="text-xs text-muted-foreground max-w-sm">
+          By business workflow policy, sales orders must be reviewed and <strong>Approved by an Administrator</strong> before warehouse inventory personnel can dispatch goods.
+        </p>
+        <div className="pt-2">
+          <Button onClick={() => navigate('/inventory')} variant="default">
+            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Inventory
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const handleConfirmDispatch = async () => {
     try {
       setLoading(true);
+
+      if (!isApprovedForDispatch) {
+        toast({
+          title: 'Approval Required',
+          description: `Order ${order.orderId || order.id} must be approved by an Admin before dispatching.`,
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
       
       const itemsPayload = Object.entries(dispatchItems)
         .map(([productId, qty]) => ({ productId, qty: Number(qty) }))
@@ -155,6 +189,54 @@ const DispatchOrderPage: React.FC = () => {
               </p>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Delivery Schedule & Dispatch Priority Alert */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-card border border-border rounded-xl p-4 shadow-2xs">
+        <div>
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-0.5">Order Placed</span>
+          <span className="text-sm font-semibold text-foreground">
+            {order.date ? new Date(order.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+          </span>
+        </div>
+        <div>
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-0.5">Expected Delivery Date</span>
+          <span className="text-sm font-bold text-primary flex items-center gap-1.5">
+            <CalendarClock className="w-4 h-4 text-primary shrink-0" />
+            {order.expectedDeliveryDate ? (
+              new Date(order.expectedDeliveryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+            ) : (
+              <span className="text-muted-foreground font-normal">Immediate / Not specified</span>
+            )}
+          </span>
+        </div>
+        <div>
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-0.5">Dispatch Urgency</span>
+          {(() => {
+            if (!order.expectedDeliveryDate) {
+              return <span className="text-xs px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">Standard Dispatch</span>;
+            }
+            try {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const exp = new Date(order.expectedDeliveryDate);
+              exp.setHours(0, 0, 0, 0);
+              const diffDays = Math.round((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+              if (diffDays < 0) {
+                return <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 border border-rose-500/20 font-bold">⚠️ Overdue by {Math.abs(diffDays)} day{Math.abs(diffDays) === 1 ? '' : 's'}</span>;
+              }
+              if (diffDays === 0) {
+                return <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 font-bold">🚨 Deliver Today</span>;
+              }
+              if (diffDays <= 2) {
+                return <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 font-bold">⚡ Due in {diffDays} day{diffDays === 1 ? '' : 's'}</span>;
+              }
+              return <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 font-bold">✓ Scheduled ({diffDays} days left)</span>;
+            } catch {
+              return <span className="text-xs text-muted-foreground">—</span>;
+            }
+          })()}
         </div>
       </div>
 

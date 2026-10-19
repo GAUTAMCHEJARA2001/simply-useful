@@ -38,7 +38,9 @@ const formatDateForInput = (dVal: any) => {
       const day = String(d.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     }
-  } catch (_) {}
+  } catch (_) {
+    // Ignore invalid date parsing errors
+  }
   return '';
 };
 
@@ -199,9 +201,15 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
     setForm({ ...form, lineItems: updated });
   };
 
-  const grandTotal = (form.lineItems || []).reduce((acc: number, it: any) => 
-    acc + ((it.quantity || 0) - (it.returnedQty || 0)) * (it.rate || 0) * (1 + (it.tax_percent || 0) / 100), 0
+  const subtotal = (form.lineItems || []).reduce((acc: number, it: any) => 
+    acc + Math.max(0, (it.quantity || 0) - (it.returnedQty || 0)) * (it.rate || 0), 0
   );
+
+  const grandTotal = (form.lineItems || []).reduce((acc: number, it: any) => 
+    acc + Math.max(0, (it.quantity || 0) - (it.returnedQty || 0)) * (it.rate || 0) * (1 + (it.tax_percent || 0) / 100), 0
+  );
+
+  const totalTax = Math.max(0, grandTotal - subtotal);
 
   const handleSave = async () => {
     const rawNarration = form.narration || '';
@@ -264,7 +272,9 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
             ...payload,
             id: sale.originalOrderId,
           });
-        } catch (_) {}
+        } catch (_) {
+          // Ignore error if updating original order fails
+        }
       }
     } else {
       await saveSale(payload);
@@ -449,6 +459,26 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
           <div className="space-y-2">
             {(form.lineItems || []).map((item: any, i: number) => (
               <div key={i} className="space-y-2 border border-border/50 rounded-xl p-3 bg-muted/5 relative">
+                {/* 3-Part Layout for Returned Orders */}
+                {item.returnedQty > 0 && (
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground font-medium">Original:</span>
+                        <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border">{item.quantity}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                        <span className="font-medium">Returned:</span>
+                        <span className="font-bold bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">-{item.returnedQty}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1 rounded-md shadow-sm">
+                      <span className="text-[11px] uppercase tracking-wider font-semibold opacity-90">Net Remaining:</span>
+                      <span className="text-sm font-extrabold font-mono">{Math.max(0, item.quantity - item.returnedQty)} bags</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-6 gap-2 items-end">
                   <div className="col-span-2">
                     <label className="text-[10px] font-medium text-muted-foreground block">Product</label>
@@ -459,16 +489,20 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] font-medium text-muted-foreground flex justify-between items-center mb-1">
-                      <span>{item.returnedQty > 0 ? 'Ordered Qty' : 'Qty'}</span>
-                      {item.returnedQty > 0 && (
-                        <span className="text-[10px] text-red-500 font-extrabold whitespace-nowrap bg-red-500/10 px-1 rounded">
-                          (-{item.returnedQty} Ret) = {item.quantity - item.returnedQty} Net
-                        </span>
-                      )}
+                    <label className="text-[10px] font-medium text-muted-foreground block mb-1">
+                      {item.returnedQty > 0 ? 'Remaining Qty' : 'Qty'}
                     </label>
-                    <input type="number" min={item.returnedQty || 1} value={item.quantity || ''} onChange={e => updateLineItem(i, 'quantity', Number(e.target.value))}
-                      placeholder="0" className="w-full border border-border rounded-md px-2 py-1.5 bg-background text-xs" />
+                    <input 
+                      type="number" 
+                      min={0} 
+                      value={item.returnedQty > 0 ? (item.quantity - item.returnedQty) : (item.quantity || '')} 
+                      onChange={e => {
+                        const val = Number(e.target.value);
+                        updateLineItem(i, 'quantity', item.returnedQty > 0 ? val + item.returnedQty : val);
+                      }}
+                      placeholder="0" 
+                      className="w-full border border-border rounded-md px-2 py-1.5 bg-background text-xs font-semibold" 
+                    />
                   </div>
                   <div>
                     <label className="text-[10px] font-medium text-muted-foreground block">Rate</label>
@@ -504,9 +538,19 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
             ))}
           </div>
 
-          <div className="bg-success text-success-foreground px-4 py-3 rounded-xl flex items-center justify-between shadow-lg shadow-success/20">
-            <div className="text-[11px] font-semibold uppercase opacity-90">Total Value</div>
-            <div className="text-xl font-bold font-mono">{Currency(grandTotal)}</div>
+          <div className="bg-success text-success-foreground px-4 py-3 rounded-xl shadow-lg shadow-success/20 space-y-2">
+            <div className="flex flex-wrap items-center justify-between text-xs border-b border-success-foreground/20 pb-2 gap-2">
+              <div className="flex items-center gap-2 sm:gap-4 font-mono">
+                <span>Subtotal: <strong className="text-sm">{Currency(subtotal)}</strong></span>
+                <span className="opacity-60">|</span>
+                <span>GST (Tax): <strong className="text-sm">{Currency(totalTax)}</strong></span>
+              </div>
+              <span className="text-[10px] uppercase tracking-wider font-bold bg-black/15 px-2 py-0.5 rounded">Tax-Inclusive</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider opacity-95">Total Value</div>
+              <div className="text-2xl font-black font-mono tracking-tight">{Currency(grandTotal)}</div>
+            </div>
           </div>
         </div>
         </fieldset>

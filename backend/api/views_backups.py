@@ -32,6 +32,9 @@ def local_backup_status_view(request):
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def download_postgres_dump_view(request):
+    user_role = (getattr(request.user, 'role', '') or '').upper()
+    if user_role not in ('SUPERADMIN', 'ADMIN'):
+        return send_error('Unauthorized. Only Admins can download database dumps.', 403)
     db_config = settings.DATABASES.get('default', {})
     db_name = db_config.get('NAME', 'db_master')
     db_user = db_config.get('USER', 'postgres')
@@ -44,7 +47,7 @@ def download_postgres_dump_view(request):
     pg_dump_path = find_pg_dump()
     env = os.environ.copy()
     env['PGPASSWORD'] = db_password
-    cmd = [pg_dump_path, '-h', db_host, '-p', db_port, '-U', db_user, '-F', 'c', '-b', '-O', '-x', '-f', local_temp_path, db_name]
+    cmd = [pg_dump_path, '-h', db_host, '-p', db_port, '-U', db_user, '-n', 'public', '-F', 'c', '-b', '-O', '-x', '-f', local_temp_path, db_name]
     try:
         subprocess.run(cmd, env=env, capture_output=True, text=True, check=True)
         if not os.path.exists(local_temp_path):
@@ -92,6 +95,9 @@ def download_postgres_dump_view(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def schedule_local_backup_view(request):
+    user_role = (getattr(request.user, 'role', '') or '').upper()
+    if user_role != 'SUPERADMIN':
+        return send_error('Unauthorized. Only Superadmin can schedule backups.', 403)
     enabled = request.data.get('enabled', False)
     backup_time = request.data.get('time', '02:00').strip()
     local_backup_dir = request.data.get('local_backup_dir', 'C:\\SimplyUsefulBackups').strip()
@@ -137,13 +143,16 @@ def schedule_local_backup_view(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_local_backups_view(request):
+    user_role = (getattr(request.user, 'role', '') or '').upper()
+    if user_role not in ('SUPERADMIN', 'ADMIN'):
+        return send_error('Unauthorized. Only Admins can view local backups.', 403)
     settings_data = load_settings()
     local_backup_dir = settings_data.get('local_backup_dir') or load_local_dir_from_settings() or 'C:\\SimplyUsefulBackups'
     backups = []
     if os.path.exists(local_backup_dir) and os.path.isdir(local_backup_dir):
         try:
             for filename in os.listdir(local_backup_dir):
-                if filename.startswith('db_backup_') and filename.endswith('.dump'):
+                if filename.startswith('db_backup_') and (filename.endswith('.dump') or filename.endswith('.json')):
                     file_path = os.path.join(local_backup_dir, filename)
                     if os.path.isfile(file_path):
                         stat = os.stat(file_path)
@@ -165,6 +174,9 @@ def list_local_backups_view(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def restore_postgres_dump_view(request):
+    user_role = (getattr(request.user, 'role', '') or '').upper()
+    if user_role != 'SUPERADMIN':
+        return send_error('Unauthorized. Only Superadmin can trigger a database restore.', 403)
     settings_data = load_settings()
     local_backup_dir = settings_data.get('local_backup_dir') or load_local_dir_from_settings() or 'C:\\SimplyUsefulBackups'
     filename = request.data.get('filename')
@@ -176,7 +188,8 @@ def restore_postgres_dump_view(request):
     try:
         if uploaded_file:
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            temp_filename = f'db_restore_temp_{timestamp}.dump'
+            ext = os.path.splitext(uploaded_file.name)[1].lower() or '.dump'
+            temp_filename = f'db_restore_temp_{timestamp}{ext}'
             backup_file_path = os.path.join(settings.BASE_DIR, temp_filename)
             is_temp_file = True
             with open(backup_file_path, 'wb+') as destination:
@@ -202,7 +215,7 @@ def restore_postgres_dump_view(request):
             pg_dump_path = find_pg_dump()
             env = os.environ.copy()
             env['PGPASSWORD'] = db_password
-            cmd = [pg_dump_path, '-h', db_host, '-p', db_port, '-U', db_user, '-F', 'c', '-b', '-O', '-x', '-f', safety_temp_path, db_name]
+            cmd = [pg_dump_path, '-h', db_host, '-p', db_port, '-U', db_user, '-n', 'public', '-F', 'c', '-b', '-O', '-x', '-f', safety_temp_path, db_name]
             subprocess.run(cmd, env=env, capture_output=True, text=True, check=True)
             safety_dest_path = os.path.join(local_backup_dir, safety_filename)
             shutil.copy2(safety_temp_path, safety_dest_path)
@@ -211,7 +224,8 @@ def restore_postgres_dump_view(request):
             except Exception:
                 pass
         except Exception as e:
-            print(f'[WARNING] Safety backup failed: {e}. Proceeding with restore anyway.')
+            print(f'[WARNING] Safety backup failed: {e}. Restore aborted.')
+            return send_error(f'Safety backup failed. Restore aborted to protect existing data: {str(e)}', 500)
         db_config = settings.DATABASES.get('default', {})
         db_name = db_config.get('NAME', 'db_master')
         db_user = db_config.get('USER', 'postgres')

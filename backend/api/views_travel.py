@@ -70,10 +70,11 @@ def _serialize_travel_log(log):
 
     stops_list = []
     try:
-        DailyTourPlanStop.objects.filter(user_id=log.user_id, date=log.date, travel_log__isnull=True).update(travel_log=log)
-        stops_qs = DailyTourPlanStop.objects.filter(travel_log=log).order_by('stop_order', 'createdat')
-        if not stops_qs.exists():
-            stops_qs = DailyTourPlanStop.objects.filter(user_id=log.user_id, date=log.date).order_by('stop_order', 'createdat')
+        stops_qs = getattr(log, 'prefetched_stops', None)
+        if stops_qs is None:
+            stops_qs = DailyTourPlanStop.objects.filter(travel_log=log).order_by('stop_order', 'createdat')
+            if not stops_qs.exists():
+                stops_qs = DailyTourPlanStop.objects.filter(user_id=log.user_id, date=log.date).order_by('stop_order', 'createdat')
         stops_list = [_serialize_tour_stop(s) for s in stops_qs]
     except Exception:
         pass
@@ -836,7 +837,7 @@ def travel_my_history(request):
         return send_error('Unauthorized', 401)
 
     user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
-    qs = DailyTravelLog.objects.filter(user_id=user_id).order_by('-date')
+    qs = DailyTravelLog.objects.filter(user_id=user_id).select_related('user', 'verified_by').order_by('-date')
     month = request.query_params.get('month')
     if month:
         try:

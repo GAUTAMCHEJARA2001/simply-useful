@@ -17,7 +17,6 @@ import {
   X 
 } from 'lucide-react';
 import { amountToWords } from './utils/amountToWords';
-import html2pdf from 'html2pdf.js';
 import { useToast } from '@/hooks/use-toast';
 import { useSettings } from '@/hooks/inventory/useMasters';
 
@@ -204,6 +203,7 @@ export const SalarySlipPdfModal: React.FC<SalarySlipPdfModalProps> = ({
         pagebreak: { mode: ['css', 'legacy'], after: '.payslip-page-break' }
       };
 
+      const { default: html2pdf } = await import('html2pdf.js');
       await html2pdf().set(opt).from(element).save();
       toast({ title: 'PDF Downloaded', description: `Successfully generated ${filename}` });
     } catch (err: any) {

@@ -83,9 +83,6 @@ const SOMapping: React.FC = () => {
   const { can } = usePermissions();
   const { toast } = useToast();
 
-  if (!can('manage_customers')) {
-    return <Navigate to="/" replace />;
-  }
 
   const salesUsers = useMemo(
     () => users.filter(u => {
@@ -226,7 +223,11 @@ const SOMapping: React.FC = () => {
   const toggleSelect = (id: string) =>
     setSelected(prev => {
       const s = new Set(prev);
-      s.has(id) ? s.delete(id) : s.add(id);
+      if (s.has(id)) {
+        s.delete(id);
+      } else {
+        s.add(id);
+      }
       return s;
     });
 
@@ -260,6 +261,10 @@ const SOMapping: React.FC = () => {
     });
     return map;
   }, [allRows, salesUsers]);
+
+  if (!can('manage_customers')) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="space-y-6">

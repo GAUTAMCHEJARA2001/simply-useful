@@ -90,7 +90,9 @@ const AdminOnboardingPage: React.FC = () => {
           setFieldStatuses(parsed.statuses || {});
           setFieldComments(parsed.comments || {});
           return;
-        } catch(e) {}
+        } catch {
+          // ignore corrupted local state
+        }
       }
 
       if (selectedRequest.extendedData?.fieldReviews) {
