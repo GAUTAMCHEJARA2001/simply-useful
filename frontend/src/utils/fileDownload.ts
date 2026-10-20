@@ -8,36 +8,11 @@ export async function saveFileWithDialog(
   defaultFilename: string,
   mimeType: string,
   extension: string,
-  description: string
+  _description?: string
 ): Promise<void> {
   const safeFilename = defaultFilename.endsWith(`.${extension}`) ? defaultFilename : `${defaultFilename}.${extension}`;
 
-  // Try modern File System Access API (Native Windows 'Save As' Dialog with Path Picker)
-  if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-    try {
-      const handle = await (window as any).showSaveFilePicker({
-        suggestedName: safeFilename,
-        types: [
-          {
-            description,
-            accept: {
-              [mimeType]: [`.${extension}`]
-            }
-          }
-        ]
-      });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      return;
-    } catch (err: any) {
-      // If user deliberately cancelled the dialog, don't trigger anchor fallback
-      if (err.name === 'AbortError') return;
-      console.warn('Native SavePicker not supported or rejected, falling back to download link:', err);
-    }
-  }
-
-  // Anchor fallback with explicit File and guaranteed extension
+  // Explicit File object ensures the browser has the filename and MIME type baked into the binary payload
   const file = new File([blob], safeFilename, { type: mimeType });
   const blobUrl = URL.createObjectURL(file);
 
@@ -50,6 +25,7 @@ export async function saveFileWithDialog(
   anchor.click();
 
   // Crucial: Chromium / Edge loses the filename/extension if revoked synchronously!
+  // Keeping URL alive for 60 seconds guarantees the browser finishes streaming the download.
   setTimeout(() => {
     try {
       if (document.body.contains(anchor)) {

@@ -13,8 +13,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Search, UserCheck, Users, Shuffle, Store, Building2, CheckCircle2, Plus,
-  Download, FileSpreadsheet, FileText, Loader2
+  Download, FileSpreadsheet, FileText, Loader2, Printer, Eye, X
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -25,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { downloadCSV } from '@/pages/reports/utils/csv';
 import { saveFileWithDialog } from '@/utils/fileDownload';
+import { downloadSoMappingPdf } from '@/utils/soMappingPdfExport';
 import { cn } from '@/lib/utils';
 import { Dealer, Distributor, User } from '@/types';
 
@@ -122,6 +124,8 @@ const SOMapping: React.FC = () => {
   const [bulkAction, setBulkAction] = useState<'add' | 'remove'>('add');
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [previewOnlySelected, setPreviewOnlySelected] = useState(false);
 
   // Build unified rows with all details
   const allRows: MappingRow[] = useMemo(() => {
@@ -195,6 +199,12 @@ const SOMapping: React.FC = () => {
       return true;
     });
   }, [rows, filterType, filterSo, filterBrand, search]);
+
+  const previewTargetRows = useMemo(() => {
+    return previewOnlySelected && selected.size > 0
+      ? filteredRows.filter(r => selected.has(r.id))
+      : filteredRows;
+  }, [filteredRows, selected, previewOnlySelected]);
 
   // SO name lookup
   const soName = (email: string) => {
@@ -339,7 +349,7 @@ const SOMapping: React.FC = () => {
     });
   };
 
-  // Export to Smart Professional PDF
+  // Export to Smart Professional Landscape A4 PDF
   const handleExportPdf = async (onlySelected = false) => {
     const targetRows = onlySelected && selected.size > 0
       ? filteredRows.filter(r => selected.has(r.id))
@@ -351,218 +361,27 @@ const SOMapping: React.FC = () => {
     }
 
     setIsExportingPdf(true);
-    toast({ title: 'Generating Dossier...', description: 'Compiling high-resolution professional PDF document.' });
+    toast({ title: 'Generating Dossier...', description: 'Compiling high-resolution Landscape A4 PDF with party addresses.' });
 
     try {
-      const { default: html2pdf } = await import('html2pdf.js');
-
-      const printContainer = document.createElement('div');
-      printContainer.id = 'pdf-export-so-mapping-dossier';
-      printContainer.style.position = 'fixed';
-      printContainer.style.top = '-9999px';
-      printContainer.style.left = '-9999px';
-      printContainer.style.width = '1120px';
-      printContainer.style.backgroundColor = '#ffffff';
-      printContainer.style.color = '#0f172a';
-      printContainer.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-      printContainer.style.padding = '26px 30px';
-      printContainer.style.boxSizing = 'border-box';
-
-      const dealersCount = targetRows.filter(r => r.type === 'dealer').length;
-      const distCount = targetRows.filter(r => r.type === 'distributor').length;
-      const assignedCount = targetRows.filter(r => r.currentSoEmails.length > 0).length;
-      const unassignedCount = targetRows.filter(r => r.currentSoEmails.length === 0).length;
-
-      const activeFiltersHtml = [
-        `<div><span style="color: #64748b; font-size: 10px;">Party Type:</span> <strong style="color: #0f172a; font-size: 11px;">${filterType === 'all' ? 'All (Dealers & Distributors)' : filterType.toUpperCase() + 'S'}</strong></div>`,
-        `<div><span style="color: #64748b; font-size: 10px;">Sales Officer:</span> <strong style="color: #0f172a; font-size: 11px;">${filterSo === 'all' ? 'All Sales Officers' : soName(filterSo)}</strong></div>`,
-        `<div><span style="color: #64748b; font-size: 10px;">Brand:</span> <strong style="color: #0f172a; font-size: 11px;">${filterBrand === 'all' ? 'All Brands' : filterBrand}</strong></div>`,
-        search ? `<div><span style="color: #64748b; font-size: 10px;">Search Keyword:</span> <strong style="color: #0f172a; font-size: 11px;">"${search}"</strong></div>` : ''
-      ].filter(Boolean).join('');
-
-      printContainer.innerHTML = `
-        <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end;">
-          <div>
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-              <span style="background-color: #1e3a8a; color: #ffffff; font-size: 9px; font-weight: 800; padding: 2px 8px; border-radius: 4px; letter-spacing: 0.08em; text-transform: uppercase;">
-                Simply Useful Enterprise
-              </span>
-              <span style="color: #64748b; font-size: 10px; font-weight: 600;">
-                Territory Governance Dossier
-              </span>
-            </div>
-            <h1 style="font-size: 21px; font-weight: 800; color: #0f172a; margin: 0; letter-spacing: -0.02em;">
-              SO Territory Mapping & Channel Partner Directory
-            </h1>
-            <p style="font-size: 11px; color: #64748b; margin: 3px 0 0 0;">
-              Comprehensive mapping of dealers and distributors, contact profiles, territories, and assigned Sales Officers.
-            </p>
-          </div>
-          <div style="text-align: right; font-size: 10px; color: #475569; line-height: 1.45;">
-            <div><span style="color: #94a3b8;">Document ID:</span> <strong style="font-family: monospace; color: #0f172a;">SOM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${targetRows.length}</strong></div>
-            <div><span style="color: #94a3b8;">Generated:</span> <strong>${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</strong></div>
-            <div><span style="color: #94a3b8;">Generated By:</span> <strong>${user?.name || 'Admin'} (${user?.role || 'SUPERADMIN'})</strong></div>
-          </div>
-        </div>
-
-        <!-- KPI Metric Ribbon -->
-        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px;">
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; text-align: left;">
-            <div style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;">Total Filtered</div>
-            <div style="font-size: 18px; font-weight: 800; color: #0f172a; line-height: 1.2;">${targetRows.length}</div>
-          </div>
-          <div style="background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 8px 12px; text-align: left;">
-            <div style="font-size: 9px; font-weight: 700; color: #0369a1; text-transform: uppercase; letter-spacing: 0.04em;">Dealers</div>
-            <div style="font-size: 18px; font-weight: 800; color: #0284c7; line-height: 1.2;">${dealersCount}</div>
-          </div>
-          <div style="background-color: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 8px 12px; text-align: left;">
-            <div style="font-size: 9px; font-weight: 700; color: #4338ca; text-transform: uppercase; letter-spacing: 0.04em;">Distributors</div>
-            <div style="font-size: 18px; font-weight: 800; color: #4f46e5; line-height: 1.2;">${distCount}</div>
-          </div>
-          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 12px; text-align: left;">
-            <div style="font-size: 9px; font-weight: 700; color: #15803d; text-transform: uppercase; letter-spacing: 0.04em;">SO Assigned</div>
-            <div style="font-size: 18px; font-weight: 800; color: #16a34a; line-height: 1.2;">${assignedCount}</div>
-          </div>
-          <div style="background-color: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 8px 12px; text-align: left;">
-            <div style="font-size: 9px; font-weight: 700; color: #be123c; text-transform: uppercase; letter-spacing: 0.04em;">Unassigned</div>
-            <div style="font-size: 18px; font-weight: 800; color: #e11d48; line-height: 1.2;">${unassignedCount}</div>
-          </div>
-        </div>
-
-        <!-- Active Filter Badge Strip -->
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 12px; margin-bottom: 12px; display: flex; gap: 20px; flex-wrap: wrap; align-items: center;">
-          <span style="font-size: 9.5px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.04em;">Filter Scope:</span>
-          ${activeFiltersHtml}
-        </div>
-
-        <!-- Main Comprehensive Table -->
-        <table style="width: 100%; border-collapse: collapse; font-size: 9.5px; text-align: left;">
-          <thead>
-            <tr style="background-color: #f1f5f9; border-top: 1.5px solid #cbd5e1; border-bottom: 2px solid #94a3b8;">
-              <th style="padding: 7px 6px; width: 30px; text-align: center; font-weight: 700; color: #334155;">#</th>
-              <th style="padding: 7px 8px; width: 190px; font-weight: 700; color: #334155;">Party Name & Code</th>
-              <th style="padding: 7px 6px; width: 75px; text-align: center; font-weight: 700; color: #334155;">Type</th>
-              <th style="padding: 7px 8px; width: 125px; font-weight: 700; color: #334155;">Contact & Phone</th>
-              <th style="padding: 7px 8px; width: 120px; font-weight: 700; color: #334155;">City & Territory</th>
-              <th style="padding: 7px 6px; width: 75px; font-weight: 700; color: #334155;">Brand</th>
-              <th style="padding: 7px 6px; width: 110px; font-weight: 700; color: #334155;">GSTIN</th>
-              <th style="padding: 7px 8px; font-weight: 700; color: #334155;">Assigned Sales Officer(s)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${targetRows.map((r, i) => {
-              const soList = r.currentSoEmails.map(soName);
-              const isAssigned = soList.length > 0;
-              return `
-              <tr style="border-bottom: 1px solid #e2e8f0; background-color: ${i % 2 === 1 ? '#f8fafc' : '#ffffff'}; page-break-inside: avoid;">
-                <td style="padding: 6px 6px; text-align: center; color: #64748b; font-size: 9px;">${i + 1}</td>
-                <td style="padding: 6px 8px;">
-                  <div style="font-weight: 700; color: #0f172a; font-size: 10px; line-height: 1.25;">${r.name}</div>
-                  <div style="font-size: 8.5px; color: #64748b; margin-top: 1px;">
-                    <span style="font-family: monospace; font-weight: 600; color: #475569;">${r.code}</span>
-                    ${r.contactPerson && r.contactPerson !== '—' ? ` &middot; ${r.contactPerson}` : ''}
-                  </div>
-                </td>
-                <td style="padding: 6px 6px; text-align: center;">
-                  <span style="display: inline-block; padding: 2px 6px; font-size: 8px; font-weight: 800; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; background-color: ${r.type === 'dealer' ? '#e0f2fe' : '#e0e7ff'}; color: ${r.type === 'dealer' ? '#0369a1' : '#4338ca'};">
-                    ${r.type}
-                  </span>
-                </td>
-                <td style="padding: 6px 8px;">
-                  <div style="color: #1e293b; font-weight: 600; font-size: 9.5px;">${r.phone !== '—' ? r.phone : '<span style="color:#94a3b8;">No Phone</span>'}</div>
-                  ${r.contactPerson && r.contactPerson !== '—' ? `<div style="font-size: 8.5px; color: #64748b;">${r.contactPerson}</div>` : ''}
-                </td>
-                <td style="padding: 6px 8px;">
-                  <div style="color: #0f172a; font-weight: 600; font-size: 9.5px;">${r.city}</div>
-                  <div style="font-size: 8.5px; color: #2563eb; font-weight: 600;">${r.territory}</div>
-                </td>
-                <td style="padding: 6px 6px;">
-                  <span style="font-weight: 700; color: #b45309; font-size: 9px;">${r.brand}</span>
-                </td>
-                <td style="padding: 6px 6px;">
-                  <span style="font-family: monospace; font-size: 8.5px; color: ${r.gst !== '—' ? '#334155' : '#94a3b8'};">
-                    ${r.gst}
-                  </span>
-                </td>
-                <td style="padding: 6px 8px;">
-                  ${isAssigned ? `
-                    <div style="display: flex; flex-wrap: wrap; gap: 3px;">
-                      ${soList.map(name => `
-                        <span style="display: inline-block; padding: 2px 6px; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px; font-size: 8.5px; font-weight: 700; color: #065f46;">
-                          👤 ${name}
-                        </span>
-                      `).join('')}
-                    </div>
-                  ` : `
-                    <span style="color: #e11d48; font-style: italic; font-size: 8.5px; font-weight: 600;">
-                      &times; Unassigned
-                    </span>
-                  `}
-                </td>
-              </tr>
-            `;
-            }).join('')}
-          </tbody>
-        </table>
-
-        <!-- Executive Footer -->
-        <div style="margin-top: 22px; padding-top: 10px; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: #64748b;">
-          <div style="display: flex; gap: 15px; align-items: center;">
-            <strong style="color: #0f172a;">Simply Useful ERP</strong>
-            <span>&middot;</span>
-            <span>SO Territory Allocation Dossier</span>
-            <span>&middot;</span>
-            <span style="color: #16a34a; font-weight: 600;">&bull; Official System Document</span>
-          </div>
-          <div>
-            <span>Confidential &middot; Exported on ${new Date().toLocaleString('en-IN')}</span>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(printContainer);
-
-      const activeFilterDesc = [
-        filterType !== 'all' ? filterType : '',
-        filterBrand !== 'all' ? filterBrand : '',
-        filterSo !== 'all' ? soName(filterSo).replace(/\s+/g, '_') : ''
-      ].filter(Boolean).join('_');
-
-      const filename = `SO_Territory_Dossier_${activeFilterDesc ? activeFilterDesc + '_' : ''}${new Date().toISOString().slice(0, 10)}`;
-
-      const opt = {
-        margin: [6, 6, 6, 6],
-        filename: `${filename}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-
-      const pdfWorker = html2pdf().set(opt).from(printContainer);
-      const pdfBlob: Blob = await pdfWorker.output('blob');
-      
-      if (document.body.contains(printContainer)) {
-        document.body.removeChild(printContainer);
-      }
-
-      // Save with native file path dialog or guaranteed extension download
-      const safeFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
-      await saveFileWithDialog(
-        pdfBlob,
-        safeFilename,
-        'application/pdf',
-        'pdf',
-        'PDF Document (*.pdf)'
-      );
+      const filename = await downloadSoMappingPdf({
+        rows: targetRows,
+        filterType,
+        filterSo,
+        filterBrand,
+        search,
+        userName: user?.name,
+        userRole: user?.role,
+        soName
+      });
 
       toast({
         title: 'Smart PDF Exported',
-        description: `Successfully exported ${safeFilename} with ${targetRows.length} party profiles.`
+        description: `Successfully exported ${filename} with ${targetRows.length} party profiles.`
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('PDF export error:', err);
-      toast({ title: 'Export Failed', description: 'Could not generate PDF file.', variant: 'destructive' });
+      toast({ title: 'Export Failed', description: err.message || 'Could not generate PDF file.', variant: 'destructive' });
     } finally {
       setIsExportingPdf(false);
     }
@@ -688,12 +507,14 @@ const SOMapping: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExportPdf(selected.size > 0)}
-            disabled={isExportingPdf}
-            className="h-9 px-3 text-xs gap-1.5 border-rose-300/80 bg-rose-50/60 hover:bg-rose-100 text-rose-800 dark:bg-rose-950/20 dark:border-rose-800 dark:text-rose-300 font-medium"
-            title={selected.size > 0 ? `Download Smart Professional PDF for ${selected.size} selected parties` : `Download Smart Professional PDF for ${filteredRows.length} filtered parties`}
+            onClick={() => {
+              setPreviewOnlySelected(selected.size > 0);
+              setShowPdfPreview(true);
+            }}
+            className="h-9 px-3 text-xs gap-1.5 border-rose-300/80 bg-rose-50/60 hover:bg-rose-100 text-rose-800 dark:bg-rose-950/20 dark:border-rose-800 dark:text-rose-300 font-medium cursor-pointer"
+            title={selected.size > 0 ? `Preview & Export Smart PDF for ${selected.size} selected parties` : `Preview & Export Smart PDF for ${filteredRows.length} filtered parties`}
           >
-            {isExportingPdf ? <Loader2 className="w-4 h-4 animate-spin text-rose-600" /> : <FileText className="w-4 h-4 text-rose-600" />}
+            <Eye className="w-4 h-4 text-rose-600" />
             <span>Smart PDF</span>
             {selected.size > 0 ? (
               <span className="bg-rose-200/80 dark:bg-rose-900/60 text-rose-900 dark:text-rose-200 px-1.5 py-0.2 rounded-full text-[10px] font-bold">
@@ -908,13 +729,15 @@ const SOMapping: React.FC = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleExportPdf(selected.size > 0)}
-                disabled={isExportingPdf}
-                className="h-7 text-xs px-2.5 text-rose-700 hover:text-rose-800 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30 gap-1.5 font-medium"
-                title={selected.size > 0 ? `Download Smart PDF for ${selected.size} selected` : `Download Smart PDF for ${filteredRows.length} filtered`}
+                onClick={() => {
+                  setPreviewOnlySelected(selected.size > 0);
+                  setShowPdfPreview(true);
+                }}
+                className="h-7 text-xs px-2.5 text-rose-700 hover:text-rose-800 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30 gap-1.5 font-medium cursor-pointer"
+                title={selected.size > 0 ? `Preview & Download Smart PDF for ${selected.size} selected` : `Preview & Download Smart PDF for ${filteredRows.length} filtered`}
               >
-                {isExportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-                <span>Export PDF {selected.size > 0 ? `(${selected.size})` : ''}</span>
+                <Eye className="w-3.5 h-3.5" />
+                <span>Preview PDF {selected.size > 0 ? `(${selected.size})` : ''}</span>
               </Button>
             </div>
           </div>
@@ -1084,6 +907,289 @@ const SOMapping: React.FC = () => {
           })}
         </div>
       </Card>
+
+      {/* Smart Professional PDF Preview & Export Modal */}
+      <Dialog open={showPdfPreview} onOpenChange={setShowPdfPreview}>
+        <DialogContent className="max-w-6xl max-h-[92vh] flex flex-col p-0 overflow-hidden bg-background">
+          <DialogHeader className="p-4 border-b border-border bg-card shrink-0 flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="text-base font-bold flex items-center gap-2">
+                <FileText className="w-5 h-5 text-primary" />
+                SO Territory Dossier &middot; Document Preview
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Executive landscape report &middot; {previewTargetRows.length} party profiles included
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => window.print()}
+                className="h-8 text-xs gap-1.5 cursor-pointer no-print"
+              >
+                <Printer className="w-3.5 h-3.5 text-muted-foreground" />
+                Print / Save as PDF
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                disabled={isExportingPdf || previewTargetRows.length === 0}
+                onClick={async () => {
+                  setIsExportingPdf(true);
+                  try {
+                    const filename = await downloadSoMappingPdf({
+                      rows: previewTargetRows,
+                      filterType,
+                      filterSo,
+                      filterBrand,
+                      search,
+                      userName: user?.name,
+                      userRole: user?.role,
+                      soName
+                    });
+                    toast({
+                      title: 'Smart PDF Exported',
+                      description: `Successfully exported ${filename}.`
+                    });
+                  } catch (err: any) {
+                    toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
+                  } finally {
+                    setIsExportingPdf(false);
+                  }
+                }}
+                className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold shadow-xs cursor-pointer no-print"
+              >
+                {isExportingPdf ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    Download PDF ({previewTargetRows.length})
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogHeader>
+
+          {/* Embedded Print Styles for perfect A4 Landscape print & PDF generation */}
+          <style>{`
+            @media print {
+              @page {
+                size: A4 landscape;
+                margin: 8mm 6mm;
+              }
+              body {
+                background: #ffffff !important;
+                color: #0f172a !important;
+              }
+              body > * {
+                visibility: hidden !important;
+              }
+              [data-radix-portal],
+              [role="dialog"],
+              #so-mapping-pdf-preview-content,
+              #so-mapping-pdf-preview-content * {
+                visibility: visible !important;
+              }
+              [role="dialog"] {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: auto !important;
+                max-height: none !important;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                background: #ffffff !important;
+                overflow: visible !important;
+              }
+              .no-print,
+              button,
+              [data-radix-overlay],
+              header {
+                display: none !important;
+              }
+              #so-mapping-pdf-preview-content {
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+              }
+              tr {
+                page-break-inside: avoid !important;
+              }
+              thead {
+                display: table-header-group !important;
+              }
+              tfoot {
+                display: table-footer-group !important;
+              }
+            }
+          `}</style>
+
+          {/* Scrollable Preview Container */}
+          <div className="flex-1 overflow-auto p-4 md:p-6 bg-slate-100/70 dark:bg-slate-900/40 flex justify-center print-preview-scroll">
+            <div
+              id="so-mapping-pdf-preview-content"
+              className="bg-white text-slate-900 shadow-xl rounded-sm p-8 max-w-6xl w-full border border-slate-200"
+              style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
+            >
+              {/* Report Header */}
+              <div className="border-b-2 border-blue-900 pb-3 mb-4 flex justify-between items-end">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="bg-blue-900 text-white text-[9px] font-bold px-2 py-0.5 rounded tracking-wider uppercase">
+                      Simply Useful Enterprise
+                    </span>
+                    <span className="text-slate-500 text-[10px] font-semibold">
+                      Territory Governance Dossier
+                    </span>
+                  </div>
+                  <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                    SO Territory Mapping &amp; Channel Partner Directory
+                  </h1>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Verified master mapping for dealers, distributors, registered addresses, and Sales Officer allocations.
+                  </p>
+                </div>
+                <div className="text-right text-[10px] text-slate-600 leading-tight">
+                  <div><span className="text-slate-400">Doc ID:</span> <strong className="font-mono text-slate-900">SOM-{new Date().toISOString().slice(0, 10).replace(/-/g, '')}-{previewTargetRows.length}</strong></div>
+                  <div><span className="text-slate-400">Date:</span> <strong>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></div>
+                  <div><span className="text-slate-400">Issuer:</span> <strong>{user?.name || 'Admin'} ({user?.role || 'SUPERADMIN'})</strong></div>
+                </div>
+              </div>
+
+              {/* KPI Metrics */}
+              <div className="grid grid-cols-5 gap-2.5 mb-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Total Filtered</div>
+                  <div className="text-lg font-black text-slate-900">{previewTargetRows.length}</div>
+                </div>
+                <div className="bg-sky-50 border border-sky-200 rounded-lg p-2.5">
+                  <div className="text-[9px] font-bold text-sky-700 uppercase tracking-wider">Dealers</div>
+                  <div className="text-lg font-black text-sky-800">{previewTargetRows.filter(r => r.type === 'dealer').length}</div>
+                </div>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2.5">
+                  <div className="text-[9px] font-bold text-indigo-700 uppercase tracking-wider">Distributors</div>
+                  <div className="text-lg font-black text-indigo-800">{previewTargetRows.filter(r => r.type === 'distributor').length}</div>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5">
+                  <div className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider">SO Assigned</div>
+                  <div className="text-lg font-black text-emerald-800">{previewTargetRows.filter(r => r.currentSoEmails.length > 0).length}</div>
+                </div>
+                <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5">
+                  <div className="text-[9px] font-bold text-rose-700 uppercase tracking-wider">Unassigned</div>
+                  <div className="text-lg font-black text-rose-800">{previewTargetRows.filter(r => r.currentSoEmails.length === 0).length}</div>
+                </div>
+              </div>
+
+              {/* Active Filter Scope */}
+              <div className="bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5 mb-3 flex gap-4 flex-wrap items-center text-xs">
+                <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Active Scope:</span>
+                <div><span className="text-slate-500 text-[10px]">Party Type:</span> <strong className="text-slate-900">{filterType === 'all' ? 'All (Dealers & Distributors)' : filterType.toUpperCase() + 'S'}</strong></div>
+                <div><span className="text-slate-500 text-[10px]">Sales Officer:</span> <strong className="text-slate-900">{filterSo === 'all' ? 'All Sales Officers' : soName(filterSo)}</strong></div>
+                <div><span className="text-slate-500 text-[10px]">Brand:</span> <strong className="text-slate-900">{filterBrand === 'all' ? 'All Brands' : filterBrand}</strong></div>
+                {search && <div><span className="text-slate-500 text-[10px]">Keyword:</span> <strong className="text-slate-900">&ldquo;{search}&rdquo;</strong></div>}
+              </div>
+
+              {/* Data Table */}
+              <table className="w-full border-collapse text-[10px] text-left">
+                <thead>
+                  <tr className="bg-slate-100 border-t border-slate-300 border-b-2 border-slate-400">
+                    <th className="py-1.5 px-2 w-8 text-center font-bold text-slate-700">#</th>
+                    <th className="py-1.5 px-2 w-44 font-bold text-slate-700">Party Name &amp; Code</th>
+                    <th className="py-1.5 px-2 w-16 text-center font-bold text-slate-700">Type</th>
+                    <th className="py-1.5 px-2 w-56 font-bold text-slate-700">Registered Address</th>
+                    <th className="py-1.5 px-2 w-28 font-bold text-slate-700">City &amp; Territory</th>
+                    <th className="py-1.5 px-2 w-28 font-bold text-slate-700">Contact &amp; Phone</th>
+                    <th className="py-1.5 px-2 w-16 font-bold text-slate-700">Brand</th>
+                    <th className="py-1.5 px-2 w-28 font-bold text-slate-700">GSTIN</th>
+                    <th className="py-1.5 px-2 font-bold text-slate-700">Assigned Sales Officer(s)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewTargetRows.map((r, i) => {
+                    const soList = r.currentSoEmails.map(soName);
+                    const isAssigned = soList.length > 0;
+                    return (
+                      <tr key={r.id} className={cn("border-b border-slate-200", i % 2 === 1 ? "bg-slate-50/60" : "bg-white")}>
+                        <td className="py-1.5 px-2 text-center text-slate-500 font-mono text-[9px]">{i + 1}</td>
+                        <td className="py-1.5 px-2">
+                          <div className="font-bold text-slate-900 text-[10px] leading-tight">{r.name}</div>
+                          <div className="text-[8.5px] text-slate-500 font-mono">
+                            {r.code} {r.contactPerson && r.contactPerson !== '—' ? `· ${r.contactPerson}` : ''}
+                          </div>
+                        </td>
+                        <td className="py-1.5 px-2 text-center">
+                          <span className={cn(
+                            "inline-block px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wider",
+                            r.type === 'dealer' ? "bg-sky-100 text-sky-800" : "bg-indigo-100 text-indigo-800"
+                          )}>
+                            {r.type}
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <div className="text-[8.5px] text-slate-700 leading-snug line-clamp-3">
+                            {r.address && r.address !== '—' ? r.address : <span className="text-slate-400 italic">No registered address</span>}
+                          </div>
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <div className="font-semibold text-slate-900 text-[9.5px]">{r.city}</div>
+                          <div className="text-[8.5px] font-semibold text-blue-600">{r.territory}</div>
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <div className="font-semibold text-slate-800 text-[9.5px]">{r.phone !== '—' ? r.phone : <span className="text-slate-400">No Phone</span>}</div>
+                        </td>
+                        <td className="py-1.5 px-2 font-semibold text-amber-700 text-[9px]">{r.brand}</td>
+                        <td className="py-1.5 px-2 font-mono text-[8.5px] text-slate-600">{r.gst}</td>
+                        <td className="py-1.5 px-2">
+                          {isAssigned ? (
+                            <div className="flex flex-wrap gap-1">
+                              {soList.map(name => (
+                                <span key={name} className="inline-block px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-[8.5px] font-bold text-emerald-800">
+                                  👤 {name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-rose-600 italic font-semibold text-[8.5px]">&times; Unassigned</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Footer */}
+              <div className="mt-6 pt-3 border-t border-slate-300 flex justify-between items-center text-[9px] text-slate-500">
+                <div className="flex gap-3 items-center">
+                  <strong className="text-slate-900">Simply Useful ERP</strong>
+                  <span>&middot;</span>
+                  <span>SO Territory Allocation Dossier</span>
+                  <span>&middot;</span>
+                  <span className="text-emerald-700 font-semibold">&bull; Official System Document</span>
+                </div>
+                <div>
+                  <span>Confidential &middot; Exported on {new Date().toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
