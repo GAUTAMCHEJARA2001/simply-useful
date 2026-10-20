@@ -16,6 +16,9 @@ import { generatePromotionLetter } from '@/utils/promotionPdfGenerator';
 import { useData } from '@/contexts/DataContext';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from "@/lib/utils";
+import { useAuth } from '@/contexts/AuthContext';
+import { userService } from '@/api/services/user.service';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 const resolveMediaUrl = (url: string | null | undefined): string => {
   if (!url) return '';
@@ -75,6 +78,7 @@ export const EmployeeMasterTab: React.FC = () => {
   const { saveEmployee, deleteEmployee, changeStatus } = useHREmployeeMutations();
   const { toast } = useToast();
   const { settings } = useData();
+  const { user, updateCurrentUser } = useAuth();
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<any>(null);
@@ -160,13 +164,17 @@ export const EmployeeMasterTab: React.FC = () => {
 
   const handleFileChange = (field: string, file: File | null) => {
     if (file) {
-      setFormData((prev: any) => ({ ...prev, [field]: file }));
-      if (file.type.startsWith('image/')) {
-        const previewUrl = URL.createObjectURL(file);
-        setFilePreviews((prev: any) => ({ ...prev, [field]: previewUrl }));
-      } else {
-        setFilePreviews((prev: any) => ({ ...prev, [field]: file.name }));
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: 'Photos Only',
+          description: 'Only photo uploads (JPG, PNG, WebP) are allowed. PDFs and other documents are not accepted.',
+          variant: 'destructive',
+        });
+        return;
       }
+      setFormData((prev: any) => ({ ...prev, [field]: file }));
+      const previewUrl = URL.createObjectURL(file);
+      setFilePreviews((prev: any) => ({ ...prev, [field]: previewUrl }));
     } else {
       setFormData((prev: any) => ({ ...prev, [field]: null }));
       setFilePreviews((prev: any) => {
@@ -195,6 +203,12 @@ export const EmployeeMasterTab: React.FC = () => {
 
     try {
       await saveEmployee(submitData);
+      if (formData.user_id === user?.id || formData.name === user?.name || formData.employee_id === user?.id) {
+        userService.getProfileDetails().then(res => {
+          const photo = res.data?.data?.employee?.employee_photo || res.data?.data?.user?.employeePhoto;
+          if (photo) updateCurrentUser({ employeePhoto: photo });
+        }).catch(() => {});
+      }
       setIsEditing(false);
       setFilePreviews({});
     } catch (err: any) {
@@ -209,7 +223,7 @@ export const EmployeeMasterTab: React.FC = () => {
     accept?: string;
     docNumber?: string;
     docNumberLabel?: string;
-  }> = ({ label, field, accept = "image/*,.pdf", docNumber, docNumberLabel }) => {
+  }> = ({ label, field, accept = "image/jpeg,image/png,image/webp,image/jpg", docNumber, docNumberLabel }) => {
     const rawVal = formData[field];
     const newPreview = filePreviews[field];
     const isNewFile = rawVal instanceof File;
@@ -357,8 +371,12 @@ export const EmployeeMasterTab: React.FC = () => {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold">Date of Joining (DOJ)</label>
-                <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                  value={formData.doj || ''} onChange={e => setFormData({...formData, doj: e.target.value})} />
+                <SmartDatePicker
+                  value={formData.doj || ''}
+                  onChange={val => setFormData({...formData, doj: val})}
+                  className="w-full"
+                  inputClassName="py-2 text-sm rounded-lg"
+                />
               </div>
               <div className="col-span-1 md:col-span-2">
                 <FormDocumentInput 
@@ -454,10 +472,11 @@ export const EmployeeMasterTab: React.FC = () => {
                     value={formData.aadhar_number || ''} onChange={e => setFormData({...formData, aadhar_number: e.target.value})} />
                 </div>
                 <FormDocumentInput 
-                  label="Aadhar Card Photo / PDF" 
+                  label="Aadhar Card Photo" 
                   field="aadhar_photo" 
                   docNumber={formData.aadhar_number}
                   docNumberLabel="Aadhar"
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
                 />
               </div>
 
@@ -469,10 +488,11 @@ export const EmployeeMasterTab: React.FC = () => {
                     value={formData.pan_number || ''} onChange={e => setFormData({...formData, pan_number: e.target.value.toUpperCase()})} />
                 </div>
                 <FormDocumentInput 
-                  label="PAN Card Photo / PDF" 
+                  label="PAN Card Photo" 
                   field="pan_photo" 
                   docNumber={formData.pan_number}
                   docNumberLabel="PAN"
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
                 />
               </div>
 
@@ -498,8 +518,9 @@ export const EmployeeMasterTab: React.FC = () => {
                   </div>
                 </div>
                 <FormDocumentInput 
-                  label="Bank Proof (Passbook Photo / Cancelled Cheque)" 
+                  label="Bank Proof Photo (Passbook / Cancelled Cheque)" 
                   field="bank_proof_photo" 
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
                 />
               </div>
             </div>

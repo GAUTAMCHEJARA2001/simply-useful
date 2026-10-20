@@ -9,6 +9,7 @@ import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
 import { Input } from '@/components/ui/input';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -190,8 +191,12 @@ export const PurchasesTab: React.FC = () => {
             </div>
             <div>
               <label className="text-[11px] font-semibold block mb-1">Return Date</label>
-              <input type="date" value={returnForm.returnDate} onChange={e => setReturnForm({ ...returnForm, returnDate: e.target.value })}
-                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm" />
+              <SmartDatePicker
+                value={returnForm.returnDate}
+                onChange={val => setReturnForm({ ...returnForm, returnDate: val })}
+                className="w-full"
+                inputClassName="py-2 text-sm rounded-lg"
+              />
             </div>
             <div className="sm:col-span-2">
               <label className="text-[11px] font-semibold block mb-1">Return Reason</label>

@@ -13,6 +13,7 @@ import { formatDecimal } from '@/utils/format';
 import { Input } from '@/components/ui/input';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -800,12 +801,12 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
 
             <div>
               <label className="text-sm font-medium block mb-1">Production Date <span className="text-destructive">*</span></label>
-              <input 
-                type="date" 
+              <SmartDatePicker
                 disabled={isReadOnly}
-                value={form.date} 
-                onChange={e => setForm({ ...form, date: e.target.value })}
-                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                value={form.date}
+                onChange={val => setForm({ ...form, date: val })}
+                className="w-full"
+                inputClassName="py-2 text-sm rounded-lg"
               />
             </div>
 

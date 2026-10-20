@@ -10,6 +10,7 @@ import { orderService } from '@/api/services/order.service';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
@@ -136,7 +137,7 @@ export const SalesTab: React.FC = () => {
 
   const { filterBySelectedFY } = useFinancialYear();
 
-  const filteredSales = filterBySelectedFY(sales, (s: any) => s.date || s.createdAt || s.dispatchDate).filter((s: any) => {
+  const filteredSales = filterBySelectedFY(sales, (s: any) => s.dispatchDate || s.date || s.createdAt).filter((s: any) => {
     const customer = (s.customerName || s.partyName || '').toLowerCase();
     const challan = (s.challanNumber || s.invoiceNumber || extractChallanNumber(s.narration) || '').toLowerCase();
     const status = s.status || 'Pending';
@@ -189,7 +190,7 @@ export const SalesTab: React.FC = () => {
 
       <SafeDataView data={sales} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable 
-          columns={['Customer', 'Challan', 'Net Amount', 'Status', 'Date', 'Sales Return']}
+          columns={['Customer', 'Challan', 'Net Amount', 'Status', 'Dispatch Date', 'Sales Return']}
           rows={filteredSales.map((s: any) => {
             const cleanNarration = s.narration ? s.narration
               .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
@@ -239,20 +240,30 @@ export const SalesTab: React.FC = () => {
               </div>,
               <span key={`status-${s.id}`} className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusColor}`}>{status}</span>,
               (() => {
-                const dVal = s.date || s.dispatchDate || s.createdAt;
-                if (!dVal) return '—';
-                try {
-                  if (typeof dVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dVal)) {
-                    const [y, m, day] = dVal.split('-');
-                    return `${parseInt(day, 10)}/${parseInt(m, 10)}/${y}`;
+                const dispatchD = s.dispatchDate || s.date || s.createdAt;
+                const formatD = (val: any) => {
+                  if (!val) return '—';
+                  try {
+                    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+                      const [y, m, day] = val.split('-');
+                      return `${parseInt(day, 10)}/${parseInt(m, 10)}/${y}`;
+                    }
+                    const d = new Date(val);
+                    return isNaN(d.getTime()) ? String(val) : d.toLocaleDateString('en-IN');
+                  } catch (_) {
+                    return String(val);
                   }
-                  const d = new Date(dVal);
-                  return isNaN(d.getTime()) ? String(dVal) : d.toLocaleDateString('en-IN');
-                } catch (_) {
-                  return String(dVal);
-                }
+                };
+
+                const formattedDispatch = formatD(dispatchD);
+
+                return (
+                  <span key={`dt-${s.id}`} className="font-semibold text-xs text-foreground whitespace-nowrap">
+                    {formattedDispatch}
+                  </span>
+                );
               })(),
-              <div key={s.id} className="flex items-center gap-1.5 flex-wrap min-w-[140px]">
+              <div key={s.id} className="flex items-center gap-1.5 flex-wrap min-w-[110px]">
                 <Button size="sm" variant="secondary" onClick={() => handleView(s)} className="h-7 text-[10px] px-2" title="View Transaction">
                   <Eye className="w-3 h-3" />
                 </Button>
@@ -348,8 +359,12 @@ export const SalesTab: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-semibold block mb-1">Return Date</label>
-              <input type="date" value={returnDate} onChange={e => setReturnDate(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-sm focus:ring-1 focus:ring-primary/50" />
+              <SmartDatePicker
+                value={returnDate}
+                onChange={setReturnDate}
+                className="w-full"
+                inputClassName="py-1.5 text-xs rounded-lg"
+              />
             </div>
             <div>
               <label className="text-[11px] font-semibold block mb-1">Vehicle Details</label>

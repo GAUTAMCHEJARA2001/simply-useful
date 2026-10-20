@@ -7,6 +7,7 @@ import { ArrowLeft, Truck, AlertTriangle, CalendarClock } from 'lucide-react';
 import { orderService } from '@/api/services/order.service';
 import { useToast } from '@/hooks/use-toast';
 import { Order } from '@/types';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 const DispatchOrderPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -427,11 +428,11 @@ const DispatchOrderPage: React.FC = () => {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold">Dispatch Date</label>
-              <input 
-                type="date"
+              <SmartDatePicker
                 value={dispatchDate}
-                onChange={e => setDispatchDate(e.target.value)}
-                className="w-full border border-border rounded-lg px-4 py-2 bg-background focus:ring-2 focus:ring-primary/50 outline-none"
+                onChange={setDispatchDate}
+                className="w-full"
+                inputClassName="px-4 py-2 text-sm rounded-lg"
               />
             </div>
             <div className="space-y-2">

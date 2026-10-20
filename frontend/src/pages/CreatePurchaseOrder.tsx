@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 interface POItem {
   product_id: string;
@@ -270,7 +271,12 @@ const CreatePurchaseOrder: React.FC = () => {
 
               <div className="space-y-2">
                 <Label>Expected Delivery</Label>
-                <Input type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} className="h-12 border-primary/20" />
+                <SmartDatePicker
+                  value={expectedDate}
+                  onChange={setExpectedDate}
+                  className="w-full"
+                  inputClassName="h-12 border-primary/20 text-sm"
+                />
                 <div className="mt-4 space-y-2">
                    <Label>Target Warehouse (Optional)</Label>
                    <Select value={warehouseId} onValueChange={setWarehouseId}>

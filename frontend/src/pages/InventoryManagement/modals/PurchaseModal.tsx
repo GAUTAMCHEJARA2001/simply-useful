@@ -7,6 +7,7 @@ import { useWarehouses } from '@/hooks/inventory/useMasters';
 import { useSuppliers } from '@/hooks/inventory/useSuppliers';
 import { usePurchaseMutations } from '@/hooks/inventory/usePurchases';
 import { usePurchaseOrders } from '@/hooks/inventory/usePurchaseOrders';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 interface PurchaseModalProps {
   isOpen: boolean;
@@ -188,12 +189,12 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
         <div className="grid grid-cols-6 gap-4 p-5 bg-card border border-border/60 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300">
           <div className="col-span-6 md:col-span-2">
             <label className="text-[10px] font-bold text-foreground/70 uppercase tracking-wider block mb-1.5">Purchase Date</label>
-            <input 
+            <SmartDatePicker
               disabled={readOnly}
-              type="date" 
-              value={form.date || ''} 
-              onChange={e => setForm({ ...form, date: e.target.value })}
-              className="w-full border border-border/70 rounded-xl px-3 py-2 bg-background/50 hover:bg-background focus:bg-background text-xs font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-70" 
+              value={form.date || ''}
+              onChange={val => setForm({ ...form, date: val })}
+              className="w-full"
+              inputClassName="py-2 text-xs font-medium rounded-xl border-border/70"
             />
           </div>
           <div className="col-span-6 md:col-span-2">

@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import LedgerRequestsPanel from '@/components/admin/LedgerRequestsPanel';
 import OnboardingRequestsPanel from '@/components/admin/OnboardingRequestsPanel';
 import PaymentRequestsPanel from '@/components/admin/PaymentRequestsPanel';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
@@ -460,7 +461,7 @@ const AdminDashboard: React.FC = () => {
 
             <TabsTrigger value="approvals" className="rounded-lg px-4 py-2 text-xs md:text-sm font-semibold gap-2 data-[state=active]:bg-card data-[state=active]:shadow-sm relative">
               <Clock className="w-4 h-4 text-amber-500" />
-              <span>Approvals Queue</span>
+              <span>Orders Approval Queue</span>
               {pendingOrders.length > 0 && (
                 <Badge className="ml-1 bg-amber-500 text-white hover:bg-amber-600 text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center rounded-full">
                   {pendingOrders.length}
@@ -514,7 +515,7 @@ const AdminDashboard: React.FC = () => {
                   onClick={() => setActiveTab('approvals')}
                   className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs px-4 h-9 shadow-xs shrink-0 cursor-pointer"
                 >
-                  <span>Open Approvals Queue</span>
+                  <span>Open Orders Approval Queue</span>
                   <ArrowUpRight className="w-4 h-4 ml-1.5" />
                 </Button>
               </div>
@@ -1467,11 +1468,11 @@ const AdminDashboard: React.FC = () => {
                       <label className="text-xs font-semibold block mb-1">
                         Rejection Date <span className="text-rose-500">*</span>
                       </label>
-                      <input 
-                        type="date" 
-                        value={confirmOrder.action_date || ''} 
-                        onChange={e => setConfirmOrder({...confirmOrder, action_date: e.target.value})} 
-                        className="w-full text-xs border border-border rounded-xl px-3 py-2 bg-background" 
+                      <SmartDatePicker
+                        value={confirmOrder.action_date || ''}
+                        onChange={val => setConfirmOrder({...confirmOrder, action_date: val})}
+                        className="w-full"
+                        inputClassName="text-xs rounded-xl px-3 py-2 bg-background"
                       />
                     </div>
                     <div>
