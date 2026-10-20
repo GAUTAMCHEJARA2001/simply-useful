@@ -54,6 +54,10 @@ export interface DailyTravelLogItem {
   user_id: string;
   user_name: string;
   user_email: string;
+  is_admin_edited?: boolean;
+  is_manual_entry?: boolean;
+  admin_notes?: string | null;
+  edited_by_admin_name?: string | null;
   total_stops_planned?: number;
   total_stops_visited?: number;
   total_target_bags?: number;
@@ -123,6 +127,33 @@ export const travelService = {
       hr_notes?: string;
     }
   ) => api.post(`/travel/hr/verify/${id}`, data),
+
+  updateHRLog: (
+    id: string,
+    data: {
+      start_km?: number;
+      end_km?: number;
+      total_km?: number;
+      approved_km?: number;
+      vehicle_type?: string;
+      status?: 'APPROVED' | 'PENDING' | 'REJECTED';
+      hr_notes?: string;
+      admin_notes?: string;
+    }
+  ) => api.post(`/travel/hr/logs/${id}`, data),
+
+  createManualLog: (data: {
+    user_id?: string;
+    labour_id?: string;
+    date: string;
+    vehicle_type: string;
+    start_km: number;
+    end_km: number;
+    total_km?: number;
+    approved_km?: number;
+    hr_notes?: string;
+    admin_notes?: string;
+  }) => api.post('/travel/hr/manual-entry', data),
 
   getSOScorecard: (params?: {
     period?: 'WEEKLY' | 'MONTHLY' | 'YEARLY';

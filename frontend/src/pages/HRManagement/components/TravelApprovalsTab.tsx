@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { travelService, DailyTravelLogItem } from '@/api/services/travel.service';
+import { useHRUsers, useHREmployees } from '@/hooks/hr/useHR';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +30,10 @@ import {
   FileText,
   Award,
   Target,
-  Compass
+  Compass,
+  Plus,
+  ShieldAlert,
+  UserCheck
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -38,6 +43,10 @@ export const TravelApprovalsTab: React.FC = () => {
   const { toast } = useToast();
   const [logs, setLogs] = useState<DailyTravelLogItem[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Users for manual entry selection
+  const { data: users = [] } = useHRUsers();
+  const { data: employees = [] } = useHREmployees();
 
   // Filters
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
@@ -52,6 +61,32 @@ export const TravelApprovalsTab: React.FC = () => {
   const [approvedKm, setApprovedKm] = useState<string>('');
   const [hrNotes, setHrNotes] = useState<string>('');
   const [savingAction, setSavingAction] = useState(false);
+
+  // Selected for Admin Edit / In-Progress Completion dialog
+  const [editingLog, setEditingLog] = useState<DailyTravelLogItem | null>(null);
+  const [editStartKm, setEditStartKm] = useState<string>('');
+  const [editEndKm, setEditEndKm] = useState<string>('');
+  const [editTotalKm, setEditTotalKm] = useState<string>('');
+  const [editApprovedKm, setEditApprovedKm] = useState<string>('');
+  const [editVehicleType, setEditVehicleType] = useState<'BIKE' | 'CAR' | 'OTHER'>('BIKE');
+  const [editStatus, setEditStatus] = useState<'APPROVED' | 'PENDING' | 'REJECTED'>('APPROVED');
+  const [editAdminNotes, setEditAdminNotes] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
+
+  // Manual Trip Creation Dialog (For SO field network issues)
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [manualUserId, setManualUserId] = useState('');
+  const [manualDate, setManualDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
+  const [manualVehicleType, setManualVehicleType] = useState<'BIKE' | 'CAR'>('BIKE');
+  const [manualStartKm, setManualStartKm] = useState('');
+  const [manualEndKm, setManualEndKm] = useState('');
+  const [manualTotalKm, setManualTotalKm] = useState('');
+  const [manualApprovedKm, setManualApprovedKm] = useState('');
+  const [manualAdminNotes, setManualAdminNotes] = useState('SO faced network connectivity issue on field. Travel entry recorded & approved by Admin.');
+  const [savingManual, setSavingManual] = useState(false);
 
   // Lightbox
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -82,6 +117,159 @@ export const TravelApprovalsTab: React.FC = () => {
     setHrNotes(log.hr_notes || '');
   };
 
+  const openEditDialog = (log: DailyTravelLogItem) => {
+    setEditingLog(log);
+    const start = String(log.start_km ?? 0);
+    const end = log.end_km !== null && log.end_km !== undefined ? String(log.end_km) : '';
+    setEditStartKm(start);
+    setEditEndKm(end);
+    setEditTotalKm(String(log.total_km ?? 0));
+    setEditApprovedKm(String(log.approved_km !== null && log.approved_km !== undefined ? log.approved_km : (log.total_km || '')));
+    setEditVehicleType(log.vehicle_type || 'BIKE');
+    setEditStatus((log.status as any) || 'APPROVED');
+    setEditAdminNotes(log.admin_notes || log.hr_notes || (log.end_km === null ? 'Completed trip by Admin (SO had network issue on field)' : 'Updated by Admin'));
+  };
+
+  const handleEditEndKmChange = (val: string) => {
+    setEditEndKm(val);
+    const s = Number(editStartKm);
+    const e = Number(val);
+    if (!isNaN(s) && !isNaN(e) && val !== '' && e >= s) {
+      const diff = Math.max(0, Math.round((e - s) * 10) / 10);
+      setEditTotalKm(String(diff));
+      setEditApprovedKm(String(diff));
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingLog) return;
+    if (editStartKm === '' || isNaN(Number(editStartKm)) || Number(editStartKm) < 0) {
+      toast({ title: 'Invalid Start KM', description: 'Please enter a valid Start KM reading', variant: 'destructive' });
+      return;
+    }
+    if (editEndKm === '' || isNaN(Number(editEndKm))) {
+      toast({ title: 'Invalid End KM', description: 'Please enter the End KM odometer reading to complete this trip', variant: 'destructive' });
+      return;
+    }
+    if (Number(editEndKm) < Number(editStartKm)) {
+      toast({ title: 'End KM Mismatch', description: 'End KM cannot be less than Start KM', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      await travelService.updateHRLog(editingLog.id, {
+        start_km: Number(editStartKm),
+        end_km: Number(editEndKm),
+        total_km: editTotalKm ? Number(editTotalKm) : Math.max(0, Number(editEndKm) - Number(editStartKm)),
+        approved_km: editApprovedKm ? Number(editApprovedKm) : undefined,
+        vehicle_type: editVehicleType,
+        status: editStatus,
+        admin_notes: editAdminNotes || 'Updated by Admin (EDITED BY ADMIN)',
+        hr_notes: editAdminNotes || 'Updated by Admin (EDITED BY ADMIN)',
+      });
+
+      toast({
+        title: 'Trip Updated & Synced',
+        description: `Travel record marked EDITED BY ADMIN with ${editApprovedKm || editTotalKm} KM approved and pushed to payroll!`,
+      });
+      setEditingLog(null);
+      fetchLogs();
+    } catch (err: any) {
+      toast({
+        title: 'Failed to update travel log',
+        description: err.response?.data?.message || 'Server error occurred',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const openManualDialog = () => {
+    setManualUserId('');
+    setManualDate(() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    });
+    setManualVehicleType('BIKE');
+    setManualStartKm('');
+    setManualEndKm('');
+    setManualTotalKm('');
+    setManualApprovedKm('');
+    setManualAdminNotes('SO faced network connectivity issue on field. Travel entry recorded & approved by Admin.');
+    setManualModalOpen(true);
+  };
+
+  const handleManualEndKmChange = (val: string) => {
+    setManualEndKm(val);
+    const s = Number(manualStartKm);
+    const e = Number(val);
+    if (!isNaN(s) && !isNaN(e) && val !== '' && e >= s) {
+      const diff = Math.max(0, Math.round((e - s) * 10) / 10);
+      setManualTotalKm(String(diff));
+      setManualApprovedKm(String(diff));
+    }
+  };
+
+  const handleSaveManual = async () => {
+    if (!manualUserId) {
+      toast({ title: 'Select Sales Officer', description: 'Please select an employee / Sales Officer', variant: 'destructive' });
+      return;
+    }
+    if (!manualDate) {
+      toast({ title: 'Date Required', description: 'Please choose the travel date', variant: 'destructive' });
+      return;
+    }
+    if (manualStartKm === '' || isNaN(Number(manualStartKm)) || Number(manualStartKm) < 0) {
+      toast({ title: 'Invalid Start KM', description: 'Please enter valid Start KM', variant: 'destructive' });
+      return;
+    }
+    if (manualEndKm === '' || isNaN(Number(manualEndKm))) {
+      toast({ title: 'Invalid End KM', description: 'Please enter valid End KM', variant: 'destructive' });
+      return;
+    }
+    if (Number(manualEndKm) < Number(manualStartKm)) {
+      toast({ title: 'End KM Mismatch', description: 'End KM cannot be less than Start KM', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      setSavingManual(true);
+      await travelService.createManualLog({
+        user_id: manualUserId,
+        date: manualDate,
+        vehicle_type: manualVehicleType,
+        start_km: Number(manualStartKm),
+        end_km: Number(manualEndKm),
+        total_km: manualTotalKm ? Number(manualTotalKm) : Math.max(0, Number(manualEndKm) - Number(manualStartKm)),
+        approved_km: manualApprovedKm ? Number(manualApprovedKm) : undefined,
+        admin_notes: manualAdminNotes || 'Manual entry created by Admin (SO network issue on field)',
+        hr_notes: manualAdminNotes || 'Manual entry created by Admin (SO network issue on field)',
+      });
+
+      toast({
+        title: 'Manual Travel Entry Created',
+        description: `Trip recorded with badge EDITED BY ADMIN and synced into monthly attendance for payroll!`,
+      });
+      setManualModalOpen(false);
+      setManualUserId('');
+      setManualStartKm('');
+      setManualEndKm('');
+      setManualTotalKm('');
+      setManualApprovedKm('');
+      fetchLogs();
+    } catch (err: any) {
+      toast({
+        title: 'Failed to create manual entry',
+        description: err.response?.data?.message || 'Server error occurred',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingManual(false);
+    }
+  };
+
   const handleVerify = async (action: 'APPROVE' | 'REJECT') => {
     if (!selectedLog) return;
 
@@ -103,7 +291,7 @@ export const TravelApprovalsTab: React.FC = () => {
       toast({
         title: action === 'APPROVE' ? 'Travel Approved & Synced' : 'Travel Rejected',
         description: action === 'APPROVE' 
-          ? `${approvedKm} KM approved and synced to Daily Attendance for payroll`
+          ? `${approvedKm} KM approved and synced to Daily Attendance for payroll (EDITED BY ADMIN)`
           : 'Record marked as rejected',
       });
 
@@ -119,6 +307,7 @@ export const TravelApprovalsTab: React.FC = () => {
       setSavingAction(false);
     }
   };
+
 
   // Filtered in memory by search query
   const filteredLogs = logs.filter(l => {
@@ -231,12 +420,21 @@ export const TravelApprovalsTab: React.FC = () => {
           <div>
             <CardTitle className="text-base font-bold">Sales Officer Travel Submissions</CardTitle>
             <CardDescription className="text-xs">
-              Verify start &amp; end odometer readings, adjust KM if needed, and push to payroll
+              Verify start &amp; end odometer readings, adjust KM if needed, complete stuck trips, or add manual field logs
             </CardDescription>
           </div>
-          <Button variant="ghost" size="sm" onClick={fetchLogs}>
-            <RefreshCw className="w-4 h-4 mr-1.5" /> Reload
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              size="sm" 
+              onClick={openManualDialog}
+              className="bg-primary hover:bg-primary/90 text-white font-bold text-xs gap-1.5 shadow-sm h-8"
+            >
+              <Plus className="w-4 h-4" /> Add Travel Log (Manual)
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={fetchLogs}>
+              <RefreshCw className="w-4 h-4 mr-1.5" /> Reload
+            </Button>
+          </div>
         </CardHeader>
 
         <CardContent className="p-0">
@@ -275,6 +473,19 @@ export const TravelApprovalsTab: React.FC = () => {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="font-semibold text-foreground">{item.user_name}</div>
                         <div className="text-[11px] text-muted-foreground">{item.user_email}</div>
+                        {item.is_admin_edited && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <Badge className="bg-purple-600 hover:bg-purple-700 text-white font-black text-[9px] px-1.5 py-0 tracking-wider uppercase shadow-xs flex items-center gap-1">
+                              <ShieldAlert className="w-2.5 h-2.5" />
+                              {item.is_manual_entry ? 'CREATED BY ADMIN (MANUAL)' : 'EDITED BY ADMIN'}
+                            </Badge>
+                            {item.edited_by_admin_name && (
+                              <span className="text-[10px] text-purple-700 dark:text-purple-300 font-semibold">
+                                ({item.edited_by_admin_name})
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <Badge variant="outline" className="text-xs">
@@ -284,17 +495,30 @@ export const TravelApprovalsTab: React.FC = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                         {item.start_km}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                        {item.end_km !== null ? item.end_km : <span className="text-amber-500 italic">In progress</span>}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.end_km !== null ? (
+                          <span className="font-medium text-foreground">{item.end_km}</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                            <Clock className="w-3 h-3" /> In progress
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap font-bold">
                         {item.total_km} KM
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap font-black">
                         {item.status === 'APPROVED' ? (
-                          <span className={item.approved_km !== item.total_km ? 'text-amber-600' : 'text-emerald-600'}>
-                            {item.approved_km} KM
-                          </span>
+                          <div>
+                            <span className={item.approved_km !== item.total_km ? 'text-amber-600' : 'text-emerald-600'}>
+                              {item.approved_km} KM
+                            </span>
+                            {item.is_admin_edited && (
+                              <div className="text-[9px] text-purple-600 dark:text-purple-400 font-bold uppercase tracking-tight">
+                                EDITED BY ADMIN
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-muted-foreground">--</span>
                         )}
@@ -334,20 +558,46 @@ export const TravelApprovalsTab: React.FC = () => {
                         >
                           {item.status}
                         </Badge>
+                        {item.is_admin_edited && (
+                          <div className="text-[10px] text-purple-700 dark:text-purple-400 font-bold mt-0.5 flex items-center gap-0.5">
+                            <ShieldAlert className="w-2.5 h-2.5" /> EDITED BY ADMIN
+                          </div>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate" title={item.hr_notes || ''}>
-                        {item.hr_notes || '--'}
+                      <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate" title={item.admin_notes || item.hr_notes || ''}>
+                        {item.admin_notes || item.hr_notes || '--'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-right">
-                        <Button 
-                          size="sm" 
-                          variant={item.status === 'PENDING' ? 'default' : 'outline'}
-                          className="h-8 text-xs font-semibold"
-                          onClick={() => openVerifyDialog(item)}
-                        >
-                          <Edit3 className="w-3.5 h-3.5 mr-1" />
-                          {item.status === 'PENDING' ? 'Verify / Approve' : 'Correct / Review'}
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {item.end_km === null ? (
+                            <Button 
+                              size="sm" 
+                              className="h-8 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs gap-1"
+                              onClick={() => openEditDialog(item)}
+                              title="Enter End KM and complete this in-progress trip"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" /> Complete Trip
+                            </Button>
+                          ) : (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              className="h-8 text-xs font-semibold text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 gap-1"
+                              onClick={() => openEditDialog(item)}
+                              title="Edit KM, Vehicle, or override trip"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" /> Edit
+                            </Button>
+                          )}
+                          <Button 
+                            size="sm" 
+                            variant={item.status === 'PENDING' ? 'default' : 'ghost'}
+                            className="h-8 text-xs font-semibold"
+                            onClick={() => openVerifyDialog(item)}
+                          >
+                            {item.status === 'PENDING' ? 'Verify' : 'Review'}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -358,6 +608,370 @@ export const TravelApprovalsTab: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* 1. ADMIN EDIT / COMPLETE IN-PROGRESS TRIP MODAL */}
+      <Dialog open={!!editingLog} onOpenChange={(open) => !open && setEditingLog(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2 text-base font-bold">
+                <Edit3 className="w-5 h-5 text-purple-600" />
+                <span>Admin Trip Override &amp; Completion</span>
+              </DialogTitle>
+              <Badge className="bg-purple-600 text-white font-black text-[10px] tracking-wider uppercase flex items-center gap-1">
+                <ShieldAlert className="w-3 h-3" /> EDITED BY ADMIN
+              </Badge>
+            </div>
+            <DialogDescription className="text-xs">
+              Complete trips interrupted by network issues, or correct odometer readings directly from the Admin portal.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingLog && (
+            <div className="space-y-4 py-2 text-xs">
+              {/* Officer and Date info bar */}
+              <div className="p-3 bg-muted/40 rounded-xl border flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-sm text-foreground">{editingLog.user_name}</div>
+                  <div className="text-[11px] text-muted-foreground">{editingLog.user_email}</div>
+                </div>
+                <div className="text-right">
+                  <span className="font-bold text-xs">{editingLog.date}</span>
+                  <div className="text-[10px] text-muted-foreground">Original Status: {editingLog.status}</div>
+                </div>
+              </div>
+
+              {/* In-progress warning banner */}
+              {editingLog.end_km === null && (
+                <div className="p-2.5 rounded-lg bg-amber-500/15 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs flex items-start gap-2">
+                  <Clock className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Trip Stuck In Progress:</strong> The Sales Officer started this trip at Start KM {editingLog.start_km}, but could not complete it on the field (network issue or offline). Enter their final End KM below to complete and push to payroll.
+                  </div>
+                </div>
+              )}
+
+              {/* Vehicle Type */}
+              <div className="space-y-1.5">
+                <Label className="font-bold">Vehicle Type</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditVehicleType('BIKE')}
+                    className={cn(
+                      "flex items-center justify-center gap-2 py-2 px-3 rounded-lg border font-semibold transition-all",
+                      editVehicleType === 'BIKE' ? "bg-primary text-white border-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    <Bike className="w-4 h-4" /> 🏍️ Bike
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditVehicleType('CAR')}
+                    className={cn(
+                      "flex items-center justify-center gap-2 py-2 px-3 rounded-lg border font-semibold transition-all",
+                      editVehicleType === 'CAR' ? "bg-primary text-white border-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    <Car className="w-4 h-4" /> 🚗 Car
+                  </button>
+                </div>
+              </div>
+
+              {/* Start KM & End KM */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="editStartKm" className="font-bold">Start KM *</Label>
+                  <Input
+                    id="editStartKm"
+                    type="number"
+                    step="0.1"
+                    value={editStartKm}
+                    onChange={(e) => {
+                      setEditStartKm(e.target.value);
+                      const s = Number(e.target.value);
+                      const endVal = Number(editEndKm);
+                      if (!isNaN(s) && !isNaN(endVal) && editEndKm !== '' && endVal >= s) {
+                        const diff = Math.max(0, Math.round((endVal - s) * 10) / 10);
+                        setEditTotalKm(String(diff));
+                        setEditApprovedKm(String(diff));
+                      }
+                    }}
+                    className="font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="editEndKm" className="font-bold text-primary flex items-center justify-between">
+                    <span>End KM *</span>
+                    {editingLog.end_km === null && <span className="text-[10px] text-amber-600 font-normal">(Required)</span>}
+                  </Label>
+                  <Input
+                    id="editEndKm"
+                    type="number"
+                    step="0.1"
+                    placeholder="Enter end meter reading"
+                    value={editEndKm}
+                    onChange={(e) => handleEditEndKmChange(e.target.value)}
+                    className="font-bold border-primary/50 focus-visible:ring-primary"
+                  />
+                </div>
+              </div>
+
+              {/* Distance Summary Card */}
+              <div className="p-3 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800/60 flex items-center justify-between">
+                <div>
+                  <span className="text-muted-foreground text-[11px] block">Calculated Distance:</span>
+                  <span className="font-black text-lg text-purple-700 dark:text-purple-300">
+                    {editTotalKm || '0'} <span className="text-xs font-normal">KM</span>
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-muted-foreground text-[11px] block">Approved for Salary:</span>
+                  <span className="font-black text-lg text-emerald-600 dark:text-emerald-400">
+                    {editApprovedKm || editTotalKm || '0'} <span className="text-xs font-normal">KM</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Approved KM Override */}
+              <div className="space-y-1.5">
+                <Label htmlFor="editApprovedKm" className="font-bold flex items-center justify-between">
+                  <span>Approved KM for Monthly Salary Calculation *</span>
+                  <span className="text-[10px] text-muted-foreground">Syncs directly to Daily Attendance</span>
+                </Label>
+                <Input
+                  id="editApprovedKm"
+                  type="number"
+                  step="0.1"
+                  value={editApprovedKm}
+                  onChange={(e) => setEditApprovedKm(e.target.value)}
+                  className="font-bold"
+                />
+              </div>
+
+              {/* Status */}
+              <div className="space-y-1.5">
+                <Label className="font-bold">Status</Label>
+                <select
+                  value={editStatus}
+                  onChange={(e: any) => setEditStatus(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-xs bg-background"
+                >
+                  <option value="APPROVED">APPROVED (Include in Monthly Salary)</option>
+                  <option value="PENDING">PENDING (Review Later)</option>
+                  <option value="REJECTED">REJECTED (Exclude from Salary)</option>
+                </select>
+              </div>
+
+              {/* Admin Note / Reason */}
+              <div className="space-y-1.5">
+                <Label htmlFor="editAdminNotes" className="font-bold flex items-center gap-1">
+                  <span>Reason for Admin Override (Audit Note)</span>
+                  <Badge variant="outline" className="text-[9px] text-purple-600 border-purple-300">EDITED BY ADMIN</Badge>
+                </Label>
+                <Textarea
+                  id="editAdminNotes"
+                  rows={2}
+                  value={editAdminNotes}
+                  onChange={(e) => setEditAdminNotes(e.target.value)}
+                  placeholder="e.g. Sales Officer had network issues on field. Completed trip from phone verification."
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="border-t pt-3 gap-2">
+            <Button variant="ghost" onClick={() => setEditingLog(null)} disabled={savingEdit}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={savingEdit || !editEndKm}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold"
+            >
+              <CheckCircle2 className="w-4 h-4 mr-1.5" /> Save Changes (EDITED BY ADMIN)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2. MANUAL TRAVEL ENTRY MODAL (Network failure on field) */}
+      <Dialog open={manualModalOpen} onOpenChange={setManualModalOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2 text-base font-bold">
+                <Plus className="w-5 h-5 text-primary" />
+                <span>Add Travel Log (Manual Entry)</span>
+              </DialogTitle>
+              <Badge className="bg-purple-600 text-white font-black text-[10px] tracking-wider uppercase flex items-center gap-1">
+                <ShieldAlert className="w-3 h-3" /> EDITED BY ADMIN
+              </Badge>
+            </div>
+            <DialogDescription className="text-xs">
+              Record retroactive travel distance for Sales Officers unable to log via phone due to poor network or app issue.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            {/* Sales Officer selection */}
+            <div className="space-y-1.5">
+              <Label htmlFor="manualUserId" className="font-bold">Select Sales Officer *</Label>
+              <select
+                id="manualUserId"
+                value={manualUserId}
+                onChange={(e) => setManualUserId(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-xs bg-background"
+              >
+                <option value="">-- Choose Sales Officer / Staff --</option>
+                {users.map((u: any) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name || u.email} ({u.role || 'Staff'}) — {u.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date and Vehicle Type */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="font-bold">Travel Date *</Label>
+                <input
+                  type="date"
+                  value={manualDate}
+                  onChange={(e) => setManualDate(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-xs bg-background"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="font-bold">Vehicle Type</Label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setManualVehicleType('BIKE')}
+                    className={cn(
+                      "flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border text-xs font-semibold transition-all",
+                      manualVehicleType === 'BIKE' ? "bg-primary text-white border-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    <Bike className="w-3.5 h-3.5" /> Bike
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManualVehicleType('CAR')}
+                    className={cn(
+                      "flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border text-xs font-semibold transition-all",
+                      manualVehicleType === 'CAR' ? "bg-primary text-white border-primary" : "hover:bg-muted"
+                    )}
+                  >
+                    <Car className="w-3.5 h-3.5" /> Car
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Start KM and End KM */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="manualStartKm" className="font-bold">Start KM *</Label>
+                <Input
+                  id="manualStartKm"
+                  type="number"
+                  step="0.1"
+                  placeholder="e.g. 181660"
+                  value={manualStartKm}
+                  onChange={(e) => {
+                    setManualStartKm(e.target.value);
+                    const s = Number(e.target.value);
+                    const endVal = Number(manualEndKm);
+                    if (!isNaN(s) && !isNaN(endVal) && manualEndKm !== '' && endVal >= s) {
+                      const diff = Math.max(0, Math.round((endVal - s) * 10) / 10);
+                      setManualTotalKm(String(diff));
+                      setManualApprovedKm(String(diff));
+                    }
+                  }}
+                  className="font-bold"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="manualEndKm" className="font-bold text-primary">End KM *</Label>
+                <Input
+                  id="manualEndKm"
+                  type="number"
+                  step="0.1"
+                  placeholder="e.g. 181725"
+                  value={manualEndKm}
+                  onChange={(e) => handleManualEndKmChange(e.target.value)}
+                  className="font-bold border-primary/50"
+                />
+              </div>
+            </div>
+
+            {/* Distance Summary Card */}
+            <div className="p-3 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800/60 flex items-center justify-between">
+              <div>
+                <span className="text-muted-foreground text-[11px] block">Calculated Distance:</span>
+                <span className="font-black text-lg text-purple-700 dark:text-purple-300">
+                  {manualTotalKm || '0'} <span className="text-xs font-normal">KM</span>
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-muted-foreground text-[11px] block">Approved for Salary:</span>
+                <span className="font-black text-lg text-emerald-600 dark:text-emerald-400">
+                  {manualApprovedKm || manualTotalKm || '0'} <span className="text-xs font-normal">KM</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Approved KM for Payroll */}
+            <div className="space-y-1.5">
+              <Label htmlFor="manualApprovedKm" className="font-bold">
+                Approved KM for Monthly Salary *
+              </Label>
+              <Input
+                id="manualApprovedKm"
+                type="number"
+                step="0.1"
+                value={manualApprovedKm}
+                onChange={(e) => setManualApprovedKm(e.target.value)}
+                className="font-bold"
+              />
+            </div>
+
+            {/* Admin Note */}
+            <div className="space-y-1.5">
+              <Label htmlFor="manualAdminNotes" className="font-bold flex items-center gap-1">
+                <span>Admin Remarks / Reason</span>
+                <Badge variant="outline" className="text-[9px] text-purple-600 border-purple-300">EDITED BY ADMIN</Badge>
+              </Label>
+              <Textarea
+                id="manualAdminNotes"
+                rows={2}
+                value={manualAdminNotes}
+                onChange={(e) => setManualAdminNotes(e.target.value)}
+                placeholder="Reason for manual entry by Admin..."
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="border-t pt-3 gap-2">
+            <Button variant="ghost" onClick={() => setManualModalOpen(false)} disabled={savingManual}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveManual}
+              disabled={savingManual || !manualUserId || !manualEndKm}
+              className="bg-primary hover:bg-primary/90 text-white font-bold"
+            >
+              <CheckCircle2 className="w-4 h-4 mr-1.5" /> Save &amp; Push to Payroll (EDITED BY ADMIN)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
       {/* VERIFY & CORRECT MODAL */}
       <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
@@ -367,19 +981,26 @@ export const TravelApprovalsTab: React.FC = () => {
                 <Gauge className="w-5 h-5 text-primary" />
                 <span>Verify Travel Log: {selectedLog?.user_name}</span>
               </DialogTitle>
-              {selectedLog?.performance_rating && selectedLog.performance_rating !== 'PENDING' && (
-                <Badge 
-                  className={cn(
-                    "text-[10px] font-bold px-2.5 py-0.5",
-                    selectedLog.performance_rating === 'OUTSTANDING' && "bg-emerald-600 text-white",
-                    selectedLog.performance_rating === 'TARGET_ACHIEVED' && "bg-blue-600 text-white",
-                    selectedLog.performance_rating === 'PARTIAL' && "bg-amber-500 text-white",
-                    selectedLog.performance_rating === 'UNDERPERFORMED' && "bg-rose-600 text-white"
-                  )}
-                >
-                  {selectedLog.performance_rating} ({selectedLog.target_achievement_pct}%)
-                </Badge>
-              )}
+              <div className="flex items-center gap-1.5">
+                {selectedLog?.is_admin_edited && (
+                  <Badge className="bg-purple-600 text-white font-black text-[10px] tracking-wider uppercase flex items-center gap-1">
+                    <ShieldAlert className="w-3 h-3" /> EDITED BY ADMIN
+                  </Badge>
+                )}
+                {selectedLog?.performance_rating && selectedLog.performance_rating !== 'PENDING' && (
+                  <Badge 
+                    className={cn(
+                      "text-[10px] font-bold px-2.5 py-0.5",
+                      selectedLog.performance_rating === 'OUTSTANDING' && "bg-emerald-600 text-white",
+                      selectedLog.performance_rating === 'TARGET_ACHIEVED' && "bg-blue-600 text-white",
+                      selectedLog.performance_rating === 'PARTIAL' && "bg-amber-500 text-white",
+                      selectedLog.performance_rating === 'UNDERPERFORMED' && "bg-rose-600 text-white"
+                    )}
+                  >
+                    {selectedLog.performance_rating} ({selectedLog.target_achievement_pct}%)
+                  </Badge>
+                )}
+              </div>
             </div>
             <DialogDescription className="text-xs">
               Date: {selectedLog?.date} &middot; Vehicle: {selectedLog?.vehicle_type}
@@ -388,6 +1009,38 @@ export const TravelApprovalsTab: React.FC = () => {
 
           {selectedLog && (
             <div className="space-y-4 py-2">
+              {/* In-progress helper banner */}
+              {selectedLog.end_km === null && (
+                <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 shrink-0" />
+                    <span>Trip is <strong>In Progress</strong> (SO had network issue on field).</span>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold h-7 text-xs"
+                    onClick={() => {
+                      const log = selectedLog;
+                      setSelectedLog(null);
+                      openEditDialog(log);
+                    }}
+                  >
+                    Complete Trip Now
+                  </Button>
+                </div>
+              )}
+
+              {/* Admin Note if edited */}
+              {selectedLog.admin_notes && (
+                <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 text-xs">
+                  <div className="font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1 mb-0.5">
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>Admin Audit / Override Note (EDITED BY ADMIN):</span>
+                  </div>
+                  <p className="text-foreground/90 pl-4">{selectedLog.admin_notes}</p>
+                </div>
+              )}
+
               {/* Photos Comparison */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">

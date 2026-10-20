@@ -1949,8 +1949,13 @@ export const DailyTravelPage: React.FC = () => {
                       <Award className="w-5 h-5 text-primary" />
                       <CardTitle className="text-lg font-black">Daily Performance Evaluation</CardTitle>
                     </div>
-                    <CardDescription className="text-xs mt-0.5">
-                      Target achievement &amp; tour plan fulfillment for {todayLog.date}
+                    <CardDescription className="text-xs mt-0.5 flex flex-wrap items-center gap-1.5">
+                      <span>Target achievement &amp; tour plan fulfillment for {todayLog.date}</span>
+                      {todayLog.is_admin_edited && (
+                        <Badge className="bg-purple-600 text-white font-black text-[9px] px-1.5 py-0 tracking-wider uppercase">
+                          EDITED BY ADMIN
+                        </Badge>
+                      )}
                     </CardDescription>
                   </div>
                   <div>
@@ -1959,6 +1964,11 @@ export const DailyTravelPage: React.FC = () => {
                 </CardHeader>
 
                 <CardContent className="p-5 space-y-5">
+                  {todayLog.admin_notes && (
+                    <div className="p-2.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20 text-xs text-purple-800 dark:text-purple-300">
+                      <strong>Admin Note (EDITED BY ADMIN):</strong> {todayLog.admin_notes}
+                    </div>
+                  )}
                   {/* KPI Evaluation Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                     <div className="p-3 rounded-xl border bg-muted/20 space-y-0.5">
@@ -2312,17 +2322,24 @@ export const DailyTravelPage: React.FC = () => {
                           {getRatingBadge(item.performance_rating, item.target_achievement_pct)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <Badge 
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] font-bold py-0",
-                              item.status === 'APPROVED' && "bg-emerald-50 text-emerald-700 border-emerald-300",
-                              item.status === 'REJECTED' && "bg-red-50 text-red-700 border-red-300",
-                              item.status === 'PENDING' && "bg-amber-50 text-amber-700 border-amber-300"
+                          <div className="flex flex-col gap-1 items-start">
+                            <Badge 
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] font-bold py-0",
+                                item.status === 'APPROVED' && "bg-emerald-50 text-emerald-700 border-emerald-300",
+                                item.status === 'REJECTED' && "bg-red-50 text-red-700 border-red-300",
+                                item.status === 'PENDING' && "bg-amber-50 text-amber-700 border-amber-300"
+                              )}
+                            >
+                              {item.status}
+                            </Badge>
+                            {item.is_admin_edited && (
+                              <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 border-purple-300 text-[9px] font-black py-0 uppercase">
+                                EDITED BY ADMIN
+                              </Badge>
                             )}
-                          >
-                            {item.status}
-                          </Badge>
+                          </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <Button 

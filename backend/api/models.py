@@ -1170,6 +1170,12 @@ class DailyTravelLog(models.Model):
     verified_by = models.ForeignKey(User, models.DO_NOTHING, db_column='verifiedBy', db_constraint=False, null=True, blank=True, related_name='verified_travel_logs')
     verified_at = models.DateTimeField(blank=True, null=True)
 
+    # Admin Override & Offline Manual Fallback
+    is_admin_edited = models.BooleanField(default=False)
+    is_manual_entry = models.BooleanField(default=False)
+    admin_notes = models.TextField(blank=True, null=True)
+    edited_by_admin_name = models.CharField(max_length=255, blank=True, null=True)
+
     # Tour Plan vs Actual Auto-Evaluation Metrics
     total_stops_planned = models.IntegerField(default=0)
     total_stops_visited = models.IntegerField(default=0)

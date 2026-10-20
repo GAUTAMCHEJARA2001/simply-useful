@@ -56,7 +56,8 @@ from api.views_orders import (
 from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties, import_busy_ledger, get_sync_status, ledger_requests_view, fulfill_ledger_request
 from api.views_travel import (
     travel_today, travel_start, travel_end, travel_my_history,
-    travel_hr_logs, travel_hr_verify, travel_plan, travel_add_unplanned_stop,
+    travel_hr_logs, travel_hr_verify, travel_hr_update_log, travel_hr_manual_entry,
+    travel_plan, travel_add_unplanned_stop,
     travel_punch_stop_visit, travel_so_scorecard
 )
 from api.views_sales_target import (
@@ -228,6 +229,8 @@ urlpatterns = [
     path('travel/end', travel_end, name='travel-end'),
     path('travel/my-history', travel_my_history, name='travel-my-history'),
     path('travel/hr/logs', travel_hr_logs, name='travel-hr-logs'),
+    path('travel/hr/logs/<str:pk>', travel_hr_update_log, name='travel-hr-update-log'),
+    path('travel/hr/manual-entry', travel_hr_manual_entry, name='travel-hr-manual-entry'),
     path('travel/hr/verify/<str:pk>', travel_hr_verify, name='travel-hr-verify'),
     path('travel/so-scorecard', travel_so_scorecard, name='travel-so-scorecard'),
 

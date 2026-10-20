@@ -418,6 +418,11 @@ interface DisplayedExpenseItem {
                           </>
                         )}
                       </span>
+                      {e.rawLog?.is_admin_edited && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 border border-purple-300">
+                          EDITED BY ADMIN
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-xs text-muted-foreground">

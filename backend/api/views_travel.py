@@ -118,6 +118,10 @@ def _serialize_travel_log(log):
         'verified_by': verified_by_name,
         'verified_by_email': verified_by_email,
         'verified_at': log.verified_at.isoformat() if log.verified_at else None,
+        'is_admin_edited': bool(getattr(log, 'is_admin_edited', False)),
+        'is_manual_entry': bool(getattr(log, 'is_manual_entry', False)),
+        'admin_notes': getattr(log, 'admin_notes', '') or '',
+        'edited_by_admin_name': getattr(log, 'edited_by_admin_name', '') or '',
         'user_id': log.user_id,
         'user_name': user_name,
         'user_email': user_email,
@@ -928,9 +932,12 @@ def travel_hr_verify(request, pk):
         else:
             approved_km = log.total_km
 
+        admin_editor_name = (getattr(user, 'name', '') or getattr(user, 'email', '') or 'Admin').strip()
         log.status = 'APPROVED'
         log.approved_km = approved_km
         log.hr_notes = hr_notes
+        log.is_admin_edited = True
+        log.edited_by_admin_name = admin_editor_name
         log.verified_by_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
         log.verified_at = timezone.now()
         log.save()
@@ -941,8 +948,11 @@ def travel_hr_verify(request, pk):
         return send_success(_serialize_travel_log(log), f"Travel log approved with {log.approved_km} KM and synced to payroll")
 
     elif action == 'REJECT':
+        admin_editor_name = (getattr(user, 'name', '') or getattr(user, 'email', '') or 'Admin').strip()
         log.status = 'REJECTED'
         log.hr_notes = hr_notes
+        log.is_admin_edited = True
+        log.edited_by_admin_name = admin_editor_name
         log.verified_by_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
         log.verified_at = timezone.now()
         log.save()
@@ -951,6 +961,218 @@ def travel_hr_verify(request, pk):
         _sync_travel_to_attendance(log, reset_km=True)
 
         return send_success(_serialize_travel_log(log), "Travel log rejected")
+
+
+@api_view(['POST', 'PUT'])
+def travel_hr_update_log(request, pk):
+    """
+    HR/Admin endpoint: Edit or complete an in-progress or existing travel log.
+    Allows HR/Admin to set/update:
+    - start_km
+    - end_km (allows completing trips stuck in progress due to field network failure)
+    - total_km (auto calculated if not given: end_km - start_km)
+    - approved_km
+    - vehicle_type
+    - hr_notes / admin_notes
+    - status ('APPROVED', 'PENDING', 'REJECTED')
+    Marks is_admin_edited = True and syncs to DailyAttendance for payroll.
+    """
+    user = getattr(request, 'user', None)
+    if not user or not getattr(user, 'is_authenticated', False):
+        return send_error('Unauthorized', 401)
+
+    user_role = (getattr(user, 'role', '') or '').upper()
+    if user_role not in ['SUPERADMIN', 'ADMIN', 'HR', 'DIRECTOR', 'VP']:
+        return send_error('Forbidden: HR or Admin access required', 403)
+
+    company_id = _get_company_id(request) or getattr(user, 'companyid_id', None)
+    log = DailyTravelLog.objects.filter(id=pk, companyid_id=company_id).first()
+    if not log:
+        return send_error('Travel log not found', 404)
+
+    data = request.data or {}
+
+    # Vehicle type
+    vehicle_type = (data.get('vehicle_type') or log.vehicle_type or 'BIKE').upper()
+    if vehicle_type in ['BIKE', 'CAR', 'OTHER']:
+        log.vehicle_type = vehicle_type
+
+    # Start KM
+    if 'start_km' in data and data.get('start_km') is not None and data.get('start_km') != '':
+        try:
+            log.start_km = float(data['start_km'])
+        except (ValueError, TypeError):
+            return send_error('Invalid start KM value', 400)
+
+    # End KM (critical for completing in-progress trips)
+    if 'end_km' in data and data.get('end_km') is not None and data.get('end_km') != '':
+        try:
+            log.end_km = float(data['end_km'])
+            if log.end_km < log.start_km:
+                return send_error('End KM cannot be less than Start KM', 400)
+            if not log.end_time:
+                log.end_time = timezone.now()
+        except (ValueError, TypeError):
+            return send_error('Invalid end KM value', 400)
+
+    # Total KM
+    if 'total_km' in data and data.get('total_km') is not None and data.get('total_km') != '':
+        try:
+            log.total_km = max(0.0, float(data['total_km']))
+        except (ValueError, TypeError):
+            return send_error('Invalid total KM value', 400)
+    elif log.end_km is not None and log.end_km >= log.start_km:
+        log.total_km = max(0.0, round(log.end_km - log.start_km, 2))
+
+    # Approved KM
+    approved_km_raw = data.get('approved_km')
+    if approved_km_raw is not None and approved_km_raw != '':
+        try:
+            log.approved_km = max(0.0, float(approved_km_raw))
+        except (ValueError, TypeError):
+            return send_error('Invalid approved KM value', 400)
+    elif log.total_km > 0:
+        log.approved_km = log.total_km
+
+    # Status
+    status_val = (data.get('status') or 'APPROVED').upper()
+    if status_val in ['PENDING', 'APPROVED', 'REJECTED']:
+        log.status = status_val
+    else:
+        log.status = 'APPROVED'
+
+    # Notes
+    admin_notes = data.get('admin_notes') or data.get('hr_notes') or ''
+    if admin_notes:
+        log.hr_notes = admin_notes
+        log.admin_notes = admin_notes
+
+    admin_editor_name = (getattr(user, 'name', '') or getattr(user, 'email', '') or 'Admin').strip()
+    log.is_admin_edited = True
+    log.edited_by_admin_name = admin_editor_name
+    log.verified_by_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
+    log.verified_at = timezone.now()
+    log.save()
+
+    # Sync to DailyAttendance for payroll
+    _sync_travel_to_attendance(log, reset_km=(log.status == 'REJECTED'))
+
+    return send_success(_serialize_travel_log(log), 'Travel log updated by Admin and synced to payroll')
+
+
+@api_view(['POST'])
+def travel_hr_manual_entry(request):
+    """
+    HR/Admin endpoint: Create or overwrite a manual travel entry for a Sales Officer
+    when they were unable to punch on field due to network issue, dead battery, or app glitch.
+    Parameters:
+    - user_id (target Sales Officer user ID) or employee_id / labour_id
+    - date (YYYY-MM-DD)
+    - vehicle_type ('BIKE' or 'CAR')
+    - start_km
+    - end_km
+    - total_km (optional, calculated from end_km - start_km)
+    - approved_km (defaults to total_km)
+    - admin_notes / hr_notes (e.g. "Network issue on field - manual punch by Admin")
+    - status ('APPROVED' default)
+    """
+    user = getattr(request, 'user', None)
+    if not user or not getattr(user, 'is_authenticated', False):
+        return send_error('Unauthorized', 401)
+
+    user_role = (getattr(user, 'role', '') or '').upper()
+    if user_role not in ['SUPERADMIN', 'ADMIN', 'HR', 'DIRECTOR', 'VP']:
+        return send_error('Forbidden: HR or Admin access required', 403)
+
+    company_id = _get_company_id(request) or getattr(user, 'companyid_id', None)
+    data = request.data or {}
+
+    target_user_id = data.get('user_id')
+    labour_id = data.get('labour_id')
+
+    target_user = None
+    if target_user_id:
+        target_user = User.objects.filter(id=target_user_id).first()
+    elif labour_id:
+        labour = Labour.objects.filter(id=labour_id, companyid_id=company_id).first()
+        if labour and labour.user_id:
+            target_user = User.objects.filter(id=labour.user_id).first()
+        elif labour and labour.contactinfo:
+            import re
+            emails = re.findall(r'[\w\.-]+@[\w\.-]+', labour.contactinfo)
+            if emails:
+                target_user = User.objects.filter(email__iexact=emails[0]).first()
+
+    if not target_user:
+        return send_error('Sales Officer / User not found for this entry', 400)
+
+    date_str = data.get('date')
+    if not date_str:
+        return send_error('Date is required (YYYY-MM-DD)', 400)
+    try:
+        log_date = datetime.strptime(str(date_str)[:10], '%Y-%m-%d').date()
+    except Exception:
+        return send_error('Invalid date format. Use YYYY-MM-DD', 400)
+
+    try:
+        start_km = float(data.get('start_km', 0.0))
+        end_km = float(data.get('end_km', 0.0))
+        if end_km < start_km:
+            return send_error('End KM cannot be less than Start KM', 400)
+    except (ValueError, TypeError):
+        return send_error('Start KM and End KM must be valid numbers', 400)
+
+    total_km = max(0.0, round(end_km - start_km, 2))
+    if 'total_km' in data and data.get('total_km') is not None and data.get('total_km') != '':
+        try:
+            total_km = max(0.0, float(data['total_km']))
+        except (ValueError, TypeError):
+            pass
+
+    approved_km = total_km
+    if 'approved_km' in data and data.get('approved_km') is not None and data.get('approved_km') != '':
+        try:
+            approved_km = max(0.0, float(data['approved_km']))
+        except (ValueError, TypeError):
+            pass
+
+    vehicle_type = (data.get('vehicle_type') or 'BIKE').upper()
+    if vehicle_type not in ['BIKE', 'CAR', 'OTHER']:
+        vehicle_type = 'BIKE'
+
+    admin_notes = data.get('admin_notes') or data.get('hr_notes') or 'Created by Admin (Manual entry - SO field network issue)'
+    admin_editor_name = (getattr(user, 'name', '') or getattr(user, 'email', '') or 'Admin').strip()
+
+    # Find existing or create new
+    log = DailyTravelLog.objects.filter(user=target_user, date=log_date).first()
+    if not log:
+        log = DailyTravelLog(
+            id=f"TRV-{uuid.uuid4().hex[:12].upper()}",
+            user=target_user,
+            companyid_id=company_id,
+            date=log_date,
+        )
+
+    log.vehicle_type = vehicle_type
+    log.start_km = start_km
+    log.end_km = end_km
+    log.total_km = total_km
+    log.approved_km = approved_km
+    log.status = 'APPROVED'
+    log.hr_notes = admin_notes
+    log.admin_notes = admin_notes
+    log.is_admin_edited = True
+    log.is_manual_entry = True
+    log.edited_by_admin_name = admin_editor_name
+    log.verified_by_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
+    log.verified_at = timezone.now()
+    log.save()
+
+    # Sync into DailyAttendance for payroll
+    _sync_travel_to_attendance(log)
+
+    return send_success(_serialize_travel_log(log), f"Manual travel log created by Admin with {log.approved_km} KM and synced to payroll")
+
 
 
 @api_view(['GET'])
