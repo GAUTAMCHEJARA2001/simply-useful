@@ -16,6 +16,7 @@ import FYSelector from '@/components/FYSelector';
 import { WarehouseSwitcher } from '@/components/WarehouseSwitcher';
 import { NotificationDropdown } from './NotificationDropdown';
 import { UserProfileModal } from '@/components/UserProfileModal';
+import { userService } from '@/api/services/user.service';
 import {
   CommandDialog,
   CommandInput,
@@ -520,10 +521,23 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       return false;
     }
   });
-  const { user, logout } = useAuth();
+  const { user, logout, updateCurrentUser } = useAuth();
   const { can } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if (user && !user.employeePhoto) {
+      userService.getProfileDetails()
+        .then(res => {
+          const photo = res.data?.data?.employee?.employee_photo || res.data?.data?.user?.employeePhoto;
+          if (photo) {
+            updateCurrentUser({ employeePhoto: photo });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user?.id, user?.employeePhoto, updateCurrentUser]);
 
   const subscriptionAlert = useMemo(() => {
     if (!user?.validUntil) return null;
@@ -1291,8 +1305,19 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               title="Click to view & edit your profile, employee master details, or change password"
               className="w-full flex items-center gap-2.5 px-2.5 py-2 mb-2 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent border border-sidebar-border/40 hover:border-sidebar-border transition-all cursor-pointer text-left group shadow-2xs"
             >
-              <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary text-xs font-bold shrink-0 group-hover:scale-105 transition-transform">
-                {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+              <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary text-xs font-bold shrink-0 overflow-hidden group-hover:scale-105 transition-transform">
+                {user.employeePhoto || user.photo ? (
+                  <img
+                    src={user.employeePhoto || user.photo}
+                    alt={user.name || user.email}
+                    className="w-full h-full object-cover rounded-full"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-sidebar-foreground truncate group-hover:text-primary transition-colors">
@@ -1316,9 +1341,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden print:block print:h-auto">
           {/* Top bar */}
           {!hideTopBar ? (
-            <header className="flex-none h-14 bg-card border-b border-border flex items-center justify-between px-2.5 sm:px-4 lg:px-6 w-full z-30 print:hidden transition-all duration-300 gap-2">
-              {/* Left side: Hamburger Toggle Button */}
-              <div className="flex items-center shrink-0">
+            <header className="flex-none h-14 bg-card border-b border-border flex items-center justify-between px-2 sm:px-4 lg:px-6 w-full z-30 print:hidden transition-all duration-300 gap-1.5 sm:gap-2">
+              {/* Left side: Hamburger Toggle Button + Mobile Brand */}
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
                   onClick={() => {
                     if (window.innerWidth >= 1024) {
@@ -1329,43 +1354,51 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   }}
                   title="Toggle navigation sidebar (Ctrl+B)"
                   aria-label="Toggle navigation sidebar"
-                  className="shrink-0 p-2 rounded-lg bg-muted/50 sm:bg-transparent hover:bg-muted text-foreground transition-colors flex items-center justify-center h-9 w-9 border border-border/40 sm:border-transparent mr-2 shadow-xs sm:shadow-none"
+                  className="shrink-0 p-1.5 sm:p-2 rounded-lg bg-muted/40 sm:bg-transparent hover:bg-muted text-foreground transition-colors flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 border border-border/40 sm:border-transparent shadow-xs sm:shadow-none"
                 >
                   {sidebarCollapsed ? (
-                    <PanelLeft className="w-5 h-5 text-primary" />
+                    <PanelLeft className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                   ) : (
-                    <Menu className="w-5 h-5" />
+                    <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
                   )}
                 </button>
+                <div className="hidden xs:flex items-center gap-1">
+                  <span className="font-black text-xs sm:text-sm tracking-tight text-foreground">Kamla</span>
+                  <span className="text-[10px] bg-primary/10 text-primary font-bold px-1.5 py-0.2 rounded-md">OTS</span>
+                </div>
               </div>
 
-              {/* Center: Global Command Palette Quick Launcher */}
-              <div className="flex-1 max-w-sm min-w-0 flex items-center">
+              {/* Center: Global Command Palette Quick Launcher (Desktop lg+ only) */}
+              <div className="hidden lg:flex flex-1 max-w-xs xl:max-w-sm mx-2 xl:mx-4 items-center">
                 <button
                   onClick={() => setCommandOpen(true)}
-                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground bg-muted/40 hover:bg-muted border border-border/60 rounded-lg transition-colors cursor-pointer w-full group shadow-2xs"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground bg-muted/40 hover:bg-muted border border-border/60 rounded-lg transition-colors cursor-pointer w-full group shadow-2xs"
                   title="Search pages and actions (Ctrl+K)"
                 >
                   <Search className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
                   <span className="flex-1 text-left truncate">Search & actions...</span>
-                  <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 font-mono text-[10px] text-muted-foreground font-semibold shrink-0">
+                  <kbd className="hidden xl:inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 font-mono text-[10px] text-muted-foreground font-semibold shrink-0">
                     <span>Ctrl</span>K
                   </kbd>
-                </button>
-                <button
-                  onClick={() => setCommandOpen(true)}
-                  className="sm:hidden p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
-                  title="Quick search (Ctrl+K)"
-                >
-                  <Search className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Right side controls */}
-              <div className="flex items-center justify-end gap-1.5 sm:gap-2.5 shrink-0 overflow-x-auto no-scrollbar min-w-0">
+              <div className="flex items-center justify-end gap-1 sm:gap-2 shrink-0 min-w-0">
+                {/* Search Icon button on mobile/tablet */}
+                <button
+                  onClick={() => setCommandOpen(true)}
+                  className="lg:hidden p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors h-8 w-8 flex items-center justify-center shrink-0 border border-border/40"
+                  title="Quick search (Ctrl+K)"
+                  aria-label="Search"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+
                 <WarehouseSwitcher />
                 <FYSelector />
                 <NotificationDropdown />
+
                 {/* Hide top bar button (Focus mode on desktop/tablet) */}
                 <button
                   onClick={() => setHideTopBar(true)}
@@ -1373,14 +1406,6 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   className="hidden md:flex p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <Maximize2 className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setProfileModalOpen(true)}
-                  title="Click to view & edit your profile, employee master details, or change password"
-                  className="text-xs text-muted-foreground hover:text-foreground hidden 2xl:block truncate max-w-[140px] cursor-pointer hover:underline transition-colors text-left"
-                >
-                  {user.name} &middot; {user.role}
                 </button>
               </div>
             </header>

@@ -32,6 +32,57 @@ const statusStyles: Record<string, string> = {
   'Partially Returned': 'bg-amber-100 text-amber-700 border-amber-200',
 };
 
+const getDeliveryUrgency = (dateStr?: string) => {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  const formattedDate = target.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+  if (diffDays < 0) {
+    return {
+      label: `🔥 Overdue by ${Math.abs(diffDays)}d (${formattedDate})`,
+      shortLabel: `🔥 Overdue ${Math.abs(diffDays)}d`,
+      days: diffDays,
+      status: 'overdue' as const,
+      color: 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border-rose-300 animate-pulse',
+      badge: 'Overdue'
+    };
+  }
+  if (diffDays === 0) {
+    return {
+      label: `🔥 Deliver Today (${formattedDate})`,
+      shortLabel: `🔥 Due Today`,
+      days: diffDays,
+      status: 'today' as const,
+      color: 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border-rose-300 font-bold',
+      badge: 'Today'
+    };
+  }
+  if (diffDays <= 3) {
+    return {
+      label: `⚡ Due in ${diffDays}d (${formattedDate})`,
+      shortLabel: `⚡ Due in ${diffDays}d`,
+      days: diffDays,
+      status: 'urgent' as const,
+      color: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-amber-300 font-semibold',
+      badge: 'Urgent'
+    };
+  }
+  return {
+    label: `📅 ${formattedDate} (${diffDays}d)`,
+    shortLabel: `📅 ${formattedDate}`,
+    days: diffDays,
+    status: 'normal' as const,
+    color: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200',
+    badge: 'Scheduled'
+  };
+};
+
 const InventoryDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -81,7 +132,9 @@ const InventoryDashboard: React.FC = () => {
   const [boms, setBoms] = useState<any[]>([]);
   const [loadingBoms, setLoadingBoms] = useState<boolean>(true);
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
-  const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | 'APPROVED' | 'UNAPPROVED' | 'DISPATCHED'>('ALL');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | 'URGENT' | 'APPROVED' | 'UNAPPROVED' | 'DISPATCHED'>('ALL');
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [productDemandFilter, setProductDemandFilter] = useState<'ALL' | 'DEFICIT' | 'READY'>('ALL');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -354,24 +407,34 @@ const InventoryDashboard: React.FC = () => {
     !['Completed', 'Cancelled', 'Rejected', 'Returned'].includes(o.status)
   );
 
+  const urgentOrders = activeOrders.filter(o => {
+    const dDate = o.expectedDeliveryDate || (o as any).expected_delivery_date;
+    const urg = getDeliveryUrgency(dDate);
+    return urg?.status === 'overdue' || urg?.status === 'today' || urg?.status === 'urgent';
+  });
+
   const approvedOrders = activeOrders.filter(o => o.status === 'Approved');
   const dispatchedOrders = activeOrders.filter(o => ['Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(o.status));
   const unapprovedOrders = activeOrders.filter(o => o.status === 'Pending');
 
+  const urgentOrdersCount = urgentOrders.length;
   const unapprovedOrdersCount = unapprovedOrders.length;
   const approvedOrdersCount = approvedOrders.length;
   const dispatchedOrdersCount = dispatchedOrders.length;
   const activeOrdersCount = activeOrders.length;
 
   const filterTabs = [
-    { key: 'ALL', label: 'All Active', count: activeOrdersCount },
-    { key: 'APPROVED', label: 'Approved', count: approvedOrdersCount },
-    { key: 'UNAPPROVED', label: 'Unapproved', count: unapprovedOrdersCount },
-    { key: 'DISPATCHED', label: 'Dispatched', count: dispatchedOrdersCount },
-  ] as const;
+    { key: 'ALL' as const, label: 'All Active', count: activeOrdersCount },
+    ...(urgentOrdersCount > 0 ? [{ key: 'URGENT' as const, label: '🔥 Urgent', count: urgentOrdersCount }] : []),
+    { key: 'APPROVED' as const, label: 'Approved', count: approvedOrdersCount },
+    { key: 'UNAPPROVED' as const, label: 'Unapproved', count: unapprovedOrdersCount },
+    { key: 'DISPATCHED' as const, label: 'Dispatched', count: dispatchedOrdersCount },
+  ];
 
   let filteredQueueOrders = activeOrders;
-  if (orderStatusFilter === 'APPROVED') {
+  if (orderStatusFilter === 'URGENT') {
+    filteredQueueOrders = urgentOrders;
+  } else if (orderStatusFilter === 'APPROVED') {
     filteredQueueOrders = approvedOrders;
   } else if (orderStatusFilter === 'UNAPPROVED') {
     filteredQueueOrders = unapprovedOrders;
@@ -390,8 +453,17 @@ const InventoryDashboard: React.FC = () => {
     });
   }
 
-  const productDemand = (assignedOrders || [])
-    .filter(o => o.status === 'Pending' || o.status === 'Approved' || o.status === 'Partially Dispatched')
+  // Prioritize urgent orders at the top of the queue
+  filteredQueueOrders = [...filteredQueueOrders].sort((a, b) => {
+    const urgA = getDeliveryUrgency(a.expectedDeliveryDate || (a as any).expected_delivery_date);
+    const urgB = getDeliveryUrgency(b.expectedDeliveryDate || (b as any).expected_delivery_date);
+    const scoreA = urgA ? (urgA.status === 'overdue' ? 3 : urgA.status === 'today' ? 2 : urgA.status === 'urgent' ? 1 : 0) : -1;
+    const scoreB = urgB ? (urgB.status === 'overdue' ? 3 : urgB.status === 'today' ? 2 : urgB.status === 'urgent' ? 1 : 0) : -1;
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime();
+  });
+
+  const productDemand = (activeOrders || [])
     .reduce((acc, o) => {
       const oId = o.orderId || (o as any).order_id || o.id || 'Unknown';
       const pName = o.partyName || (o as any).party_name || 'Party';
@@ -403,12 +475,15 @@ const InventoryDashboard: React.FC = () => {
       (o.items || []).forEach((item: any) => {
         const itAny = item as any;
         const itemProductId = itAny.productId || itAny.productid_id || (typeof itAny.product === 'object' ? itAny.product?.id : itAny.product);
-        const pObj = products.find((p: any) => p.id === itemProductId || p.productCode === itemProductId || p.name === itemProductId);
-        let productName = pObj?.name || pObj?.productName || itAny.productName || 'Unknown Product';
+        const pObj = products.find((p: any) => 
+          (itemProductId && (String(p.id) === String(itemProductId) || String(p.productCode) === String(itemProductId))) ||
+          (p.name && (p.name === itAny.productName || p.name === itAny.product_name))
+        );
+        let productName = pObj?.name || pObj?.productName || itAny.productName || itAny.product_name || itAny.name;
         
-        if (productName === 'Unknown Product' && itAny.product) {
+        if (!productName && itAny.product) {
           if (typeof itAny.product === 'object') {
-            productName = itAny.product.name || itAny.product.productName || 'Unknown Product';
+            productName = itAny.product.name || itAny.product.productName;
           } else if (typeof itAny.product === 'string') {
             productName = itAny.product;
           }
@@ -419,11 +494,15 @@ const InventoryDashboard: React.FC = () => {
         }
         
         // Final fallback to ensure it is always a string
-        if (typeof productName !== 'string') {
-          productName = String(productName);
+        if (!productName || typeof productName !== 'string') {
+          productName = String(productName || 'Unknown Product');
         }
 
-        const pendingQty = Math.max(0, (item.qty || 0) - (item.sentQty || 0));
+        const ordered = Number(item.qty ?? itAny.quantity ?? 0);
+        const sent = Number(item.sentQty ?? itAny.sentqty ?? itAny.sent_qty ?? 0);
+        const returned = Number(item.returnedQty ?? itAny.returnedqty ?? itAny.returned_qty ?? 0);
+        const netSent = Math.max(0, sent - returned);
+        const pendingQty = Math.max(0, ordered - netSent);
         if (pendingQty <= 0) return;
 
         const breakdownEntry = {
@@ -432,8 +511,8 @@ const InventoryDashboard: React.FC = () => {
           partyName: pName,
           partyType: pType,
           qtyNeeded: pendingQty,
-          orderedQty: Number(item.qty) || 0,
-          sentQty: Number(item.sentQty) || 0,
+          orderedQty: ordered,
+          sentQty: sent,
           status: oStatus,
           soEmail: so,
           date: orderDate,
@@ -482,6 +561,20 @@ const InventoryDashboard: React.FC = () => {
     const deficit = Math.max(0, p.qty - readyQty);
     return { ...p, readyQty, deficit };
   });
+
+  const deficitDemandCount = enrichedProductDemand.filter(p => p.deficit > 0).length;
+  const readyDemandCount = enrichedProductDemand.filter(p => p.deficit === 0).length;
+
+  let filteredProductDemand = enrichedProductDemand;
+  if (productSearchTerm.trim()) {
+    const term = productSearchTerm.toLowerCase();
+    filteredProductDemand = filteredProductDemand.filter(p => p.product.toLowerCase().includes(term));
+  }
+  if (productDemandFilter === 'DEFICIT') {
+    filteredProductDemand = filteredProductDemand.filter(p => p.deficit > 0);
+  } else if (productDemandFilter === 'READY') {
+    filteredProductDemand = filteredProductDemand.filter(p => p.deficit === 0);
+  }
 
   // Debug log as requested by user
   console.log('Product Demand Data:', enrichedProductDemand);
@@ -690,50 +783,126 @@ const InventoryDashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Product Demand Table */}
-        <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-base">What Customers Need (Active Orders)</CardTitle>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Click any product to see which orders & parties need it</p>
+        <Card className="shadow-sm border-border flex flex-col h-[740px] xl:h-[780px]">
+          <CardHeader className="p-4 border-b bg-muted/10 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2 flex-wrap">
+                What Customers Need
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+                  {filteredProductDemand.length} {filteredProductDemand.length === 1 ? 'Product' : 'Products'}
+                </span>
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <div className="relative w-full sm:w-auto">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <input 
+                    type="text" 
+                    placeholder="Search products..." 
+                    value={productSearchTerm}
+                    onChange={(e) => setProductSearchTerm(e.target.value)}
+                    className="pl-8 pr-7 h-8 w-full sm:w-[200px] rounded-md border border-input bg-background text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                  />
+                  {productSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setProductSearchTerm('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Filter Tabs for Demand */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 pt-0.5 scrollbar-thin">
+              {[
+                { key: 'ALL' as const, label: 'All Products', count: enrichedProductDemand.length },
+                { key: 'DEFICIT' as const, label: '🔥 Deficit', count: deficitDemandCount },
+                { key: 'READY' as const, label: 'In Stock', count: readyDemandCount },
+              ].map(tab => {
+                const isActive = productDemandFilter === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setProductDemandFilter(tab.key)}
+                    className={`px-2.5 py-1 text-xs rounded-full font-medium transition-all shrink-0 flex items-center gap-1.5 border cursor-pointer ${
+                      isActive 
+                        ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold' 
+                        : 'bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border/80'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isActive 
+                        ? 'bg-white/25 text-white' 
+                        : tab.key === 'DEFICIT' && tab.count > 0 ? 'bg-red-100 text-red-700' : 'bg-muted text-foreground'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 flex-1 overflow-y-auto min-h-0 scrollbar-thin">
             <div className="overflow-x-auto w-full">
               <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30 text-[10px] text-muted-foreground font-semibold">
-                    <th className="text-left px-3 py-2 font-semibold">Product</th>
-                    <th className="text-right px-3 py-2 font-semibold">Qty Needed</th>
-                    <th className="text-right px-3 py-2 font-semibold text-green-700">Ready Qty</th>
-                    <th className="text-right px-3 py-2 font-semibold text-red-600">Deficit</th>
-                    <th className="text-right px-3 py-2 font-semibold">Orders</th>
+                <thead className="sticky top-0 bg-muted/95 backdrop-blur z-10 border-b border-border shadow-xs">
+                  <tr className="text-[10px] text-muted-foreground font-semibold">
+                    <th className="text-left px-3 py-2.5 font-semibold">Product</th>
+                    <th className="text-right px-3 py-2.5 font-semibold">Qty Needed</th>
+                    <th className="text-right px-3 py-2.5 font-semibold text-green-700">Ready Qty</th>
+                    <th className="text-right px-3 py-2.5 font-semibold text-red-600">Deficit</th>
+                    <th className="text-right px-3 py-2.5 font-semibold">Orders</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {enrichedProductDemand.map((p, index) => (
+                  {filteredProductDemand.map((p, index) => (
                     <tr 
                       key={`${p.product || 'unknown-product'}-${index}`} 
                       className="border-b border-border/50 hover:bg-primary/5 cursor-pointer transition-colors group select-none"
                       onClick={() => setSelectedDemandProduct(p)}
                       title="Click to view which customers & orders need this product"
                     >
-                      <td className="px-3 py-2 font-medium">
+                      <td className="px-3 py-2.5 font-medium">
                         <div className="flex items-center justify-between gap-1">
                           <span className="group-hover:text-primary font-semibold transition-colors">{p.product}</span>
                           <span className="text-[10px] text-primary opacity-0 group-hover:opacity-100 transition-opacity font-bold shrink-0">View Orders &rarr;</span>
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right font-bold text-primary">{p.qty.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-right text-green-700 font-semibold">{p.readyQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                      <td className={`px-3 py-2 text-right font-bold ${p.deficit > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>{p.deficit > 0 ? p.deficit.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
-                      <td className="px-3 py-2 text-right font-bold text-foreground">
+                      <td className="px-3 py-2.5 text-right font-bold text-primary">{p.qty.toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-right text-green-700 font-semibold">{p.readyQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className={`px-3 py-2.5 text-right font-bold ${p.deficit > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>{p.deficit > 0 ? p.deficit.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
+                      <td className="px-3 py-2.5 text-right font-bold text-foreground">
                         <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-muted group-hover:bg-primary/10 group-hover:text-primary text-xs transition-colors">
                           {p.orders}
                         </span>
                       </td>
                     </tr>
                   ))}
-                  {enrichedProductDemand.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">No active orders</td></tr>}
+                  {filteredProductDemand.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-12 text-center text-muted-foreground">
+                        <p className="text-sm font-medium text-foreground">No products found</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {productSearchTerm ? `No products matching "${productSearchTerm}"` : 'No active orders demand in this filter'}
+                        </p>
+                        {(productDemandFilter !== 'ALL' || productSearchTerm) && (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => { setProductDemandFilter('ALL'); setProductSearchTerm(''); }}
+                            className="text-xs mt-3 h-7"
+                          >
+                            Reset Filter
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -741,12 +910,13 @@ const InventoryDashboard: React.FC = () => {
         </Card>
 
         {/* Orders Queue with Actions */}
-        <Card className="shadow-sm border-border flex flex-col">
+        <Card className="shadow-sm border-border flex flex-col h-[740px] xl:h-[780px]">
           <CardHeader className="p-4 border-b bg-muted/10 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2 flex-wrap">
                 Orders to Pack & Send
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                  orderStatusFilter === 'URGENT' ? 'bg-rose-100 text-rose-700 border border-rose-300' :
                   orderStatusFilter === 'APPROVED' ? 'bg-blue-100 text-blue-700' :
                   orderStatusFilter === 'UNAPPROVED' ? 'bg-yellow-100 text-yellow-800' :
                   orderStatusFilter === 'DISPATCHED' ? 'bg-purple-100 text-purple-700' :
@@ -797,7 +967,7 @@ const InventoryDashboard: React.FC = () => {
               })}
             </div>
           </CardHeader>
-          <CardContent className="p-3 overflow-y-auto max-h-[600px] space-y-3 bg-muted/5">
+          <CardContent className="p-3 flex-1 overflow-y-auto min-h-0 space-y-3 bg-muted/5 scrollbar-thin">
             {filteredQueueOrders.length === 0 && (
               <div className="text-center py-10 space-y-2">
                 <p className="text-sm font-medium text-foreground">No orders found</p>
@@ -837,6 +1007,14 @@ const InventoryDashboard: React.FC = () => {
                 Unavailable: 'Stock Shortage',
               };
 
+              const deliveryDate = o.expectedDeliveryDate || (o as any).expected_delivery_date;
+              const urgency = getDeliveryUrgency(deliveryDate);
+              const urgencyBorder = urgency?.status === 'overdue' || urgency?.status === 'today'
+                ? 'border-l-4 border-l-rose-500 bg-rose-500/[0.03]'
+                : urgency?.status === 'urgent'
+                ? 'border-l-4 border-l-amber-500 bg-amber-500/[0.02]'
+                : '';
+
               const isExpanded = expandedOrders.has(orderId);
               const toggleExpand = (e: React.MouseEvent) => {
                 e.stopPropagation();
@@ -849,19 +1027,24 @@ const InventoryDashboard: React.FC = () => {
               };
 
               return (
-                <div key={orderId} className="group flex flex-col bg-card hover:bg-accent/5 transition-colors border border-border/60 rounded-lg overflow-hidden shadow-sm hover:shadow-md">
+                <div key={orderId} className={`group flex flex-col bg-card hover:bg-accent/5 transition-colors border border-border/60 rounded-lg overflow-hidden shadow-sm hover:shadow-md ${urgencyBorder}`}>
                   {/* Accordion Header */}
                   <div 
                     className="p-3 flex items-center justify-between cursor-pointer select-none"
                     onClick={toggleExpand}
                   >
-                    <div className="flex items-center gap-2">
-                      <button className="p-0.5 hover:bg-muted rounded-full transition-colors">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-2">
+                      <button className="p-0.5 hover:bg-muted rounded-full transition-colors shrink-0">
                         {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                       </button>
-                      <span className="font-bold text-foreground text-xs tracking-tight">{partyName}</span>
-                      <span className="text-muted-foreground text-[10px] ml-1">({orderId})</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ml-1 ${statusStyles[displayStatus]}`}>{displayStatus}</span>
+                      <span className="font-bold text-foreground text-xs tracking-tight truncate max-w-[130px] sm:max-w-[200px]" title={partyName}>{partyName}</span>
+                      <span className="text-muted-foreground text-[10px] whitespace-nowrap shrink-0">({orderId})</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider whitespace-nowrap shrink-0 ${statusStyles[displayStatus]}`}>{displayStatus}</span>
+                      {urgency && (
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border whitespace-nowrap shrink-0 flex items-center gap-1 ${urgency.color}`} title={urgency.label}>
+                          {urgency.shortLabel}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 sm:gap-4 ml-2">
                       {/* Admin Quick Approvals */}

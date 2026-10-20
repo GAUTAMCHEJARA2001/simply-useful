@@ -448,10 +448,24 @@ def _read_uploaded_csv(request):
                     clean_rows.append(r_data)
                 if not clean_rows:
                     return ([], None)
-                header_row = clean_rows[0]
+                
+                # Smart header detection: locate the row that contains table headers
+                header_idx = 0
+                max_score = -1
+                for idx, r_data in enumerate(clean_rows[:15]):
+                    row_vals = [str(v).strip().lower() for v in r_data.values() if v]
+                    score = len(row_vals)
+                    # Check for recognized accounting and table header keywords
+                    if any(any(k in v for k in ['date', 'dt', 'when', 'vch', 'voucher', 'particular', 'debit', 'credit', 'amount', 'balance', 'party', 'code', 'dr', 'cr']) for v in row_vals):
+                        score += 20
+                    if score > max_score and len(row_vals) >= 2:
+                        max_score = score
+                        header_idx = idx
+
+                header_row = clean_rows[header_idx]
                 headers = {col: header_row[col].strip() for col in header_row if header_row[col]}
                 result = []
-                for r_data in clean_rows[1:]:
+                for r_data in clean_rows[header_idx + 1:]:
                     row_dict = {}
                     for col_letter, header_name in headers.items():
                         row_dict[header_name] = r_data.get(col_letter, '').strip()
@@ -472,7 +486,23 @@ def _read_uploaded_csv(request):
         except Exception as e:
             return (None, send_error(f'Failed to decode CSV file: {e}', 400))
     clean_lines = [line for line in content.splitlines() if line.strip() and (not line.strip().startswith('#'))]
-    clean_content = '\n'.join(clean_lines)
+    if not clean_lines:
+        return ([], None)
+
+    # Smart header row detection in CSV: scan lines for recognized table headers
+    header_line_idx = 0
+    max_score = -1
+    for idx, line in enumerate(clean_lines[:15]):
+        line_lower = line.lower()
+        parts = [p.strip() for p in line.split(',') if p.strip()]
+        score = len(parts)
+        if any(k in line_lower for k in ['date', 'dt', 'when', 'vch', 'voucher', 'particular', 'debit', 'credit', 'amount', 'balance', 'party', 'code']):
+            score += 20
+        if score > max_score and len(parts) >= 2:
+            max_score = score
+            header_line_idx = idx
+
+    clean_content = '\n'.join(clean_lines[header_line_idx:])
     return (list(csv.DictReader(io.StringIO(clean_content))), None)
 
 def _truthy(value, default=True):
@@ -1308,15 +1338,7 @@ class DistributorViewSet(viewsets.ModelViewSet):
         return send_success({}, 'Distributor deleted successfully')
 
 
-# ---------------------------------------------------------
-# Modular Domain: Sales Orders, Dispatches & Approvals
-# ---------------------------------------------------------
-from api.views_orders import (
-    OrderViewSet, transaction_sales, transaction_sales_detail,
-    transaction_approvals, transaction_approval_detail,
-    transaction_approve, transaction_dispatch, transaction_reject,
-    transaction_dispatch_log_detail
-)
+
 
 class VisitViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -1407,14 +1429,39 @@ class BOMViewSet(viewsets.ModelViewSet):
         from api.serializers import BomListSerializer
         from django.db.models import Count
         from api.models import Product
-        queryset = self.get_queryset().annotate(item_count=Count('bomitem')).prefetch_related('bomitem_set')
+        from api.services.costing_service import compute_product_warehouse_costs, compute_bom_cost_breakdown
+        queryset = self.get_queryset().annotate(item_count=Count('bomitem')).prefetch_related('bomitem_set', 'warehouseid')
         product_map = {}
         for p in Product.objects.only('id', 'productcode', 'name'):
             if p.productcode:
                 product_map[p.productcode] = p
             if p.name:
                 product_map[p.name] = p
-        serializer = BomListSerializer(queryset, many=True, context={'request': request, 'product_map': product_map})
+
+        company_id = _get_company_id(request)
+        wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
+        target_wh_ids = None
+        if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
+            try:
+                target_wh_ids = [int(wh_header)]
+            except (ValueError, TypeError):
+                pass
+
+        try:
+            val_by_id, val_by_name = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
+            bom_cost_map = {}
+            for bom in queryset:
+                bom_cost_map[bom.id] = compute_bom_cost_breakdown(
+                    bom, valuation_by_id=val_by_id, valuation_by_name=val_by_name, warehouse_ids=target_wh_ids, company_id=company_id
+                )
+        except Exception as e:
+            print("Error computing BOM costs:", e)
+            val_by_id, val_by_name, bom_cost_map = {}, {}, {}
+
+        serializer = BomListSerializer(
+            queryset, many=True,
+            context={'request': request, 'product_map': product_map, 'val_by_id': val_by_id, 'val_by_name': val_by_name, 'bom_cost_map': bom_cost_map}
+        )
         return send_success(serializer.data, 'BOMs fetched successfully')
 
     def create(self, request, *args, **kwargs):
@@ -1467,6 +1514,24 @@ class BOMViewSet(viewsets.ModelViewSet):
         full_serializer = BomSerializer(bom)
         return send_success(full_serializer.data, 'BOM updated successfully')
 
+    @action(detail=False, methods=['get'], url_path='price-list')
+    def price_list(self, request):
+        """
+        Returns accurate price list & manufacturing costing for all BOM recipes
+        based on warehouse FIFO and Weighted Average raw material purchase prices.
+        """
+        company_id = _get_company_id(request)
+        wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
+        target_wh_ids = None
+        if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
+            try:
+                target_wh_ids = [int(wh_header)]
+            except (ValueError, TypeError):
+                pass
+        from api.services.costing_service import get_all_bom_valuations
+        data = get_all_bom_valuations(company_id=company_id, warehouse_ids=target_wh_ids)
+        return send_success(data, 'BOM Accurate Price List fetched successfully')
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         user_role = (getattr(request.user, 'role', '') or '').upper()
@@ -1490,6 +1555,7 @@ class BOMViewSet(viewsets.ModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         from api.models import Product
         from api.serializers import BomSerializer
+        from api.services.costing_service import compute_product_warehouse_costs, compute_bom_cost_breakdown
         instance = self.get_object()
         product_map = {}
         for p in Product.objects.only('id', 'productcode', 'name'):
@@ -1497,8 +1563,33 @@ class BOMViewSet(viewsets.ModelViewSet):
                 product_map[p.productcode] = p
             if p.name:
                 product_map[p.name] = p
-        serializer = BomSerializer(instance, context={'request': request, 'product_map': product_map})
-        return send_success(serializer.data, 'BOM fetched successfully')
+
+        company_id = _get_company_id(request)
+        wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
+        target_wh_ids = None
+        if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
+            try:
+                target_wh_ids = [int(wh_header)]
+            except (ValueError, TypeError):
+                pass
+        
+        try:
+            val_by_id, val_by_name = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
+            bom_cost = compute_bom_cost_breakdown(
+                instance, valuation_by_id=val_by_id, valuation_by_name=val_by_name, warehouse_ids=target_wh_ids, company_id=company_id
+            )
+            bom_cost_map = {instance.id: bom_cost}
+        except Exception:
+            val_by_id, val_by_name, bom_cost_map = {}, {}, {}
+
+        serializer = BomSerializer(
+            instance,
+            context={'request': request, 'product_map': product_map, 'val_by_id': val_by_id, 'val_by_name': val_by_name, 'bom_cost_map': bom_cost_map}
+        )
+        data = serializer.data
+        if instance.id in bom_cost_map:
+            data['costBreakdown'] = bom_cost_map[instance.id]
+        return send_success(data, 'BOM fetched successfully')
 
     def destroy(self, request, *args, **kwargs):
         user_role = (getattr(request.user, 'role', '') or '').upper()

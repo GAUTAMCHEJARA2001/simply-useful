@@ -4,6 +4,7 @@ import { Modal } from '@/components/Modal';
 import { Plus, X } from 'lucide-react';
 import { useProducts } from '@/hooks/inventory/useProducts';
 import { useReturnMutations } from '@/hooks/inventory/useReturns';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 interface ReturnOrderModalProps {
   isOpen: boolean;
@@ -157,8 +158,11 @@ export const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ isOpen, onCl
           </div>
           <div>
             <label className="text-[11px] font-semibold block mb-1">Return Date</label>
-            <input type="date" value={form.returnDate || ''} onChange={e => setForm({ ...form, returnDate: e.target.value })}
-              className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" />
+            <SmartDatePicker 
+              value={form.returnDate || ''} 
+              onChange={val => setForm({ ...form, returnDate: val })}
+              inputClassName="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" 
+            />
           </div>
           <div>
             <label className="text-[11px] font-semibold block mb-1">Return Vehicle No</label>

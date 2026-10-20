@@ -124,6 +124,37 @@ const HomeRedirect: React.FC = () => {
   return <Navigate to={getRoleDashboard(user!.role)} replace />;
 };
 
+const RootRoute: React.FC = () => {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Already authenticated -> go directly to role dashboard
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // If installed on mobile as PWA (standalone mode) -> bypass landing page and go straight to login
+  const isInstalledPwa = typeof window !== 'undefined' && (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true ||
+    document.referrer.includes('android-app://') ||
+    window.location.search.includes('source=pwa') ||
+    localStorage.getItem('app_installed') === 'true'
+  );
+
+  if (isInstalledPwa) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <PublicLandingPage />;
+};
+
 const App = () => {
   console.log('💎 KAMLA OTS Booting...');
 
@@ -182,8 +213,17 @@ const App = () => {
     };
 
     document.addEventListener('keydown', handleKeyDown);
+
+    const handleAppInstalled = () => {
+      try {
+        localStorage.setItem('app_installed', 'true');
+      } catch {}
+    };
+    window.addEventListener('appinstalled', handleAppInstalled);
+
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
@@ -203,9 +243,9 @@ const App = () => {
                       <Route path="/signup" element={<Navigate to="/login" replace />} />
                       <Route path="/register-company" element={<Navigate to="/" replace />} />
                       <Route path="/signup-company" element={<Navigate to="/" replace />} />
-                      <Route path="/" element={<PublicLandingPage />} />
-                      <Route path="/landing" element={<PublicLandingPage />} />
-                      <Route path="/home" element={<PublicLandingPage />} />
+                      <Route path="/" element={<RootRoute />} />
+                      <Route path="/landing" element={<RootRoute />} />
+                      <Route path="/home" element={<RootRoute />} />
                       <Route path="/dashboard" element={<HomeRedirect />} />
                       <Route path="/portal" element={<HomeRedirect />} />
 

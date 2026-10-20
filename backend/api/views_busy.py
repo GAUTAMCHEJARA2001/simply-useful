@@ -338,6 +338,47 @@ def import_busy_ledger(request):
             else:
                 return Response({'success': False, 'message': f'No dealer or distributor found with code: {party_code_str}'}, status=404)
 
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
+            return Response({'success': False, 'message': 'File is required.'}, status=400)
+
+        file_name = uploaded_file.name.lower()
+        is_pdf_or_doc = any(file_name.endswith(ext) for ext in ('.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'))
+
+        if is_pdf_or_doc:
+            # Fulfill the pending ledger request directly with this document
+            from api.models import LedgerRequest
+            from django.utils import timezone
+            from django.core.files.storage import default_storage
+
+            file_url = None
+            try:
+                import cloudinary.uploader
+                res_type = 'image' if (file_name.endswith('.pdf') or any(file_name.endswith(e) for e in ('.jpg', '.jpeg', '.png'))) else 'raw'
+                upload_res = cloudinary.uploader.upload(uploaded_file, folder='ledger_requests', resource_type=res_type)
+                file_url = upload_res.get('secure_url') or upload_res.get('url')
+            except Exception:
+                try:
+                    uploaded_file.seek(0)
+                    saved = default_storage.save(f'ledger_requests/{uploaded_file.name}', uploaded_file)
+                    file_url = default_storage.url(saved)
+                except Exception:
+                    pass
+
+            lr = LedgerRequest.objects.filter(party_code__iexact=party_code_str, status='PENDING').first()
+            if lr:
+                lr.status = 'COMPLETED'
+                lr.completed_at = timezone.now()
+                lr.file_url = file_url
+                lr.file_name = uploaded_file.name
+                lr.save()
+
+            return Response({
+                'success': True,
+                'message': f'Document "{uploaded_file.name}" uploaded successfully and ledger request fulfilled!',
+                'file_url': file_url
+            })
+
         rows, err_resp = _read_uploaded_csv(request)
         if err_resp:
             # Read_uploaded_csv returns a standard HttpResponse when error. Let's extract message if possible.
@@ -355,17 +396,17 @@ def import_busy_ledger(request):
         # Map headers
         headers = list(rows[0].keys())
         
-        date_col = next((h for h in headers if any(k in h.lower() for k in ['date', 'dt', 'when'])), None)
-        vch_no_col = next((h for h in headers if any(k in h.lower() for k in ['vch_no', 'vch_num', 'voucher', 'vchno', 'vch no'])), None)
+        date_col = next((h for h in headers if any(k in str(h).lower() for k in ['date', 'dt', 'when', 'inv date', 'voucher date', 'bill date'])), None)
+        vch_no_col = next((h for h in headers if any(k in str(h).lower() for k in ['vch_no', 'vch_num', 'voucher', 'vchno', 'vch no', 'bill no', 'inv no'])), None)
         if not vch_no_col:
-            vch_no_col = next((h for h in headers if any(k in h.lower() for k in ['no', 'number'])), None)
+            vch_no_col = next((h for h in headers if any(k in str(h).lower() for k in ['no', 'number'])), None)
             
-        vch_type_col = next((h for h in headers if any(k in h.lower() for k in ['type', 'vchtype', 'vch_type'])), None)
+        vch_type_col = next((h for h in headers if any(k in str(h).lower() for k in ['type', 'vchtype', 'vch_type', 'vch type'])), None)
         
-        debit_col = next((h for h in headers if any(k in h.lower() for k in ['debit', 'dr'])), None)
-        credit_col = next((h for h in headers if any(k in h.lower() for k in ['credit', 'cr'])), None)
-        amount_col = next((h for h in headers if any(k in h.lower() for k in ['amount', 'amt', 'value', 'val'])), None)
-        nar_col = next((h for h in headers if any(k in h.lower() for k in ['narration', 'short_nar', 'remarks', 'desc', 'description', 'nar'])), None)
+        debit_col = next((h for h in headers if any(k in str(h).lower() for k in ['debit', 'dr'])), None)
+        credit_col = next((h for h in headers if any(k in str(h).lower() for k in ['credit', 'cr'])), None)
+        amount_col = next((h for h in headers if any(k in str(h).lower() for k in ['amount', 'amt', 'value', 'val'])), None)
+        nar_col = next((h for h in headers if any(k in str(h).lower() for k in ['narration', 'short_nar', 'remarks', 'desc', 'description', 'nar', 'particulars', 'particular'])), None)
 
         if not date_col:
             return Response({'success': False, 'message': 'Could not find a "Date" column in the sheet. Please make sure the sheet has a column labeled "Date".'}, status=400)
@@ -554,11 +595,23 @@ def ledger_requests_view(request):
                 qs = qs.filter(party_code=party_code)
                 
             data = []
+            from api.models import Dealer, Distributor
             for r in qs:
+                # Find matching dealer or distributor phone/details for direct WhatsApp/sharing
+                p_code = (r.party_code or '').strip()
+                dealer = Dealer.objects.filter(dealercode__iexact=p_code).first()
+                dist = Distributor.objects.filter(distributorcode__iexact=p_code).first() if not dealer else None
+                phone = (getattr(dealer, 'phone', None) or getattr(dist, 'phone', None) or '')
+                email = (getattr(dealer, 'email', None) or getattr(dist, 'email', None) or '')
+                contact_person = (getattr(dealer, 'contact_person', None) or getattr(dist, 'contact_person', None) or '')
+
                 data.append({
                     'id': r.id,
                     'party_code': r.party_code,
                     'party_name': r.party_name,
+                    'phone': phone,
+                    'email': email,
+                    'contact_person': contact_person,
                     'requested_by_name': r.requested_by.name if r.requested_by else "",
                     'requested_by_email': r.requested_by.email if r.requested_by else "",
                     'status': r.status,
@@ -598,10 +651,8 @@ def fulfill_ledger_request(request, req_id):
                 import cloudinary.uploader
                 # Determine resource_type based on file extension
                 ext = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else ''
-                if ext in ('jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'):
+                if ext in ('jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf'):
                     resource_type = 'image'
-                elif ext in ('pdf',):
-                    resource_type = 'image'  # Cloudinary treats PDF as image
                 else:
                     resource_type = 'raw'  # Excel, CSV, etc.
                 
@@ -614,7 +665,13 @@ def fulfill_ledger_request(request, req_id):
                 )
                 file_url = result.get('secure_url') or result.get('url')
             except Exception as upload_err:
-                return Response({'success': False, 'message': f'File upload failed: {str(upload_err)}'}, status=500)
+                try:
+                    uploaded_file.seek(0)
+                    from django.core.files.storage import default_storage
+                    saved = default_storage.save(f'ledger_requests/{file_name}', uploaded_file)
+                    file_url = default_storage.url(saved)
+                except Exception:
+                    return Response({'success': False, 'message': f'File upload failed: {str(upload_err)}'}, status=500)
         
         lr.status = 'COMPLETED'
         lr.completed_at = timezone.now()

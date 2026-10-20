@@ -8,6 +8,7 @@ import { Modal } from '@/components/Modal';
 import { Send, Truck } from 'lucide-react';
 import { useProducts } from '@/hooks/inventory/useProducts';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 const extractDispatchDetails = (narration: string) => {
   if (!narration) return null;
@@ -353,8 +354,11 @@ export const ApprovalsTab: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-semibold block mb-1">Dispatch Date</label>
-              <input type="date" value={dispatchForm.dispatchDate} onChange={e => setDispatchForm({ ...dispatchForm, dispatchDate: e.target.value })}
-                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm" />
+              <SmartDatePicker 
+                value={dispatchForm.dispatchDate} 
+                onChange={val => setDispatchForm({ ...dispatchForm, dispatchDate: val })}
+                inputClassName="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm" 
+              />
             </div>
             <div>
               <label className="text-[11px] font-semibold block mb-1">Invoice Number</label>

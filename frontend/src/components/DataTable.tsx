@@ -26,9 +26,23 @@ const getCellValue = (cell: any): string | number => {
     return isNaN(num) ? cell : num;
   }
   if (React.isValidElement(cell)) {
-    const children = (cell.props as any)?.children;
-    if (typeof children === 'string' || typeof children === 'number') {
-      return children;
+    const props = cell.props as any;
+    if (props?.['data-sort-value'] !== undefined) {
+      const v = props['data-sort-value'];
+      const num = Number(v);
+      return isNaN(num) ? String(v) : num;
+    }
+    const extractText = (node: any): string => {
+      if (node === null || node === undefined || typeof node === 'boolean') return '';
+      if (typeof node === 'string' || typeof node === 'number') return String(node);
+      if (Array.isArray(node)) return node.map(extractText).join(' ');
+      if (React.isValidElement(node)) return extractText((node.props as any)?.children);
+      return '';
+    };
+    const extracted = extractText(props?.children).trim();
+    if (extracted) {
+      const num = Number(extracted);
+      return isNaN(num) ? extracted : num;
     }
   }
   return String(cell);
@@ -116,9 +130,10 @@ export const DataTable: React.FC<DataTableProps> = ({
       const strA = String(valA).toLowerCase();
       const strB = String(valB).toLowerCase();
       
-      // Smart date parsing for en-IN format (DD/MM/YYYY)
+      // Smart date parsing for en-IN format (DD/MM/YYYY) and ISO format (YYYY-MM-DD)
       const normalizeDateString = (str: string) => {
-        const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,\s*(\d{1,2}):(\d{2}):(\d{2})\s*(am|pm))?/);
+        const clean = str.trim();
+        const match = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,\s*(\d{1,2}):(\d{2}):(\d{2})\s*(am|pm))?/i);
         if (match) {
           const yyyy = match[3];
           const mm = match[2].padStart(2, '0');
@@ -126,12 +141,16 @@ export const DataTable: React.FC<DataTableProps> = ({
           let hh = match[4] || '00';
           const min = match[5] || '00';
           const sec = match[6] || '00';
-          const ampm = match[7] ? match[7] : '';
+          const ampm = match[7] ? match[7].toLowerCase() : '';
           
           if (ampm === 'pm' && hh !== '12') hh = String(Number(hh) + 12);
           if (ampm === 'am' && hh === '12') hh = '00';
           
           return `${yyyy}${mm}${dd}${hh.padStart(2, '0')}${min}${sec}`;
+        }
+        const isoMatch = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+        if (isoMatch) {
+          return `${isoMatch[1]}${isoMatch[2].padStart(2, '0')}${isoMatch[3].padStart(2, '0')}`;
         }
         return str;
       };

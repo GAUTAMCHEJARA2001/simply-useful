@@ -1,7 +1,7 @@
 {
   "name": "Kamla Industries OTS",
   "short_name": "Kamla",
-  "start_url": "/",
+  "start_url": "/login?source=pwa",
   "scope": "/",
   "display": "standalone",
   "theme_color": "#ffffff",

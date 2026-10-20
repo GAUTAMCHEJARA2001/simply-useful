@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/Modal';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Edit } from 'lucide-react';
 import { useProducts } from '@/hooks/inventory/useProducts';
 import { useWarehouses } from '@/hooks/inventory/useMasters';
 import { useSaleMutations } from '@/hooks/inventory/useSales';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 interface SalesModalProps {
   isOpen: boolean;
@@ -27,8 +28,18 @@ const extractChallanNumber = (narration: string) => {
 
 const formatDateForInput = (dVal: any) => {
   if (!dVal) return '';
-  if (typeof dVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dVal.trim())) {
-    return dVal.trim();
+  if (typeof dVal === 'string') {
+    const trimmed = dVal.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+    const ddmmyyyy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (ddmmyyyy) {
+      const day = ddmmyyyy[1].padStart(2, '0');
+      const month = ddmmyyyy[2].padStart(2, '0');
+      const year = ddmmyyyy[3];
+      return `${year}-${month}-${day}`;
+    }
   }
   try {
     const d = new Date(dVal);
@@ -104,6 +115,11 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
 
   const { data: products = [] } = useProducts({ warehouseId: form.warehouse_id });
   const [initializedSaleId, setInitializedSaleId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState<boolean>(!readOnly);
+
+  useEffect(() => {
+    setIsEditing(!readOnly);
+  }, [readOnly, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -218,25 +234,12 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
     const selectedWh = warehouses.find((w: any) => String(w.id) === String(form.warehouse_id));
     const finalRemarks = form.narration || cleanNarration;
 
-    const payload = {
-      ...form,
-      partyName: form.customerName || form.partyName || '',
-      partyType: form.partyType || 'Dealer',
-      status: form.status || 'Completed',
-      grandTotal: grandTotal,
-      narration: finalRemarks,
-      remarks: finalRemarks,
-      date: form.date || new Date().toISOString().split('T')[0],
-      assignedWarehouse: form.warehouse_id || '',
-      warehouse_id: form.warehouse_id || '',
-      invoiceNumber: form.challanNumber || '',
-      dispatchWarehouse: selectedWh ? selectedWh.name : '',
-      dispatchDate: form.dispatchDate || sale?.dispatchDate || '',
-      vehicleNumber: form.vehicleNumber || '',
-      driverName: form.driverName || '',
-      driverMobile: form.driverMobile || '',
-      driverMobileNumber: form.driverMobile || '',
-      items: (form.lineItems || []).map((it: any) => ({
+    const parsedDispDate = formatDateForInput(form.dispatchDate) || form.dispatchDate || sale?.dispatchDate || '';
+    const parsedDate = formatDateForInput(form.date) || form.date || new Date().toISOString().split('T')[0];
+
+    const validLineItems = (form.lineItems || [])
+      .filter((it: any) => it.productId && String(it.productId).trim() !== '')
+      .map((it: any) => ({
         id: it.id || undefined,
         productId: it.productId,
         qty: it.quantity,
@@ -245,8 +248,30 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         tax_percent: it.tax_percent || 18,
         returnedQty: it.returnedQty || 0,
         itemRemark: it.itemRemark || ''
-      }))
+      }));
+
+    const payload: any = {
+      ...form,
+      partyName: form.customerName || form.partyName || '',
+      partyType: form.partyType || 'Dealer',
+      status: form.status || 'Completed',
+      grandTotal: grandTotal,
+      narration: finalRemarks,
+      remarks: finalRemarks,
+      date: parsedDate,
+      assignedWarehouse: form.warehouse_id || '',
+      warehouse_id: form.warehouse_id || '',
+      invoiceNumber: form.challanNumber || '',
+      dispatchWarehouse: selectedWh ? selectedWh.name : '',
+      dispatchDate: parsedDispDate,
+      vehicleNumber: form.vehicleNumber || '',
+      driverName: form.driverName || '',
+      driverMobile: form.driverMobile || '',
+      driverMobileNumber: form.driverMobile || '',
     };
+    if (validLineItems.length > 0) {
+      payload.items = validLineItems;
+    }
     
     if (isDispatchLog) {
       await saveDispatchLog({
@@ -256,15 +281,15 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         driverName: form.driverName || extractedDetails.driver || '',
         driverMobile: form.driverMobile || extractedDetails.mobile || '',
         driverMobileNumber: form.driverMobile || extractedDetails.mobile || '',
-        dispatchDate: form.dispatchDate || new Date().toISOString().split('T')[0],
-        orderDate: form.date,
-        date: form.date,
+        dispatchDate: parsedDispDate || new Date().toISOString().split('T')[0],
+        orderDate: parsedDate,
+        date: parsedDate,
         partyName: form.customerName || form.partyName || '',
         customerName: form.customerName || form.partyName || '',
         warehouse_id: form.warehouse_id || '',
         remarks: finalRemarks,
         narration: finalRemarks,
-        items: payload.items
+        items: validLineItems
       });
       if (sale.originalOrderId) {
         try {
@@ -283,9 +308,9 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
   };
 
   return (
-    <Modal isOpen={isOpen} title={readOnly ? 'View Transaction' : (sale?.id ? (isDispatchLog ? 'Edit Dispatch' : 'Edit Sale') : 'New Sale Registration')} onClose={onClose}>
+    <Modal isOpen={isOpen} title={!isEditing ? 'View Transaction' : (sale?.id ? (isDispatchLog ? 'Edit Dispatch' : 'Edit Sale') : 'New Sale Registration')} onClose={onClose}>
       <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
-        <fieldset disabled={readOnly} className="space-y-4">
+        <fieldset disabled={!isEditing} className="space-y-4">
         {sale?.id && (
           <div className="p-4 bg-purple-500/5 border border-purple-500/15 rounded-xl text-xs space-y-3">
             <p className="font-bold uppercase tracking-wider text-purple-700 text-[10px] flex items-center gap-1.5">
@@ -407,22 +432,20 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
             <label className="text-[11px] font-semibold block mb-1">
               Order Placed Date
             </label>
-            <input 
-              type="date" 
+            <SmartDatePicker 
               value={form.date || ''} 
-              onChange={e => setForm({ ...form, date: e.target.value })}
-              className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" 
+              onChange={val => setForm({ ...form, date: val })}
+              disabled={!isEditing}
             />
           </div>
           <div>
             <label className="text-[11px] font-semibold block mb-1">
               Dispatch Date
             </label>
-            <input 
-              type="date" 
+            <SmartDatePicker 
               value={form.dispatchDate || ''} 
-              onChange={e => setForm({ ...form, dispatchDate: e.target.value })}
-              className="w-full border border-border rounded-lg px-3 py-1.5 bg-background text-xs" 
+              onChange={val => setForm({ ...form, dispatchDate: val })}
+              disabled={!isEditing}
             />
           </div>
           <div className="col-span-2">
@@ -555,15 +578,42 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         </div>
         </fieldset>
 
-        <div className="flex justify-end gap-2 pt-4">
-          {!readOnly ? (
-            <>
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button onClick={handleSave}>Save {isDispatchLog ? 'Dispatch' : 'Invoice'}</Button>
-            </>
-          ) : (
-            <Button variant="outline" onClick={onClose}>Close</Button>
-          )}
+        <div className="flex justify-between items-center gap-2 pt-4 border-t border-border/40">
+          <div>
+            {!isEditing && readOnly && (
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsEditing(true)}
+                className="text-primary hover:bg-primary/10 border-primary/40 font-semibold text-xs"
+              >
+                ✏️ Edit Transaction / Dispatch Date
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    if (readOnly) {
+                      setIsEditing(false);
+                    } else {
+                      onClose();
+                    }
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleSave}>
+                  Save {isDispatchLog ? 'Dispatch' : 'Invoice'}
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={onClose}>Close</Button>
+            )}
+          </div>
         </div>
       </div>
     </Modal>

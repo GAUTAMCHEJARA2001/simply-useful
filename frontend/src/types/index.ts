@@ -16,6 +16,8 @@ export interface User {
   isSubscriptionActive?: boolean;
   skuPrefix?: string | null;
   stockMethod?: string;
+  photo?: string;
+  employeePhoto?: string;
 }
 
 export interface LoginInput {
@@ -134,6 +136,10 @@ export interface Product {
   stockQty?: number;
   availableStock?: number;
   defaultWarehouseId?: string | number | null;
+  avgCost?: number;
+  fifoCost?: number;
+  weightedAvgCost?: number;
+  inventoryValue?: number;
 }
 
 export type OrderStatus = 'Pending' | 'Approved' | 'Partially Dispatched' | 'Dispatched' | 'Completed' | 'Cancelled' | 'Partially Returned' | 'Returned';

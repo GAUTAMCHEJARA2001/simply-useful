@@ -123,6 +123,7 @@ if DATABASE_URL:
         'HOST': url.hostname,
         'PORT': url.port or 5432,
         'CONN_MAX_AGE': 600,
+        'CONN_HEALTH_CHECKS': True,
     }
 
     # Pass SSL mode or other parameters if present
@@ -152,6 +153,7 @@ else:
             'HOST': db_host,
             'PORT': db_port,
             'CONN_MAX_AGE': 600,
+            'CONN_HEALTH_CHECKS': True,
         }
     }
 

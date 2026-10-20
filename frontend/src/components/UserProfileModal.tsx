@@ -69,6 +69,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ open, onOpen
         .then(res => {
           if (res.data?.success && res.data.data) {
             setEmployeeData(res.data.data.employee);
+            if (res.data.data.employee?.employee_photo) {
+              updateCurrentUser({ employeePhoto: res.data.data.employee.employee_photo });
+            }
             if (res.data.data.user?.name) {
               setName(res.data.data.user.name);
             }
@@ -190,8 +193,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ open, onOpen
         {/* Modal Top Header Banner */}
         <div className="bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-5 border-b border-border/80 shrink-0">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground flex items-center justify-center font-bold text-xl shadow-md border-2 border-primary/20 shrink-0">
-              {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground flex items-center justify-center font-bold text-xl shadow-md border-2 border-primary/20 shrink-0 overflow-hidden">
+              {employeeData?.employee_photo || user.employeePhoto || user.photo ? (
+                <img
+                  src={employeeData?.employee_photo || user.employeePhoto || user.photo}
+                  alt={user.name || user.email}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">

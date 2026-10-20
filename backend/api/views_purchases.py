@@ -193,6 +193,7 @@ def transaction_purchases(request):
                     tax_p = as_float(it.get('tax_percent'), 'Tax percent')
                     item_total = qty * rate * (1 + tax_p / 100)
                     product_name = 'Unknown Product'
+                    prod = None
                     prod_id = it.get('productId') or it.get('product_id')
                     if prod_id:
                         try:
@@ -200,10 +201,41 @@ def transaction_purchases(request):
                             product_name = prod.name
                         except Product.DoesNotExist:
                             pass
-                    Purchaseitem.objects.create(id=item_id, purchaseid=purchase_obj, productname=product_name, qty=qty, rate=rate, total=item_total)
-                    if prod_id:
-                        pass
-                    items_data.append({'id': item_id, 'productName': product_name, 'productId': prod_id, 'qty': qty, 'quantity': qty, 'rate': rate, 'total': item_total, 'tax_percent': tax_p})
+                    if not prod and it.get('productName'):
+                        prod = Product.objects.filter(name__iexact=it.get('productName').strip()).first()
+                        if prod:
+                            product_name = prod.name
+
+                    Purchaseitem.objects.create(
+                        id=item_id,
+                        purchaseid=purchase_obj,
+                        productname=product_name,
+                        qty=qty,
+                        rate=rate,
+                        total=item_total,
+                        productid=prod
+                    )
+
+                    if prod and warehouse:
+                        try:
+                            from api.services.ledger_service import record_stock_ledger_entry
+                            record_stock_ledger_entry(
+                                product_id=prod.id,
+                                warehouse_id=warehouse.id,
+                                company_id=company_id,
+                                voucher_type='PURCHASE_RECEIPT',
+                                quantity_change=qty,
+                                voucher_id=pur_id,
+                                voucher_number=pur_num,
+                                unit_cost=Decimal(str(rate)),
+                                narration=f"Purchase receipt from {vendor_name}",
+                                posting_date=purchase_date,
+                                created_by=request.user
+                            )
+                        except Exception as sle_err:
+                            print(f"[PURCHASE] Warning: Could not record stock ledger entry: {sle_err}")
+
+                    items_data.append({'id': item_id, 'productName': product_name, 'productId': prod.id if prod else prod_id, 'qty': qty, 'quantity': qty, 'rate': rate, 'total': item_total, 'tax_percent': tax_p})
         except IntegrityError as e:
             print(f'[PURCHASE CREATE] IntegrityError: {e}')
             return send_error('Purchase could not be recorded because related data is out of sync. Please refresh and try again.', 409)

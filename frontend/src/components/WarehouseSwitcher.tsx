@@ -63,13 +63,10 @@ export const WarehouseSwitcher: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center gap-1.5 sm:gap-2 mr-0 sm:mr-4 shrink-0">
-      <div className="bg-primary/10 p-2 rounded-full hidden sm:flex">
-        <Building2 className={`w-4 h-4 text-primary ${switching ? 'animate-spin' : ''}`} />
-      </div>
+    <div className="flex items-center shrink-0">
       <Select value={activeWarehouseId || undefined} onValueChange={handleWarehouseChange} disabled={switching}>
-        <SelectTrigger className="w-[105px] sm:w-[180px] bg-background text-xs sm:text-sm h-8 sm:h-10 px-2 sm:px-3">
-          <SelectValue placeholder={switching ? 'Switching…' : 'Warehouse'} />
+        <SelectTrigger className="w-[110px] sm:w-[160px] bg-background text-[11px] sm:text-xs font-semibold h-8 px-2 sm:px-3 border-border/80 shadow-2xs">
+          <SelectValue placeholder={switching ? '…' : 'Warehouse'} />
         </SelectTrigger>
         <SelectContent>
           {user?.role === 'SUPERADMIN' && (

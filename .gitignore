@@ -34,3 +34,6 @@ backend/audit_all_apis.mjs
 # Archive of legacy experimental systems
 archive/
 backend/scripts/legacy_scratch/
+backend/media/
+media/
+*.csv

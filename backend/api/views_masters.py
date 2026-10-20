@@ -99,6 +99,15 @@ class ProductViewSet(viewsets.ModelViewSet):
         except Exception:
             sku_qty_map = {}
 
+        # Valuation & Costing per Warehouse (FIFO & Weighted Average)
+        cost_map = {}
+        try:
+            from api.services.costing_service import compute_product_warehouse_costs
+            cost_map, _ = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
+        except Exception as e:
+            print("Error computing product costs in ProductViewSet:", e)
+            cost_map = {}
+
         is_global = request.query_params.get('global', '').lower() == 'true' or request.query_params.get('all', '').lower() == 'true'
         if target_wh_ids and not is_global:
             active_st_prod_ids = set(Stocktransaction.objects.filter(warehouseid_id__in=target_wh_ids).values_list('productid_id', flat=True))
@@ -119,7 +128,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 page, limit = 1, 20
             offset = (page - 1) * limit
             page_products = all_products[offset:offset + limit]
-            serializer = ProductSerializer(page_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
+            serializer = ProductSerializer(page_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map, 'cost_map': cost_map})
             return send_success({
                 'items': serializer.data,
                 'total': total,
@@ -128,7 +137,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 'hasMore': offset + limit < total,
             }, 'Products fetched successfully')
 
-        serializer = ProductSerializer(all_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map})
+        serializer = ProductSerializer(all_products, many=True, context={'request': request, 'sku_qty_map': sku_qty_map, 'cost_map': cost_map})
         return send_success(serializer.data, 'Products fetched successfully')
 
     def retrieve(self, request, *args, **kwargs):
@@ -145,8 +154,15 @@ class ProductViewSet(viewsets.ModelViewSet):
             sku_qty_map = {item['sku']: item['currentStock'] for item in stock_list if 'sku' in item}
         except Exception:
             sku_qty_map = {}
+
+        cost_map = {}
+        try:
+            from api.services.costing_service import compute_product_warehouse_costs
+            cost_map, _ = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
+        except Exception:
+            cost_map = {}
             
-        serializer = ProductSerializer(instance, context={'request': request, 'sku_qty_map': sku_qty_map})
+        serializer = ProductSerializer(instance, context={'request': request, 'sku_qty_map': sku_qty_map, 'cost_map': cost_map})
         return send_success(serializer.data, 'Product fetched successfully')
 
     @action(detail=False, methods=['post'], url_path='suggest-sku')

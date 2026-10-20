@@ -527,19 +527,27 @@ class UserViewSet(viewsets.ModelViewSet):
         employee = Labour.objects.filter(user_id=user.id).first()
         if not employee and user.name:
             employee = Labour.objects.filter(name__iexact=user.name).first()
+        if not employee and user.email:
+            employee = Labour.objects.filter(contactinfo__icontains=user.email).first()
 
         emp_data = None
         if employee:
             def _get_full_url(file_field):
                 if not file_field:
                     return None
+                val_str = str(file_field)
+                if val_str.startswith('http://') or val_str.startswith('https://'):
+                    return val_str
                 try:
-                    url = file_field.url
+                    url = file_field.url if hasattr(file_field, 'url') else val_str
                     if url.startswith('http://') or url.startswith('https://'):
                         return url
                     return request.build_absolute_uri(url)
                 except Exception:
-                    return None
+                    return val_str if val_str.startswith('http') else None
+
+            if employee.employee_photo:
+                user_data['employeePhoto'] = _get_full_url(employee.employee_photo)
 
             reports_to_name = None
             if employee.reports_to_id:

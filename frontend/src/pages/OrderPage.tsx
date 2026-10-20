@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { PDFGenerator } from '@/components/PDF/PDFGenerator';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 const OrderPage: React.FC = () => {
   const { user } = useAuth();
@@ -389,11 +390,11 @@ const OrderPage: React.FC = () => {
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Party &amp; Delivery Details</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-2 min-w-0">
               <Label>Party Type</Label>
               <Select value={partyType} onValueChange={(v: 'Dealer' | 'Distributor' | 'Project') => { setPartyType(v); setSelectedParty(''); }}>
-                <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-12 w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Dealer">Dealer (Counter / Retailer)</SelectItem>
                   <SelectItem value="Distributor">Distributor (B2B)</SelectItem>
@@ -401,12 +402,14 @@ const OrderPage: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 flex flex-col">
+            <div className={`space-y-2 min-w-0 flex flex-col ${!isAdmin ? 'lg:col-span-2' : ''}`}>
               <Label>{partyType} Name</Label>
               <Popover open={openPartyCombobox} onOpenChange={setOpenPartyCombobox}>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" role="combobox" aria-expanded={openPartyCombobox} className="h-12 w-full justify-between font-normal">
-                    {selectedParty ? selectedParty : <span className="text-muted-foreground">Select {partyType}...</span>}
+                  <Button variant="outline" role="combobox" aria-expanded={openPartyCombobox} className="h-12 w-full justify-between font-normal overflow-hidden px-3">
+                    <span className="truncate flex-1 text-left min-w-0">
+                      {selectedParty ? selectedParty : <span className="text-muted-foreground">Select {partyType}...</span>}
+                    </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -521,10 +524,10 @@ const OrderPage: React.FC = () => {
               </Popover>
             </div>
             {isAdmin && (
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <Label>Sales Officer</Label>
                 <Select value={soEmail} onValueChange={setSoEmail}>
-                  <SelectTrigger className="h-12"><SelectValue placeholder="Select Sales Officer" /></SelectTrigger>
+                  <SelectTrigger className="h-12 w-full"><SelectValue placeholder="Select Sales Officer" /></SelectTrigger>
                   <SelectContent>
                     {salesOfficers.map(so => (
                       <SelectItem key={so.id} value={so.email}>
@@ -535,16 +538,15 @@ const OrderPage: React.FC = () => {
                 </Select>
               </div>
             )}
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <Label>Order Placed Date</Label>
-              <Input 
-                type="date" 
+              <SmartDatePicker 
                 value={orderDate} 
-                onChange={(e) => setOrderDate(e.target.value)} 
-                className="h-12 w-full"
+                onChange={setOrderDate} 
+                inputClassName="h-12 w-full text-sm"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0 sm:col-span-1 lg:col-span-2">
               <div className="flex items-center justify-between">
                 <Label className="flex items-center gap-1.5 font-bold text-foreground">
                   <CalendarClock className="w-3.5 h-3.5 text-primary" />
@@ -565,13 +567,49 @@ const OrderPage: React.FC = () => {
                   </span>
                 )}
               </div>
-              <Input 
-                type="date" 
-                value={expectedDeliveryDate} 
-                onChange={(e) => setExpectedDeliveryDate(e.target.value)} 
-                className="h-12 w-full border-primary/30 focus:border-primary"
-                min={orderDate}
-              />
+              <div className="flex items-center gap-2">
+                <SmartDatePicker 
+                  value={expectedDeliveryDate} 
+                  onChange={setExpectedDeliveryDate} 
+                  className="flex-1"
+                  inputClassName="h-12 text-sm border-primary/30 focus:border-primary"
+                />
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date(orderDate || new Date());
+                      d.setDate(d.getDate() + 3);
+                      setExpectedDeliveryDate(d.toISOString().split('T')[0]);
+                    }}
+                    className="h-12 px-3 rounded-lg bg-card hover:bg-muted border border-border text-xs font-semibold text-foreground cursor-pointer transition-colors"
+                  >
+                    +3 Days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date(orderDate || new Date());
+                      d.setDate(d.getDate() + 7);
+                      setExpectedDeliveryDate(d.toISOString().split('T')[0]);
+                    }}
+                    className="h-12 px-3 rounded-lg bg-card hover:bg-muted border border-border text-xs font-semibold text-foreground cursor-pointer transition-colors"
+                  >
+                    +7 Days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date(orderDate || new Date());
+                      d.setDate(d.getDate() + 14);
+                      setExpectedDeliveryDate(d.toISOString().split('T')[0]);
+                    }}
+                    className="h-12 px-3 rounded-lg bg-card hover:bg-muted border border-border text-xs font-semibold text-foreground cursor-pointer transition-colors"
+                  >
+                    +14 Days
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground bg-primary/5 border border-primary/15 rounded-lg px-3 py-2">
@@ -579,41 +617,6 @@ const OrderPage: React.FC = () => {
               <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
               <span>Expected Delivery Date guides the warehouse dispatch team on priority &amp; shipping deadlines.</span>
             </span>
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  const d = new Date(orderDate || new Date());
-                  d.setDate(d.getDate() + 3);
-                  setExpectedDeliveryDate(d.toISOString().split('T')[0]);
-                }}
-                className="px-2 py-0.5 rounded bg-card hover:bg-muted border border-border text-[10px] font-semibold text-foreground cursor-pointer transition-colors"
-              >
-                +3 Days
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const d = new Date(orderDate || new Date());
-                  d.setDate(d.getDate() + 7);
-                  setExpectedDeliveryDate(d.toISOString().split('T')[0]);
-                }}
-                className="px-2 py-0.5 rounded bg-card hover:bg-muted border border-border text-[10px] font-semibold text-foreground cursor-pointer transition-colors"
-              >
-                +7 Days
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const d = new Date(orderDate || new Date());
-                  d.setDate(d.getDate() + 14);
-                  setExpectedDeliveryDate(d.toISOString().split('T')[0]);
-                }}
-                className="px-2 py-0.5 rounded bg-card hover:bg-muted border border-border text-[10px] font-semibold text-foreground cursor-pointer transition-colors"
-              >
-                +14 Days
-              </button>
-            </div>
           </div>
           {selectedParty && selectedDistInfo && (
             <div className="bg-secondary rounded-lg p-3 text-sm">
