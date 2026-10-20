@@ -97,7 +97,7 @@ const navItems: NavItem[] = [
   { label: 'Warehouse List', path: '/admin/warehouses', icon: Warehouse, feature: 'access_settings', domain: 'SUPPLY_CHAIN', subgroup: 'Facility', description: 'Facility locations and storage rooms' },
 
   // 5. HR & Payroll (Dedicated Standalone Suite)
-  { label: 'Staff Dashboard', path: '/hr', icon: Users, feature: 'view_reports', domain: 'HR', subgroup: 'Staff & Team', description: 'Staff directory & operations overview' },
+  { label: 'Staff Dashboard', path: '/hr/manage?tab=dashboard', icon: LayoutDashboard, feature: 'view_reports', domain: 'HR', subgroup: 'Staff & Team', description: 'Staff directory & operations overview' },
   { label: 'Employee Master', path: '/hr/manage?tab=employees', icon: Users, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Staff & Team', description: 'Staff directory & profiles' },
   { label: 'Employee Documents', path: '/hr/manage?tab=documents', icon: Award, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Staff & Team', description: 'Employment letters & ID cards' },
   { label: 'Sales Targets & KPIs', path: '/hr/manage?tab=targets', icon: Target, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Staff & Team', description: 'Monthly targets & commission progress' },
@@ -393,10 +393,19 @@ export const HR_SUB_PAGES: SubPageSearchItem[] = [
     id: 'hr_workspace_main',
     label: 'HR Workspace',
     group: 'HR Overview',
-    path: '/hr/manage',
-    icon: Briefcase,
-    keywords: 'hr workspace human resources workforce management payroll dashboard overview staff',
-    description: 'Comprehensive HR, payroll and staff operations workspace',
+    path: '/hr/manage?tab=dashboard',
+    icon: LayoutDashboard,
+    keywords: 'hr workspace human resources workforce management payroll dashboard overview staff operations team kpis',
+    description: 'Comprehensive HR, payroll and staff operations dashboard',
+  },
+  {
+    id: 'hr_dashboard',
+    label: 'Staff Dashboard',
+    group: 'HR Suite',
+    path: '/hr/manage?tab=dashboard',
+    icon: LayoutDashboard,
+    keywords: 'staff dashboard hr overview workforce team summary stats kpis attendance travel approvals payroll',
+    description: 'Workforce KPI overview, pending travel/expense reviews & payroll readiness',
   },
   {
     id: 'hr_employees',
@@ -829,8 +838,8 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       const currentParams = new URLSearchParams(location.search);
       for (const [key, value] of itemParams.entries()) {
         const currentVal = currentParams.get(key);
-        // Default tab on /hr/manage is employees
-        if (!currentVal && itemBase === '/hr/manage' && key === 'tab' && value === 'employees') {
+        // Default tab on /hr/manage is dashboard
+        if (!currentVal && itemBase === '/hr/manage' && key === 'tab' && (value === 'dashboard' || value === 'employees')) {
           continue;
         }
         // Default tab on /inventory/manage is dashboard

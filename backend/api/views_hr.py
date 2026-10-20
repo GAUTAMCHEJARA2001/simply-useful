@@ -645,12 +645,46 @@ def hr_generate_payroll(request):
         emp_emails = []
         if emp.user and emp.user.email:
             emp_emails.append(emp.user.email.strip().lower())
+        else:
+            # Auto-link employee to User profile if unlinked (exact name, contact email, or word match)
+            matched_user = None
+            if emp.contactinfo and '@' in str(emp.contactinfo):
+                for piece in str(emp.contactinfo).replace(',', ' ').replace(';', ' ').split():
+                    if '@' in piece:
+                        clean_e = piece.strip().strip('<>()[]').lower()
+                        matched_user = User.objects.filter(email__iexact=clean_e).first()
+                        if matched_user:
+                            break
+            if not matched_user:
+                matched_user = User.objects.filter(name__iexact=emp.name).first()
+            if not matched_user:
+                # Fuzzy match: e.g. 'PRITIKA PATEL' in 'PRITIKA NILESH PATEL'
+                emp_name_clean = emp.name.strip().lower()
+                for cand_user in User.objects.all():
+                    cand_name = (cand_user.name or '').strip().lower()
+                    if cand_name and len(cand_name) > 3:
+                        cand_parts = [p for p in cand_name.split() if len(p) > 2]
+                        if cand_parts and all(p in emp_name_clean for p in cand_parts):
+                            matched_user = cand_user
+                            break
+
+            if matched_user:
+                try:
+                    emp.user = matched_user
+                    emp.save(update_fields=['user'])
+                    if matched_user.email:
+                        emp_emails.append(matched_user.email.strip().lower())
+                except Exception:
+                    if matched_user.email:
+                        emp_emails.append(matched_user.email.strip().lower())
+
         if emp.contactinfo:
             for piece in str(emp.contactinfo).replace(',', ' ').replace(';', ' ').split():
                 if '@' in piece:
                     clean_email = piece.strip().strip('<>()[]').lower()
                     if clean_email and clean_email not in emp_emails:
                         emp_emails.append(clean_email)
+
         matching_users = User.objects.filter(name__iexact=emp.name)
         for mu in matching_users:
             if mu.email and mu.email.strip().lower() not in emp_emails:

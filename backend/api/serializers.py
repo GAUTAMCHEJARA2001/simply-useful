@@ -910,6 +910,7 @@ class VisitSerializer(serializers.ModelSerializer):
 
 class ExpenseSerializer(serializers.ModelSerializer):
     soEmail = serializers.CharField(source='soemail_id')
+    soName = serializers.CharField(source='soemail.name', read_only=True, default='')
     rejectReason = serializers.CharField(source='rejectreason', required=False, allow_null=True, allow_blank=True)
     companyId = serializers.CharField(source='companyid_id')
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
@@ -920,7 +921,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
         fields = [
-            'id', 'date', 'soEmail', 'category', 'amount', 'remarks', 'status',
+            'id', 'date', 'soEmail', 'soName', 'category', 'amount', 'remarks', 'status',
             'photo', 'rejectReason', 'declaration', 'companyId', 'createdAt',
             'verifiedBy', 'verifiedAt', 'kmTravelled'
         ]

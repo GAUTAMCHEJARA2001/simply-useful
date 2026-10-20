@@ -3,6 +3,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate, useSearchParams } from 'react-router-dom';
 
+import { StaffDashboardTab } from './HRManagement/components/StaffDashboardTab';
 import { EmployeeMasterTab } from './HRManagement/components/EmployeeMasterTab';
 import { EmployeeDocumentsTab } from './HRManagement/components/EmployeeDocumentsTab';
 import { AdvancedAttendanceTab } from './HRManagement/components/AdvancedAttendanceTab';
@@ -15,13 +16,13 @@ import { TravelApprovalsTab } from './HRManagement/components/TravelApprovalsTab
 import { SalesTargetManagementTab } from './HRManagement/components/SalesTargetManagementTab';
 import { ExpenseApprovalsTab } from './HRManagement/components/ExpenseApprovalsTab';
 
-export type HRTab = 'employees' | 'documents' | 'targets' | 'attendance' | 'travel' | 'expenses' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
+export type HRTab = 'dashboard' | 'employees' | 'documents' | 'targets' | 'attendance' | 'travel' | 'expenses' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
 
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const tab = (searchParams.get('tab') as HRTab) || 'employees';
+  const tab = (searchParams.get('tab') as HRTab) || 'dashboard';
 
   const hasAccess = can('view_inventory_dashboard') || can('view_hr_dashboard') || ['SUPERADMIN', 'ADMIN', 'HR'].includes(user?.role || '');
   if (!hasAccess) return <Navigate to="/" replace />;
@@ -31,6 +32,7 @@ const HRManagement: React.FC = () => {
 
       {/* ── ACTIVE TAB VIEW ── */}
       <div className="w-full">
+        {tab === 'dashboard' && <StaffDashboardTab />}
         {tab === 'employees' && <EmployeeMasterTab />}
         {tab === 'documents' && <EmployeeDocumentsTab />}
         {tab === 'targets' && <SalesTargetManagementTab />}

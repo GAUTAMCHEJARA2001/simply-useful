@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { travelService, DailyTravelLogItem } from '@/api/services/travel.service';
 import { useHRUsers, useHREmployees } from '@/hooks/hr/useHR';
 import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
@@ -33,7 +33,12 @@ import {
   Compass,
   Plus,
   ShieldAlert,
-  UserCheck
+  ShieldCheck,
+  UserCheck,
+  ChevronDown,
+  Check,
+  X,
+  User
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -76,6 +81,80 @@ export const TravelApprovalsTab: React.FC = () => {
   // Manual Trip Creation Dialog (For SO field network issues)
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [manualUserId, setManualUserId] = useState('');
+  const [soSearchQuery, setSoSearchQuery] = useState('');
+  const [soDropdownOpen, setSoDropdownOpen] = useState(false);
+  const [onlyEligibleFilter, setOnlyEligibleFilter] = useState(true);
+  const soDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close SO dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (soDropdownRef.current && !soDropdownRef.current.contains(event.target as Node)) {
+        setSoDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Filtered & mapped Travel-Eligible Sales Officers list
+  const eligibleOfficers = useMemo(() => {
+    return users.map((u: any) => {
+      const emp = employees.find((e: any) => 
+        (e.user_id && e.user_id === u.id) ||
+        (e.contactinfo && u.email && e.contactinfo.toLowerCase().includes(u.email.toLowerCase())) ||
+        (e.name && u.name && e.name.trim().toLowerCase() === u.name.trim().toLowerCase())
+      );
+
+      const roleUpper = (u.role || '').toUpperCase();
+      const isSalesRole = roleUpper === 'SALES' || roleUpper === 'SO' || roleUpper === 'SALES_OFFICER' || roleUpper === 'SALES OFFICER';
+      const isKmEligible = emp ? (
+        emp.is_km_eligible === true ||
+        (Number(emp.bike_allowance_per_km || 0) > 0) ||
+        (Number(emp.car_allowance_per_km || 0) > 0) ||
+        (emp.department || '').toUpperCase().includes('SALES') ||
+        (emp.designation || '').toUpperCase().includes('SALES')
+      ) : false;
+
+      // An SO user with travel allowance eligibility:
+      const isEligible = isSalesRole || isKmEligible;
+
+      return {
+        id: u.id,
+        name: u.name || u.email,
+        email: u.email,
+        role: u.role || 'SALES',
+        department: emp?.department || (isSalesRole ? 'SALES' : 'STAFF'),
+        designation: emp?.designation || (isSalesRole ? 'SALES OFFICER' : (u.role || 'STAFF')),
+        is_km_eligible: emp?.is_km_eligible ?? isEligible,
+        bike_rate: emp?.bike_allowance_per_km || 3.0,
+        car_rate: emp?.car_allowance_per_km || 8.0,
+        labour_id: emp?.id,
+        isEligible,
+      };
+    });
+  }, [users, employees]);
+
+  const searchedOfficers = useMemo(() => {
+    let list = eligibleOfficers;
+    if (onlyEligibleFilter) {
+      list = list.filter(o => o.isEligible);
+    }
+    if (!soSearchQuery.trim()) return list;
+    const q = soSearchQuery.toLowerCase().trim();
+    return list.filter(o => 
+      o.name.toLowerCase().includes(q) ||
+      o.email.toLowerCase().includes(q) ||
+      (o.designation && o.designation.toLowerCase().includes(q))
+    );
+  }, [eligibleOfficers, onlyEligibleFilter, soSearchQuery]);
+
+  const selectedOfficer = useMemo(() => {
+    return eligibleOfficers.find(o => o.id === manualUserId);
+  }, [eligibleOfficers, manualUserId]);
+
   const [manualDate, setManualDate] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -188,6 +267,9 @@ export const TravelApprovalsTab: React.FC = () => {
 
   const openManualDialog = () => {
     setManualUserId('');
+    setSoSearchQuery('');
+    setSoDropdownOpen(false);
+    setOnlyEligibleFilter(true);
     setManualDate(() => {
       const now = new Date();
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -238,6 +320,7 @@ export const TravelApprovalsTab: React.FC = () => {
       setSavingManual(true);
       await travelService.createManualLog({
         user_id: manualUserId,
+        labour_id: selectedOfficer?.labour_id,
         date: manualDate,
         vehicle_type: manualVehicleType,
         start_km: Number(manualStartKm),
@@ -814,22 +897,174 @@ export const TravelApprovalsTab: React.FC = () => {
           </DialogHeader>
 
           <div className="space-y-4 py-2 text-xs">
-            {/* Sales Officer selection */}
-            <div className="space-y-1.5">
-              <Label htmlFor="manualUserId" className="font-bold">Select Sales Officer *</Label>
-              <select
-                id="manualUserId"
-                value={manualUserId}
-                onChange={(e) => setManualUserId(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-xs bg-background"
-              >
-                <option value="">-- Choose Sales Officer / Staff --</option>
-                {users.map((u: any) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name || u.email} ({u.role || 'Staff'}) — {u.email}
-                  </option>
-                ))}
-              </select>
+            {/* Sales Officer selection with searchable search bar & Travel Allowance filter */}
+            <div className="space-y-1.5" ref={soDropdownRef}>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="manualUserId" className="font-bold flex items-center gap-1.5">
+                  <span>Select Sales Officer *</span>
+                  <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 text-[9px] font-bold py-0">
+                    Travel Allowance Eligible Only
+                  </Badge>
+                </Label>
+                <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={onlyEligibleFilter}
+                    onChange={(e) => setOnlyEligibleFilter(e.target.checked)}
+                    className="rounded border text-primary w-3 h-3 cursor-pointer"
+                  />
+                  <span>Only SOs</span>
+                </label>
+              </div>
+
+              {/* Selected card or Search input */}
+              <div className="relative">
+                {!soDropdownOpen && selectedOfficer ? (
+                  <div
+                    onClick={() => {
+                      setSoDropdownOpen(true);
+                      setSoSearchQuery('');
+                    }}
+                    className="w-full border-2 border-primary/30 rounded-lg p-2.5 text-xs bg-primary/5 hover:bg-primary/10 cursor-pointer transition-all flex items-center justify-between shadow-xs group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-primary text-white font-black flex items-center justify-center text-xs shadow-xs">
+                        {selectedOfficer.name?.charAt(0)?.toUpperCase() || 'S'}
+                      </div>
+                      <div>
+                        <div className="font-bold text-foreground flex items-center gap-1.5">
+                          <span className="text-sm">{selectedOfficer.name}</span>
+                          <Badge variant="outline" className="text-[9px] font-bold text-emerald-700 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 py-0">
+                            {selectedOfficer.designation || 'Sales Officer'}
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+                          <span>{selectedOfficer.email}</span>
+                          <span>&bull;</span>
+                          <span className="text-primary font-medium">Bike: ₹{selectedOfficer.bike_rate}/km &middot; Car: ₹{selectedOfficer.car_rate}/km</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors">
+                      <span className="text-[11px] font-medium underline">Change</span>
+                      <ChevronDown className="w-4 h-4" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      placeholder="Type to search Sales Officer by name or email..."
+                      value={soSearchQuery}
+                      onChange={(e) => {
+                        setSoSearchQuery(e.target.value);
+                        if (!soDropdownOpen) setSoDropdownOpen(true);
+                      }}
+                      onFocus={() => setSoDropdownOpen(true)}
+                      className="pl-9 pr-8 text-xs h-9 bg-background font-medium border-primary/40 focus-visible:ring-primary"
+                      autoFocus={soDropdownOpen}
+                    />
+                    {soSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSoSearchQuery('')}
+                        className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Dropdown Options List */}
+                {soDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-popover border-2 border-primary/30 rounded-xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95">
+                    <div className="p-2 border-b bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        Travel-Eligible Sales Officers ({searchedOfficers.length})
+                      </span>
+                      <span className="text-[10px] lowercase font-normal text-muted-foreground">click to select</span>
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto divide-y">
+                      {searchedOfficers.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-muted-foreground">
+                          <div>No travel-eligible Sales Officer found matching "{soSearchQuery}".</div>
+                          {onlyEligibleFilter && (
+                            <button
+                              type="button"
+                              className="mt-1.5 text-[11px] text-primary font-bold hover:underline"
+                              onClick={() => setOnlyEligibleFilter(false)}
+                            >
+                              Show all company users instead
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        searchedOfficers.map((officer) => {
+                          const isSelected = manualUserId === officer.id;
+                          return (
+                            <button
+                              key={officer.id}
+                              type="button"
+                              onClick={() => {
+                                setManualUserId(officer.id);
+                                setSoDropdownOpen(false);
+                                setSoSearchQuery('');
+                              }}
+                              className={cn(
+                                "w-full text-left p-2.5 text-xs transition-colors flex items-center justify-between hover:bg-muted/60",
+                                isSelected && "bg-primary/10 text-primary font-bold"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className={cn(
+                                  "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
+                                  isSelected ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                                )}>
+                                  {officer.name?.charAt(0)?.toUpperCase() || 'S'}
+                                </div>
+                                <div>
+                                  <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                    <span>{officer.name}</span>
+                                    <Badge variant="outline" className="text-[9px] py-0 border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 font-bold">
+                                      {officer.designation || 'Sales Officer'}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">{officer.email}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-right text-[10px] text-muted-foreground">
+                                  <div>Bike: ₹{officer.bike_rate}/km</div>
+                                  <div>Car: ₹{officer.car_rate}/km</div>
+                                </div>
+                                {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div className="p-1.5 border-t bg-muted/20 flex items-center justify-between px-3">
+                      <span className="text-[10px] text-muted-foreground">
+                        {onlyEligibleFilter ? 'Filtered: SO & KM Eligible Only' : 'Showing all staff'}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] text-muted-foreground hover:text-foreground"
+                        onClick={() => setSoDropdownOpen(false)}
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Date and Vehicle Type */}
