@@ -330,8 +330,33 @@ class OrderViewSet(viewsets.ModelViewSet):
             import uuid
             from django.utils import timezone
             from api.models import Dispatchlog, Dispatchlogitem
+
+            # Respect user-provided actionDate / dispatchDate
+            action_date_raw = data.get('actionDate') or data.get('action_date') or data.get('dispatchDate') or data.get('dispatch_date')
+            action_time_raw = data.get('actionTime') or data.get('action_time') or data.get('dispatchTime') or data.get('dispatch_time') or '00:00'
+
+            dispatch_dt = timezone.now()
+            final_dispatch_date_str = timezone.now().strftime('%Y-%m-%d')
+
+            if action_date_raw:
+                parsed_dt = _smart_parse_date(f"{str(action_date_raw).split('T')[0]} {action_time_raw}") or _smart_parse_date(action_date_raw)
+                if parsed_dt:
+                    dispatch_dt = parsed_dt
+                    final_dispatch_date_str = parsed_dt.strftime('%Y-%m-%d')
+                else:
+                    final_dispatch_date_str = str(action_date_raw).split('T')[0]
+
             log_id = 'c' + uuid.uuid4().hex[:23]
-            dispatch_log = Dispatchlog.objects.create(id=log_id, orderid=instance, dispatchdate=timezone.now(), invoicenumber=invoice, vehiclenumber=vehicle, drivername=driver, drivermobile=mobile, remarks=remarks)
+            dispatch_log = Dispatchlog.objects.create(
+                id=log_id,
+                orderid=instance,
+                dispatchdate=dispatch_dt,
+                invoicenumber=invoice,
+                vehiclenumber=vehicle,
+                drivername=driver,
+                drivermobile=mobile,
+                remarks=remarks
+            )
             for item_data in items:
                 p_id = item_data.get('productId') or item_data.get('product_id')
                 qty_to_send = int(item_data.get('qty', 0))
@@ -366,7 +391,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                         quantity=-qty_to_send,
                         referenceid=instance.orderid or instance.id,
                         reason=f"Dispatched Order {instance.orderid or instance.id} (Invoice: {invoice or '-'})",
-                        createdat=timezone.now()
+                        createdat=dispatch_dt
                     )
                 except Exception as st_err:
                     print('[DISPATCH STOCK TX ERROR]', st_err)
@@ -392,7 +417,12 @@ class OrderViewSet(viewsets.ModelViewSet):
                 instance.dispatchwarehouse = wh_val.name
             elif data.get('warehouseDetails'):
                 instance.dispatchwarehouse = data.get('warehouseDetails')
-            instance.dispatchdate = timezone.now().strftime('%Y-%m-%d')
+            instance.dispatchdate = final_dispatch_date_str
+            try:
+                from api.views import _append_order_tags
+                instance.narration = _append_order_tags(instance.narration or '', {'DISPATCH DATE': final_dispatch_date_str})
+            except Exception:
+                pass
             instance.save()
             from api.serializers import OrderSerializer
             return send_success(OrderSerializer(instance).data, f'Order status updated to {instance.status}')
@@ -720,9 +750,11 @@ def transaction_sales(request):
                     sale['customerName'] = sale['partyName']
                     sale['invoiceNumber'] = log.invoicenumber
                     sale['challanNumber'] = log.invoicenumber
-                    sale['date'] = d.get('date') or (log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else (log.createdat.strftime('%Y-%m-%d') if log.createdat else ''))
-                    sale['orderDate'] = d.get('date') or sale['date']
-                    sale['dispatchDate'] = log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else (d.get('dispatchDate') or '')
+                    disp_date_str = log.dispatchdate.strftime('%Y-%m-%d') if log.dispatchdate else (d.get('dispatchDate') or '')
+                    order_date_str = d.get('date') or ''
+                    sale['dispatchDate'] = disp_date_str
+                    sale['orderDate'] = order_date_str
+                    sale['date'] = disp_date_str or order_date_str or (log.createdat.strftime('%Y-%m-%d') if log.createdat else '')
                     if log.createdat:
                         sale['createdAt'] = log.createdat.isoformat()
                     sale['isDispatchLog'] = True
@@ -758,10 +790,15 @@ def transaction_sales(request):
                         dispatch_items.append({'productId': li.productid_id, 'productName': prod_name, 'qty': li.qty, 'price': price, 'total': (li.qty - actual_ret) * price, 'sentQty': li.qty, 'returnedQty': actual_ret})
                         total_amount += (li.qty - actual_ret) * price
                         total_cost += (li.qty - actual_ret) * cost_price
-                    sale['items'] = dispatch_items
-                    sale['grandTotal'] = total_amount
-                    sale['netAmount'] = total_amount
-                    sale['totalProfit'] = max(0.0, total_amount - total_cost)
+                    if not dispatch_items and d.get('items'):
+                        sale['items'] = d.get('items')
+                        sale['grandTotal'] = d.get('grandTotal') or 0.0
+                        sale['netAmount'] = d.get('grandTotal') or 0.0
+                    else:
+                        sale['items'] = dispatch_items
+                        sale['grandTotal'] = total_amount
+                        sale['netAmount'] = total_amount
+                        sale['totalProfit'] = max(0.0, total_amount - total_cost)
                     if total_returned >= total_dispatched and total_dispatched > 0:
                         sale['status'] = 'Returned'
                     elif total_returned > 0:
@@ -783,7 +820,11 @@ def transaction_sales(request):
                 d['vehicleNumber'] = d.get('vehicleNumber') or _extract_order_tag(narration, 'VEHICLE') or ''
                 d['driverName'] = d.get('driverName') or _extract_order_tag(narration, 'DRIVER') or ''
                 d['warehouseName'] = d.get('warehouseName') or d.get('dispatchWarehouse') or _extract_order_tag(narration, 'WAREHOUSE') or ''
-                d['dispatchDate'] = d.get('dispatchDate') or _extract_order_tag(narration, 'DISPATCH DATE') or ''
+                disp_date_str = d.get('dispatchDate') or _extract_order_tag(narration, 'DISPATCH DATE') or ''
+                order_date_str = d.get('date') or ''
+                d['dispatchDate'] = disp_date_str
+                d['orderDate'] = order_date_str
+                d['date'] = disp_date_str or order_date_str
                 d['netAmount'] = d.get('grandTotal') or 0.0
                 total_profit = 0.0
                 order_items = d.get('items') or []
@@ -824,6 +865,33 @@ def transaction_sales(request):
                 pass
         return send_success(serializer.data, 'Sale recorded successfully', 201)
 
+def _smart_parse_date(d_str):
+    if not d_str:
+        return None
+    d_str = str(d_str).strip()
+    from django.utils.dateparse import parse_datetime, parse_date
+    from datetime import datetime, time
+    from django.utils import timezone
+    dt = parse_datetime(d_str)
+    if dt:
+        return timezone.make_aware(dt) if timezone.is_naive(dt) else dt
+    d = parse_date(d_str)
+    if d:
+        return timezone.make_aware(datetime.combine(d, time.min))
+    import re
+    m = re.match(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?', d_str)
+    if m:
+        day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        hr = int(m.group(4)) if m.group(4) else 0
+        mn = int(m.group(5)) if m.group(5) else 0
+        sc = int(m.group(6)) if m.group(6) else 0
+        try:
+            d_val = datetime(year, month, day, hr, mn, sc)
+            return timezone.make_aware(d_val) if timezone.is_naive(d_val) else d_val
+        except ValueError:
+            pass
+    return None
+
 @api_view(['PUT', 'DELETE'])
 def transaction_sales_detail(request, pk):
     from api.models import Order
@@ -834,14 +902,41 @@ def transaction_sales_detail(request, pk):
     if request.method == 'PUT':
         data = request.data.copy()
         import uuid
-        items_list = data.get('items', [])
-        for item in items_list:
-            if 'id' not in item or not item['id']:
-                item['id'] = 'c' + uuid.uuid4().hex[:23]
+        if 'items' in data:
+            valid_items = [i for i in data.get('items', []) if i.get('productId') and str(i.get('productId')).strip()]
+            if not valid_items and order.orderitem_set.exists():
+                data.pop('items', None)
+            else:
+                for item in valid_items:
+                    if 'id' not in item or not item['id']:
+                        item['id'] = 'c' + uuid.uuid4().hex[:23]
+                data['items'] = valid_items
+        if data.get('dispatchDate'):
+            from api.views import _append_order_tags
+            dt_disp = _smart_parse_date(data.get('dispatchDate'))
+            disp_val = dt_disp.strftime('%Y-%m-%d') if dt_disp else str(data.get('dispatchDate')).strip()
+            data['dispatchDate'] = disp_val
+            raw_narr = data.get('narration') or order.narration or ''
+            data['narration'] = _append_order_tags(raw_narr, {'DISPATCH DATE': disp_val})
+        if data.get('date'):
+            dt_ord = _smart_parse_date(data.get('date'))
+            if dt_ord:
+                data['date'] = dt_ord.isoformat()
         serializer = OrderSerializer(order, data=data, partial=True)
         if not serializer.is_valid():
             return send_error(f'Validation failed: {serializer.errors}', 400)
         updated_order = serializer.save()
+        if data.get('dispatchDate'):
+            disp_val = str(data.get('dispatchDate')).strip()
+            updated_order.dispatchdate = disp_val
+            updated_order.save(update_fields=['dispatchdate', 'narration'])
+            from api.models import Dispatchlog
+            dl = Dispatchlog.objects.filter(orderid=updated_order).first()
+            if dl:
+                dt_obj = _smart_parse_date(disp_val)
+                if dt_obj:
+                    dl.dispatchdate = dt_obj
+                    dl.save(update_fields=['dispatchdate'])
         updated_order.refresh_from_db()
         return send_success(OrderSerializer(updated_order).data, 'Sale updated successfully')
     elif request.method == 'DELETE':
@@ -1057,18 +1152,29 @@ def transaction_dispatch_log_detail(request, pk):
         disp_raw = data.get('dispatchDate') or data.get('date')
         dt_obj = None
         if disp_raw:
-            disp_d = str(disp_raw).strip()
-            from django.utils.dateparse import parse_datetime, parse_date
-            from django.utils import timezone
-            from datetime import datetime, time
             try:
-                dt_obj = parse_datetime(disp_d)
-                if not dt_obj:
-                    d_obj = parse_date(disp_d)
-                    if d_obj:
-                        dt_obj = timezone.make_aware(datetime.combine(d_obj, time.min))
+                dt_obj = _smart_parse_date(disp_raw)
                 if dt_obj:
                     dispatch_log.dispatchdate = dt_obj
+                    if getattr(dispatch_log, 'orderid', None):
+                        try:
+                            from api.views import _append_order_tags
+                            ord_obj = dispatch_log.orderid
+                            iso_d = dt_obj.strftime('%Y-%m-%d')
+                            ord_obj.dispatchdate = iso_d
+                            ord_obj.narration = _append_order_tags(ord_obj.narration or '', {'DISPATCH DATE': iso_d})
+                            ord_obj.save(update_fields=['dispatchdate', 'narration'])
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        if data.get('orderDate') and getattr(dispatch_log, 'orderid', None):
+            try:
+                od_parsed = _smart_parse_date(data.get('orderDate'))
+                if od_parsed:
+                    ord_obj = dispatch_log.orderid
+                    ord_obj.date = od_parsed
+                    ord_obj.save(update_fields=['date'])
             except Exception:
                 pass
         old_items = list(dispatch_log.items.all())
@@ -1129,17 +1235,12 @@ def transaction_dispatch_log_detail(request, pk):
                 dispatch_log.warehouseid = wh_obj
         order_date_raw = data.get('orderDate') or data.get('saleDate')
         if order_date_raw:
-            from django.utils.dateparse import parse_datetime, parse_date
-            od_dt = parse_datetime(str(order_date_raw).strip())
-            if not od_dt:
-                od_d = parse_date(str(order_date_raw).strip())
-                if od_d:
-                    from django.utils import timezone
-                    from datetime import datetime, time
-                    od_dt = timezone.make_aware(datetime.combine(od_d, time.min))
+            od_dt = _smart_parse_date(order_date_raw)
             if od_dt:
                 order.date = od_dt
-        if disp_raw:
+        if dt_obj:
+            order.dispatchdate = dt_obj.strftime('%Y-%m-%d')
+        elif disp_raw:
             order.dispatchdate = str(disp_raw).strip()
         order.save()
         return send_success(None, 'Dispatch transaction updated')
