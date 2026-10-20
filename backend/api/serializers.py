@@ -40,6 +40,33 @@ class UserSerializer(serializers.ModelSerializer):
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
     updatedAt = serializers.DateTimeField(source='updatedat', read_only=True)
     monthlyTarget = serializers.FloatField(source='monthlytarget', required=False, allow_null=True)
+    employeePhoto = serializers.SerializerMethodField(read_only=True)
+
+    def get_employeePhoto(self, obj):
+        try:
+            from api.models import Labour
+            emp = None
+            if hasattr(obj, 'employee_profile') and obj.employee_profile:
+                emp = obj.employee_profile
+            if not emp:
+                emp = Labour.objects.filter(user_id=obj.id).first()
+            if not emp and obj.email:
+                emp = Labour.objects.filter(contactinfo__icontains=obj.email).first()
+            if not emp and obj.name:
+                emp = Labour.objects.filter(name__iexact=obj.name).first()
+            if emp and emp.employee_photo:
+                val = str(emp.employee_photo)
+                if val.startswith('http://') or val.startswith('https://'):
+                    return val
+                if hasattr(emp.employee_photo, 'url'):
+                    url = emp.employee_photo.url
+                    if url.startswith('http://') or url.startswith('https://'):
+                        return url
+                    req = self.context.get('request')
+                    return req.build_absolute_uri(url) if req else url
+        except Exception:
+            pass
+        return None
 
     def get_companyName(self, obj):
         try:
@@ -76,7 +103,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'email', 'name', 'role', 'active', 'monthlyTarget', 
             'companyId', 'companyName', 'validUntil', 'isSubscriptionActive',
-            'skuPrefix', 'stockMethod',
+            'skuPrefix', 'stockMethod', 'employeePhoto',
             'createdAt', 'updatedAt', 'territory'
         ]
 
@@ -257,14 +284,43 @@ class ProductSerializer(serializers.ModelSerializer):
     categoryRef = serializers.SerializerMethodField(read_only=True)
     availableStock = serializers.SerializerMethodField(read_only=True)
     stockQty = serializers.SerializerMethodField(read_only=True)
+    avgCost = serializers.SerializerMethodField(read_only=True)
+    fifoCost = serializers.SerializerMethodField(read_only=True)
+    weightedAvgCost = serializers.SerializerMethodField(read_only=True)
+    inventoryValue = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Product
         fields = [
             'id', 'productCode', 'name', 'productName', 'bagSize', 'brandId', 'unitId', 'rate', 'gst', 
             'active', 'companyId', 'createdAt', 'updatedAt', 'categoryId', 'openingStock', 
-            'minimumStock', 'defaultWarehouseId', 'brand', 'unit', 'categoryRef', 'availableStock', 'stockQty'
+            'minimumStock', 'defaultWarehouseId', 'brand', 'unit', 'categoryRef', 'availableStock', 'stockQty',
+            'avgCost', 'fifoCost', 'weightedAvgCost', 'inventoryValue'
         ]
+
+    def get_avgCost(self, obj):
+        cost_map = self.context.get('cost_map', {})
+        if obj.id in cost_map:
+            return cost_map[obj.id].get('effectiveCost', float(obj.rate or 0.0))
+        return float(obj.rate or 0.0)
+
+    def get_fifoCost(self, obj):
+        cost_map = self.context.get('cost_map', {})
+        if obj.id in cost_map:
+            return cost_map[obj.id].get('fifoCost', float(obj.rate or 0.0))
+        return float(obj.rate or 0.0)
+
+    def get_weightedAvgCost(self, obj):
+        cost_map = self.context.get('cost_map', {})
+        if obj.id in cost_map:
+            return cost_map[obj.id].get('weightedAvgCost', float(obj.rate or 0.0))
+        return float(obj.rate or 0.0)
+
+    def get_inventoryValue(self, obj):
+        cost_map = self.context.get('cost_map', {})
+        if obj.id in cost_map:
+            return cost_map[obj.id].get('stockValue', 0.0)
+        return 0.0
 
     def get_brand(self, obj):
         try:
@@ -857,12 +913,16 @@ class ExpenseSerializer(serializers.ModelSerializer):
     rejectReason = serializers.CharField(source='rejectreason', required=False, allow_null=True, allow_blank=True)
     companyId = serializers.CharField(source='companyid_id')
     createdAt = serializers.DateTimeField(source='createdat', read_only=True)
+    verifiedBy = serializers.CharField(source='verified_by.name', read_only=True, default=None)
+    verifiedAt = serializers.DateTimeField(source='verified_at', read_only=True, default=None)
+    kmTravelled = serializers.FloatField(source='km_travelled', required=False, default=0.0)
 
     class Meta:
         model = Expense
         fields = [
             'id', 'date', 'soEmail', 'category', 'amount', 'remarks', 'status',
-            'photo', 'rejectReason', 'declaration', 'companyId', 'createdAt'
+            'photo', 'rejectReason', 'declaration', 'companyId', 'createdAt',
+            'verifiedBy', 'verifiedAt', 'kmTravelled'
         ]
 
 
@@ -874,15 +934,30 @@ class BomitemSerializer(serializers.ModelSerializer):
     qty = serializers.FloatField(required=False)
     quantity = serializers.FloatField(source='qty', required=False)
     productId = serializers.SerializerMethodField(read_only=True)
+    unitCost = serializers.SerializerMethodField(read_only=True)
+    lineCost = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Bomitem
-        fields = ['id', 'bomId', 'materialName', 'productName', 'qty', 'quantity', 'unit', 'productId']
+        fields = ['id', 'bomId', 'materialName', 'productName', 'qty', 'quantity', 'unit', 'productId', 'unitCost', 'lineCost']
 
     def get_productId(self, obj):
         product_map = self.context.get('product_map', {})
         prod = product_map.get(obj.materialname)
         return prod.id if prod else ""
+
+    def get_unitCost(self, obj):
+        val_map = self.context.get('val_by_name', {})
+        mat_name = (obj.materialname or '').strip().lower()
+        if mat_name in val_map:
+            return val_map[mat_name].get('effectiveCost', 0.0)
+        from api.models import Product
+        prod = Product.objects.filter(name__iexact=obj.materialname).first()
+        return float(prod.rate or 0.0) if prod else 0.0
+
+    def get_lineCost(self, obj):
+        unit_cost = self.get_unitCost(obj)
+        return round(float(obj.qty or 0.0) * unit_cost, 2)
 
     def validate(self, data):
         # If materialname is not set, try to get it from materialname, productName, or product_name
@@ -921,10 +996,19 @@ class BomListSerializer(serializers.ModelSerializer):
     status = serializers.CharField(required=False)
     assignedWarehouse = serializers.CharField(source='warehouseid_id', required=False, allow_null=True)
     assignedWarehouseName = serializers.SerializerMethodField(read_only=True)
+    unitCost = serializers.SerializerMethodField(read_only=True)
+    batchCost = serializers.SerializerMethodField(read_only=True)
+    sellingRate = serializers.SerializerMethodField(read_only=True)
+    grossMargin = serializers.SerializerMethodField(read_only=True)
+    marginPct = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Bom
-        fields = ['id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'items', 'outputQuantity', 'productId', 'productName', 'itemCount', 'status', 'assignedWarehouse', 'assignedWarehouseName']
+        fields = [
+            'id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'items', 'outputQuantity',
+            'productId', 'productName', 'itemCount', 'status', 'assignedWarehouse', 'assignedWarehouseName',
+            'unitCost', 'batchCost', 'sellingRate', 'grossMargin', 'marginPct'
+        ]
 
     def get_assignedWarehouseName(self, obj):
         return obj.warehouseid.name if obj.warehouseid else None
@@ -942,6 +1026,33 @@ class BomListSerializer(serializers.ModelSerializer):
         prod = product_map.get(obj.productcode)
         return prod.name if prod else ""
 
+    def get_bomCost(self, obj):
+        bom_cost_map = self.context.get('bom_cost_map', {})
+        if obj.id in bom_cost_map:
+            return bom_cost_map[obj.id]
+        try:
+            from api.services.costing_service import compute_bom_cost_breakdown
+            val_by_id = self.context.get('val_by_id')
+            val_by_name = self.context.get('val_by_name')
+            return compute_bom_cost_breakdown(obj, valuation_by_id=val_by_id, valuation_by_name=val_by_name)
+        except Exception:
+            return {}
+
+    def get_unitCost(self, obj):
+        return self.get_bomCost(obj).get('unitCost', 0.0)
+
+    def get_batchCost(self, obj):
+        return self.get_bomCost(obj).get('totalBatchCost', 0.0)
+
+    def get_sellingRate(self, obj):
+        return self.get_bomCost(obj).get('sellingRate', 0.0)
+
+    def get_grossMargin(self, obj):
+        return self.get_bomCost(obj).get('grossMargin', 0.0)
+
+    def get_marginPct(self, obj):
+        return self.get_bomCost(obj).get('marginPct', 0.0)
+
 
 class BomSerializer(serializers.ModelSerializer):
     id = serializers.CharField(required=False)
@@ -956,10 +1067,19 @@ class BomSerializer(serializers.ModelSerializer):
     status = serializers.CharField(required=False)
     assignedWarehouse = serializers.CharField(source='warehouseid_id', required=False, allow_null=True)
     assignedWarehouseName = serializers.SerializerMethodField(read_only=True)
+    unitCost = serializers.SerializerMethodField(read_only=True)
+    batchCost = serializers.SerializerMethodField(read_only=True)
+    sellingRate = serializers.SerializerMethodField(read_only=True)
+    grossMargin = serializers.SerializerMethodField(read_only=True)
+    marginPct = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Bom
-        fields = ['id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'items', 'outputQuantity', 'productId', 'productName', 'status', 'assignedWarehouse', 'assignedWarehouseName']
+        fields = [
+            'id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'items', 'outputQuantity',
+            'productId', 'productName', 'status', 'assignedWarehouse', 'assignedWarehouseName',
+            'unitCost', 'batchCost', 'sellingRate', 'grossMargin', 'marginPct'
+        ]
 
     def get_assignedWarehouseName(self, obj):
         return obj.warehouseid.name if obj.warehouseid else None
@@ -973,6 +1093,33 @@ class BomSerializer(serializers.ModelSerializer):
         product_map = self.context.get('product_map', {})
         prod = product_map.get(obj.productcode)
         return prod.name if prod else ""
+
+    def get_bomCost(self, obj):
+        bom_cost_map = self.context.get('bom_cost_map', {})
+        if obj.id in bom_cost_map:
+            return bom_cost_map[obj.id]
+        try:
+            from api.services.costing_service import compute_bom_cost_breakdown
+            val_by_id = self.context.get('val_by_id')
+            val_by_name = self.context.get('val_by_name')
+            return compute_bom_cost_breakdown(obj, valuation_by_id=val_by_id, valuation_by_name=val_by_name)
+        except Exception:
+            return {}
+
+    def get_unitCost(self, obj):
+        return self.get_bomCost(obj).get('unitCost', 0.0)
+
+    def get_batchCost(self, obj):
+        return self.get_bomCost(obj).get('totalBatchCost', 0.0)
+
+    def get_sellingRate(self, obj):
+        return self.get_bomCost(obj).get('sellingRate', 0.0)
+
+    def get_grossMargin(self, obj):
+        return self.get_bomCost(obj).get('grossMargin', 0.0)
+
+    def get_marginPct(self, obj):
+        return self.get_bomCost(obj).get('marginPct', 0.0)
 
     def validate(self, data):
         product_id = self.initial_data.get('productId') or self.initial_data.get('product_id')

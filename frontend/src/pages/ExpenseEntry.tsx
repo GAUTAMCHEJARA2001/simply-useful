@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Plus, Receipt, IndianRupee, Car, Bike, Navigation, Layers, RefreshCw, FileText } from 'lucide-react';
+import { Plus, Receipt, IndianRupee, Car, Bike, Navigation, Layers, RefreshCw, FileText, CheckCircle2, XCircle, Check, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
@@ -25,11 +25,18 @@ const getTravelRate = (vehicle?: string) => {
 
 const ExpenseEntry: React.FC = () => {
   const { user } = useAuth();
-  const { expenses, addExpense, updateExpense } = useData();
+  const { expenses, addExpense, updateExpense, updateExpenseStatus } = useData();
   const { toast } = useToast();
   const { filterBySelectedFY, fyLabel } = useFinancialYear();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [rejectModal, setRejectModal] = useState<{ open: boolean; item: DisplayedExpenseItem | null; reason: string }>({
+    open: false,
+    item: null,
+    reason: ''
+  });
   const [form, setForm] = useState<Expense>({
     date: new Date().toISOString().split('T')[0],
     soEmail: user?.email || '',
@@ -156,29 +163,109 @@ interface DisplayedExpenseItem {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.category || !form.amount) {
       toast({ title: 'Fill required fields', variant: 'destructive' });
       return;
     }
     
-    if (form.id) {
-      updateExpense(form.id, form);
-      toast({ title: 'Expense Updated', description: 'Resubmitted for Approval' });
-    } else {
-      addExpense({ ...form, soEmail: user?.email || '' });
-      toast({ title: 'Expense Submitted', description: `₹${form.amount} for ${form.category}` });
+    try {
+      setSubmitting(true);
+      if (form.id) {
+        await updateExpense(form.id, form);
+        toast({ title: 'Expense Updated', description: 'Resubmitted for HR verification & approval' });
+      } else {
+        await addExpense({ ...form, soEmail: user?.email || '' });
+        toast({ title: 'Expense Submitted', description: `₹${form.amount} for ${form.category}. Pending HR verification.` });
+      }
+      
+      setDialogOpen(false);
+      setForm({
+        date: new Date().toISOString().split('T')[0],
+        soEmail: user?.email || '',
+        category: '',
+        amount: 0,
+        remarks: '',
+        status: 'PENDING'
+      });
+    } catch (err: any) {
+      console.error('Failed to submit expense', err);
+      toast({
+        title: 'Failed to Submit Expense',
+        description: err?.response?.data?.message || err?.message || 'Server error while saving expense claim.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSubmitting(false);
     }
-    
-    setDialogOpen(false);
-    setForm({
-      date: new Date().toISOString().split('T')[0],
-      soEmail: user?.email || '',
-      category: '',
-      amount: 0,
-      remarks: '',
-      status: 'PENDING'
-    });
+  };
+
+  const handleApprove = async (item: DisplayedExpenseItem) => {
+    if (!item.id) return;
+    try {
+      setActionLoading(item.id);
+      if (item.isTravelClaim) {
+        await travelService.verifyLog(item.id, {
+          action: 'APPROVE',
+          approved_km: item.km
+        });
+        toast({
+          title: 'Travel Claim Verified',
+          description: `Approved ${item.km} KM (₹${item.amount}) and synced to employee salary.`
+        });
+        await fetchTravelClaims();
+      } else {
+        await updateExpenseStatus(item.id, 'APPROVED');
+        toast({
+          title: 'Expense Claim Verified',
+          description: `Approved ₹${item.amount} (${item.category}) and synced to employee salary.`
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Verification Failed',
+        description: err?.response?.data?.message || err?.message || 'Could not approve claim.',
+        variant: 'destructive'
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRejectConfirm = async () => {
+    if (!rejectModal.item?.id || !rejectModal.reason.trim()) {
+      toast({ title: 'Rejection reason required', variant: 'destructive' });
+      return;
+    }
+    try {
+      setActionLoading(rejectModal.item.id);
+      if (rejectModal.item.isTravelClaim) {
+        await travelService.verifyLog(rejectModal.item.id, {
+          action: 'REJECT',
+          hr_notes: rejectModal.reason.trim()
+        });
+        toast({
+          title: 'Travel Claim Rejected',
+          description: 'Status updated and reason recorded for the Sales Officer.'
+        });
+        await fetchTravelClaims();
+      } else {
+        await updateExpenseStatus(rejectModal.item.id, 'REJECTED', rejectModal.reason.trim());
+        toast({
+          title: 'Expense Claim Rejected',
+          description: 'Status updated and reason recorded for the Sales Officer.'
+        });
+      }
+      setRejectModal({ open: false, item: null, reason: '' });
+    } catch (err: any) {
+      toast({
+        title: 'Rejection Failed',
+        description: err?.response?.data?.message || err?.message || 'Could not reject claim.',
+        variant: 'destructive'
+      });
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   return (
@@ -309,12 +396,27 @@ interface DisplayedExpenseItem {
                       <p className="font-semibold text-sm text-foreground">{e.category}</p>
 
                       <span className={cn(
-                        "text-[10px] px-2 py-0.5 rounded-full font-bold border uppercase tracking-wider",
-                        e.status === 'APPROVED' ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" :
-                        e.status === 'REJECTED' ? "bg-destructive/10 text-destructive border-destructive/20" :
-                        "bg-amber-500/10 text-amber-700 border-amber-500/20"
+                        "text-[10px] px-2.5 py-0.5 rounded-full font-bold border uppercase tracking-wider flex items-center gap-1",
+                        e.status === 'APPROVED' ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" :
+                        e.status === 'REJECTED' ? "bg-destructive/10 text-destructive border-destructive/30" :
+                        "bg-amber-500/10 text-amber-700 border-amber-500/30"
                       )}>
-                        {e.status || 'PENDING'}
+                        {e.status === 'APPROVED' ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            Verified · In Salary
+                          </>
+                        ) : e.status === 'REJECTED' ? (
+                          <>
+                            <XCircle className="w-3 h-3 text-destructive" />
+                            Rejected
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            Pending Verification
+                          </>
+                        )}
                       </span>
                     </div>
 
@@ -370,10 +472,33 @@ interface DisplayedExpenseItem {
                     {e.photo && (
                       <div 
                         className="mt-2 group relative w-16 h-16 border rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity" 
-                        onClick={() => setPreviewPhoto(e.photo)}
+                        onClick={() => setPreviewPhoto(e.photo || null)}
                         title="Click to zoom in / inspect photo"
                       >
                         <img src={e.photo} alt="Receipt / Odometer" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    {/* HR Verification Actions */}
+                    {isHr && (e.status === 'PENDING' || !e.status) && (
+                      <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-border/50">
+                        <Button 
+                          size="sm" 
+                          className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium flex items-center gap-1.5 px-3"
+                          onClick={() => handleApprove(e)}
+                          disabled={actionLoading === e.id}
+                        >
+                          <Check className="w-3.5 h-3.5" /> Verify &amp; Add to Salary
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 flex items-center gap-1.5 px-3"
+                          onClick={() => setRejectModal({ open: true, item: e, reason: '' })}
+                          disabled={actionLoading === e.id}
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Reject
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -480,8 +605,68 @@ interface DisplayedExpenseItem {
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>Submit Expense</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={submitting}>Cancel</Button>
+            <Button onClick={handleSave} disabled={submitting}>
+              {submitting ? 'Submitting...' : form.id ? 'Resubmit for Verification' : 'Submit Claim'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejection Modal for HR / Admin */}
+      <Dialog open={rejectModal.open} onOpenChange={open => !open && setRejectModal(p => ({ ...p, open: false }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="w-5 h-5" />
+              Reject Claim
+            </DialogTitle>
+            <DialogDescription>
+              Please provide a clear reason for rejection. The Sales Officer will see this note and can resubmit with justifications.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="p-3 bg-muted/40 rounded-lg text-xs space-y-1.5 border border-border/60">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Claim Category:</span>
+                <span className="font-semibold text-foreground">{rejectModal.item?.category}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Amount:</span>
+                <span className="font-bold text-foreground">₹{Number(rejectModal.item?.amount || 0).toLocaleString('en-IN')}</span>
+              </div>
+              {rejectModal.item?.soEmail && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Sales Officer:</span>
+                  <span className="font-mono text-foreground">{rejectModal.item.soEmail}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Rejection Reason *</Label>
+              <Textarea
+                placeholder="e.g. Missing GST bill receipt / invoice, invalid amount, excessive travel claim..."
+                value={rejectModal.reason}
+                onChange={e => setRejectModal(p => ({ ...p, reason: e.target.value }))}
+                rows={3}
+                className="text-xs"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setRejectModal(p => ({ ...p, open: false }))} disabled={actionLoading !== null}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleRejectConfirm} 
+              disabled={!rejectModal.reason.trim() || actionLoading !== null}
+            >
+              {actionLoading ? 'Rejecting...' : 'Confirm Rejection'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

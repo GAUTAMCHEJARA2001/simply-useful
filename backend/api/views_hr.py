@@ -1,5 +1,7 @@
 import datetime
 import calendar
+import uuid
+import cloudinary.uploader
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -15,6 +17,43 @@ from api.models import (
 from core.models import User
 from django.db.models import Sum, Case, When, FloatField
 from api.views import send_success, send_error, _get_company_id, load_settings
+
+def _upload_employee_photo_to_cloudinary(file_obj, emp_id, field_name):
+    """
+    Validates that the file is strictly an image/photo (rejects PDF and documents)
+    and uploads directly to Cloudinary under 'employee_docs' folder.
+    Returns the secure HTTPS Cloudinary URL.
+    """
+    if not file_obj:
+        return None
+
+    file_name = getattr(file_obj, 'name', '').lower()
+    content_type = getattr(file_obj, 'content_type', '').lower()
+
+    # Reject PDFs and non-images
+    if file_name.endswith('.pdf') or 'pdf' in content_type:
+        clean_field_name = field_name.replace('_', ' ').title()
+        raise ValueError(f"Only photo uploads (JPG, PNG, WebP) are allowed for {clean_field_name}. PDF files are not allowed.")
+
+    allowed_extensions = ('.jpg', '.jpeg', '.png', '.webp', '.heic', '.bmp')
+    is_valid_ext = any(file_name.endswith(ext) for ext in allowed_extensions)
+    is_valid_mime = content_type.startswith('image/')
+
+    if not is_valid_ext and not is_valid_mime:
+        clean_field_name = field_name.replace('_', ' ').title()
+        raise ValueError(f"Only photo uploads (JPG, PNG, WebP) are allowed for {clean_field_name}. Documents and PDFs are not allowed.")
+
+    try:
+        upload_result = cloudinary.uploader.upload(
+            file_obj,
+            folder='employee_docs',
+            resource_type='image',
+            public_id=f"emp_{emp_id}_{field_name}_{uuid.uuid4().hex[:6]}",
+            overwrite=True
+        )
+        return upload_result.get('secure_url') or upload_result.get('url')
+    except Exception as e:
+        raise RuntimeError(f"Cloudinary upload failed for {field_name}: {str(e)}")
 
 # --- MASTERS ---
 @api_view(['GET', 'POST'])
@@ -77,12 +116,17 @@ def hr_employees(request):
         def _get_full_url(file_field):
             if not file_field:
                 return None
+            val_str = str(file_field)
+            if val_str.startswith('http://') or val_str.startswith('https://'):
+                return val_str
             try:
-                url = file_field.url
+                url = file_field.url if hasattr(file_field, 'url') else val_str
                 if url.startswith('http://') or url.startswith('https://'):
                     return url
                 return request.build_absolute_uri(url)
             except Exception:
+                if val_str.startswith('http://') or val_str.startswith('https://'):
+                    return val_str
                 return None
 
         for l in qs:
@@ -204,11 +248,13 @@ def hr_employees(request):
                 bank_ifsc=data.get('bank_ifsc', '')
             )
             
-            # Handle file uploads
-            if 'employee_photo' in request.FILES: emp.employee_photo = request.FILES['employee_photo']
-            if 'aadhar_photo' in request.FILES: emp.aadhar_photo = request.FILES['aadhar_photo']
-            if 'pan_photo' in request.FILES: emp.pan_photo = request.FILES['pan_photo']
-            if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
+            # Handle photo uploads strictly to Cloudinary
+            doc_fields = ['employee_photo', 'aadhar_photo', 'pan_photo', 'bank_proof_photo']
+            for field in doc_fields:
+                if field in request.FILES:
+                    file_obj = request.FILES[field]
+                    cloudinary_url = _upload_employee_photo_to_cloudinary(file_obj, emp.id, field)
+                    setattr(emp, field, cloudinary_url)
             emp.save()
             
             return send_success({
@@ -307,21 +353,31 @@ def hr_employees_detail(request, pk):
             if 'bank_account_number' in data: emp.bank_account_number = data.get('bank_account_number')
             if 'bank_ifsc' in data: emp.bank_ifsc = data.get('bank_ifsc')
 
-            if 'employee_photo' in request.FILES: emp.employee_photo = request.FILES['employee_photo']
-            if 'aadhar_photo' in request.FILES: emp.aadhar_photo = request.FILES['aadhar_photo']
-            if 'pan_photo' in request.FILES: emp.pan_photo = request.FILES['pan_photo']
-            if 'bank_proof_photo' in request.FILES: emp.bank_proof_photo = request.FILES['bank_proof_photo']
+            # Handle photo uploads strictly to Cloudinary
+            doc_fields = ['employee_photo', 'aadhar_photo', 'pan_photo', 'bank_proof_photo']
+            for field in doc_fields:
+                if field in request.FILES:
+                    file_obj = request.FILES[field]
+                    cloudinary_url = _upload_employee_photo_to_cloudinary(file_obj, emp.id, field)
+                    setattr(emp, field, cloudinary_url)
+                elif field in data and data.get(field) == '':
+                    setattr(emp, field, None)
 
             emp.save()
             def _get_full_url(file_field):
                 if not file_field:
                     return None
+                val_str = str(file_field)
+                if val_str.startswith('http://') or val_str.startswith('https://'):
+                    return val_str
                 try:
-                    url = file_field.url
+                    url = file_field.url if hasattr(file_field, 'url') else val_str
                     if url.startswith('http://') or url.startswith('https://'):
                         return url
                     return request.build_absolute_uri(url)
                 except Exception:
+                    if val_str.startswith('http://') or val_str.startswith('https://'):
+                        return val_str
                     return None
 
             return send_success({
@@ -589,6 +645,12 @@ def hr_generate_payroll(request):
         emp_emails = []
         if emp.user and emp.user.email:
             emp_emails.append(emp.user.email.strip().lower())
+        if emp.contactinfo:
+            for piece in str(emp.contactinfo).replace(',', ' ').replace(';', ' ').split():
+                if '@' in piece:
+                    clean_email = piece.strip().strip('<>()[]').lower()
+                    if clean_email and clean_email not in emp_emails:
+                        emp_emails.append(clean_email)
         matching_users = User.objects.filter(name__iexact=emp.name)
         for mu in matching_users:
             if mu.email and mu.email.strip().lower() not in emp_emails:
@@ -602,7 +664,10 @@ def hr_generate_payroll(request):
                 date__year=int(y_str),
                 date__month=int(m_str)
             )
-            exp_list = [e for e in approved_exp_qs if (getattr(e, 'soemail_id', '') or '').strip().lower() in emp_emails]
+            exp_list = [
+                e for e in approved_exp_qs 
+                if (getattr(e, 'soemail_id', '') or getattr(getattr(e, 'soemail', None), 'email', '') or '').strip().lower() in emp_emails
+            ]
             for exp in exp_list:
                 amt = float(exp.amount or 0.0)
                 if amt > 0:

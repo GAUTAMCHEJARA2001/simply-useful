@@ -58,6 +58,7 @@ class ExpenseService:
 
         payload['category'] = category
         payload['status'] = 'PENDING'
+        payload['km_travelled'] = float(payload.get('km_travelled') or payload.get('kmTravelled') or 0.0)
         if not payload.get('date'):
             payload['date'] = timezone.now().isoformat()
 
@@ -101,11 +102,17 @@ class ExpenseService:
             if not reject_reason or not str(reject_reason).strip():
                 raise ValueError("A reject reason is mandatory when rejecting an expense claim.")
             expense.rejectreason = str(reject_reason).strip()
+            expense.save(update_fields=['status', 'rejectreason'])
+        elif clean_status == 'APPROVED':
+            expense.verified_by = reviewer
+            expense.verified_at = timezone.now()
+            if reject_reason is not None:
+                expense.rejectreason = reject_reason
+            expense.save(update_fields=['status', 'rejectreason', 'verified_by', 'verified_at'])
         else:
             if reject_reason is not None:
                 expense.rejectreason = reject_reason
-
-        expense.save(update_fields=['status', 'rejectreason'])
+            expense.save(update_fields=['status', 'rejectreason'])
 
         # Audit log
         try:
