@@ -910,7 +910,7 @@ const SOMapping: React.FC = () => {
 
       {/* Smart Professional PDF Preview & Export Modal */}
       <Dialog open={showPdfPreview} onOpenChange={setShowPdfPreview}>
-        <DialogContent className="max-w-6xl max-h-[92vh] flex flex-col p-0 overflow-hidden bg-background">
+        <DialogContent className="max-w-[96vw] w-[96vw] max-h-[94vh] h-[94vh] flex flex-col p-0 overflow-hidden bg-background">
           <DialogHeader className="p-4 border-b border-border bg-card shrink-0 flex flex-row items-center justify-between">
             <div>
               <DialogTitle className="text-base font-bold flex items-center gap-2">
@@ -1043,7 +1043,7 @@ const SOMapping: React.FC = () => {
           <div className="flex-1 overflow-auto p-4 md:p-6 bg-slate-100/70 dark:bg-slate-900/40 flex justify-center print-preview-scroll">
             <div
               id="so-mapping-pdf-preview-content"
-              className="bg-white text-slate-900 shadow-xl rounded-sm p-8 max-w-6xl w-full border border-slate-200"
+              className="bg-white text-slate-900 shadow-xl rounded-sm p-8 w-full border border-slate-200"
               style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
             >
               {/* Report Header */}
@@ -1104,74 +1104,76 @@ const SOMapping: React.FC = () => {
                 {search && <div><span className="text-slate-500 text-[10px]">Keyword:</span> <strong className="text-slate-900">&ldquo;{search}&rdquo;</strong></div>}
               </div>
 
-              {/* Data Table */}
-              <table className="w-full border-collapse text-[10px] text-left">
-                <thead>
-                  <tr className="bg-slate-100 border-t border-slate-300 border-b-2 border-slate-400">
-                    <th className="py-1.5 px-2 w-8 text-center font-bold text-slate-700">#</th>
-                    <th className="py-1.5 px-2 w-44 font-bold text-slate-700">Party Name &amp; Code</th>
-                    <th className="py-1.5 px-2 w-16 text-center font-bold text-slate-700">Type</th>
-                    <th className="py-1.5 px-2 w-56 font-bold text-slate-700">Registered Address</th>
-                    <th className="py-1.5 px-2 w-28 font-bold text-slate-700">City &amp; Territory</th>
-                    <th className="py-1.5 px-2 w-28 font-bold text-slate-700">Contact &amp; Phone</th>
-                    <th className="py-1.5 px-2 w-16 font-bold text-slate-700">Brand</th>
-                    <th className="py-1.5 px-2 w-28 font-bold text-slate-700">GSTIN</th>
-                    <th className="py-1.5 px-2 font-bold text-slate-700">Assigned Sales Officer(s)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {previewTargetRows.map((r, i) => {
-                    const soList = r.currentSoEmails.map(soName);
-                    const isAssigned = soList.length > 0;
-                    return (
-                      <tr key={r.id} className={cn("border-b border-slate-200", i % 2 === 1 ? "bg-slate-50/60" : "bg-white")}>
-                        <td className="py-1.5 px-2 text-center text-slate-500 font-mono text-[9px]">{i + 1}</td>
-                        <td className="py-1.5 px-2">
-                          <div className="font-bold text-slate-900 text-[10px] leading-tight">{r.name}</div>
-                          <div className="text-[8.5px] text-slate-500 font-mono">
-                            {r.code} {r.contactPerson && r.contactPerson !== '—' ? `· ${r.contactPerson}` : ''}
-                          </div>
-                        </td>
-                        <td className="py-1.5 px-2 text-center">
-                          <span className={cn(
-                            "inline-block px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wider",
-                            r.type === 'dealer' ? "bg-sky-100 text-sky-800" : "bg-indigo-100 text-indigo-800"
-                          )}>
-                            {r.type}
-                          </span>
-                        </td>
-                        <td className="py-1.5 px-2">
-                          <div className="text-[8.5px] text-slate-700 leading-snug line-clamp-3">
-                            {r.address && r.address !== '—' ? r.address : <span className="text-slate-400 italic">No registered address</span>}
-                          </div>
-                        </td>
-                        <td className="py-1.5 px-2">
-                          <div className="font-semibold text-slate-900 text-[9.5px]">{r.city}</div>
-                          <div className="text-[8.5px] font-semibold text-blue-600">{r.territory}</div>
-                        </td>
-                        <td className="py-1.5 px-2">
-                          <div className="font-semibold text-slate-800 text-[9.5px]">{r.phone !== '—' ? r.phone : <span className="text-slate-400">No Phone</span>}</div>
-                        </td>
-                        <td className="py-1.5 px-2 font-semibold text-amber-700 text-[9px]">{r.brand}</td>
-                        <td className="py-1.5 px-2 font-mono text-[8.5px] text-slate-600">{r.gst}</td>
-                        <td className="py-1.5 px-2">
-                          {isAssigned ? (
-                            <div className="flex flex-wrap gap-1">
-                              {soList.map(name => (
-                                <span key={name} className="inline-block px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-[8.5px] font-bold text-emerald-800">
-                                  👤 {name}
-                                </span>
-                              ))}
+              {/* Data Table with Sticky, Visible Header */}
+              <div className="overflow-x-auto rounded-sm border border-slate-200">
+                <table className="w-full border-collapse text-[10px] text-left">
+                  <thead className="sticky top-0 z-10 bg-slate-100 shadow-xs">
+                    <tr className="bg-slate-100 border-b-2 border-slate-300">
+                      <th className="py-2.5 px-2.5 w-10 text-center font-bold text-slate-700">#</th>
+                      <th className="py-2.5 px-3 w-48 font-bold text-slate-700">Party Name &amp; Code</th>
+                      <th className="py-2.5 px-2.5 w-20 text-center font-bold text-slate-700">Type</th>
+                      <th className="py-2.5 px-3 min-w-[220px] font-bold text-slate-700">Registered Address</th>
+                      <th className="py-2.5 px-3 w-32 font-bold text-slate-700">City &amp; Territory</th>
+                      <th className="py-2.5 px-3 w-32 font-bold text-slate-700">Contact &amp; Phone</th>
+                      <th className="py-2.5 px-2.5 w-20 font-bold text-slate-700">Brand</th>
+                      <th className="py-2.5 px-3 w-32 font-bold text-slate-700">GSTIN</th>
+                      <th className="py-2.5 px-3 font-bold text-slate-700">Assigned Sales Officer(s)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewTargetRows.map((r, i) => {
+                      const soList = r.currentSoEmails.map(soName);
+                      const isAssigned = soList.length > 0;
+                      return (
+                        <tr key={r.id} className={cn("border-b border-slate-200", i % 2 === 1 ? "bg-slate-50/60" : "bg-white")}>
+                          <td className="py-2 px-2.5 text-center text-slate-500 font-mono text-[9px]">{i + 1}</td>
+                          <td className="py-2 px-3">
+                            <div className="font-bold text-slate-900 text-[10px] leading-tight">{r.name}</div>
+                            <div className="text-[8.5px] text-slate-500 font-mono">
+                              {r.code} {r.contactPerson && r.contactPerson !== '—' ? `· ${r.contactPerson}` : ''}
                             </div>
-                          ) : (
-                            <span className="text-rose-600 italic font-semibold text-[8.5px]">&times; Unassigned</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="py-2 px-2.5 text-center">
+                            <span className={cn(
+                              "inline-block px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wider",
+                              r.type === 'dealer' ? "bg-sky-100 text-sky-800" : "bg-indigo-100 text-indigo-800"
+                            )}>
+                              {r.type}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3">
+                            <div className="text-[8.5px] text-slate-700 leading-snug line-clamp-3">
+                              {r.address && r.address !== '—' ? r.address : <span className="text-slate-400 italic">No registered address</span>}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3">
+                            <div className="font-semibold text-slate-900 text-[9.5px]">{r.city}</div>
+                            <div className="text-[8.5px] font-semibold text-blue-600">{r.territory}</div>
+                          </td>
+                          <td className="py-2 px-3">
+                            <div className="font-semibold text-slate-800 text-[9.5px]">{r.phone !== '—' ? r.phone : <span className="text-slate-400">No Phone</span>}</div>
+                          </td>
+                          <td className="py-2 px-2.5 font-semibold text-amber-700 text-[9px]">{r.brand}</td>
+                          <td className="py-2 px-3 font-mono text-[8.5px] text-slate-600">{r.gst}</td>
+                          <td className="py-2 px-3">
+                            {isAssigned ? (
+                              <div className="flex flex-wrap gap-1">
+                                {soList.map(name => (
+                                  <span key={name} className="inline-block px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-[8.5px] font-bold text-emerald-800">
+                                    👤 {name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-rose-600 italic font-semibold text-[8.5px]">&times; Unassigned</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Footer */}
               <div className="mt-6 pt-3 border-t border-slate-300 flex justify-between items-center text-[9px] text-slate-500">
