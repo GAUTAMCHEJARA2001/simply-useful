@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
 import { travelService } from '@/api/services/travel.service';
 import { ImageViewerModal } from '@/components/ImageViewerModal';
+import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
 
 const categories = ['Travel', 'Food', 'Accommodation', 'Fuel', 'Phone', 'Other'];
 
@@ -65,8 +66,28 @@ const ExpenseEntry: React.FC = () => {
     fetchTravelClaims();
   }, [isHr, user?.email]);
 
+interface DisplayedExpenseItem {
+  id?: string;
+  date: string;
+  soEmail: string;
+  category: string;
+  amount: number;
+  remarks?: string;
+  status: string;
+  photo?: string | null;
+  rejectReason?: string;
+  declaration?: string;
+  so_email?: string;
+  reject_reason?: string;
+  isTravelClaim: boolean;
+  vehicle?: string;
+  km?: number;
+  rate?: number;
+  rawLog?: any;
+}
+
   // Normalize travel logs into expense structure
-  const normalizedTravelClaims = useMemo(() => {
+  const normalizedTravelClaims = useMemo<DisplayedExpenseItem[]>(() => {
     return travelLogs.map(l => {
       const km = Number(l.approved_km !== null && l.approved_km !== undefined ? l.approved_km : (l.total_km || 0));
       const rate = Number(l.rate !== undefined && l.rate !== null ? l.rate : getTravelRate(l.vehicle_type));
@@ -86,13 +107,14 @@ const ExpenseEntry: React.FC = () => {
         status: (l.status || 'PENDING').toUpperCase(),
         isTravelClaim: true,
         photo: l.end_photo || l.start_photo || null,
+        rejectReason: l.reject_reason || undefined,
         rawLog: l
       };
     });
   }, [travelLogs, user?.email]);
 
   // Filter bills & travel claims by selected FY
-  const billExpenses = useMemo(() => {
+  const billExpenses = useMemo<DisplayedExpenseItem[]>(() => {
     const list = isHr ? expenses : expenses.filter(e => e.soEmail?.toLowerCase() === user?.email?.toLowerCase());
     return filterBySelectedFY(list, e => e.date).map(e => ({
       ...e,
@@ -100,11 +122,11 @@ const ExpenseEntry: React.FC = () => {
     }));
   }, [expenses, filterBySelectedFY, isHr, user?.email]);
 
-  const travelExpenses = useMemo(() => {
+  const travelExpenses = useMemo<DisplayedExpenseItem[]>(() => {
     return filterBySelectedFY(normalizedTravelClaims, e => e.date);
   }, [normalizedTravelClaims, filterBySelectedFY]);
 
-  const allCombinedExpenses = useMemo(() => {
+  const allCombinedExpenses = useMemo<DisplayedExpenseItem[]>(() => {
     return [...billExpenses, ...travelExpenses].sort((a, b) => {
       const dateA = a.date || '';
       const dateB = b.date || '';
@@ -113,7 +135,7 @@ const ExpenseEntry: React.FC = () => {
   }, [billExpenses, travelExpenses]);
 
   // Tab filtering
-  const displayedList = useMemo(() => {
+  const displayedList = useMemo<DisplayedExpenseItem[]>(() => {
     if (activeTab === 'travel') return travelExpenses;
     if (activeTab === 'bills') return billExpenses;
     return allCombinedExpenses;
@@ -326,7 +348,18 @@ const ExpenseEntry: React.FC = () => {
                         variant="outline" 
                         className="h-7 text-[10px] mt-1 flex items-center gap-1" 
                         onClick={() => {
-                          setForm({ ...e });
+                          setForm({
+                            id: e.id,
+                            date: e.date,
+                            soEmail: e.soEmail,
+                            category: e.category,
+                            amount: e.amount,
+                            remarks: e.remarks || '',
+                            status: e.status,
+                            photo: e.photo || undefined,
+                            rejectReason: e.rejectReason,
+                            declaration: e.declaration
+                          });
                           setDialogOpen(true);
                         }}
                       >
@@ -386,7 +419,11 @@ const ExpenseEntry: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Date</Label>
-                <Input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+                <SmartDatePicker
+                  value={form.date}
+                  onChange={val => setForm(p => ({ ...p, date: val }))}
+                  className="w-full"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Category *</Label>

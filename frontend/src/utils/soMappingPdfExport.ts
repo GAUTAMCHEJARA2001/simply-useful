@@ -17,6 +17,14 @@ export interface SoMappingPdfRow {
   currentSoEmails: string[];
 }
 
+export interface SoMappingPdfCompanyDetails {
+  name?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  gst?: string;
+}
+
 export interface SoMappingPdfExportOptions {
   rows: SoMappingPdfRow[];
   filterType: string;
@@ -26,6 +34,7 @@ export interface SoMappingPdfExportOptions {
   userName?: string;
   userRole?: string;
   soName: (email: string) => string;
+  company?: SoMappingPdfCompanyDetails;
 }
 
 /**
@@ -42,8 +51,15 @@ export async function generateSoMappingPdf(options: SoMappingPdfExportOptions): 
     search,
     userName = 'Admin',
     userRole = 'SUPERADMIN',
-    soName
+    soName,
+    company
   } = options;
+
+  const companyName = company?.name || 'KAMLA CONCHEM PVT LTD';
+  const companyAddress = company?.address || 'Navsari, Gujarat - 396445';
+  const companyPhone = company?.phone || '+91 81559 31559';
+  const companyEmail = company?.email || 'support@kamla.com';
+  const companyGst = company?.gst || '24AALCK3507C1ZX';
 
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -56,32 +72,39 @@ export async function generateSoMappingPdf(options: SoMappingPdfExportOptions): 
 
   // 1. Executive Top Header Banner (Deep Navy)
   doc.setFillColor(30, 58, 138); // #1e3a8a
-  doc.rect(10, 8, pageWidth - 20, 16, 'F');
+  doc.rect(10, 7, pageWidth - 20, 19, 'F');
 
-  // Title & Subtitle
+  // Title with Company Name
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.text('SIMPLY USEFUL ENTERPRISE — SO TERRITORY ALLOCATION DOSSIER', 14, 15);
+  doc.setFontSize(12);
+  doc.text(`${companyName.toUpperCase()} — SO TERRITORY ALLOCATION DOSSIER`, 14, 13.5);
 
+  // Company Details Strip (Address, Phone, GSTIN)
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setTextColor(224, 231, 255);
-  doc.text('Official Channel Partner Mapping, Regional Coverage & Sales Officer Allocation Directory', 14, 20);
+  doc.text(`Address: ${companyAddress}   |   Phone: ${companyPhone}   |   GSTIN: ${companyGst}`, 14, 18.5);
+
+  // Subtitle / Email
+  doc.setFontSize(7);
+  doc.setTextColor(199, 210, 254);
+  doc.text(`Email: ${companyEmail}   |   Channel Partner Directory, Regional Governance & Sales Officer Allocation Registry`, 14, 23);
 
   // Issuer & Audit Tag
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setTextColor(255, 255, 255);
-  doc.text('CONFIDENTIAL / SYSTEM AUDIT', pageWidth - 14, 15, { align: 'right' });
+  doc.text('CONFIDENTIAL / SYSTEM AUDIT', pageWidth - 14, 13.5, { align: 'right' });
   
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(224, 231, 255);
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  doc.text(`Exported: ${dateStr} ${timeStr} · Issuer: ${userName} (${userRole})`, pageWidth - 14, 20, { align: 'right' });
+  doc.text(`Exported: ${dateStr} ${timeStr}`, pageWidth - 14, 18.5, { align: 'right' });
+  doc.text(`Issuer: ${userName} (${userRole})`, pageWidth - 14, 23, { align: 'right' });
 
   // 2. Executive KPI Summary Strip
   const totalParties = rows.length;
@@ -90,7 +113,7 @@ export async function generateSoMappingPdf(options: SoMappingPdfExportOptions): 
   const assignedCount = rows.filter(r => r.currentSoEmails.length > 0).length;
   const unassignedCount = rows.filter(r => r.currentSoEmails.length === 0).length;
 
-  const kpiY = 26;
+  const kpiY = 28.5;
   const kpis = [
     { label: 'TOTAL PARTIES', val: totalParties, color: [241, 245, 249], border: [203, 213, 225], text: [15, 23, 42] },
     { label: 'DEALERS', val: dealerCount, color: [224, 242, 254], border: [186, 230, 253], text: [3, 105, 161] },
@@ -118,7 +141,7 @@ export async function generateSoMappingPdf(options: SoMappingPdfExportOptions): 
   });
 
   // 3. Active Filter Scope Strip
-  const filterY = 39;
+  const filterY = 42;
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226, 232, 240);
   doc.rect(10, filterY, pageWidth - 20, 6, 'FD');
@@ -153,7 +176,7 @@ export async function generateSoMappingPdf(options: SoMappingPdfExportOptions): 
 
   // 5. Render AutoTable with Landscape A4 layout
   autoTable(doc, {
-    startY: 47,
+    startY: 50,
     margin: { left: 10, right: 10, top: 16, bottom: 12 },
     head: [[
       '#',

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useSettings } from '@/hooks/inventory/useMasters';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -104,6 +105,15 @@ const SOMapping: React.FC = () => {
   const { dealers, distributors, users, updateDealer, updateDistributor } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
+  const { data: settings } = useSettings();
+
+  const companyDetails = useMemo(() => ({
+    name: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT LTD',
+    address: settings?.company_address || 'Navsari, Gujarat - 396445',
+    phone: settings?.company_phone || '+91 81559 31559',
+    email: settings?.company_email || 'support@kamla.com',
+    gst: settings?.company_gst || '24AALCK3507C1ZX'
+  }), [settings]);
 
 
   const salesUsers = useMemo(
@@ -372,7 +382,8 @@ const SOMapping: React.FC = () => {
         search,
         userName: user?.name,
         userRole: user?.role,
-        soName
+        soName,
+        company: companyDetails
       });
 
       toast({
@@ -949,7 +960,8 @@ const SOMapping: React.FC = () => {
                       search,
                       userName: user?.name,
                       userRole: user?.role,
-                      soName
+                      soName,
+                      company: companyDetails
                     });
                     toast({
                       title: 'Smart PDF Exported',
@@ -1046,25 +1058,33 @@ const SOMapping: React.FC = () => {
               className="bg-white text-slate-900 shadow-xl rounded-sm p-8 w-full border border-slate-200"
               style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
             >
-              {/* Report Header */}
-              <div className="border-b-2 border-blue-900 pb-3 mb-4 flex justify-between items-end">
+              {/* Report Header with Official Company Details */}
+              <div className="border-b-2 border-blue-900 pb-3.5 mb-4 flex justify-between items-start">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="bg-blue-900 text-white text-[9px] font-bold px-2 py-0.5 rounded tracking-wider uppercase">
-                      Simply Useful Enterprise
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className="bg-blue-900 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded tracking-wider uppercase shadow-xs">
+                      {companyDetails.name}
                     </span>
                     <span className="text-slate-500 text-[10px] font-semibold">
                       Territory Governance Dossier
+                    </span>
+                    <span className="text-slate-300">&bull;</span>
+                    <span className="text-[9.5px] font-mono text-slate-600">
+                      GSTIN: <strong className="text-slate-800 font-bold">{companyDetails.gst}</strong>
                     </span>
                   </div>
                   <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
                     SO Territory Mapping &amp; Channel Partner Directory
                   </h1>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Verified master mapping for dealers, distributors, registered addresses, and Sales Officer allocations.
-                  </p>
+                  <div className="text-[10px] text-slate-500 mt-1 flex flex-wrap gap-x-3 gap-y-0.5 items-center">
+                    <span><strong className="text-slate-700">Address:</strong> {companyDetails.address}</span>
+                    <span className="text-slate-300">&bull;</span>
+                    <span><strong className="text-slate-700">Phone:</strong> {companyDetails.phone}</span>
+                    <span className="text-slate-300">&bull;</span>
+                    <span><strong className="text-slate-700">Email:</strong> {companyDetails.email}</span>
+                  </div>
                 </div>
-                <div className="text-right text-[10px] text-slate-600 leading-tight">
+                <div className="text-right text-[10px] text-slate-600 leading-tight shrink-0 pl-4">
                   <div><span className="text-slate-400">Doc ID:</span> <strong className="font-mono text-slate-900">SOM-{new Date().toISOString().slice(0, 10).replace(/-/g, '')}-{previewTargetRows.length}</strong></div>
                   <div><span className="text-slate-400">Date:</span> <strong>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></div>
                   <div><span className="text-slate-400">Issuer:</span> <strong>{user?.name || 'Admin'} ({user?.role || 'SUPERADMIN'})</strong></div>
