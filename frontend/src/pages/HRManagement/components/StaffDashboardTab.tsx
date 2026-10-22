@@ -138,8 +138,11 @@ export const StaffDashboardTab: React.FC = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, []);
 
+  const roleUpper = (user?.role || '').toUpperCase();
+  const isAdminOrSuperAdmin = ['SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER'].includes(roleUpper);
+
   useEffect(() => {
-    if (user?.role !== 'SUPERADMIN') {
+    if (!isAdminOrSuperAdmin) {
       setLoadingStats(false);
       return;
     }
@@ -169,7 +172,7 @@ export const StaffDashboardTab: React.FC = () => {
     };
 
     fetchDashboardData();
-  }, [currentMonth]);
+  }, [currentMonth, isAdminOrSuperAdmin]);
 
   // Employee Statistics
   const totalEmployees = employees.length;
@@ -198,12 +201,12 @@ export const StaffDashboardTab: React.FC = () => {
   const pendingExpenseAmount = pendingExpenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
   const approvedExpenseAmount = approvedExpenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
 
-  if (user?.role !== 'SUPERADMIN') {
+  if (!isAdminOrSuperAdmin) {
     return (
       <Card className="p-8 text-center text-muted-foreground border-dashed">
         <h3 className="text-sm font-semibold text-foreground">Access Restricted</h3>
         <p className="text-xs text-muted-foreground mt-1">
-          The Staff Operations & Workforce Dashboard is exclusively accessible to Super Admin.
+          The Staff Operations & Workforce Dashboard is exclusively accessible to Administrators.
         </p>
       </Card>
     );

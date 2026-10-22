@@ -22,15 +22,15 @@ export type HRTab = 'dashboard' | 'employees' | 'documents' | 'targets' | 'atten
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
-  const isSuperAdmin = user?.role === 'SUPERADMIN';
-  const defaultTab: HRTab = isSuperAdmin ? 'dashboard' : 'employees';
+  const roleUpper = (user?.role || '').toUpperCase();
+  const isAdminOrSuperAdmin = ['SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER'].includes(roleUpper);
+  const defaultTab: HRTab = isAdminOrSuperAdmin ? 'dashboard' : 'employees';
   const tab = (searchParams.get('tab') as HRTab) || defaultTab;
 
-  const hasAccess = can('view_inventory_dashboard') || can('view_hr_dashboard') || ['SUPERADMIN', 'ADMIN', 'HR'].includes(user?.role || '');
+  const hasAccess = can('view_inventory_dashboard') || can('view_hr_dashboard') || ['SUPERADMIN', 'ADMIN', 'HR'].includes(roleUpper);
   if (!hasAccess) return <Navigate to="/" replace />;
 
-  if (tab === 'dashboard' && !isSuperAdmin) {
+  if (tab === 'dashboard' && !isAdminOrSuperAdmin) {
     return <Navigate to="/hr/manage?tab=employees" replace />;
   }
 

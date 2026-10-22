@@ -1353,9 +1353,12 @@ def hr_workforce_intelligence(request):
     """
     user = getattr(request, 'user', None)
     user_role = (getattr(user, 'role', '') or '').upper()
-    is_superadmin = getattr(user, 'is_superuser', False) or user_role == 'SUPERADMIN'
-    if not is_superadmin:
-        return send_error('Staff Operations & Workforce Dashboard is restricted to Super Admin only.', status_code=status.HTTP_403_FORBIDDEN)
+    is_privileged = (
+        getattr(user, 'is_superuser', False) or 
+        user_role in ('SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER')
+    )
+    if not is_privileged:
+        return send_error('Staff Operations & Workforce Dashboard is restricted to Administrators only.', status_code=status.HTTP_403_FORBIDDEN)
 
     company_id = _get_company_id(request)
     now = timezone.now()

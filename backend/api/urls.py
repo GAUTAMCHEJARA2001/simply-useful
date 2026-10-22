@@ -1,4 +1,4 @@
-from django.urls import path, include
+from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 from api.views_push import subscribe, unsubscribe, vapid_public_key
 from api.views_backups import (
@@ -203,6 +203,7 @@ urlpatterns = [
     path('hr/leave-policies/<str:pk>', hr_leave_policies_detail, name='hr-leave-policies-detail'),
     path('hr/leaves/allocate', hr_leave_allocate, name='hr-leave-allocate'),
     path('hr/workforce-intelligence', hr_workforce_intelligence, name='hr-workforce-intelligence'),
+    re_path(r'^hr/workforce-intelligence/?$', hr_workforce_intelligence, name='hr-workforce-intelligence-slash'),
 
     path('transactions/adjustments', transaction_adjustments, name='tx-adjustments'),
     path('transactions/adjustments/<str:pk>', transaction_adjustments_detail, name='tx-adjustment-detail'),

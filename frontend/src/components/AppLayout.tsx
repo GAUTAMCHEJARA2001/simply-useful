@@ -728,7 +728,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (item.path === '/admin/payments') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/admin/onboarding') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/reports') return user.role === 'SUPERADMIN';
-    if (item.path === '/hr/manage?tab=dashboard') return user.role === 'SUPERADMIN';
+    if (item.path === '/hr/manage?tab=dashboard') {
+      const roleUpper = (user.role || '').toUpperCase();
+      return ['SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER'].includes(roleUpper);
+    }
     if (item.domain === 'HR' || item.path.startsWith('/hr')) return ['SUPERADMIN', 'ADMIN', 'HR'].includes(user.role);
     if (item.domain === 'ADMIN' || item.path.startsWith('/admin')) return ['SUPERADMIN', 'ADMIN'].includes(user.role);
     if (user.role === 'PRODUCTION') {
@@ -1011,7 +1014,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {(can('view_inventory_dashboard') || can('view_hr_dashboard') || ['SUPERADMIN', 'ADMIN', 'HR'].includes(user?.role || '')) && (
               <CommandGroup heading="👥 HR & Workforce Suite (Modules & Sub-Tabs)">
                 {HR_SUB_PAGES.filter(item => {
-                  if (item.path === '/hr/manage?tab=dashboard') return user?.role === 'SUPERADMIN';
+                  if (item.path === '/hr/manage?tab=dashboard') {
+                    const roleUpper = (user?.role || '').toUpperCase();
+                    return ['SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER'].includes(roleUpper);
+                  }
                   return true;
                 }).map(item => (
                   <CommandItem
