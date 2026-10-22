@@ -1418,11 +1418,12 @@ class BOMViewSet(viewsets.ModelViewSet):
     serializer_class = BomSerializer
 
     def get_queryset(self):
+        from django.db import models
         company_id = _get_company_id(self.request)
         qs = Bom.objects.filter(companyid_id=company_id) if company_id else Bom.objects.all()
         wh_header = self.request.headers.get('X-Warehouse-Id') or self.request.headers.get('X-Warehouse-ID') or self.request.headers.get('x-warehouse-id')
         if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
-            qs = qs.filter(warehouseid_id=wh_header)
+            qs = qs.filter(models.Q(warehouseid_id=wh_header) | models.Q(warehouseid_id__isnull=True))
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -1440,23 +1441,26 @@ class BOMViewSet(viewsets.ModelViewSet):
 
         company_id = _get_company_id(request)
         wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
-        target_wh_ids = None
-        if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
-            try:
-                target_wh_ids = [int(wh_header)]
-            except (ValueError, TypeError):
-                pass
+        
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        is_superadmin = user_role == 'SUPERADMIN' or getattr(request.user, 'is_superuser', False)
 
-        try:
-            val_by_id, val_by_name = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
-            bom_cost_map = {}
-            for bom in queryset:
-                bom_cost_map[bom.id] = compute_bom_cost_breakdown(
-                    bom, valuation_by_id=val_by_id, valuation_by_name=val_by_name, warehouse_ids=target_wh_ids, company_id=company_id
-                )
-        except Exception as e:
-            print("Error computing BOM costs:", e)
-            val_by_id, val_by_name, bom_cost_map = {}, {}, {}
+        val_by_id, val_by_name, bom_cost_map = {}, {}, {}
+        # Costing and margin calculations are strictly restricted to SUPERADMIN
+        if is_superadmin:
+            target_wh_ids = None
+            if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
+                target_wh_ids = [str(wh_header)]
+
+            try:
+                val_by_id, val_by_name = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
+                for bom in queryset:
+                    bom_cost_map[bom.id] = compute_bom_cost_breakdown(
+                        bom, valuation_by_id=val_by_id, valuation_by_name=val_by_name, warehouse_ids=target_wh_ids, company_id=company_id
+                    )
+            except Exception as e:
+                print("Error computing BOM costs:", e)
+                val_by_id, val_by_name, bom_cost_map = {}, {}, {}
 
         serializer = BomListSerializer(
             queryset, many=True,

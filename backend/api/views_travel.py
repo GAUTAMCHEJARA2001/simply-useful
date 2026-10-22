@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, date
 from django.utils import timezone
+from django.db.models import Q
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -1232,4 +1233,184 @@ def travel_so_scorecard(request):
         import traceback
         traceback.print_exc()
         return send_error(f"Failed to calculate scorecard: {str(e)}", 500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def travel_hr_field_visits(request):
+    """
+    Dedicated endpoint for HR & Admins to view all Sales Officer visits throughout the day.
+    Purely focused on visits, dealers met, timeline sequence, GPS proof, and commercial outcomes.
+    Zero KM / odometer clutter.
+    Filters: date, date_from, date_to, month, user_id, purpose, status, search.
+    """
+    user = getattr(request, 'user', None)
+    if not user or not getattr(user, 'is_authenticated', False):
+        return send_error('Unauthorized', 401)
+
+    user_role = (getattr(user, 'role', '') or '').upper()
+    if user_role not in ['SUPERADMIN', 'ADMIN', 'HR', 'SALES_MANAGER', 'GENERAL_MANAGER']:
+        return send_error('Forbidden: HR or Admin access required', 403)
+
+    company_id = _get_company_id(request) or getattr(user, 'companyid_id', None)
+
+    # 1. Query DailyTourPlanStop
+    stops_qs = DailyTourPlanStop.objects.filter(companyid_id=company_id).select_related('user').order_by('-date', 'user_id', 'stop_order')
+
+    date_str = request.query_params.get('date')
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            stops_qs = stops_qs.filter(date=target_date)
+        except Exception:
+            pass
+
+    date_from = request.query_params.get('date_from')
+    if date_from:
+        try:
+            d_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+            stops_qs = stops_qs.filter(date__gte=d_from)
+        except Exception:
+            pass
+
+    date_to = request.query_params.get('date_to')
+    if date_to:
+        try:
+            d_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+            stops_qs = stops_qs.filter(date__lte=d_to)
+        except Exception:
+            pass
+
+    month = request.query_params.get('month')
+    if month and not (date_str or date_from):
+        try:
+            y, m = map(int, month.split('-'))
+            stops_qs = stops_qs.filter(date__year=y, date__month=m)
+        except Exception:
+            pass
+
+    user_id_filter = request.query_params.get('user_id')
+    if user_id_filter and user_id_filter != 'ALL':
+        stops_qs = stops_qs.filter(user_id=user_id_filter)
+
+    purpose_filter = request.query_params.get('purpose')
+    if purpose_filter and purpose_filter != 'ALL':
+        stops_qs = stops_qs.filter(visit_purpose__icontains=purpose_filter)
+
+    status_filter = request.query_params.get('status')
+    if status_filter and status_filter != 'ALL':
+        if status_filter == 'VISITED':
+            stops_qs = stops_qs.filter(visited=True)
+        elif status_filter == 'SKIPPED':
+            stops_qs = stops_qs.filter(actual_status='SKIPPED')
+        elif status_filter == 'SPOT':
+            stops_qs = stops_qs.filter(is_unplanned=True)
+        else:
+            stops_qs = stops_qs.filter(actual_status__iexact=status_filter)
+
+    search = request.query_params.get('search')
+    if search:
+        s = search.strip()
+        stops_qs = stops_qs.filter(
+            Q(dealer_name__icontains=s) |
+            Q(dealer_location__icontains=s) |
+            Q(user__name__icontains=s) |
+            Q(user__email__icontains=s) |
+            Q(actual_notes__icontains=s)
+        )
+
+    results = []
+    seen_stop_keys = set()
+    for stop in stops_qs[:500]:
+        key = f"{stop.date}_{stop.user_id}_{stop.dealer_name.strip().lower()}"
+        seen_stop_keys.add(key)
+        results.append({
+            'id': stop.id,
+            'source': 'TOUR_PLAN',
+            'date': stop.date.strftime('%Y-%m-%d') if stop.date else None,
+            'stop_order': stop.stop_order,
+            'is_unplanned': stop.is_unplanned,
+            'so_id': stop.user_id,
+            'so_name': stop.user.name or stop.user.email if stop.user else 'Sales Officer',
+            'so_email': stop.user.email if stop.user else '',
+            'dealer_id': stop.dealer_id,
+            'dealer_name': stop.dealer_name,
+            'dealer_location': stop.dealer_location or '',
+            'visit_purpose': stop.visit_purpose or 'ORDER',
+            'visited': stop.visited,
+            'target_order_bags': stop.target_order_bags or 0,
+            'target_order_value': stop.target_order_value or 0,
+            'target_collection_value': stop.target_collection_value or 0,
+            'actual_order_bags': stop.actual_order_bags or 0,
+            'actual_order_value': stop.actual_order_value or 0,
+            'actual_collection_value': stop.actual_collection_value or 0,
+            'actual_status': stop.actual_status or ('COMPLETED' if stop.visited else 'PENDING'),
+            'shortfall_reason': stop.shortfall_reason or '',
+            'actual_notes': stop.actual_notes or '',
+            'visit_photo': stop.visit_photo,
+            'gps_location': stop.gps_location,
+            'completed_at': stop.completed_at.isoformat() if stop.completed_at else None,
+            'next_visit_date': stop.next_visit_date.strftime('%Y-%m-%d') if getattr(stop, 'next_visit_date', None) else None,
+            'created_at': stop.createdat.isoformat() if getattr(stop, 'createdat', None) else None,
+        })
+
+    # 2. Also incorporate any direct Visit records
+    try:
+        from api.models import Visit
+        visits_qs = Visit.objects.filter(companyid_id=company_id).select_related('soemail').order_by('-date')
+        if date_str:
+            try:
+                t_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                visits_qs = visits_qs.filter(date__date=t_date)
+            except Exception:
+                pass
+        if user_id_filter and user_id_filter != 'ALL':
+            visits_qs = visits_qs.filter(soemail__id=user_id_filter)
+        if search:
+            visits_qs = visits_qs.filter(
+                Q(dealername__icontains=search.strip()) |
+                Q(soemail__name__icontains=search.strip()) |
+                Q(remarks__icontains=search.strip())
+            )
+
+        for v in visits_qs[:100]:
+            v_date = v.date.strftime('%Y-%m-%d') if v.date else (v.createdat.strftime('%Y-%m-%d') if v.createdat else '')
+            so_id = v.soemail.id if v.soemail else ''
+            key = f"{v_date}_{so_id}_{v.dealername.strip().lower()}"
+            if key not in seen_stop_keys:
+                results.append({
+                    'id': v.id,
+                    'source': 'VISIT_PUNCH',
+                    'date': v_date,
+                    'stop_order': 0,
+                    'is_unplanned': True,
+                    'so_id': so_id,
+                    'so_name': v.soemail.name or v.soemail.email if v.soemail else 'Sales Officer',
+                    'so_email': v.soemail.email if v.soemail else '',
+                    'dealer_id': None,
+                    'dealer_name': v.dealername,
+                    'dealer_location': '',
+                    'visit_purpose': 'ROUTINE',
+                    'visited': True,
+                    'target_order_bags': 0,
+                    'target_order_value': 0,
+                    'target_collection_value': 0,
+                    'actual_order_bags': 0,
+                    'actual_order_value': 0,
+                    'actual_collection_value': 0,
+                    'actual_status': v.visit_status or 'COMPLETED',
+                    'shortfall_reason': '',
+                    'actual_notes': v.remarks or '',
+                    'visit_photo': v.photo,
+                    'gps_location': v.gpslocation,
+                    'completed_at': v.date.isoformat() if v.date else (v.createdat.isoformat() if v.createdat else None),
+                    'next_visit_date': v.nextfollowup.strftime('%Y-%m-%d') if v.nextfollowup else None,
+                    'created_at': v.createdat.isoformat() if v.createdat else None,
+                })
+    except Exception:
+        pass
+
+    # Sort all results by completed_at or date descending
+    results.sort(key=lambda x: x.get('completed_at') or x.get('date') or '', reverse=True)
+    return send_success(results, 'Field visits fetched successfully')
 

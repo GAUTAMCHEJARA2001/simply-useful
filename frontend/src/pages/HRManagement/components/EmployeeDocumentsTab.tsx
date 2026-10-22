@@ -28,6 +28,19 @@ import {
   deleteCustomTemplate,
   substitutePlaceholders
 } from './documents/documentTemplates';
+import {
+  ALL_HR_LETTERS,
+  getLetterById,
+  getLettersByCategory,
+  ALL_HR_LETTER_IDS,
+} from './documents/hrLetterCatalogue';
+import {
+  HRLetterDefinition,
+  HRLetterCategory,
+  HR_CATEGORY_META,
+  HRInputField,
+  HRLetterSection,
+} from './documents/hrLetterTypes';
 
 export type { DocumentType };
 
@@ -72,6 +85,12 @@ export const EmployeeDocumentsTab: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRegisteringCandidate, setIsRegisteringCandidate] = useState(false);
   const [empSelectorOpen, setEmpSelectorOpen] = useState(false);
+
+  // HR Letter Catalogue State (28+ enterprise letters across 9 categories)
+  const [catalogueFieldValues, setCatalogueFieldValues] = useState<Record<string, string>>({});
+  const [catalogueCategoryFilter, setCatalogueCategoryFilter] = useState<HRLetterCategory | 'ALL'>('ALL');
+  const [catalogueSearchQuery, setCatalogueSearchQuery] = useState('');
+  const [cataloguePickerOpen, setCataloguePickerOpen] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -409,8 +428,10 @@ export const EmployeeDocumentsTab: React.FC = () => {
     relievingDate: todayStr,
     conductRating: 'Satisfactory and Exemplary',
     relievingReason: 'Personal career progression',
+    relievingRemarks: '',
     addressedTo: 'To Whom It May Concern',
     certificatePurpose: 'for Official Verification / Financial Application',
+    salaryRemarks: '',
     bloodGroup: 'B+',
     emergencyContact: '+91 98765 43210',
     validUpto: `${new Date().getFullYear() + 3}-12-31`,
@@ -449,6 +470,10 @@ You are hereby formally cautioned to strictly adhere to the designated working h
 
   const monthlyBase = Number(activePerson?.base_salary_monthly || (activePerson?.dailywage ? activePerson.dailywage * 26 : 0) || 0);
   const annualCtc = monthlyBase * 12;
+  const basicSalary = Math.round(monthlyBase * 0.5);
+  const hraSalary = Math.round(monthlyBase * 0.3);
+  const conveyance = Math.round(monthlyBase * 0.1);
+  const specialAllowance = Math.round(monthlyBase * 0.1);
 
   const formatCurrency = (val: number) => {
     return `₹${Math.round(val).toLocaleString('en-IN')}`;
@@ -646,7 +671,8 @@ You are hereby formally cautioned to strictly adhere to the designated working h
 
   // Dynamic Placeholder helper
   const replaceTokens = (rawText: string) => {
-    return substitutePlaceholders(rawText, {
+    if (!rawText) return '';
+    let result = substitutePlaceholders(rawText, {
       employeeName: activePerson?.name,
       designation: activePerson?.designation,
       department: activePerson?.department,
@@ -661,6 +687,84 @@ You are hereby formally cautioned to strictly adhere to the designated working h
       employeeId: activePerson?.employee_id || (isCandidateMode ? 'CAND-REF' : 'REF'),
       issueDate: formatDate(docConfig.issueDate),
     });
+
+    // Intelligent fallbacks for common HR catalogue letter tokens
+    const defaultsMap: Record<string, string> = {
+      effective_date: formatDate(docConfig.issueDate),
+      new_designation: activePerson?.designation || 'Senior Team Member',
+      previous_designation: activePerson?.designation || 'Associate',
+      transfer_location: docConfig.workLocation,
+      transfer_from: `${activePerson?.department || 'Operations'} (${docConfig.workLocation})`,
+      transfer_to: docConfig.workLocation,
+      leave_type: 'Annual / Privilege Leave',
+      leave_start_date: formatDate(docConfig.issueDate),
+      leave_end_date: formatDate(docConfig.issueDate),
+      total_days: '3',
+      holiday_date: formatDate(docConfig.issueDate),
+      holiday_name: 'Upcoming Public Holiday',
+      policy_date: formatDate(docConfig.issueDate),
+      policy_name: 'Workplace Operations & Conduct Policy',
+      appreciation_reason: 'Exemplary diligence, high operational standards, and commitment to corporate excellence',
+      relieving_date: formatDate(docConfig.relievingDate || docConfig.issueDate),
+      resignation_date: formatDate(docConfig.issueDate),
+      last_working_day: formatDate(docConfig.relievingDate || docConfig.issueDate),
+      experience_start_date: formatDate(activePerson?.doj || docConfig.joiningDate),
+      experience_end_date: formatDate(docConfig.relievingDate || docConfig.issueDate),
+      noc_purpose: 'Higher Education / Passport & Visa Processing',
+      employment_status: 'Currently Employed',
+      verification_requested_by: 'Background Verification Agency / Official Authority',
+      verification_ref: `BGV-${activePerson?.employee_id || '001'}-VER`,
+      interview_date: formatDate(docConfig.issueDate),
+      interview_time: '11:00 AM',
+      interview_venue: `${companyName} Corporate Office`,
+      reporting_manager: 'Department Head / Operations Manager',
+      revised_salary: `${formatCurrency(monthlyBase)} per month`,
+      previous_salary: `${formatCurrency(Math.round(monthlyBase * 0.85))} per month`,
+      extended_probation_period: '3 Additional Months',
+      probation_end_date: formatDate(docConfig.issueDate),
+      bonus_amount: formatCurrency(monthlyBase),
+      bonus_type: 'Annual Festival Ex-Gratia',
+      bonus_year: `${new Date().getFullYear() - 1}-${new Date().getFullYear()}`,
+      disbursement_date: formatDate(docConfig.issueDate),
+      severance_amount: formatCurrency(monthlyBase * 2),
+      notice_period_served: 'Full Notice Period Served',
+    };
+
+    // Dynamic replacement for catalogue fields (supports snake_case and camelCase placeholders)
+    result = result.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, key) => {
+      // 1. Direct match in catalogueFieldValues
+      if (catalogueFieldValues[key] !== undefined && catalogueFieldValues[key] !== '') {
+        return catalogueFieldValues[key];
+      }
+      // 2. CamelCase version of snake_case key (e.g. transfer_from -> transferFrom)
+      const camelKey = key.replace(/_([a-z0-9])/g, (_: string, letter: string) => letter.toUpperCase());
+      if (catalogueFieldValues[camelKey] !== undefined && catalogueFieldValues[camelKey] !== '') {
+        return catalogueFieldValues[camelKey];
+      }
+      // 3. Snake_case version of camelKey
+      const snakeKey = key.replace(/[A-Z]/g, (letter: string) => `_${letter.toLowerCase()}`);
+      if (catalogueFieldValues[snakeKey] !== undefined && catalogueFieldValues[snakeKey] !== '') {
+        return catalogueFieldValues[snakeKey];
+      }
+      // 4. In docConfig
+      if ((docConfig as any)[key] !== undefined && (docConfig as any)[key] !== '') {
+        return String((docConfig as any)[key]);
+      }
+      if ((docConfig as any)[camelKey] !== undefined && (docConfig as any)[camelKey] !== '') {
+        return String((docConfig as any)[camelKey]);
+      }
+      // 5. In intelligent defaults
+      if (defaultsMap[key] !== undefined) {
+        return defaultsMap[key];
+      }
+      if (defaultsMap[snakeKey] !== undefined) {
+        return defaultsMap[snakeKey];
+      }
+      // 6. Return placeholder as-is if no match
+      return match;
+    });
+
+    return result;
   };
 
   // Register Candidate into database
@@ -709,13 +813,45 @@ You are hereby formally cautioned to strictly adhere to the designated working h
     setIsGenerating(true);
     try {
       const docNameMapping: Record<DocumentType, string> = {
+        // Recruitment
         offer_letter: 'Offer_Letter',
         appointment_letter: 'Appointment_Letter',
-        sales_incentive_letter: 'Sales_Incentive_Scheme',
-        relieving_letter: 'Experience_Certificate',
-        salary_certificate: 'Salary_Certificate',
-        id_card: 'Employee_ID_Card_A4',
+        probationary_appointment: 'Probationary_Appointment',
+        internship_offer: 'Internship_Offer',
+        interview_invitation: 'Interview_Invitation',
+        // Employment Administration
+        promotion_letter: 'Promotion_Letter',
+        transfer_letter: 'Transfer_Letter',
+        salary_revision_letter: 'Salary_Revision',
+        probation_extension: 'Probation_Extension',
+        confirmation_letter: 'Confirmation_Letter',
+        // Attendance & Discipline
         notice_letter: 'Notice_Letter',
+        show_cause_notice: 'Show_Cause_Notice',
+        attendance_warning: 'Attendance_Warning',
+        pip_notice: 'Performance_Improvement_Plan',
+        // Leave & Benefits
+        leave_approval: 'Leave_Approval',
+        leave_rejection: 'Leave_Rejection',
+        // Payroll
+        sales_incentive_letter: 'Sales_Incentive_Scheme',
+        // Performance
+        appreciation_letter: 'Appreciation_Letter',
+        performance_review_invitation: 'Appraisal_Invitation',
+        // Policy
+        policy_circular: 'HR_Circular',
+        holiday_notification: 'Holiday_Notification',
+        // Separation
+        relieving_letter: 'Relieving_Certificate',
+        resignation_acceptance: 'Resignation_Acceptance',
+        termination_letter: 'Termination_Letter',
+        // Certificates
+        salary_certificate: 'Salary_Certificate',
+        experience_certificate: 'Experience_Certificate',
+        noc_letter: 'No_Objection_Certificate',
+        employment_verification: 'Employment_Verification',
+        // Legacy
+        id_card: 'Employee_ID_Card_A4',
       };
 
       const filename = `${docNameMapping[activeDoc]}_${(activePerson.name || 'Candidate').replace(/\s+/g, '_')}_${activePerson.employee_id || 'REF'}.pdf`;
@@ -745,13 +881,29 @@ You are hereby formally cautioned to strictly adhere to the designated working h
   // Helper to compute formal reference number
   const getFormalRefNumber = (type: DocumentType, person: any) => {
     const docCodeMap: Record<DocumentType, string> = {
-      offer_letter: 'OFF',
-      appointment_letter: 'APPT',
+      // Recruitment
+      offer_letter: 'OFF', appointment_letter: 'APPT', probationary_appointment: 'PROB',
+      internship_offer: 'INT', interview_invitation: 'IVT',
+      // Employment Admin
+      promotion_letter: 'PRM', transfer_letter: 'TRF', salary_revision_letter: 'SAR',
+      probation_extension: 'PEX', confirmation_letter: 'CNF',
+      // Discipline
+      notice_letter: 'NOT', show_cause_notice: 'SCN', attendance_warning: 'ATW', pip_notice: 'PIP',
+      // Leave
+      leave_approval: 'LAP', leave_rejection: 'LRJ',
+      // Payroll
       sales_incentive_letter: 'INC',
-      relieving_letter: 'REL',
-      salary_certificate: 'SAL',
+      // Performance
+      appreciation_letter: 'APR', performance_review_invitation: 'PRI',
+      // Policy
+      policy_circular: 'CIR', holiday_notification: 'HOL',
+      // Separation
+      relieving_letter: 'REL', resignation_acceptance: 'RSA', termination_letter: 'TRM',
+      // Certificates
+      salary_certificate: 'SAL', experience_certificate: 'EXP',
+      noc_letter: 'NOC', employment_verification: 'EVL',
+      // Legacy
       id_card: 'IDC',
-      notice_letter: 'NOT',
     };
     const prefix = docCodeMap[type] || 'HR';
     const year = new Date().getFullYear();
@@ -765,7 +917,7 @@ You are hereby formally cautioned to strictly adhere to the designated working h
   // Save & Issue Official Letter to Archive
   const handleIssueAndSaveLetter = () => {
     if (!activePerson) return;
-    const docTitleMap: Record<DocumentType, string> = {
+    const docTitleMap: Partial<Record<DocumentType, string>> = {
       offer_letter: 'Letter of Offer of Employment',
       appointment_letter: 'Letter of Appointment',
       sales_incentive_letter: 'Sales Target & Incentive Agreement',
@@ -775,11 +927,14 @@ You are hereby formally cautioned to strictly adhere to the designated working h
       notice_letter: `${docConfig.noticeSeverity} Notice: ${docConfig.noticeSubject}`
     };
 
+    const letterDef = getLetterById(activeDoc);
+    const resolvedTitle = letterDef?.title || docTitleMap[activeDoc] || 'Official HR Letter';
+
     const newLetter: IssuedLetter = {
       id: `iss_${Date.now()}`,
       refNo: currentRefNumber,
       docType: activeDoc,
-      docTitle: docTitleMap[activeDoc] || 'Official HR Letter',
+      docTitle: resolvedTitle,
       employeeId: activePerson.employee_id || (isCandidateMode ? 'CAND-REF' : 'EMP-001'),
       employeeName: activePerson.name,
       department: activePerson.department || 'Operations',
@@ -792,7 +947,7 @@ You are hereby formally cautioned to strictly adhere to the designated working h
       customClause: docConfig.customClause,
       workLocation: docConfig.workLocation,
       issuedAt: new Date().toISOString(),
-      issuedBy: user?.username || 'HR Admin',
+      issuedBy: user?.name || 'HR Admin',
     };
 
     setIssuedLetters(prev => [newLetter, ...prev]);
@@ -945,87 +1100,142 @@ You are hereby formally cautioned to strictly adhere to the designated working h
 
   // Render Official Corporate Letterhead Footer
   const renderFooter = () => (
-    <div className="mt-2 pt-1.5 border-t border-slate-200 text-center space-y-0.5">
-      <div className="flex items-center justify-between text-[8px] text-slate-600 font-medium">
-        <span><strong>Regd Office &amp; Works:</strong> {companyAddress}</span>
-        <span><strong>CIN:</strong> U24290GJ2020PTC115488</span>
-        <span><strong>Web:</strong> www.kamlaconchem.com</span>
-      </div>
-      <p className="text-[7.5px] text-slate-400 leading-tight">
-        <strong>Confidentiality Notice:</strong> This document contains legally privileged and confidential information belonging to {companyName}. If you are not the intended recipient, any disclosure, copying, distribution or action taken in reliance on the contents is strictly prohibited.
-      </p>
-      <div className="flex items-center justify-between text-[7px] text-slate-400 font-mono pt-0.5">
+    <div className="mt-3 pt-2 border-t border-slate-200">
+      <div className="flex items-center justify-between text-[7.5px] text-slate-400 font-mono">
         <span>System Authenticated • Doc Ref: {currentRefNumber}</span>
-        <span>Page 1 of 1 • Strict Private &amp; Confidential</span>
+        <span>Corporate Human Resources • {companyName}</span>
+        <span>Page 1 of 1 • Strictly Private &amp; Confidential</span>
       </div>
     </div>
   );
 
-  // Render Dual Signature Section with Candidate Acceptance & Company Stamp
-  const renderSignatory = () => (
-    <div className="pt-3 mt-3 border-t-2 border-slate-300">
-      <div className="grid grid-cols-2 gap-6 text-xs">
-        {/* Left Column: Candidate / Employee Acceptance */}
-        <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-2.5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5">
-              <span className="font-bold text-[9.5px] uppercase tracking-wider text-slate-700">
-                Candidate / Employee Acceptance
-              </span>
-              <span className="text-[8px] text-slate-500 font-medium">Duplicate Copy</span>
-            </div>
-            <p className="text-[9.5px] text-slate-600 leading-relaxed mb-2">
-              I, <strong>{activePerson?.name}</strong>, hereby acknowledge receipt of this official letter, accept all terms, conditions &amp; responsibilities stated herein, and confirm my acceptance.
-            </p>
-          </div>
-          
-          <div className="space-y-1 pt-1">
-            <div className="border-b-2 border-slate-400 w-full h-7 flex items-end">
-              <span className="text-[8.5px] text-slate-400 italic font-mono">[Signature of Candidate / Employee]</span>
-            </div>
-            <div className="flex justify-between items-center text-[9px] text-slate-600 pt-0.5">
-              <span>Name: <strong>{activePerson?.name}</strong></span>
-              <span>Date: __________________</span>
-            </div>
-          </div>
-        </div>
+  // Render Signature Section
+  const renderSignatory = () => {
+    const isRelieving = activeDoc === 'relieving_letter';
+    const isSalaryCert = activeDoc === 'salary_certificate';
+    const isNotice = activeDoc === 'notice_letter';
+    const letterDef = getLetterById(activeDoc);
 
-        {/* Right Column: Company Authorized Signatory with Official Seal */}
-        <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-2.5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5">
-              <span className="font-bold text-[9.5px] uppercase tracking-wider text-slate-900">
-                For {companyName}
-              </span>
-              <span className="text-[8px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                Authorized Executive
-              </span>
+    const requiresEmployeeAck = letterDef 
+      ? letterDef.employeeAcknowledgment === 'required'
+      : (!isRelieving && !isSalaryCert);
+
+    const ackTitle = letterDef?.acknowledgmentLabel || (isNotice ? 'Employee Acknowledgment' : 'Candidate / Employee Acceptance');
+
+    // For letters that don't require employee acceptance / signature:
+    if (!requiresEmployeeAck) {
+      return (
+        <div className="pt-3 mt-3 border-t-2 border-slate-300">
+          <div className="flex justify-end text-xs">
+            {/* Right Column: Company Authorized Signatory with Official Seal */}
+            <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-3 w-80 flex flex-col justify-between shadow-2xs">
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5">
+                  <span className="font-bold text-[9.5px] uppercase tracking-wider text-slate-900">
+                    For {companyName}
+                  </span>
+                  <span className="text-[8px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                    Authorized Signatory
+                  </span>
+                </div>
+                
+                {/* Stamp & Seal Watermark Badge */}
+                <div className="h-8 flex items-center justify-between px-1 my-1">
+                  <div className="inline-flex items-center gap-1 border border-purple-300 bg-purple-50/80 px-2 py-0.5 rounded text-[8px] font-bold text-purple-900 shadow-2xs">
+                    <ShieldCheck className="w-3 h-3 text-purple-700 shrink-0" />
+                    <span>CORPORATE HR SEAL • VERIFIED</span>
+                  </div>
+                  <span className="text-[7.5px] font-mono text-slate-400">Ref: {currentRefNumber}</span>
+                </div>
+              </div>
+
+              <div className="space-y-0.5 pt-2">
+                <div className="border-b-2 border-slate-400 w-full h-4 mb-1"></div>
+                <div className="pt-0.5">
+                  <p className="font-bold text-slate-950 text-[11px] leading-tight">{docConfig.signatoryName}</p>
+                  <p className="text-[9.5px] font-medium text-slate-600">{docConfig.signatoryDesignation}</p>
+                  <p className="text-[8.5px] font-semibold text-slate-500 uppercase">{companyName}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {renderFooter()}
+        </div>
+      );
+    }
+
+    return (
+      <div className="pt-3 mt-3 border-t-2 border-slate-300">
+        <div className="grid grid-cols-2 gap-6 text-xs">
+          {/* Left Column: Candidate / Employee Acceptance (for Offer / Appointment / Notice) */}
+          <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-2.5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5">
+                <span className="font-bold text-[9.5px] uppercase tracking-wider text-slate-700">
+                  {ackTitle}
+                </span>
+                <span className="text-[8px] text-slate-500 font-medium">Duplicate Copy</span>
+              </div>
+              <p className="text-[9.5px] text-slate-600 leading-relaxed mb-2">
+                {isNotice ? (
+                  <>I, <strong>{activePerson?.name}</strong>, hereby acknowledge receipt of this official notice letter.</>
+                ) : letterDef?.acknowledgmentLabel ? (
+                  <>I, <strong>{activePerson?.name}</strong>, hereby acknowledge receipt of this official letter ({letterDef.shortTitle || letterDef.title}), accept the terms &amp; conditions stated herein, and confirm my acknowledgment.</>
+                ) : (
+                  <>I, <strong>{activePerson?.name}</strong>, hereby acknowledge receipt of this official letter, accept all terms, conditions &amp; responsibilities stated herein, and confirm my acceptance.</>
+                )}
+              </p>
             </div>
             
-            {/* Stamp & Seal Watermark Badge */}
-            <div className="h-8 flex items-center justify-between px-1">
-              <div className="inline-flex items-center gap-1 border border-purple-300 bg-purple-50/80 px-2 py-0.5 rounded text-[8px] font-bold text-purple-900 shadow-2xs">
-                <ShieldCheck className="w-3 h-3 text-purple-700 shrink-0" />
-                <span>CORPORATE HR SEAL • VERIFIED</span>
+            <div className="space-y-1 pt-1">
+              <div className="border-b-2 border-slate-400 w-full h-7 flex items-end">
+                <span className="text-[8.5px] text-slate-400 italic font-mono">[Signature of Candidate / Employee]</span>
               </div>
-              <span className="text-[7.5px] font-mono text-slate-400">Ref: {currentRefNumber}</span>
+              <div className="flex justify-between items-center text-[9px] text-slate-600 pt-0.5">
+                <span>Name: <strong>{activePerson?.name}</strong></span>
+                <span>Date: __________________</span>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-0.5 pt-1">
-            <div className="border-b-2 border-slate-400 w-full h-3"></div>
-            <div className="pt-0.5">
-              <p className="font-bold text-slate-950 text-[11px] leading-tight">{docConfig.signatoryName}</p>
-              <p className="text-[9.5px] font-medium text-slate-600">{docConfig.signatoryDesignation}</p>
-              <p className="text-[8.5px] font-semibold text-slate-500 uppercase">{companyName}</p>
+          {/* Right Column: Company Authorized Signatory with Official Seal */}
+          <div className="bg-slate-50/70 border border-slate-200 rounded-lg p-2.5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1 mb-1.5">
+                <span className="font-bold text-[9.5px] uppercase tracking-wider text-slate-900">
+                  For {companyName}
+                </span>
+                <span className="text-[8px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                  Authorized Executive
+                </span>
+              </div>
+              
+              {/* Stamp & Seal Watermark Badge */}
+              <div className="h-8 flex items-center justify-between px-1">
+                <div className="inline-flex items-center gap-1 border border-purple-300 bg-purple-50/80 px-2 py-0.5 rounded text-[8px] font-bold text-purple-900 shadow-2xs">
+                  <ShieldCheck className="w-3 h-3 text-purple-700 shrink-0" />
+                  <span>CORPORATE HR SEAL • VERIFIED</span>
+                </div>
+                <span className="text-[7.5px] font-mono text-slate-400">Ref: {currentRefNumber}</span>
+              </div>
+            </div>
+
+            <div className="space-y-0.5 pt-1">
+              <div className="border-b-2 border-slate-400 w-full h-3"></div>
+              <div className="pt-0.5">
+                <p className="font-bold text-slate-950 text-[11px] leading-tight">{docConfig.signatoryName}</p>
+                <p className="text-[9.5px] font-medium text-slate-600">{docConfig.signatoryDesignation}</p>
+                <p className="text-[8.5px] font-semibold text-slate-500 uppercase">{companyName}</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {renderFooter()}
-    </div>
-  );
+        {renderFooter()}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4 max-w-[1600px] mx-auto">
@@ -1244,7 +1454,7 @@ You are hereby formally cautioned to strictly adhere to the designated working h
                 )}
               </div>
 
-              {/* Document Type Switcher Pills (Sleek Inline) */}
+              {/* Document Type Switcher & Full Catalogue Popover */}
               <div className="flex items-center gap-1 flex-wrap overflow-x-hidden">
                 {[
                   { id: 'offer_letter', label: '1. Offer', icon: Briefcase },
@@ -1261,7 +1471,7 @@ You are hereby formally cautioned to strictly adhere to the designated working h
                     <button
                       key={doc.id}
                       onClick={() => {
-                        setActiveDoc(doc.id as DocType);
+                        setActiveDoc(doc.id as DocumentType);
                         if (doc.id === 'sales_incentive_letter') setSelectedCategoryFilter('Sales');
                         if (doc.id === 'notice_letter') setSelectedCategoryFilter('Notices');
                         const t = templates.find(item => item.docType === doc.id);
@@ -1280,6 +1490,142 @@ You are hereby formally cautioned to strictly adhere to the designated working h
                     </button>
                   );
                 })}
+
+                {/* Active Indicator for Extended Catalogue Letters */}
+                {!['offer_letter', 'appointment_letter', 'sales_incentive_letter', 'relieving_letter', 'salary_certificate', 'id_card', 'notice_letter'].includes(activeDoc) && (
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span>{getLetterById(activeDoc)?.shortTitle || getLetterById(activeDoc)?.title || activeDoc}</span>
+                  </div>
+                )}
+
+                {/* Full 28-Letter Enterprise Catalogue Popover */}
+                <Popover open={cataloguePickerOpen} onOpenChange={setCataloguePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:hover:bg-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shadow-2xs"
+                    >
+                      <BookOpen className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                      <span>Catalogue ({ALL_HR_LETTERS.length})</span>
+                      <ChevronsUpDown className="w-3 h-3 opacity-60" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[360px] sm:w-[500px] p-3 shadow-xl rounded-xl border border-border" align="end">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between border-b pb-2">
+                        <div>
+                          <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                            <BookOpen className="w-4 h-4 text-purple-600" />
+                            Enterprise HR Letter Catalogue
+                          </h4>
+                          <p className="text-[10px] text-muted-foreground">
+                            {ALL_HR_LETTERS.length} statutory letters across 9 specialized HR categories
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 font-bold">
+                          All ISO Compliant
+                        </span>
+                      </div>
+
+                      {/* Search Input */}
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search letters (e.g. probation, promotion, NOC, bonus)..."
+                          value={catalogueSearchQuery}
+                          onChange={(e) => setCatalogueSearchQuery(e.target.value)}
+                          className="w-full bg-muted/40 border rounded-lg pl-8 pr-3 py-1 text-xs focus:ring-1 focus:ring-purple-500"
+                        />
+                      </div>
+
+                      {/* Category Filter Pills */}
+                      <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
+                        <button
+                          onClick={() => setCatalogueCategoryFilter('ALL')}
+                          className={`px-2 py-0.5 rounded-md font-bold shrink-0 transition-all cursor-pointer ${
+                            catalogueCategoryFilter === 'ALL'
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                          }`}
+                        >
+                          All ({ALL_HR_LETTERS.length})
+                        </button>
+                        {HR_CATEGORY_META.map(cat => {
+                          const count = ALL_HR_LETTERS.filter(l => l.category === cat.id).length;
+                          if (count === 0) return null;
+                          return (
+                            <button
+                              key={cat.id}
+                              onClick={() => setCatalogueCategoryFilter(cat.id)}
+                              className={`px-2 py-0.5 rounded-md font-bold shrink-0 transition-all cursor-pointer ${
+                                catalogueCategoryFilter === cat.id
+                                  ? 'bg-purple-600 text-white'
+                                  : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                              }`}
+                            >
+                              {cat.shortLabel} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Filtered Letters List */}
+                      <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                        {ALL_HR_LETTERS
+                          .filter(l => catalogueCategoryFilter === 'ALL' || l.category === catalogueCategoryFilter)
+                          .filter(l => {
+                            if (!catalogueSearchQuery.trim()) return true;
+                            const q = catalogueSearchQuery.toLowerCase();
+                            return l.title.toLowerCase().includes(q) ||
+                              l.shortTitle.toLowerCase().includes(q) ||
+                              l.purpose.toLowerCase().includes(q) ||
+                              l.refCode.toLowerCase().includes(q);
+                          })
+                          .map(letter => {
+                            const isSelected = activeDoc === letter.id;
+                            const catMeta = HR_CATEGORY_META.find(c => c.id === letter.category);
+                            return (
+                              <button
+                                key={letter.id}
+                                onClick={() => {
+                                  setActiveDoc(letter.id as DocumentType);
+                                  setCataloguePickerOpen(false);
+                                  toast({
+                                    title: `Letter Selected: ${letter.title}`,
+                                    description: `Switched document canvas to ${letter.shortTitle}.`,
+                                  });
+                                }}
+                                className={`w-full text-left p-2 rounded-lg transition-all flex items-start justify-between gap-2 border cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-purple-500/10 border-purple-500/30 text-purple-950 dark:text-purple-200'
+                                    : 'bg-card hover:bg-muted/40 border-border/50'
+                                }`}
+                              >
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-bold text-xs text-foreground">{letter.title}</span>
+                                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-semibold">
+                                      {letter.refCode}
+                                    </span>
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
+                                      {catMeta?.shortLabel || letter.category}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground line-clamp-1">
+                                    {letter.purpose}
+                                  </p>
+                                </div>
+                                {isSelected && (
+                                  <Check className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                                )}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 
@@ -1522,6 +1868,95 @@ You are hereby formally cautioned to strictly adhere to the designated working h
                   >
                     <Save className="w-3 h-3 mr-1" /> {isUpdatingDb ? 'Saving...' : 'Save to Master'}
                   </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── HR LETTER CATALOGUE PROFILE & DYNAMIC FIELDS ── */}
+          {getLetterById(activeDoc) && (
+            <div className="space-y-3 pt-3 border-t border-border">
+              {/* Profile Card */}
+              <div className="bg-muted/30 border border-border/80 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                    {HR_CATEGORY_META.find(c => c.id === getLetterById(activeDoc)?.category)?.label || getLetterById(activeDoc)?.category}
+                  </span>
+                  <span className="text-[9.5px] font-mono font-bold px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                    REF: {getLetterById(activeDoc)?.refCode} • {getLetterById(activeDoc)?.sensitivity.toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs text-foreground leading-tight">
+                    {getLetterById(activeDoc)?.title}
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                    {getLetterById(activeDoc)?.purpose}
+                  </p>
+                </div>
+
+                {/* Legal Advisory / Statutory Compliance Notes */}
+                {getLetterById(activeDoc)?.legalNotes && getLetterById(activeDoc)!.legalNotes!.length > 0 && (
+                  <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg p-2.5 text-[10px] text-amber-900 dark:text-amber-200 space-y-1">
+                    <p className="font-bold flex items-center gap-1 text-[9.5px] uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                      Statutory HR Compliance &amp; Guidelines:
+                    </p>
+                    <ul className="list-disc pl-4 space-y-0.5 text-[10px]">
+                      {getLetterById(activeDoc)!.legalNotes!.map((note, nIdx) => (
+                        <li key={nIdx} className="leading-tight">{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Dynamic Specific Fields for Extended Catalogue Letters */}
+              {!['offer_letter', 'appointment_letter', 'sales_incentive_letter', 'id_card', 'notice_letter', 'relieving_letter', 'salary_certificate'].includes(activeDoc) && (
+                <div className="space-y-2.5 bg-muted/20 border border-border/60 p-3 rounded-xl">
+                  <span className="font-bold text-purple-600 uppercase text-[10.5px] tracking-wider block">
+                    Letter Parameters &amp; Custom Fields
+                  </span>
+                  {getLetterById(activeDoc)?.specificFields
+                    .filter(f => !['signatoryName', 'signatoryDesignation', 'issueDate'].includes(f.key))
+                    .map(field => {
+                      const val = catalogueFieldValues[field.key] ?? field.defaultValue ?? '';
+                      return (
+                        <div key={field.key} className="space-y-1">
+                          <label className="font-semibold text-xs text-muted-foreground flex items-center justify-between">
+                            <span>{field.label} {field.required && <span className="text-red-500">*</span>}</span>
+                            {field.helpText && <span className="text-[9.5px] text-muted-foreground font-normal">{field.helpText}</span>}
+                          </label>
+                          {field.type === 'textarea' ? (
+                            <textarea
+                              rows={2}
+                              value={val}
+                              placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
+                              onChange={(e) => setCatalogueFieldValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                              className="w-full border rounded-lg p-2 bg-background text-xs font-medium resize-none leading-relaxed"
+                            />
+                          ) : field.type === 'select' ? (
+                            <select
+                              value={val}
+                              onChange={(e) => setCatalogueFieldValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                              className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-medium"
+                            >
+                              {field.options?.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                              value={val}
+                              placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
+                              onChange={(e) => setCatalogueFieldValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                              className="w-full border rounded-lg px-2.5 py-1.5 bg-background text-xs font-medium"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </div>
@@ -2596,6 +3031,171 @@ You are hereby formally cautioned to strictly adhere to the designated working h
                     Please sign and return the duplicate copy of this communication as an acknowledgment of receipt.
                   </p>
 
+                  {renderSignatory()}
+                </div>
+              )}
+
+              {/* ── 8. DYNAMIC HR LETTER CATALOGUE RENDERER (FOR EXTENDED CATALOGUE LETTERS) ── */}
+              {getLetterById(activeDoc) && !['offer_letter', 'appointment_letter', 'sales_incentive_letter', 'relieving_letter', 'salary_certificate', 'id_card', 'notice_letter'].includes(activeDoc) && (
+                <div className="space-y-4 text-xs leading-relaxed">
+                  {renderHeader()}
+
+                  {/* Letter Formal Subject / Header Banner */}
+                  <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white py-1.5 px-4 rounded text-center shadow-xs border border-amber-400/40">
+                    <h2 className="font-serif font-black text-xs tracking-[2px] uppercase text-amber-200">
+                      {getLetterById(activeDoc)?.title}
+                    </h2>
+                    <span className="text-[8px] font-sans font-semibold tracking-wider text-slate-300 uppercase block mt-0.5">
+                      Official Corporate Communication • Ref: {currentRefNumber}
+                    </span>
+                  </div>
+
+                  {/* Recipient Details Block */}
+                  <div className="space-y-0.5 border-b border-slate-200 pb-2 text-[10.5px]">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-slate-500 uppercase text-[9px] tracking-wider">
+                        {getLetterById(activeDoc)?.audience === 'all_staff' ? 'Circular Notice / Addressed To:' : 'Addressee / Recipient:'}
+                      </p>
+                      <span className="font-mono text-[8.5px] bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-bold border border-slate-200">
+                        REF ID: {activePerson.employee_id || (isCandidateMode ? 'CAND-0010' : 'EMP-0010')}
+                      </span>
+                    </div>
+                    <p className="font-black text-sm text-slate-950 uppercase tracking-tight">{activePerson.name}</p>
+                    <div className="flex flex-wrap items-center gap-x-3 text-[10px] text-slate-600">
+                      <span>Designation: <strong>{activePerson.designation || 'Staff'}</strong></span>
+                      <span>• Department: <strong>{activePerson.department || 'Operations'}</strong></span>
+                      {activePerson.contactinfo && <span>• Mobile: {activePerson.contactinfo}</span>}
+                      {activePerson.aadhar_number && <span>• Aadhaar: {activePerson.aadhar_number}</span>}
+                    </div>
+                  </div>
+
+                  {/* Dynamic Sections from bodyTemplate */}
+                  <div className="space-y-3 pt-1">
+                    {getLetterById(activeDoc)?.bodyTemplate.map((section) => {
+                      if (section.type === 'heading') {
+                        return (
+                          <div key={section.id} className="pt-1">
+                            <h3 className="font-bold text-[11px] text-slate-950 uppercase tracking-wide border-b border-slate-200 pb-1">
+                              {replaceTokens(section.content || '')}
+                            </h3>
+                          </div>
+                        );
+                      }
+
+                      if (section.type === 'paragraph') {
+                        const content = replaceTokens(section.content || '');
+                        if (!content.trim() && section.optional) return null;
+                        return (
+                          <p key={section.id} className="text-[11px] text-slate-800 leading-relaxed text-justify whitespace-pre-wrap">
+                            {content}
+                          </p>
+                        );
+                      }
+
+                      if (section.type === 'table_terms') {
+                        return (
+                          <div key={section.id} className="my-2 border border-slate-300 rounded-lg overflow-hidden shadow-2xs">
+                            {section.label && (
+                              <div className="bg-slate-100 px-3 py-1 font-bold text-[9px] uppercase tracking-wider text-slate-800 border-b border-slate-200">
+                                {section.label}
+                              </div>
+                            )}
+                            <table className="w-full text-[10px] text-left">
+                              <tbody>
+                                {section.rows?.map((row, rIdx) => (
+                                  <tr key={rIdx} className={rIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
+                                    <td className="py-1 px-3 font-semibold text-slate-600 border-b border-slate-100 w-2/5">
+                                      {replaceTokens(row.label)}
+                                    </td>
+                                    <td className="py-1 px-3 font-bold text-slate-900 border-b border-slate-100">
+                                      {replaceTokens(row.value)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      }
+
+                      if (section.type === 'roles_duties') {
+                        return rolesAndDuties.length > 0 ? (
+                          <div key={section.id} className="my-1.5 border border-slate-200 rounded-lg p-2.5 bg-slate-50/70">
+                            <p className="font-bold text-[9.5px] uppercase tracking-wider text-slate-800 mb-1">
+                              Roles &amp; Assigned Responsibilities:
+                            </p>
+                            <ul className="list-decimal pl-4 space-y-0.5 text-[10px] text-slate-700">
+                              {rolesAndDuties.map((duty, idx) => (
+                                <li key={idx} className="leading-snug">{replaceTokens(duty)}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null;
+                      }
+
+                      if (section.type === 'salary_breakdown') {
+                        return (
+                          <div key={section.id} className="my-2 border border-slate-300 rounded-lg overflow-hidden shadow-2xs">
+                            <div className="bg-slate-100 px-3 py-1 font-bold text-[9px] uppercase tracking-wider text-slate-800 border-b border-slate-200 flex justify-between">
+                              <span>Compensation Structure</span>
+                              <span className="font-mono text-purple-900 font-bold">Total Monthly: {formatCurrency(monthlyBase)}</span>
+                            </div>
+                            <table className="w-full text-[10px] text-left">
+                              <tbody>
+                                <tr className="bg-white"><td className="py-1 px-3 text-slate-600 border-b border-slate-100 w-2/5">Basic Salary (50%)</td><td className="py-1 px-3 font-bold text-slate-900 border-b border-slate-100">{formatCurrency(basicSalary)}</td></tr>
+                                <tr className="bg-slate-50/70"><td className="py-1 px-3 text-slate-600 border-b border-slate-100">House Rent Allowance - HRA (30%)</td><td className="py-1 px-3 font-bold text-slate-900 border-b border-slate-100">{formatCurrency(hraSalary)}</td></tr>
+                                <tr className="bg-white"><td className="py-1 px-3 text-slate-600 border-b border-slate-100">Conveyance Allowance (10%)</td><td className="py-1 px-3 font-bold text-slate-900 border-b border-slate-100">{formatCurrency(conveyance)}</td></tr>
+                                <tr className="bg-slate-50/70"><td className="py-1 px-3 text-slate-600 border-b border-slate-100">Special &amp; Performance Allowance (10%)</td><td className="py-1 px-3 font-bold text-slate-900 border-b border-slate-100">{formatCurrency(specialAllowance)}</td></tr>
+                                <tr className="bg-purple-50/60 font-bold"><td className="py-1 px-3 text-purple-950 border-t border-purple-200">Total Cost to Company (Annual CTC)</td><td className="py-1 px-3 text-purple-950 border-t border-purple-200 font-black">{formatCurrency(annualCtc)}</td></tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      }
+
+                      if (section.type === 'notice_box') {
+                        const sevClass = 
+                          section.severity === 'danger' ? 'bg-red-50 border-red-300 text-red-950' :
+                          section.severity === 'warning' ? 'bg-amber-50 border-amber-300 text-amber-950' :
+                          section.severity === 'success' ? 'bg-emerald-50 border-emerald-300 text-emerald-950' :
+                          'bg-blue-50 border-blue-300 text-blue-950';
+
+                        return (
+                          <div key={section.id} className={`p-2.5 rounded-lg border text-[10px] leading-relaxed my-1.5 ${sevClass}`}>
+                            {replaceTokens(section.content || '')}
+                          </div>
+                        );
+                      }
+
+                      if (section.type === 'bullet_list') {
+                        return (
+                          <ul key={section.id} className="list-disc pl-5 space-y-0.5 text-[10.5px] text-slate-700 my-1">
+                            {section.items?.map((it, idx) => (
+                              <li key={idx} className="leading-snug">{replaceTokens(it)}</li>
+                            ))}
+                          </ul>
+                        );
+                      }
+
+                      if (section.type === 'numbered_list') {
+                        return (
+                          <ol key={section.id} className="list-decimal pl-5 space-y-0.5 text-[10.5px] text-slate-700 my-1">
+                            {section.items?.map((it, idx) => (
+                              <li key={idx} className="leading-snug">{replaceTokens(it)}</li>
+                            ))}
+                          </ol>
+                        );
+                      }
+
+                      if (section.type === 'blank_lines') {
+                        return <div key={section.id} className="h-3" />;
+                      }
+
+                      return null;
+                    })}
+                  </div>
+
+                  {/* Statutory Signatures & Seal Block */}
                   {renderSignatory()}
                 </div>
               )}

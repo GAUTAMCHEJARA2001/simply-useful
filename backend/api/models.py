@@ -1034,6 +1034,50 @@ class PaymentReceipt(models.Model):
     class Meta:
         db_table = 'PaymentReceipt'
 
+
+class CreditNoteDiscountRequest(models.Model):
+    TYPE_CHOICES = (
+        ('CREDIT_NOTE', 'Credit Note'),
+        ('DISCOUNT', 'Discount'),
+    )
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending SuperAdmin Approval'),
+        ('APPROVED', 'Approved & Synced to Ledger'),
+        ('REJECTED', 'Rejected'),
+    )
+
+    id = models.TextField(primary_key=True)
+    request_id = models.CharField(max_length=100, unique=True)
+    party_type = models.CharField(max_length=50, default='DEALER')
+    party_id = models.TextField(db_column='partyId')
+    party_name = models.TextField(db_column='partyName')
+    request_type = models.CharField(max_length=50, choices=TYPE_CHOICES, default='CREDIT_NOTE')
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    reason = models.TextField()
+    related_order_id = models.CharField(max_length=100, blank=True, null=True)
+    invoice_number = models.CharField(max_length=100, blank=True, null=True)
+    photo_url = models.URLField(max_length=500, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+
+    requested_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='requestedById', db_constraint=False, related_name='requested_cns')
+    requested_at = models.DateTimeField(default=timezone.now)
+
+    reviewed_by = models.ForeignKey('core.User', models.DO_NOTHING, db_column='reviewedById', db_constraint=False, null=True, blank=True, related_name='reviewed_cns')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_notes = models.TextField(blank=True, null=True)
+    accounting_narration = models.TextField(blank=True, null=True)
+
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'CreditNoteDiscountRequest'
+        indexes = [
+            models.Index(fields=['party_id', 'status'], name='idx_cndisc_party_stat'),
+            models.Index(fields=['request_type', 'status'], name='idx_cndisc_type_stat'),
+        ]
+
 class PartyOnboardingRequest(models.Model):
     id = models.TextField(primary_key=True)
     party_type = models.CharField(max_length=50, default='DEALER') # DEALER or DISTRIBUTOR

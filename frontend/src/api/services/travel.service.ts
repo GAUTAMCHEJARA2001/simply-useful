@@ -28,6 +28,36 @@ export interface TourPlanStopItem {
   created_at?: string | null;
 }
 
+export interface FieldVisitItem {
+  id: string;
+  source?: 'TOUR_PLAN' | 'VISIT_PUNCH' | string;
+  date: string;
+  stop_order: number;
+  is_unplanned: boolean;
+  so_id: string;
+  so_name: string;
+  so_email: string;
+  dealer_id?: string | null;
+  dealer_name: string;
+  dealer_location?: string;
+  visit_purpose: string;
+  visited: boolean;
+  target_order_bags?: number;
+  target_order_value?: number;
+  target_collection_value?: number;
+  actual_order_bags: number;
+  actual_order_value: number;
+  actual_collection_value: number;
+  actual_status: string;
+  shortfall_reason?: string;
+  actual_notes?: string;
+  visit_photo?: string | null;
+  gps_location?: string | null;
+  completed_at?: string | null;
+  next_visit_date?: string | null;
+  created_at?: string | null;
+}
+
 export interface DailyTravelLogItem {
   id: string;
   date: string;
@@ -118,6 +148,17 @@ export const travelService = {
     status?: string;
     user_id?: string;
   }) => api.get('/travel/hr/logs', { params }),
+
+  getFieldVisits: (params?: {
+    date?: string;
+    date_from?: string;
+    date_to?: string;
+    month?: string;
+    user_id?: string;
+    purpose?: string;
+    status?: string;
+    search?: string;
+  }) => api.get<FieldVisitItem[]>('/travel/hr/field-visits', { params }),
 
   verifyLog: (
     id: string,
@@ -225,4 +266,6 @@ export interface SOScorecardData {
   };
   officers: SOScorecardOfficer[];
 }
+
+
 

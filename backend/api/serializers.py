@@ -1028,6 +1028,11 @@ class BomListSerializer(serializers.ModelSerializer):
         return prod.name if prod else ""
 
     def get_bomCost(self, obj):
+        req = self.context.get('request')
+        user = getattr(req, 'user', None)
+        role = (getattr(user, 'role', '') or '').upper() if user else ''
+        if role != 'SUPERADMIN' and not getattr(user, 'is_superuser', False):
+            return {}
         bom_cost_map = self.context.get('bom_cost_map', {})
         if obj.id in bom_cost_map:
             return bom_cost_map[obj.id]
@@ -1096,6 +1101,11 @@ class BomSerializer(serializers.ModelSerializer):
         return prod.name if prod else ""
 
     def get_bomCost(self, obj):
+        req = self.context.get('request')
+        user = getattr(req, 'user', None)
+        role = (getattr(user, 'role', '') or '').upper() if user else ''
+        if role != 'SUPERADMIN' and not getattr(user, 'is_superuser', False):
+            return {}
         bom_cost_map = self.context.get('bom_cost_map', {})
         if obj.id in bom_cost_map:
             return bom_cost_map[obj.id]

@@ -54,11 +54,16 @@ from api.views_orders import (
 )
 
 from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties, import_busy_ledger, get_sync_status, ledger_requests_view, fulfill_ledger_request
+from api.views_party_ledger import (
+    cn_discount_requests_list_create,
+    review_cn_discount_request,
+    get_live_party_ledger,
+)
 from api.views_travel import (
     travel_today, travel_start, travel_end, travel_my_history,
     travel_hr_logs, travel_hr_verify, travel_hr_update_log, travel_hr_manual_entry,
     travel_plan, travel_add_unplanned_stop,
-    travel_punch_stop_visit, travel_so_scorecard
+    travel_punch_stop_visit, travel_so_scorecard, travel_hr_field_visits
 )
 from api.views_sales_target import (
     list_sales_targets, upsert_sales_target, copy_previous_targets, get_target_masters
@@ -96,7 +101,8 @@ from api.views_hr import (
     hr_departments, hr_departments_detail,
     hr_designations, hr_designations_detail,
     hr_leave_types, hr_leave_types_detail,
-    hr_leave_balances, hr_leave_records
+    hr_leave_balances, hr_leave_records,
+    hr_workforce_intelligence
 )
 from api.leave_views import hr_leave_policies, hr_leave_policies_detail, hr_leave_allocate, hr_leave_auto_fetch, hr_leave_records_detail
 
@@ -196,6 +202,7 @@ urlpatterns = [
     path('hr/leave-policies', hr_leave_policies, name='hr-leave-policies'),
     path('hr/leave-policies/<str:pk>', hr_leave_policies_detail, name='hr-leave-policies-detail'),
     path('hr/leaves/allocate', hr_leave_allocate, name='hr-leave-allocate'),
+    path('hr/workforce-intelligence', hr_workforce_intelligence, name='hr-workforce-intelligence'),
 
     path('transactions/adjustments', transaction_adjustments, name='tx-adjustments'),
     path('transactions/adjustments/<str:pk>', transaction_adjustments_detail, name='tx-adjustment-detail'),
@@ -232,6 +239,7 @@ urlpatterns = [
     path('travel/hr/logs/<str:pk>', travel_hr_update_log, name='travel-hr-update-log'),
     path('travel/hr/manual-entry', travel_hr_manual_entry, name='travel-hr-manual-entry'),
     path('travel/hr/verify/<str:pk>', travel_hr_verify, name='travel-hr-verify'),
+    path('travel/hr/field-visits', travel_hr_field_visits, name='travel-hr-field-visits'),
     path('travel/so-scorecard', travel_so_scorecard, name='travel-so-scorecard'),
 
     # HR Sales Target Management & Allocation
@@ -239,6 +247,11 @@ urlpatterns = [
     path('hr/sales-targets/save', upsert_sales_target, name='hr-sales-targets-save'),
     path('hr/sales-targets/copy-previous', copy_previous_targets, name='hr-sales-targets-copy'),
     path('hr/sales-targets/masters', get_target_masters, name='hr-sales-targets-masters'),
+
+    # Live Party Financial Ledger & Credit Note / Discount Approvals
+    path('parties/cn-requests', cn_discount_requests_list_create, name='cn-discount-requests'),
+    path('parties/cn-requests/<str:pk>/review', review_cn_discount_request, name='cn-discount-review'),
+    path('parties/ledger/<str:party_type>/<str:party_id>', get_live_party_ledger, name='live-party-ledger'),
 
     # Router endpoints
     path('', include(router.urls)),

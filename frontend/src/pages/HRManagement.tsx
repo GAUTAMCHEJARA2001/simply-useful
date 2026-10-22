@@ -15,17 +15,24 @@ import { LeaveManagementTab } from './HRManagement/components/LeaveManagementTab
 import { TravelApprovalsTab } from './HRManagement/components/TravelApprovalsTab';
 import { SalesTargetManagementTab } from './HRManagement/components/SalesTargetManagementTab';
 import { ExpenseApprovalsTab } from './HRManagement/components/ExpenseApprovalsTab';
+import { FieldVisitsTab } from './HRManagement/components/FieldVisitsTab';
 
-export type HRTab = 'dashboard' | 'employees' | 'documents' | 'targets' | 'attendance' | 'travel' | 'expenses' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
+export type HRTab = 'dashboard' | 'employees' | 'documents' | 'targets' | 'attendance' | 'travel' | 'visits' | 'expenses' | 'leaves' | 'ledger' | 'payroll' | 'orgchart' | 'config';
 
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const tab = (searchParams.get('tab') as HRTab) || 'dashboard';
+  const isSuperAdmin = user?.role === 'SUPERADMIN';
+  const defaultTab: HRTab = isSuperAdmin ? 'dashboard' : 'employees';
+  const tab = (searchParams.get('tab') as HRTab) || defaultTab;
 
   const hasAccess = can('view_inventory_dashboard') || can('view_hr_dashboard') || ['SUPERADMIN', 'ADMIN', 'HR'].includes(user?.role || '');
   if (!hasAccess) return <Navigate to="/" replace />;
+
+  if (tab === 'dashboard' && !isSuperAdmin) {
+    return <Navigate to="/hr/manage?tab=employees" replace />;
+  }
 
   return (
     <div className="flex-1 w-full min-w-0 p-3 sm:p-5 lg:p-6 bg-background overflow-y-auto space-y-5">
@@ -39,6 +46,7 @@ const HRManagement: React.FC = () => {
         {tab === 'orgchart' && <OrgChartTab />}
         {tab === 'attendance' && <AdvancedAttendanceTab />}
         {tab === 'travel' && <TravelApprovalsTab />}
+        {tab === 'visits' && <FieldVisitsTab />}
         {tab === 'expenses' && <ExpenseApprovalsTab />}
         {tab === 'leaves' && <LeaveManagementTab />}
         {tab === 'ledger' && <EmployeeLedgerTab />}

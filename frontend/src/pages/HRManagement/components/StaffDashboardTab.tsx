@@ -26,8 +26,85 @@ import {
   UserCheck,
   Building2,
   Award,
-  Wallet
+  Wallet,
+  Zap,
+  Target,
+  ShoppingCart,
+  Factory,
+  ArrowUpRight,
+  BarChart3,
+  Loader2,
+  Activity,
+  Check
 } from 'lucide-react';
+
+interface WorkforceIntel {
+  overview: {
+    total_headcount: number;
+    active_headcount: number;
+    fixed_headcount: number;
+    variable_headcount: number;
+    sales_headcount: number;
+    production_headcount: number;
+    revenue_per_company_employee: number;
+    departments: Record<string, number>;
+  };
+  sales_ratios: {
+    sales_per_rep_monthly: number;
+    sales_per_rep_all_time: number;
+    daily_sales_per_rep: number;
+    total_sales_all_time: number;
+    total_orders_all_time: number;
+    monthly_sales: number;
+    monthly_orders_count: number;
+    today_sales: number;
+    today_orders_count: number;
+    average_order_value: number;
+    total_visits: number;
+    visit_to_order_ratio_pct: number;
+    total_travel_km: number;
+    sales_revenue_per_km: number;
+    travel_cost_to_revenue_pct: number;
+    revenue_per_travel_rupee: number;
+  };
+  production_ratios: {
+    total_units_produced: number;
+    total_batches_completed: number;
+    units_per_worker: number;
+    batches_per_worker: number;
+    avg_batch_output: number;
+  };
+  sales_leaderboard: Array<{
+    email: string;
+    name: string;
+    role: string;
+    total_sales: number;
+    order_count: number;
+    average_order_value: number;
+    visits_count: number;
+    travel_km: number;
+    sales_per_km: number;
+    target_amount: number;
+    target_achievement_pct: number | null;
+  }>;
+  production_breakdown: Array<{
+    name: string;
+    warehouse_name?: string;
+    warehouse_id?: string | number;
+    email?: string;
+    supervisors?: string;
+    supervisors_detail?: Array<{
+      name: string;
+      email: string;
+      units: number;
+      batches: number;
+    }>;
+    units_produced: number;
+    batches_completed: number;
+    avg_batch_size: number;
+    contribution_pct: number;
+  }>;
+}
 
 export const StaffDashboardTab: React.FC = () => {
   const navigate = useNavigate();
@@ -37,7 +114,9 @@ export const StaffDashboardTab: React.FC = () => {
 
   const [travelLogs, setTravelLogs] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [workforceIntel, setWorkforceIntel] = useState<WorkforceIntel | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [activeRatioTab, setActiveRatioTab] = useState<'ALL' | 'SALES' | 'PRODUCTION' | 'TRAVEL'>('ALL');
 
   // User lookup map for names and emails
   const userMap = useMemo(() => {
@@ -60,12 +139,17 @@ export const StaffDashboardTab: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (user?.role !== 'SUPERADMIN') {
+      setLoadingStats(false);
+      return;
+    }
     const fetchDashboardData = async () => {
       try {
         setLoadingStats(true);
-        const [travelRes, expRes] = await Promise.allSettled([
+        const [travelRes, expRes, intelRes] = await Promise.allSettled([
           travelService.getHRLogs({ month: currentMonth }),
           api.get('/expenses/'),
+          api.get(`/hr/workforce-intelligence?month=${currentMonth}`),
         ]);
 
         if (travelRes.status === 'fulfilled' && travelRes.value.data?.data) {
@@ -73,6 +157,9 @@ export const StaffDashboardTab: React.FC = () => {
         }
         if (expRes.status === 'fulfilled' && expRes.value.data?.data) {
           setExpenses(expRes.value.data.data);
+        }
+        if (intelRes.status === 'fulfilled' && intelRes.value.data?.data) {
+          setWorkforceIntel(intelRes.value.data.data);
         }
       } catch (err) {
         console.error('Failed to load HR dashboard overview data:', err);
@@ -111,6 +198,17 @@ export const StaffDashboardTab: React.FC = () => {
   const pendingExpenseAmount = pendingExpenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
   const approvedExpenseAmount = approvedExpenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
 
+  if (user?.role !== 'SUPERADMIN') {
+    return (
+      <Card className="p-8 text-center text-muted-foreground border-dashed">
+        <h3 className="text-sm font-semibold text-foreground">Access Restricted</h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          The Staff Operations & Workforce Dashboard is exclusively accessible to Super Admin.
+        </p>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in-50 duration-300">
       {/* ── Top Header Banner ── */}
@@ -129,11 +227,17 @@ export const StaffDashboardTab: React.FC = () => {
               Staff Operations & Workforce Dashboard
             </h1>
             <p className="text-xs sm:text-sm text-blue-100 max-w-2xl mt-1">
-              Real-time monitoring of team roster, field travel verifications, staff expense claims, attendance records, and monthly payroll processing.
+              Workforce intelligence analytics: monitoring daily product output per worker, sales productivity per employee, field travel efficiency, and monthly payroll.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              onClick={() => navigate('/finance/ledger')}
+              className="bg-white/20 hover:bg-white/30 text-white font-semibold backdrop-blur-xs text-xs h-9 border border-white/30"
+            >
+              <Wallet className="w-4 h-4 mr-1.5 text-blue-200" /> Party Ledgers & CN
+            </Button>
             <Button
               onClick={() => navigate('/hr/manage?tab=travel')}
               className="bg-white text-blue-900 hover:bg-blue-50 font-bold shadow-md text-xs h-9"
@@ -259,6 +363,329 @@ export const StaffDashboardTab: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* ── HUMAN CAPITAL & WORKFORCE PRODUCTIVITY RATIOS (NEW HIGH-VALUE HUB) ── */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      <Card className="border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden bg-gradient-to-b from-white to-slate-50/60 dark:from-slate-900 dark:to-slate-950">
+        <CardHeader className="py-4 px-5 border-b border-border/70 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-muted/15">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <CardTitle className="text-base md:text-lg font-bold text-foreground">
+                Human Capital & Workforce Productivity Ratios
+              </CardTitle>
+              <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 text-[10px] font-bold">
+                Workforce Intelligence
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Cross-departmental productivity: daily product output per worker, sales revenue per employee, field travel ROI, and basket conversion.
+            </p>
+          </div>
+
+          {/* Filter Pills Switcher */}
+          <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-800 p-0.5 bg-background text-xs">
+            {[
+              { id: 'ALL', label: 'All Ratios' },
+              { id: 'SALES', label: 'Sales Force' },
+              { id: 'PRODUCTION', label: 'Plant & Production' },
+              { id: 'TRAVEL', label: 'Travel ROI' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveRatioTab(tab.id as any)}
+                className={`px-3 py-1 font-semibold rounded-md transition-all ${
+                  activeRatioTab === tab.id
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 space-y-6">
+          {/* Key 6 Ratio Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5">
+            
+            {/* Ratio 1: Monthly Sales per Sales Rep */}
+            <div className="p-3.5 rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 flex items-center justify-between">
+                <span>SALES / REP (MO)</span>
+                <ShoppingCart className="w-3.5 h-3.5" />
+              </span>
+              <div className="text-lg font-black text-blue-950 dark:text-blue-100">
+                ₹{((workforceIntel?.sales_ratios?.sales_per_rep_monthly || 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                All-time: ₹{((workforceIntel?.sales_ratios?.sales_per_rep_all_time || 0) / 100000).toFixed(2)}L / rep
+              </p>
+            </div>
+
+            {/* Ratio 2: Units per Plant Worker */}
+            <div className="p-3.5 rounded-xl border border-purple-100 dark:border-purple-900/50 bg-purple-50/50 dark:bg-purple-950/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400 flex items-center justify-between">
+                <span>OUTPUT / WORKER</span>
+                <Factory className="w-3.5 h-3.5" />
+              </span>
+              <div className="text-lg font-black text-purple-950 dark:text-purple-100">
+                {(workforceIntel?.production_ratios?.units_per_worker || 0).toLocaleString()} <span className="text-xs font-semibold">Units</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {workforceIntel?.production_ratios?.batches_per_worker || 0} batches / worker
+              </p>
+            </div>
+
+            {/* Ratio 3: Field Travel ROI (Sales / KM) */}
+            <div className="p-3.5 rounded-xl border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center justify-between">
+                <span>SALES / KM (ROI)</span>
+                <Gauge className="w-3.5 h-3.5" />
+              </span>
+              <div className="text-lg font-black text-emerald-950 dark:text-emerald-100">
+                ₹{(workforceIntel?.sales_ratios?.sales_revenue_per_km || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Revenue per travelled KM
+              </p>
+            </div>
+
+            {/* Ratio 4: Average Order Basket Size */}
+            <div className="p-3.5 rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center justify-between">
+                <span>AVG ORDER BASKET</span>
+                <DollarSign className="w-3.5 h-3.5" />
+              </span>
+              <div className="text-lg font-black text-amber-950 dark:text-amber-100">
+                ₹{(workforceIntel?.sales_ratios?.average_order_value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Across {workforceIntel?.sales_ratios?.total_orders_all_time || 0} total orders
+              </p>
+            </div>
+
+            {/* Ratio 5: Strike Rate (Orders / Visits) */}
+            <div className="p-3.5 rounded-xl border border-rose-100 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 flex items-center justify-between">
+                <span>VISIT CONVERSION</span>
+                <Target className="w-3.5 h-3.5" />
+              </span>
+              <div className="text-lg font-black text-rose-950 dark:text-rose-100">
+                {(workforceIntel?.sales_ratios?.visit_to_order_ratio_pct || 0)}%
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Orders vs logged dealer visits
+              </p>
+            </div>
+
+            {/* Ratio 6: Company Revenue per Staff */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                <span>REVENUE / STAFF</span>
+                <Award className="w-3.5 h-3.5" />
+              </span>
+              <div className="text-lg font-black text-slate-900 dark:text-white">
+                ₹{(workforceIntel?.overview?.revenue_per_company_employee || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Total Sales ÷ {workforceIntel?.overview?.total_headcount || 16} staff
+              </p>
+            </div>
+          </div>
+
+          {/* Conditional Sub-View Tables based on activeRatioTab */}
+          {(activeRatioTab === 'ALL' || activeRatioTab === 'SALES' || activeRatioTab === 'TRAVEL') && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                  <ShoppingCart className="w-4 h-4 text-primary" />
+                  Sales Force Human Performance & Productivity Scorecard
+                </h3>
+                <span className="text-[11px] text-muted-foreground">
+                  Individual revenue generation, order size & field travel efficiency
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-border overflow-hidden bg-card">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="bg-muted/40 border-b border-border text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
+                        <th className="px-3 py-2.5">Rank</th>
+                        <th className="px-3 py-2.5">Sales Officer</th>
+                        <th className="px-3 py-2.5">Role</th>
+                        <th className="px-3 py-2.5 text-right">Orders</th>
+                        <th className="px-3 py-2.5 text-right">Total Revenue (₹)</th>
+                        <th className="px-3 py-2.5 text-right">Avg Order (₹)</th>
+                        <th className="px-3 py-2.5 text-right">Visits</th>
+                        <th className="px-3 py-2.5 text-right">Travel (KM)</th>
+                        <th className="px-3 py-2.5 text-right">Field ROI (₹/KM)</th>
+                        <th className="px-3 py-2.5 text-center">Target %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {(!workforceIntel?.sales_leaderboard || workforceIntel.sales_leaderboard.length === 0) ? (
+                        <tr>
+                          <td colSpan={10} className="p-6 text-center text-muted-foreground">
+                            No sales rep records found.
+                          </td>
+                        </tr>
+                      ) : (
+                        workforceIntel.sales_leaderboard.map((so, idx) => (
+                          <tr key={so.email} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-3 py-2.5 font-bold text-muted-foreground">
+                              #{idx + 1}
+                            </td>
+                            <td className="px-3 py-2.5 font-bold text-foreground">
+                              {so.name}
+                              <span className="block text-[10px] font-normal text-muted-foreground font-mono">{so.email}</span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <Badge variant="outline" className="text-[9px] py-0 border-blue-200 text-blue-700 bg-blue-50">
+                                {so.role}
+                              </Badge>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-semibold">
+                              {so.order_count}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                              ₹{so.total_sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono text-foreground">
+                              ₹{so.average_order_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono">
+                              {so.visits_count}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono">
+                              {so.travel_km > 0 ? `${so.travel_km} KM` : '—'}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-bold text-blue-700 dark:text-blue-400">
+                              {so.sales_per_km > 0 ? `₹${so.sales_per_km.toLocaleString('en-IN', { maximumFractionDigits: 0 })}/KM` : '—'}
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              {so.target_achievement_pct !== null ? (
+                                <Badge className={`text-[10px] ${
+                                  so.target_achievement_pct >= 100
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : so.target_achievement_pct >= 60
+                                    ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                    : 'bg-amber-100 text-amber-800 border-amber-300'
+                                }`}>
+                                  {so.target_achievement_pct}%
+                                </Badge>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">Standard</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Plant & Production Labour Efficiency Table */}
+          {(activeRatioTab === 'ALL' || activeRatioTab === 'PRODUCTION') && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                  <Factory className="w-4 h-4 text-purple-600" />
+                  Plant & Warehouse Production Output Breakdown
+                </h3>
+                <span className="text-[11px] text-muted-foreground">
+                  Finished goods units produced, manufacturing batches handled & facility contribution share
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-border overflow-hidden bg-card">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="bg-muted/40 border-b border-border text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
+                        <th className="px-3 py-2.5">Rank</th>
+                        <th className="px-3 py-2.5">Manufacturing Facility / Plant</th>
+                        <th className="px-3 py-2.5 text-right">Units Produced</th>
+                        <th className="px-3 py-2.5 text-right">Batches Handled</th>
+                        <th className="px-3 py-2.5 text-right">Avg Batch Size</th>
+                        <th className="px-3 py-2.5 text-right">Factory Contribution %</th>
+                        <th className="px-4 py-2.5 min-w-[140px]">Production Share</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {(!workforceIntel?.production_breakdown || workforceIntel.production_breakdown.length === 0) ? (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                            No production batch logs recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        workforceIntel.production_breakdown.map((op, idx) => (
+                          <tr key={op.name + idx} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-3 py-2.5 font-bold text-muted-foreground">
+                              #{idx + 1}
+                            </td>
+                            <td className="px-3 py-2.5 font-bold text-foreground">
+                              <div className="flex items-center gap-1.5">
+                                <Factory className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                <span className="font-bold text-foreground text-xs">{op.warehouse_name || op.name}</span>
+                              </div>
+                              {op.supervisors && (
+                                <div className="text-[10px] font-normal text-muted-foreground mt-0.5 flex items-center gap-1">
+                                  <span className="font-semibold text-slate-700 dark:text-slate-300">Supervisors:</span>
+                                  <span>{op.supervisors}</span>
+                                </div>
+                              )}
+                              {op.supervisors_detail && op.supervisors_detail.length > 1 && (
+                                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                  {op.supervisors_detail.map(sup => (
+                                    <span key={sup.email} className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                      <span className="font-medium">{sup.name}:</span>
+                                      <span className="font-mono font-bold">{sup.units.toLocaleString()} u</span>
+                                      <span className="text-muted-foreground font-normal">({sup.batches} b)</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-bold text-purple-700 dark:text-purple-400">
+                              {op.units_produced.toLocaleString()} <span className="text-[10px] font-normal">units</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-semibold">
+                              {op.batches_completed} batches
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">
+                              {op.avg_batch_size} units/batch
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-bold text-foreground">
+                              {op.contribution_pct}%
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                                <div
+                                  className="bg-purple-600 h-2 rounded-full transition-all"
+                                  style={{ width: `${Math.min(100, op.contribution_pct)}%` }}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Two Columns: Operations Overview & Navigation Matrix ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -483,8 +910,10 @@ export const StaffDashboardTab: React.FC = () => {
             </CardHeader>
             <CardContent className="p-2 space-y-1">
               {[
+                { label: 'Party Ledgers & CN', path: '/finance/ledger', icon: Wallet, desc: 'Live ERP party statement & balance' },
                 { label: 'Employee Master', path: '/hr/manage?tab=employees', icon: Users, desc: 'Staff directory & KYC' },
                 { label: 'Daily Attendance', path: '/hr/manage?tab=attendance', icon: Clock, desc: 'Biometric punches & shift logs' },
+                { label: 'SO Field Visits', path: '/hr/manage?tab=visits', icon: MapPin, desc: 'Beat visit tracker & dealer stops' },
                 { label: 'Travel & KM Approvals', path: '/hr/manage?tab=travel', icon: Gauge, desc: 'Field trip odometer reviews' },
                 { label: 'Spend & Bill Approvals', path: '/hr/manage?tab=expenses', icon: Receipt, desc: 'Expense reimbursements' },
                 { label: 'Payroll & Slips', path: '/hr/manage?tab=payroll', icon: FileBarChart, desc: 'Salary slip generation' },
@@ -517,3 +946,5 @@ export const StaffDashboardTab: React.FC = () => {
     </div>
   );
 };
+
+export default StaffDashboardTab;

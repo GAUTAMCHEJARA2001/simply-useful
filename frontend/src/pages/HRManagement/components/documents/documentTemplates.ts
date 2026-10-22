@@ -1,11 +1,43 @@
-export type DocumentType = 
-  | 'offer_letter' 
-  | 'appointment_letter' 
-  | 'sales_incentive_letter' 
-  | 'relieving_letter' 
-  | 'salary_certificate' 
-  | 'id_card' 
-  | 'notice_letter';
+export type DocumentType =
+  // Recruitment
+  | 'offer_letter'
+  | 'appointment_letter'
+  | 'probationary_appointment'
+  | 'internship_offer'
+  | 'interview_invitation'
+  // Employment Administration
+  | 'promotion_letter'
+  | 'transfer_letter'
+  | 'salary_revision_letter'
+  | 'probation_extension'
+  | 'confirmation_letter'
+  // Attendance & Discipline
+  | 'notice_letter'
+  | 'show_cause_notice'
+  | 'attendance_warning'
+  | 'pip_notice'
+  // Leave & Benefits
+  | 'leave_approval'
+  | 'leave_rejection'
+  // Payroll
+  | 'sales_incentive_letter'
+  // Performance
+  | 'appreciation_letter'
+  | 'performance_review_invitation'
+  // Policy
+  | 'policy_circular'
+  | 'holiday_notification'
+  // Separation
+  | 'relieving_letter'
+  | 'resignation_acceptance'
+  | 'termination_letter'
+  // Certificates
+  | 'salary_certificate'
+  | 'experience_certificate'
+  | 'noc_letter'
+  | 'employment_verification'
+  // Legacy
+  | 'id_card';
 
 export type TemplateCategory = 
   | 'Accounts' 

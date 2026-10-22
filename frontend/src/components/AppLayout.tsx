@@ -7,7 +7,7 @@ import {
   ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store, Activity, FileText,
   PanelLeftClose, PanelLeft, Maximize2, Minimize2, Gauge, Trophy, Target,
   Search, ChevronDown, ChevronRight, Briefcase, Truck, CreditCard, ShieldCheck, Zap,
-  Clock, Award, FileBarChart, CalendarCheck, Sliders, DollarSign, Factory, Trash2, Wallet
+  Clock, Award, FileBarChart, CalendarCheck, Sliders, DollarSign, Factory, Trash2, Wallet, Percent
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -54,6 +54,8 @@ const navItems: NavItem[] = [
   { label: 'SO Scorecards', path: '/sales/travel?tab=SCORECARD', icon: Trophy, feature: 'track_visits', domain: 'FIELD', description: 'Sales officer performance rankings' },
 
   // 3. Finance & Billing
+  { label: 'Party Ledgers', path: '/finance/ledger', icon: Wallet, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Live ERP party statements, running balances & transaction ledger' },
+  { label: 'CN & Discounts', path: '/finance/cn-requests', icon: Percent, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Credit Notes, special discounts & SuperAdmin approvals queue' },
   { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses', domain: 'FINANCE', description: 'Submit and review travel & field expenses' },
   { label: 'Payment Receipts', path: '/sales/payments/new', icon: CreditCard, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Record party cheque, RTGS or cash payments' },
   { label: 'Payment Approvals', path: '/admin/payments', icon: Receipt, feature: 'view_admin_dashboard', domain: 'FINANCE', description: 'Verify and approve party payment collections' },
@@ -104,6 +106,7 @@ const navItems: NavItem[] = [
   { label: 'Organization Chart', path: '/hr/manage?tab=orgchart', icon: Users, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Staff & Team', description: 'Company reporting hierarchy tree' },
   { label: 'Daily Attendance', path: '/hr/manage?tab=attendance', icon: Clock, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Attendance & Operations', description: 'Biometric punches & shift logs' },
   { label: 'Travel & KM Approvals', path: '/hr/manage?tab=travel', icon: Gauge, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Attendance & Operations', description: 'Field travel & KM allowance reviews' },
+  { label: 'SO Field Visits', path: '/hr/manage?tab=visits', icon: MapPin, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Attendance & Operations', description: 'Track where Sales Officers go throughout the day & beat stops' },
   { label: 'Spend & Bill Approvals', path: '/hr/manage?tab=expenses', icon: Receipt, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Attendance & Operations', description: 'Staff reimbursement approvals' },
   { label: 'Leave Management', path: '/hr/manage?tab=leaves', icon: CalendarCheck, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Attendance & Operations', description: 'Leave approvals & holiday tracker' },
   { label: 'Employee Ledger', path: '/hr/manage?tab=ledger', icon: Wallet, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Staff advance salary & running balances' },
@@ -112,6 +115,8 @@ const navItems: NavItem[] = [
 
   // 6. Administration
   { label: 'Admin Panels', path: '/admin', icon: ShieldCheck, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Master control dashboard' },
+  { label: 'Party Ledgers', path: '/finance/ledger', icon: Wallet, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Live statements, sales billing, returns, and transaction ledger' },
+  { label: 'CN & Discount Approvals', path: '/finance/cn-requests', icon: Percent, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Examine & approve credit notes, special discounts & ledger write-offs' },
   { label: 'Manage Staff', path: '/admin/users', icon: Users, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Staff logins, roles & warehouse permissions' },
   { label: 'Dealers', path: '/admin/dealers', icon: Store, feature: 'manage_customers', domain: 'ADMIN', description: 'Manage retail shops, dealers and credit limits' },
   { label: 'Distributors', path: '/admin/distributors', icon: Users, feature: 'manage_customers', domain: 'ADMIN', description: 'Manage wholesale distributor networks' },
@@ -462,6 +467,15 @@ export const HR_SUB_PAGES: SubPageSearchItem[] = [
     description: 'Field officer odometer verification & KM allowance approvals',
   },
   {
+    id: 'hr_field_visits',
+    label: 'SO Field Visits',
+    group: 'HR Suite',
+    path: '/hr/manage?tab=visits',
+    icon: MapPin,
+    keywords: 'field visits so visits sales officer dealer visits stops tracker location beat stops route daily timeline',
+    description: 'Track where Sales Officers go throughout the day, dealer visits & beat stops',
+  },
+  {
     id: 'hr_expenses',
     label: 'Spend & Bill Approvals',
     group: 'HR Suite',
@@ -705,12 +719,16 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   if (!user) return null;
 
   const filteredNav = navItems.filter(item => {
+    if (item.path === '/finance/ledger' || item.path === '/finance/cn-requests') {
+      return ['SUPERADMIN', 'ADMIN', 'SALES', 'ACCOUNTANT', 'MANAGER'].includes(user.role) || can(item.feature);
+    }
     if (item.path === '/admin/global-inventory') return user.role === 'SUPERADMIN';
     if (item.path === '/admin/activity-logs') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/admin/ledger-requests') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/admin/payments') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/admin/onboarding') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/reports') return user.role === 'SUPERADMIN';
+    if (item.path === '/hr/manage?tab=dashboard') return user.role === 'SUPERADMIN';
     if (item.domain === 'HR' || item.path.startsWith('/hr')) return ['SUPERADMIN', 'ADMIN', 'HR'].includes(user.role);
     if (item.domain === 'ADMIN' || item.path.startsWith('/admin')) return ['SUPERADMIN', 'ADMIN'].includes(user.role);
     if (user.role === 'PRODUCTION') {
@@ -838,8 +856,8 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       const currentParams = new URLSearchParams(location.search);
       for (const [key, value] of itemParams.entries()) {
         const currentVal = currentParams.get(key);
-        // Default tab on /hr/manage is dashboard
-        if (!currentVal && itemBase === '/hr/manage' && key === 'tab' && (value === 'dashboard' || value === 'employees')) {
+        const defaultHrTab = user?.role === 'SUPERADMIN' ? 'dashboard' : 'employees';
+        if (!currentVal && itemBase === '/hr/manage' && key === 'tab' && value === defaultHrTab) {
           continue;
         }
         // Default tab on /inventory/manage is dashboard
@@ -992,7 +1010,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {/* HR & Workforce Suite Modules & Sub-Tabs */}
             {(can('view_inventory_dashboard') || can('view_hr_dashboard') || ['SUPERADMIN', 'ADMIN', 'HR'].includes(user?.role || '')) && (
               <CommandGroup heading="👥 HR & Workforce Suite (Modules & Sub-Tabs)">
-                {HR_SUB_PAGES.map(item => (
+                {HR_SUB_PAGES.filter(item => {
+                  if (item.path === '/hr/manage?tab=dashboard') return user?.role === 'SUPERADMIN';
+                  return true;
+                }).map(item => (
                   <CommandItem
                     key={item.id}
                     value={`${item.label} ${item.group} ${item.keywords} ${item.path}`}

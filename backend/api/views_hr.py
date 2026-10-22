@@ -7,15 +7,15 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Sum
+from django.db.models import Sum, Count, Case, When, FloatField
 
 from api.models import (
     Labour, LeaveType, EmployeeLeaveBalance, LeaveRecord,
     SalaryAdvance, DailyAttendance, SalarySlip, Company,
-    HRDepartment, HRDesignation, EmployeeLedger, Expense
+    HRDepartment, HRDesignation, EmployeeLedger, Expense,
+    Order, Visit, Stocktransaction, DailyTravelLog, SalesTarget
 )
 from core.models import User
-from django.db.models import Sum, Case, When, FloatField
 from api.views import send_success, send_error, _get_company_id, load_settings
 
 def _upload_employee_photo_to_cloudinary(file_obj, emp_id, field_name):
@@ -1336,3 +1336,287 @@ def hr_salary_slips(request):
         })
         
     return send_success(results, 'Salary slips retrieved successfully')
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def hr_workforce_intelligence(request):
+    """
+    Computes Human Capital & Workforce Productivity Ratios:
+      - Sales generated per Sales Employee (Daily, Monthly, Cumulative)
+      - Order conversion per Customer Visit ratio
+      - Field Travel efficiency (Revenue per KM, Travel cost to revenue %)
+      - Production output per Plant Worker (Units/worker, Batches/worker)
+      - Employee-wise Sales, Visits, Travel and Production Scorecards
+      - Departmental distribution & Fixed vs Variable ratio
+    Exclusively restricted to SUPERADMIN.
+    """
+    user = getattr(request, 'user', None)
+    user_role = (getattr(user, 'role', '') or '').upper()
+    is_superadmin = getattr(user, 'is_superuser', False) or user_role == 'SUPERADMIN'
+    if not is_superadmin:
+        return send_error('Staff Operations & Workforce Dashboard is restricted to Super Admin only.', status_code=status.HTTP_403_FORBIDDEN)
+
+    company_id = _get_company_id(request)
+    now = timezone.now()
+    current_month_str = request.query_params.get('month') or now.strftime('%Y-%m')
+
+    # 1. Employees & Departments
+    emp_qs = Labour.objects.all()
+    if company_id:
+        emp_qs = emp_qs.filter(companyid_id=company_id)
+
+    total_staff = emp_qs.count()
+    active_staff = emp_qs.filter(active=True).count()
+    fixed_count = emp_qs.filter(employee_type='FIXED').count()
+    variable_count = emp_qs.filter(employee_type='VARIABLE').count()
+
+    sales_staff_qs = emp_qs.filter(department__iexact='SALES')
+    prod_staff_qs = emp_qs.filter(department__iexact='PRODUCTION')
+
+    sales_headcount = max(1, sales_staff_qs.count())
+    prod_headcount = max(1, prod_staff_qs.count())
+
+    user_qs = User.objects.all()
+    if company_id:
+        user_qs = user_qs.filter(companyid_id=company_id)
+
+    user_map = {u.email.lower(): u for u in user_qs if u.email}
+
+    # 2. Sales Orders
+    order_qs = Order.objects.all()
+    if company_id:
+        order_qs = order_qs.filter(companyid_id=company_id)
+
+    # Monthly orders
+    try:
+        y, m = map(int, current_month_str.split('-'))
+        monthly_orders = order_qs.filter(date__year=y, date__month=m)
+    except Exception:
+        monthly_orders = order_qs
+
+    total_sales_all_time = float(order_qs.aggregate(s=Sum('grandtotal'))['s'] or 0.0)
+    total_orders_all_time = order_qs.count()
+
+    monthly_sales = float(monthly_orders.aggregate(s=Sum('grandtotal'))['s'] or 0.0)
+    monthly_orders_count = monthly_orders.count()
+
+    # Daily sales today
+    today_orders = order_qs.filter(date__date=now.date())
+    today_sales = float(today_orders.aggregate(s=Sum('grandtotal'))['s'] or 0.0)
+    today_orders_count = today_orders.count()
+
+    # Human Sales Ratios
+    sales_per_rep_monthly = round(monthly_sales / sales_headcount, 2)
+    sales_per_rep_all_time = round(total_sales_all_time / sales_headcount, 2)
+    daily_sales_per_rep = round(today_sales / sales_headcount, 2)
+    avg_order_value_all_time = round(total_sales_all_time / max(1, total_orders_all_time), 2)
+    avg_order_value_monthly = round(monthly_sales / max(1, monthly_orders_count), 2)
+
+    # 3. Customer Visits
+    visit_qs = Visit.objects.all()
+    if company_id:
+        visit_qs = visit_qs.filter(companyid_id=company_id)
+
+    total_visits = visit_qs.count()
+    visit_to_order_ratio = round((total_orders_all_time / max(1, total_visits)) * 100, 1)
+
+    # 4. Travel & KM
+    travel_qs = DailyTravelLog.objects.all()
+    if company_id:
+        travel_qs = travel_qs.filter(companyid_id=company_id)
+
+    total_km = float(travel_qs.aggregate(s=Sum('approved_km'))['s'] or travel_qs.aggregate(s=Sum('total_km'))['s'] or 0.0)
+    sales_per_km = round(total_sales_all_time / max(1.0, total_km), 2) if total_km > 0 else 0.0
+
+    exp_qs = Expense.objects.filter(category__icontains='TRAVEL')
+    if company_id:
+        exp_qs = exp_qs.filter(companyid_id=company_id)
+    total_travel_exp = float(exp_qs.aggregate(s=Sum('amount'))['s'] or 0.0)
+
+    travel_cost_to_revenue_pct = round((total_travel_exp / max(1.0, total_sales_all_time)) * 100, 2) if total_sales_all_time > 0 else 0.0
+    revenue_per_travel_rupee = round(total_sales_all_time / max(1.0, total_travel_exp), 2) if total_travel_exp > 0 else 0.0
+
+    # 5. Production & Plant Labour
+    prod_qs = Stocktransaction.objects.filter(transactiontype='PRODUCTION', is_deleted=False).exclude(reason='REJECTED')
+    if company_id:
+        prod_qs = prod_qs.filter(productid__companyid_id=company_id)
+
+    total_prod_units = float(prod_qs.aggregate(s=Sum('quantity'))['s'] or 0.0)
+    total_prod_batches = prod_qs.count()
+
+    units_per_worker = round(total_prod_units / prod_headcount, 1)
+    batches_per_worker = round(total_prod_batches / prod_headcount, 1)
+    avg_batch_output = round(total_prod_units / max(1, total_prod_batches), 1)
+
+    # 6. Per-Employee Sales Performance List
+    so_order_map = {}
+    for ord_stat in order_qs.values('soemail').annotate(total=Sum('grandtotal'), cnt=Count('id')):
+        em = (ord_stat['soemail'] or '').lower().strip()
+        if em:
+            so_order_map[em] = {
+                'total_sales': float(ord_stat['total'] or 0.0),
+                'order_count': ord_stat['cnt'] or 0,
+            }
+
+    so_visit_map = {}
+    for v_stat in visit_qs.values('soemail').annotate(cnt=Count('id')):
+        em = (v_stat['soemail'] or '').lower().strip()
+        if em:
+            so_visit_map[em] = v_stat['cnt'] or 0
+
+    user_km_map = {}
+    for t_stat in travel_qs.values('user__email').annotate(km=Sum('approved_km'), raw_km=Sum('total_km')):
+        em = (t_stat['user__email'] or '').lower().strip()
+        if em:
+            user_km_map[em] = float(t_stat['km'] or t_stat['raw_km'] or 0.0)
+
+    month_int = None
+    try:
+        month_int = int(current_month_str.split('-')[1])
+    except Exception:
+        month_int = now.month
+
+    target_map = {}
+    tg_qs = SalesTarget.objects.filter(month=month_int) if month_int else SalesTarget.objects.all()
+    for tg in tg_qs:
+        if tg.user and tg.user.email:
+            target_map[tg.user.email.lower()] = float(tg.target_revenue or 0.0)
+
+    all_sales_emails = set(so_order_map.keys()) | set(so_visit_map.keys()) | set(user_km_map.keys())
+    for s_emp in sales_staff_qs:
+        if s_emp.contactinfo:
+            all_sales_emails.add(s_emp.contactinfo.lower().strip())
+
+    sales_leaderboard = []
+    for em in all_sales_emails:
+        u = user_map.get(em)
+        name = u.name if u else em.split('@')[0].upper()
+        s_data = so_order_map.get(em, {'total_sales': 0.0, 'order_count': 0})
+        v_count = so_visit_map.get(em, 0)
+        km = user_km_map.get(em, 0.0)
+        tg_val = target_map.get(em, float(getattr(u, 'monthlytarget', 0) or 0.0) if u else 0.0)
+
+        tot_s = s_data['total_sales']
+        cnt_o = s_data['order_count']
+        aov = round(tot_s / max(1, cnt_o), 2)
+        so_sales_per_km = round(tot_s / max(1.0, km), 2) if km > 0 else 0.0
+        tg_pct = round((tot_s / tg_val) * 100, 1) if tg_val > 0 else None
+
+        sales_leaderboard.append({
+            'email': em,
+            'name': name,
+            'role': (u.role if u else 'SALES'),
+            'total_sales': round(tot_s, 2),
+            'order_count': cnt_o,
+            'average_order_value': aov,
+            'visits_count': v_count,
+            'travel_km': round(km, 1),
+            'sales_per_km': so_sales_per_km,
+            'target_amount': tg_val,
+            'target_achievement_pct': tg_pct,
+        })
+    sales_leaderboard.sort(key=lambda x: x['total_sales'], reverse=True)
+
+    # 7. Production breakdown grouped by Manufacturing Facility / Warehouse
+    wh_stats = {}
+    valid_prod_qs = prod_qs.select_related('warehouseid', 'created_by')
+    total_valid_units = float(valid_prod_qs.aggregate(s=Sum('quantity'))['s'] or 0.0)
+
+    for st in valid_prod_qs:
+        wh = st.warehouseid
+        wh_id = wh.id if wh else 'unassigned'
+        wh_name = wh.name if wh else 'Factory / Plant'
+        if wh_id not in wh_stats:
+            wh_stats[wh_id] = {
+                'warehouse_id': wh_id,
+                'warehouse_name': wh_name,
+                'units_produced': 0.0,
+                'batches_completed': 0,
+                'supervisors_map': {}
+            }
+        wh_stats[wh_id]['units_produced'] += float(st.quantity or 0.0)
+        wh_stats[wh_id]['batches_completed'] += 1
+
+        if st.created_by:
+            s_role = (getattr(st.created_by, 'role', '') or '').upper()
+            if s_role not in ('SUPERADMIN', 'ADMIN', 'SALES', 'SO', 'MARKETING'):
+                s_email = st.created_by.email
+                s_name = st.created_by.name or (s_email.split('@')[0].upper() if s_email else 'Supervisor')
+                if s_email not in wh_stats[wh_id]['supervisors_map']:
+                    wh_stats[wh_id]['supervisors_map'][s_email] = {
+                        'name': s_name,
+                        'email': s_email,
+                        'units': 0.0,
+                        'batches': 0
+                    }
+                wh_stats[wh_id]['supervisors_map'][s_email]['units'] += float(st.quantity or 0.0)
+                wh_stats[wh_id]['supervisors_map'][s_email]['batches'] += 1
+
+    prod_breakdown = []
+    for w in wh_stats.values():
+        u = w['units_produced']
+        b = w['batches_completed']
+        avg_b = round(u / max(1, b), 1)
+        contrib = round((u / max(1.0, total_valid_units)) * 100, 1)
+        sups = list(w['supervisors_map'].values())
+        sups.sort(key=lambda x: x['units'], reverse=True)
+        sup_names = ', '.join([s['name'] for s in sups]) if sups else 'Plant Supervisors'
+        prod_breakdown.append({
+            'name': w['warehouse_name'],
+            'warehouse_name': w['warehouse_name'],
+            'warehouse_id': w['warehouse_id'],
+            'units_produced': u,
+            'batches_completed': b,
+            'avg_batch_size': avg_b,
+            'contribution_pct': contrib,
+            'supervisors': sup_names,
+            'supervisors_detail': sups,
+        })
+    prod_breakdown.sort(key=lambda x: x['units_produced'], reverse=True)
+
+    # 8. Department distribution & composition
+    dept_map = {}
+    for emp in emp_qs:
+        d = (emp.department or 'OTHER').upper()
+        dept_map[d] = dept_map.get(d, 0) + 1
+
+    return send_success({
+        'overview': {
+            'total_headcount': total_staff,
+            'active_headcount': active_staff,
+            'fixed_headcount': fixed_count,
+            'variable_headcount': variable_count,
+            'sales_headcount': sales_headcount,
+            'production_headcount': prod_headcount,
+            'revenue_per_company_employee': round(total_sales_all_time / max(1, total_staff), 2),
+            'departments': dept_map,
+        },
+        'sales_ratios': {
+            'sales_per_rep_monthly': sales_per_rep_monthly,
+            'sales_per_rep_all_time': sales_per_rep_all_time,
+            'daily_sales_per_rep': daily_sales_per_rep,
+            'total_sales_all_time': round(total_sales_all_time, 2),
+            'total_orders_all_time': total_orders_all_time,
+            'monthly_sales': round(monthly_sales, 2),
+            'monthly_orders_count': monthly_orders_count,
+            'today_sales': round(today_sales, 2),
+            'today_orders_count': today_orders_count,
+            'average_order_value': avg_order_value_all_time,
+            'total_visits': total_visits,
+            'visit_to_order_ratio_pct': visit_to_order_ratio,
+            'total_travel_km': round(total_km, 1),
+            'sales_revenue_per_km': sales_per_km,
+            'travel_cost_to_revenue_pct': travel_cost_to_revenue_pct,
+            'revenue_per_travel_rupee': revenue_per_travel_rupee,
+        },
+        'production_ratios': {
+            'total_units_produced': round(total_prod_units, 1),
+            'total_batches_completed': total_prod_batches,
+            'units_per_worker': units_per_worker,
+            'batches_per_worker': batches_per_worker,
+            'avg_batch_output': avg_batch_output,
+        },
+        'sales_leaderboard': sales_leaderboard,
+        'production_breakdown': prod_breakdown,
+    }, 'Workforce intelligence ratios computed successfully')

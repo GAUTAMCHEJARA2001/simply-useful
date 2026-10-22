@@ -258,10 +258,20 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
 
   const isGlobal = activeWarehouseId === 'GLOBAL';
   const canManage = ['SUPERADMIN', 'ADMIN', 'INVENTORY'].includes(user?.role || '');
+  const isSuperAdmin = user?.role === 'SUPERADMIN' || (user as any)?.is_superuser;
 
-  const tableColumns = isGlobal 
-    ? ['Recipe Name', 'Finished Product', 'Yield Qty', 'Unit Cost', 'Selling Rate', 'Gross Margin', 'Ingredients', 'Warehouse', 'Status', 'Actions']
-    : ['Recipe Name', 'Finished Product', 'Yield Qty', 'Unit Cost', 'Selling Rate', 'Gross Margin', 'Ingredients', 'Status', 'Actions'];
+  const tableColumns = useMemo(() => {
+    const cols = ['Recipe Name', 'Finished Product', 'Yield Qty'];
+    if (isSuperAdmin) {
+      cols.push('Unit Cost', 'Selling Rate', 'Gross Margin');
+    }
+    cols.push('Ingredients');
+    if (isGlobal) {
+      cols.push('Warehouse');
+    }
+    cols.push('Status', 'Actions');
+    return cols;
+  }, [isSuperAdmin, isGlobal]);
 
   const isInventory = user?.role === 'INVENTORY' || user?.role === 'PRODUCTION';
 
@@ -349,18 +359,20 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => {
-              setShowPriceListModal(true);
-              loadPriceList();
-            }}
-            className="flex items-center gap-1.5 border-primary/40 hover:bg-primary/10 text-primary font-medium"
-          >
-            <Calculator className="w-4 h-4 text-primary" />
-            <span>Accurate BOM Price List</span>
-          </Button>
+          {isSuperAdmin && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                setShowPriceListModal(true);
+                loadPriceList();
+              }}
+              className="flex items-center gap-1.5 border-primary/40 hover:bg-primary/10 text-primary font-medium"
+            >
+              <Calculator className="w-4 h-4 text-primary" />
+              <span>Accurate BOM Price List</span>
+            </Button>
+          )}
           {canManage && (
             <Button size="sm" onClick={() => { setForm({ name: '', productId: '', outputQuantity: 1, items: [] }); setModal(true); }}>
               <Plus className="w-4 h-4 mr-1.5" /> New Recipe
@@ -395,25 +407,31 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
       <DataTable
         columns={tableColumns}
         rows={filteredRecipes.map((r: any, idx: number) => {
-          const rowData = [
+          const rowData: any[] = [
             <span key={`name-${idx}`} className="font-medium text-foreground">{r.name}</span>,
             <span key={`prod-${idx}`} className="text-foreground">{r.productName || '—'}</span>,
             formatDecimal(r.outputQuantity),
-            <span key={`cost-${idx}`} className="font-semibold text-emerald-600 font-mono">
-              {r.unitCost ? `₹${formatDecimal(r.unitCost)}` : '—'}
-            </span>,
-            <span key={`rate-${idx}`} className="text-foreground font-mono">
-              {r.sellingRate ? `₹${formatDecimal(r.sellingRate)}` : '—'}
-            </span>,
-            r.sellingRate && r.grossMargin !== undefined ? (
-              <span key={`margin-${idx}`} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
-                r.grossMargin >= 0 ? 'bg-emerald-500/10 text-emerald-700' : 'bg-red-500/10 text-red-700'
-              }`}>
-                {r.grossMargin >= 0 ? '+' : ''}₹{formatDecimal(r.grossMargin)} ({formatDecimal(r.marginPct || 0)}%)
-              </span>
-            ) : <span key={`margin-${idx}`} className="text-muted-foreground text-xs">—</span>,
-            <span key={`items-${idx}`} className="text-xs font-mono text-muted-foreground">{r.itemCount ?? r.items?.length ?? 0} items</span>
           ];
+          if (isSuperAdmin) {
+            rowData.push(
+              <span key={`cost-${idx}`} className="font-semibold text-emerald-600 font-mono">
+                {r.unitCost ? `₹${formatDecimal(r.unitCost)}` : '—'}
+              </span>,
+              <span key={`rate-${idx}`} className="text-foreground font-mono">
+                {r.sellingRate ? `₹${formatDecimal(r.sellingRate)}` : '—'}
+              </span>,
+              r.sellingRate && r.grossMargin !== undefined ? (
+                <span key={`margin-${idx}`} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                  r.grossMargin >= 0 ? 'bg-emerald-500/10 text-emerald-700' : 'bg-red-500/10 text-red-700'
+                }`}>
+                  {r.grossMargin >= 0 ? '+' : ''}₹{formatDecimal(r.grossMargin)} ({formatDecimal(r.marginPct || 0)}%)
+                </span>
+              ) : <span key={`margin-${idx}`} className="text-muted-foreground text-xs">—</span>
+            );
+          }
+          rowData.push(
+            <span key={`items-${idx}`} className="text-xs font-mono text-muted-foreground">{r.itemCount ?? r.items?.length ?? 0} items</span>
+          );
           if (isGlobal) {
             rowData.push(
               <span key={`wh-${idx}`} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground whitespace-nowrap">
@@ -715,7 +733,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                             <p className="text-xs font-semibold truncate">{item.productName}</p>
                             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                               <span>{item.unit?.name || (typeof item.unit === 'string' ? item.unit : '') || '—'}</span>
-                              {itCost > 0 && (
+                              {isSuperAdmin && itCost > 0 && (
                                 <span className="text-primary font-medium">@ ₹{formatDecimal(itCost)}/unit</span>
                               )}
                             </div>
@@ -729,11 +747,13 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                                 className="w-full border border-border rounded px-2 py-1 text-xs bg-background disabled:opacity-75 disabled:bg-transparent font-mono" 
                             />
                         </div>
-                        <div className="w-20 text-right">
-                          <span className="text-xs font-semibold text-foreground font-mono">
-                            ₹{formatDecimal(itLineCost)}
-                          </span>
-                        </div>
+                        {isSuperAdmin && (
+                          <div className="w-20 text-right">
+                            <span className="text-xs font-semibold text-foreground font-mono">
+                              ₹{formatDecimal(itLineCost)}
+                            </span>
+                          </div>
+                        )}
                         {canManage && (
                           <button onClick={() => removeIngredient(idx)} className="p-1 hover:text-destructive transition-colors">
                               <Trash2 className="w-3.5 h-3.5" />
@@ -749,8 +769,8 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                 )}
               </div>
 
-              {/* Accurate BOM Cost Summary Card */}
-              {form.items && form.items.length > 0 && (
+              {/* Accurate BOM Cost Summary Card - Strictly SuperAdmin Only */}
+              {isSuperAdmin && form.items && form.items.length > 0 && (
                 <div className="p-3.5 bg-muted/20 border border-border rounded-xl space-y-2 mt-4">
                   <div className="flex items-center justify-between text-xs font-bold text-foreground">
                     <span className="flex items-center gap-1.5">

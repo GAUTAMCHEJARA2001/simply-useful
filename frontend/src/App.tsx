@@ -85,6 +85,9 @@ const PrintableOnboardingForm = safeLazy(() => import("./pages/PrintableOnboardi
 const DailyTravelPage = safeLazy(() => import("./pages/DailyTravelPage"), "DailyTravelPage");
 const SalesTargetsPage = safeLazy(() => import("./pages/SalesTargetsPage"), "SalesTargetsPage");
 const PublicLandingPage = safeLazy(() => import("./pages/PublicLandingPage"), "PublicLandingPage");
+const PartyLedgerPage = safeLazy(() => import("./pages/PartyLedgerPage"), "PartyLedgerPage");
+const RaiseCNDiscountPage = safeLazy(() => import("./pages/RaiseCNDiscountPage"), "RaiseCNDiscountPage");
+const CNDiscountManagementPage = safeLazy(() => import("./pages/CNDiscountManagementPage"), "CNDiscountManagementPage");
 
 
 
@@ -269,6 +272,12 @@ const App = () => {
                       <Route path="/sales/payments/new" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><SubmitPaymentPage /></ProtectedRoute>} />
                       <Route path="/sales/onboarding" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><OnboardingRequestsPage /></ProtectedRoute>} />
                       <Route path="/sales/onboarding/:id/print" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><PrintableOnboardingForm /></ProtectedRoute>} />
+                      <Route path="/finance/ledger" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><PartyLedgerPage /></ProtectedRoute>} />
+                      <Route path="/finance/cn-requests" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><CNDiscountManagementPage /></ProtectedRoute>} />
+                      <Route path="/finance/cn-discount" element={<Navigate to="/finance/cn-requests" replace />} />
+                      <Route path="/finance/cn-requests/new" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'SALES']}><RaiseCNDiscountPage /></ProtectedRoute>} />
+                      <Route path="/finance/cn-discount/new" element={<Navigate to="/finance/cn-requests/new" replace />} />
+                      <Route path="/parties/ledger" element={<Navigate to="/finance/ledger" replace />} />
 
                       {/* Admin */}
                       <Route path="/admin" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><AdminDashboard /></ProtectedRoute>} />

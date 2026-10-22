@@ -193,10 +193,13 @@ def transaction_productions(request):
         assigned_wh_ids = list(Userwarehouseaccess.objects.filter(userid_id=user_id).values_list('warehouseid_id', flat=True))
     company_id = _get_company_id(request)
     if request.method == 'GET':
-        qs = Stocktransaction.objects.filter(transactiontype='PRODUCTION').select_related('productid', 'warehouseid').order_by('-createdat')
+        qs = Stocktransaction.objects.filter(transactiontype='PRODUCTION').select_related('productid', 'warehouseid', 'created_by', 'approved_by', 'deleted_by').order_by('-createdat')
         if company_id and request.user.role != 'SUPERADMIN':
             qs = qs.filter(productid__companyid_id=company_id)
-        if assigned_wh_ids:
+        wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
+        if wh_header and wh_header not in ('GLOBAL', 'none', 'undefined'):
+            qs = qs.filter(warehouseid_id=wh_header)
+        elif assigned_wh_ids:
             qs = qs.filter(warehouseid_id__in=assigned_wh_ids)
         rows = []
         for st in qs:
