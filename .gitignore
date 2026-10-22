@@ -36,4 +36,6 @@ archive/
 backend/scripts/legacy_scratch/
 backend/media/
 media/
+staticfiles/
+backend/staticfiles/
 *.csv
