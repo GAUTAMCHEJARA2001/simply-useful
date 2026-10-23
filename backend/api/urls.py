@@ -104,6 +104,7 @@ from api.views_hr import (
     hr_leave_balances, hr_leave_records,
     hr_workforce_intelligence
 )
+from api.views_director import director_boardroom_command_center
 from api.leave_views import hr_leave_policies, hr_leave_policies_detail, hr_leave_allocate, hr_leave_auto_fetch, hr_leave_records_detail
 
 urlpatterns = [
@@ -253,6 +254,10 @@ urlpatterns = [
     path('parties/cn-requests', cn_discount_requests_list_create, name='cn-discount-requests'),
     path('parties/cn-requests/<str:pk>/review', review_cn_discount_request, name='cn-discount-review'),
     path('parties/ledger/<str:party_type>/<str:party_id>', get_live_party_ledger, name='live-party-ledger'),
+
+    # Director / Owner Executive Boardroom Command Center
+    path('director/dashboard', director_boardroom_command_center, name='director-boardroom-command-center'),
+    re_path(r'^director/dashboard/?$', director_boardroom_command_center, name='director-boardroom-command-center-slash'),
 
     # Trailing slash compatibility
     path('expenses/', ExpenseViewSet.as_view({'get': 'list', 'post': 'create'}), name='expenses-slash'),

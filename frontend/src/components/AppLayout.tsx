@@ -7,7 +7,8 @@ import {
   ClipboardList, Warehouse, RefreshCw, XCircle, Globe, UserCheck, Store, Activity, FileText,
   PanelLeftClose, PanelLeft, Maximize2, Minimize2, Gauge, Trophy, Target,
   Search, ChevronDown, ChevronRight, Briefcase, Truck, CreditCard, ShieldCheck, Zap,
-  Clock, Award, FileBarChart, CalendarCheck, Sliders, DollarSign, Factory, Trash2, Wallet, Percent
+  Clock, Award, FileBarChart, CalendarCheck, Sliders, DollarSign, Factory, Trash2, Wallet, Percent,
+  Crown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -127,6 +128,8 @@ const navItems: NavItem[] = [
   { label: 'Cancelled Orders', path: '/admin/rejected', icon: XCircle, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Rejected or cancelled order archive' },
   { label: 'Sales Reports', path: '/reports', icon: BarChart3, feature: 'view_reports', domain: 'ADMIN', description: 'Comprehensive business analytics & exports' },
   { label: 'App Settings', path: '/admin/settings', icon: Settings, feature: 'access_settings', domain: 'ADMIN', description: 'System configuration, financial years & master data' },
+  // Director Command Center (executive-only)
+  { label: 'Director Command Center', path: '/director/dashboard', icon: Crown, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Executive boardroom dashboard — P&L waterfall, consumption, payroll, collections & KPIs' },
 ];
 
 interface DomainSection {
@@ -729,6 +732,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (item.path === '/admin/onboarding') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';
     if (item.path === '/reports') return user.role === 'SUPERADMIN';
     if (item.path === '/hr/manage?tab=dashboard') {
+      const roleUpper = (user.role || '').toUpperCase();
+      return ['SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER'].includes(roleUpper);
+    }
+    if (item.path === '/director/dashboard') {
       const roleUpper = (user.role || '').toUpperCase();
       return ['SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER'].includes(roleUpper);
     }

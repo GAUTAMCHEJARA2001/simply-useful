@@ -88,6 +88,7 @@ const PublicLandingPage = safeLazy(() => import("./pages/PublicLandingPage"), "P
 const PartyLedgerPage = safeLazy(() => import("./pages/PartyLedgerPage"), "PartyLedgerPage");
 const RaiseCNDiscountPage = safeLazy(() => import("./pages/RaiseCNDiscountPage"), "RaiseCNDiscountPage");
 const CNDiscountManagementPage = safeLazy(() => import("./pages/CNDiscountManagementPage"), "CNDiscountManagementPage");
+const DirectorDashboardPage = safeLazy(() => import("./pages/DirectorDashboardPage"), "DirectorDashboardPage");
 
 
 
@@ -309,6 +310,9 @@ const App = () => {
 
                       {/* Reports */}
                       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+
+                      {/* Director Command Center */}
+                      <Route path="/director/dashboard" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><DirectorDashboardPage /></ProtectedRoute>} />
 
                     </Routes>
                   </Suspense>
