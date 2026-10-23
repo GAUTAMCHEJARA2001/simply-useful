@@ -122,7 +122,7 @@ if DATABASE_URL:
         'PASSWORD': unquote(url.password) if url.password else None,
         'HOST': url.hostname,
         'PORT': url.port or 5432,
-        'CONN_MAX_AGE': 600,
+        'CONN_MAX_AGE': 60,  # Reclaim idle database connection memory quickly
         'CONN_HEALTH_CHECKS': True,
     }
 
@@ -152,7 +152,7 @@ else:
             'PASSWORD': db_password,
             'HOST': db_host,
             'PORT': db_port,
-            'CONN_MAX_AGE': 600,
+            'CONN_MAX_AGE': 60,
             'CONN_HEALTH_CHECKS': True,
         }
     }
@@ -289,6 +289,11 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'simply-useful-cache',
+        'TIMEOUT': 300,
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+            'CULL_FREQUENCY': 3,
+        }
     }
 }
 
