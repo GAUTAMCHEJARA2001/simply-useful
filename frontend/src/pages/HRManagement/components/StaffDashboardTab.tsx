@@ -151,7 +151,7 @@ export const StaffDashboardTab: React.FC = () => {
         setLoadingStats(true);
         const [travelRes, expRes, intelRes] = await Promise.allSettled([
           travelService.getHRLogs({ month: currentMonth }),
-          api.get('/expenses/'),
+          api.get('/expenses'),
           api.get(`/hr/workforce-intelligence?month=${currentMonth}`),
         ]);
 

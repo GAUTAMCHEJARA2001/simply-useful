@@ -22,6 +22,7 @@ export type HRTab = 'dashboard' | 'employees' | 'documents' | 'targets' | 'atten
 const HRManagement: React.FC = () => {
   const { can } = usePermissions();
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const roleUpper = (user?.role || '').toUpperCase();
   const isAdminOrSuperAdmin = ['SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER'].includes(roleUpper);
   const defaultTab: HRTab = isAdminOrSuperAdmin ? 'dashboard' : 'employees';

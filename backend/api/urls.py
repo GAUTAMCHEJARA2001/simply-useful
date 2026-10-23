@@ -254,6 +254,9 @@ urlpatterns = [
     path('parties/cn-requests/<str:pk>/review', review_cn_discount_request, name='cn-discount-review'),
     path('parties/ledger/<str:party_type>/<str:party_id>', get_live_party_ledger, name='live-party-ledger'),
 
+    # Trailing slash compatibility
+    path('expenses/', ExpenseViewSet.as_view({'get': 'list', 'post': 'create'}), name='expenses-slash'),
+
     # Router endpoints
     path('', include(router.urls)),
 ]
