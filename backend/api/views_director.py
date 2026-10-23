@@ -23,10 +23,11 @@ from api.views import send_success, send_error, _get_company_id
 from api.models import (
     Order, Orderitem, Product, PaymentReceipt, Expense,
     Dealer, Distributor, DailyTravelLog, Visit, Stocktransaction,
-    CreditNoteDiscountRequest, Labour, SalarySlip, DailyAttendance
+    CreditNoteDiscountRequest, Labour, SalarySlip, DailyAttendance,
+    Bom, Bomitem
 )
 from core.models import User, Company, Warehouse
-from api.services.costing_service import compute_product_warehouse_costs
+from api.services.costing_service import compute_product_warehouse_costs, compute_bom_cost_breakdown
 
 
 def _parse_director_date_range(request):
@@ -151,7 +152,36 @@ def director_boardroom_command_center(request):
     start_dt, end_dt, prev_start_dt, prev_end_dt, period_name, period_days = _parse_director_date_range(request)
 
     # 3. Product Valuation Map (FIFO & Weighted Average Raw Material Cost)
-    cost_map_by_id, _ = compute_product_warehouse_costs(company_id=company_id)
+    cost_map_by_id, cost_map_by_name = compute_product_warehouse_costs(company_id=company_id)
+
+    # 3b. Pre-compute BOM Recipe RM Cost per unit/bag (User Formula: Total Batch RM Cost / Output Quantity)
+    bom_qs = Bom.objects.filter(companyid_id=company_id) if company_id else Bom.objects.all()
+    bom_by_id = {}
+    bom_by_code = {}
+    bom_by_name = {}
+
+    for bom_obj in bom_qs.prefetch_related('bomitem_set', 'warehouseid'):
+        bom_data = compute_bom_cost_breakdown(
+            bom_obj,
+            valuation_by_id=cost_map_by_id,
+            valuation_by_name=cost_map_by_name,
+            company_id=company_id
+        )
+        if bom_data:
+            u_cost = float(bom_data.get('unitCost') or 0.0)
+            p_id = bom_data.get('productId')
+            p_code = (bom_data.get('productCode') or '').strip().lower()
+            p_name = (bom_data.get('productName') or '').strip().lower()
+            b_name = (bom_obj.name or '').strip().lower()
+
+            if p_id:
+                bom_by_id[p_id] = u_cost
+            if p_code:
+                bom_by_code[p_code] = u_cost
+            if p_name:
+                bom_by_name[p_name] = u_cost
+            if b_name:
+                bom_by_name[b_name] = u_cost
 
     # 4. Sales Orders & Material Consumption (COGS) in Selected Period
     order_base_qs = Order.objects.filter(companyid_id=company_id).exclude(status='REJECTED') if company_id else Order.objects.exclude(status='REJECTED')
@@ -177,14 +207,31 @@ def director_boardroom_command_center(request):
                 total_items_sold += int(qty)
 
                 pid = item.productid_id
-                prod_cost_info = cost_map_by_id.get(pid, {})
-                unit_cogs = float(prod_cost_info.get('effectiveCost') or 0.0)
+                prod = getattr(item, 'productid', None)
+                p_code = (getattr(prod, 'productcode', '') or '').strip().lower()
+                p_name = (getattr(prod, 'name', '') or '').strip().lower()
+
+                # Exact BOM Recipe RM Cost lookup (User BOM formula: e.g. 5 bags = Rs 878.55 => Rs 175.71/bag)
+                bom_unit_cost = (
+                    bom_by_id.get(pid) or
+                    bom_by_code.get(p_code) or
+                    bom_by_name.get(p_name)
+                )
+
+                if bom_unit_cost is not None and bom_unit_cost > 0:
+                    unit_cogs = float(bom_unit_cost)
+                    cost_source = 'BOM_RECIPE'
+                else:
+                    prod_cost_info = cost_map_by_id.get(pid, {})
+                    unit_cogs = float(prod_cost_info.get('effectiveCost') or 0.0)
+                    cost_source = 'WAREHOUSE_STOCK'
+
                 line_cogs = qty * unit_cogs
                 total_rm_cogs += line_cogs
 
                 # Group by SKU for Director's Top Gross Margin Products
-                prod_name = prod_cost_info.get('name') or (item.productid.name if getattr(item, 'productid', None) else f"SKU-{pid}")
-                sku_code = prod_cost_info.get('sku') or (item.productid.productcode if getattr(item, 'productid', None) else '')
+                prod_name = (prod.name if prod else None) or cost_map_by_id.get(pid, {}).get('name') or f"SKU-{pid}"
+                sku_code = (prod.productcode if prod else None) or cost_map_by_id.get(pid, {}).get('sku') or ''
                 if pid not in top_sku_map:
                     top_sku_map[pid] = {
                         'id': pid,
@@ -193,6 +240,8 @@ def director_boardroom_command_center(request):
                         'units_sold': 0,
                         'revenue': 0.0,
                         'cogs': 0.0,
+                        'unit_rm_cost': round(unit_cogs, 2),
+                        'cost_source': cost_source,
                     }
                 top_sku_map[pid]['units_sold'] += int(qty)
                 top_sku_map[pid]['revenue'] += line_revenue

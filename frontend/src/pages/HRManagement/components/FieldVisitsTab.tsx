@@ -32,7 +32,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ImageViewerModal } from '@/components/ImageViewerModal';
 
-type DatePreset = 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'CUSTOM';
+type DatePreset = 'ALL' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'THIS_MONTH' | 'TODAY' | 'YESTERDAY' | 'CUSTOM';
 type ViewMode = 'TIMELINE' | 'FEED' | 'TABLE';
 
 export const FieldVisitsTab: React.FC = () => {
@@ -42,8 +42,8 @@ export const FieldVisitsTab: React.FC = () => {
   // Users for SO dropdown
   const { data: users = [] } = useHRUsers();
 
-  // Filters
-  const [selectedPreset, setSelectedPreset] = useState<DatePreset>('TODAY');
+  // Filters - Default to ALL so past visits always show on initial load
+  const [selectedPreset, setSelectedPreset] = useState<DatePreset>('ALL');
   const [customDate, setCustomDate] = useState<string>(() => {
     const now = new Date();
     return now.toISOString().split('T')[0];
@@ -76,6 +76,9 @@ export const FieldVisitsTab: React.FC = () => {
     const pad = (n: number) => String(n).padStart(2, '0');
     const toYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+    if (selectedPreset === 'ALL') {
+      return {}; // No date filter: fetches all past and current visits
+    }
     if (selectedPreset === 'TODAY') {
       const dStr = toYMD(today);
       return { date: dStr };
@@ -89,6 +92,14 @@ export const FieldVisitsTab: React.FC = () => {
     if (selectedPreset === 'LAST_7_DAYS') {
       const past = new Date(today);
       past.setDate(today.getDate() - 6);
+      return {
+        date_from: toYMD(past),
+        date_to: toYMD(today)
+      };
+    }
+    if (selectedPreset === 'LAST_30_DAYS') {
+      const past = new Date(today);
+      past.setDate(today.getDate() - 29);
       return {
         date_from: toYMD(past),
         date_to: toYMD(today)
@@ -346,10 +357,12 @@ export const FieldVisitsTab: React.FC = () => {
                 <Calendar className="w-3.5 h-3.5" /> Date:
               </span>
               {[
+                { id: 'ALL', label: 'All Past Visits' },
+                { id: 'LAST_7_DAYS', label: 'Last 7 Days' },
+                { id: 'LAST_30_DAYS', label: 'Last 30 Days' },
+                { id: 'THIS_MONTH', label: 'This Month' },
                 { id: 'TODAY', label: 'Today' },
                 { id: 'YESTERDAY', label: 'Yesterday' },
-                { id: 'LAST_7_DAYS', label: 'Last 7 Days' },
-                { id: 'THIS_MONTH', label: 'This Month' },
                 { id: 'CUSTOM', label: 'Custom' },
               ].map(preset => (
                 <button

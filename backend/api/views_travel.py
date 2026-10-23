@@ -1357,26 +1357,69 @@ def travel_hr_field_visits(request):
     # 2. Also incorporate any direct Visit records
     try:
         from api.models import Visit
-        visits_qs = Visit.objects.filter(companyid_id=company_id).select_related('soemail').order_by('-date')
+        visits_qs = Visit.objects.select_related('soemail').order_by('-date')
+        if company_id:
+            visits_qs = visits_qs.filter(Q(companyid_id=company_id) | Q(companyid__isnull=True))
+
         if date_str:
             try:
                 t_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                visits_qs = visits_qs.filter(date__date=t_date)
-            except Exception:
-                pass
+                visits_qs = visits_qs.filter(
+                    Q(date__date=t_date) |
+                    (Q(date__isnull=True) & Q(createdat__date=t_date))
+                )
+            except Exception as e:
+                print('Visit date filter error:', e)
+
+        if date_from:
+            try:
+                d_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                visits_qs = visits_qs.filter(
+                    Q(date__date__gte=d_from) |
+                    (Q(date__isnull=True) & Q(createdat__date__gte=d_from))
+                )
+            except Exception as e:
+                print('Visit date_from filter error:', e)
+
+        if date_to:
+            try:
+                d_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                visits_qs = visits_qs.filter(
+                    Q(date__date__lte=d_to) |
+                    (Q(date__isnull=True) & Q(createdat__date__lte=d_to))
+                )
+            except Exception as e:
+                print('Visit date_to filter error:', e)
+
+        if month and not (date_str or date_from):
+            try:
+                y, m = map(int, month.split('-'))
+                visits_qs = visits_qs.filter(
+                    Q(date__year=y, date__month=m) |
+                    (Q(date__isnull=True) & Q(createdat__year=y, createdat__month=m))
+                )
+            except Exception as e:
+                print('Visit month filter error:', e)
+
         if user_id_filter and user_id_filter != 'ALL':
-            visits_qs = visits_qs.filter(soemail__id=user_id_filter)
+            try:
+                u_id_int = int(user_id_filter)
+                visits_qs = visits_qs.filter(Q(soemail__id=u_id_int) | Q(soemail__email=str(user_id_filter)))
+            except (ValueError, TypeError):
+                visits_qs = visits_qs.filter(soemail__email=str(user_id_filter))
+
         if search:
             visits_qs = visits_qs.filter(
                 Q(dealername__icontains=search.strip()) |
                 Q(soemail__name__icontains=search.strip()) |
+                Q(soemail__email__icontains=search.strip()) |
                 Q(remarks__icontains=search.strip())
             )
 
-        for v in visits_qs[:100]:
+        for v in visits_qs[:500]:
             v_date = v.date.strftime('%Y-%m-%d') if v.date else (v.createdat.strftime('%Y-%m-%d') if v.createdat else '')
             so_id = v.soemail.id if v.soemail else ''
-            key = f"{v_date}_{so_id}_{v.dealername.strip().lower()}"
+            key = f"{v_date}_{so_id}_{(v.dealername or '').strip().lower()}"
             if key not in seen_stop_keys:
                 results.append({
                     'id': v.id,
@@ -1407,8 +1450,19 @@ def travel_hr_field_visits(request):
                     'next_visit_date': v.nextfollowup.strftime('%Y-%m-%d') if v.nextfollowup else None,
                     'created_at': v.createdat.isoformat() if v.createdat else None,
                 })
-    except Exception:
-        pass
+            else:
+                # Enrich existing stop with Visit data if stop was missing photo or gps
+                for r in results:
+                    if r.get('date') == v_date and r.get('so_id') == so_id and (r.get('dealer_name') or '').strip().lower() == (v.dealername or '').strip().lower():
+                        if not r.get('visit_photo') and v.photo:
+                            r['visit_photo'] = v.photo
+                        if not r.get('gps_location') and v.gpslocation:
+                            r['gps_location'] = v.gpslocation
+                        if v.remarks and not r.get('actual_notes'):
+                            r['actual_notes'] = v.remarks
+                        break
+    except Exception as e:
+        print('Error fetching Visit records for field visits:', e)
 
     # Sort all results by completed_at or date descending
     results.sort(key=lambda x: x.get('completed_at') or x.get('date') or '', reverse=True)
