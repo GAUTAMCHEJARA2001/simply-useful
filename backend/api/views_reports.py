@@ -586,18 +586,24 @@ def report_stock_integrity_audit(request):
             l_data = ledger_res.data.get('data', {})
             l_curr = float(l_data.get('currentStock') or 0.0)
             c_curr = float(s_data.get('currentStock') or 0.0)
-            sle_curr = sle_balances.get(prod_id, 0.0)
+            sle_curr = sle_balances.get(prod_id)
             diff_ledger = round(c_curr - l_curr, 4)
-            diff_sle = round(c_curr - sle_curr, 4)
-            if abs(diff_ledger) > 0.001 or abs(diff_sle) > 0.001:
+            
+            # Stock integrity ensures 100% agreement between Stock Overview and Stock Ledger
+            has_discrepancy = abs(diff_ledger) > 0.001
+            # If StockLedgerEntry is actively populated and tracked for this product, verify it as well
+            if sle_curr is not None and abs(round(c_curr - sle_curr, 4)) > 0.001:
+                has_discrepancy = True
+
+            if has_discrepancy:
                 discrepancies.append({
                     'productId': prod_id,
                     'productName': s_data.get('productName'),
                     'sku': s_data.get('sku'),
                     'overviewStock': c_curr,
                     'ledgerStock': l_curr,
-                    'immutableLedgerStock': sle_curr,
-                    'discrepancy': diff_ledger or diff_sle
+                    'immutableLedgerStock': sle_curr if sle_curr is not None else l_curr,
+                    'discrepancy': diff_ledger if abs(diff_ledger) > 0.001 else round(c_curr - (sle_curr or 0), 4)
                 })
 
     is_healthy = len(discrepancies) == 0

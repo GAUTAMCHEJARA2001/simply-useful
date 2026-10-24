@@ -1676,6 +1676,20 @@ def _compute_all_product_stocks(company_id=None, request=None, target_wh_ids=Non
                 stock_map[pid]['sales'] += float(effective_sales or 0)
                 stock_map[pid]['salesReturn'] += float(oi.returnedqty or 0)
 
+        # Include dispatches from Dispatchlogitem for orders that have no Orderitem entries (direct dispatches)
+        from api.models import Dispatchlogitem
+        orphan_dl_items = Dispatchlogitem.objects.filter(
+            dispatchlogid__orderid__status__in=['Completed', 'Returned', 'Delivered', 'Dispatched', 'Partially Dispatched', 'Partially Returned', 'Approved']
+        ).exclude(
+            dispatchlogid__orderid__orderitem__isnull=False
+        )
+        if target_wh_ids:
+            orphan_dl_items = orphan_dl_items.filter(dispatchlogid__orderid__warehouseid_id__in=target_wh_ids)
+        for dli in orphan_dl_items:
+            pid = dli.productid_id
+            if pid in stock_map:
+                stock_map[pid]['sales'] += float(dli.qty or 0)
+
         st_qs = Stocktransaction.objects.exclude(
             reason__in=['PENDING_APPROVAL', 'REJECTED']
         ).exclude(is_deleted=True).exclude(referenceid__startswith='REV-')
