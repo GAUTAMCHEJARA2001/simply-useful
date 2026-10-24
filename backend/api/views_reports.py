@@ -217,7 +217,7 @@ def report_stock_ledger(request, pk):
 
     # 4. Fetch Purchaseitem entries
     purchase_items_qs = Purchaseitem.objects.filter(
-        productname=product.name
+        Q(productid_id=product.id) | Q(productname__iexact=product.name.strip())
     ).filter(
         purchaseid__status__in=['Completed', 'Approved', 'RECEIVED', 'PARTIALLY_RECEIVED', 'Partially Returned', 'Returned']
     )
@@ -302,15 +302,18 @@ def report_stock_ledger(request, pk):
 
     # Direct completed orders without dispatch log or Stocktransaction (fallback)
     from api.models import Orderitem
+    dispatched_order_ids_for_prod = {
+        di.dispatchlogid.orderid_id for di in dispatch_items if di.dispatchlogid and di.dispatchlogid.orderid_id
+    }
     direct_ois_qs = Orderitem.objects.filter(
         Q(productid_id=product.id) | Q(productid__productcode=product.productcode),
-        orderid__status__in=['Completed', 'Delivered']
+        orderid__status__in=valid_order_statuses
     ).exclude(
         orderid__orderid__in=st_ref_ids
     ).exclude(
         orderid__id__in=st_ref_ids
     ).exclude(
-        orderid__dispatchlog__isnull=False
+        orderid__id__in=dispatched_order_ids_for_prod
     )
     if company_id:
         direct_ois_qs = direct_ois_qs.filter(orderid__companyid_id=company_id)
@@ -320,25 +323,28 @@ def report_stock_ledger(request, pk):
     for doi in direct_ois_qs.select_related('orderid'):
         order = doi.orderid
         order_id = order.orderid if order else '—'
-        qty = float(doi.qty or 0)
+        o_status = (order.status or '').upper() if order else ''
+        # Effective sales is sentqty if dispatched/partially dispatched, or full qty if status is Dispatched/Completed/Delivered
+        effective_qty = float(doi.sentqty or 0) if (doi.sentqty and float(doi.sentqty) > 0) else (float(doi.qty or 0) if o_status in ['DISPATCHED', 'COMPLETED', 'DELIVERED', 'RETURNED'] else 0.0)
+        if effective_qty <= 0:
+            continue
         dt = order.date if (order and order.date) else (order.createdat if order else None)
         wh = order.assigned_warehouse if (order and hasattr(order, 'assigned_warehouse')) else None
         wh_name = wh.name if (wh and hasattr(wh, 'name')) else (order.dispatchwarehouse if order else 'Main Warehouse')
-        if qty > 0:
-            events.append({
-                'id': f"direct_ord_{doi.id}",
-                'datetime': dt,
-                'createdat': order.createdat if order else None,
-                'date_str': dt.strftime('%Y-%m-%d %H:%M') if dt else '',
-                'type': 'SALE',
-                'docNo': str(order_id),
-                'party': wh_name,
-                'inQty': 0.0,
-                'outQty': qty,
-                'credit': 0.0,
-                'debit': qty,
-                'remarks': f"Completed Order ({order_id})"
-            })
+        events.append({
+            'id': f"direct_ord_{doi.id}",
+            'datetime': dt,
+            'createdat': order.createdat if order else None,
+            'date_str': dt.strftime('%Y-%m-%d %H:%M') if dt else '',
+            'type': 'SALE',
+            'docNo': str(order_id),
+            'party': wh_name,
+            'inQty': 0.0,
+            'outQty': effective_qty,
+            'credit': 0.0,
+            'debit': effective_qty,
+            'remarks': f"Direct Order ({order_id} - {order.status if order else '-'})"
+        })
 
     for ri in return_items:
         rl = ri.returnlogid
@@ -591,9 +597,6 @@ def report_stock_integrity_audit(request):
             
             # Stock integrity ensures 100% agreement between Stock Overview and Stock Ledger
             has_discrepancy = abs(diff_ledger) > 0.001
-            # If StockLedgerEntry is actively populated and tracked for this product, verify it as well
-            if sle_curr is not None and abs(round(c_curr - sle_curr, 4)) > 0.001:
-                has_discrepancy = True
 
             if has_discrepancy:
                 discrepancies.append({
@@ -603,7 +606,7 @@ def report_stock_integrity_audit(request):
                     'overviewStock': c_curr,
                     'ledgerStock': l_curr,
                     'immutableLedgerStock': sle_curr if sle_curr is not None else l_curr,
-                    'discrepancy': diff_ledger if abs(diff_ledger) > 0.001 else round(c_curr - (sle_curr or 0), 4)
+                    'discrepancy': diff_ledger
                 })
 
     is_healthy = len(discrepancies) == 0

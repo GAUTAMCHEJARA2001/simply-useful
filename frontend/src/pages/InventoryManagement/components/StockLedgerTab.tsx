@@ -55,21 +55,26 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
   const [popWh, setPopWh] = useState('');
   const [summary, setSummary] = useState({ opening: 0, current: 0 });
   const [auditing, setAuditing] = useState(false);
+  const [auditResult, setAuditResult] = useState<any | null>(null);
+  const [showAuditModal, setShowAuditModal] = useState(false);
 
   const runAudit = async () => {
     setAuditing(true);
     try {
       const res = await apiClient<any>('/inv/reports/stock-integrity-audit');
       const auditData = res?.data || (res as any);
+      setAuditResult(auditData);
       if (auditData?.healthy) {
+        setShowAuditModal(false);
         toast({
           title: 'Stock Integrity 100% Verified',
           description: `All ${auditData.totalProducts || 445} products match with 0 discrepancies between Stock Overview and Stock Ledger.`,
         });
       } else {
+        setShowAuditModal(true);
         toast({
           title: 'Stock Discrepancy Found',
-          description: `${auditData?.discrepancyCount || 0} product(s) have discrepancies.`,
+          description: `${auditData?.discrepancyCount || 0} product(s) have discrepancies. Click to view details.`,
           variant: 'destructive',
         });
       }
@@ -352,6 +357,59 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                 </table>
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {showAuditModal && auditResult && (
+        <Modal title={`Stock Discrepancy Details (${auditResult.discrepancyCount || 0} Products)`} onClose={() => setShowAuditModal(false)}>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between text-sm bg-muted/40 p-3 rounded-lg border border-border gap-2">
+              <div>Total Catalog Checked: <span className="font-bold">{auditResult.totalProducts}</span></div>
+              <div className="text-red-500 font-bold">{auditResult.discrepancyCount} Products With Discrepancy</div>
+              <div className="text-muted-foreground text-xs">{auditResult.auditedAt ? new Date(auditResult.auditedAt).toLocaleString() : ''}</div>
+            </div>
+
+            <div className="max-h-[60vh] overflow-auto border border-border rounded-xl">
+              <table className="w-full text-sm">
+                <thead className="bg-muted sticky top-0">
+                  <tr className="border-b border-border text-left">
+                    <th className="p-2.5">Product Name</th>
+                    <th className="p-2.5">SKU</th>
+                    <th className="p-2.5 text-right">Stock Overview</th>
+                    <th className="p-2.5 text-right">Stock Ledger</th>
+                    <th className="p-2.5 text-right">Discrepancy</th>
+                    <th className="p-2.5 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {(auditResult.discrepancies || []).map((d: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-muted/30">
+                      <td className="p-2.5 font-medium">{d.productName}</td>
+                      <td className="p-2.5 text-muted-foreground font-mono text-xs">{d.sku}</td>
+                      <td className="p-2.5 text-right font-medium">{formatDecimal(d.overviewStock)}</td>
+                      <td className="p-2.5 text-right font-medium">{formatDecimal(d.ledgerStock)}</td>
+                      <td className="p-2.5 text-right font-bold text-red-500">
+                        {d.discrepancy > 0 ? `+${formatDecimal(d.discrepancy)}` : formatDecimal(d.discrepancy)}
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setShowAuditModal(false);
+                            const p = stock.find((s) => s.productId === d.productId || s.id === d.productId);
+                            if (p) setSelectedProduct(p);
+                          }}
+                        >
+                          View Ledger
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </Modal>
       )}
