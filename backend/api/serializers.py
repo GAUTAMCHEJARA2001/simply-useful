@@ -333,7 +333,7 @@ class ProductSerializer(serializers.ModelSerializer):
     def validate(self, data):
         # Validate unique product code per company
         product_code = data.get('productcode')
-        company_id = data.get('companyid_id')
+        company_id = data.get('companyid_id') or (self.instance.companyid_id if self.instance else None)
         
         # In updates, we need to ignore the current instance
         instance_id = self.instance.id if self.instance else None
@@ -347,6 +347,8 @@ class ProductSerializer(serializers.ModelSerializer):
             if qs.exists():
                 raise serializers.ValidationError({"productCode": "A product with this SKU already exists."})
                 
+        return data
+
     def to_internal_value(self, data):
         data = data.copy() if hasattr(data, 'copy') else dict(data)
         if 'name' not in data and 'productName' in data:

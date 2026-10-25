@@ -117,15 +117,25 @@ def hr_employees(request):
             if not file_field:
                 return None
             val_str = str(file_field)
+            is_ssl = request.is_secure() or request.headers.get('x-forwarded-proto') == 'https'
             if val_str.startswith('http://') or val_str.startswith('https://'):
+                if is_ssl and val_str.startswith('http://') and not ('localhost' in val_str or '127.0.0.1' in val_str):
+                    return val_str.replace('http://', 'https://', 1)
                 return val_str
             try:
                 url = file_field.url if hasattr(file_field, 'url') else val_str
                 if url.startswith('http://') or url.startswith('https://'):
+                    if is_ssl and url.startswith('http://') and not ('localhost' in url or '127.0.0.1' in url):
+                        return url.replace('http://', 'https://', 1)
                     return url
-                return request.build_absolute_uri(url)
+                abs_url = request.build_absolute_uri(url)
+                if is_ssl and abs_url.startswith('http://') and not ('localhost' in abs_url or '127.0.0.1' in abs_url):
+                    abs_url = abs_url.replace('http://', 'https://', 1)
+                return abs_url
             except Exception:
                 if val_str.startswith('http://') or val_str.startswith('https://'):
+                    if is_ssl and val_str.startswith('http://') and not ('localhost' in val_str or '127.0.0.1' in val_str):
+                        return val_str.replace('http://', 'https://', 1)
                     return val_str
                 return None
 
@@ -368,15 +378,25 @@ def hr_employees_detail(request, pk):
                 if not file_field:
                     return None
                 val_str = str(file_field)
+                is_ssl = request.is_secure() or request.headers.get('x-forwarded-proto') == 'https'
                 if val_str.startswith('http://') or val_str.startswith('https://'):
+                    if is_ssl and val_str.startswith('http://') and not ('localhost' in val_str or '127.0.0.1' in val_str):
+                        return val_str.replace('http://', 'https://', 1)
                     return val_str
                 try:
                     url = file_field.url if hasattr(file_field, 'url') else val_str
                     if url.startswith('http://') or url.startswith('https://'):
+                        if is_ssl and url.startswith('http://') and not ('localhost' in url or '127.0.0.1' in url):
+                            return url.replace('http://', 'https://', 1)
                         return url
-                    return request.build_absolute_uri(url)
+                    abs_url = request.build_absolute_uri(url)
+                    if is_ssl and abs_url.startswith('http://') and not ('localhost' in abs_url or '127.0.0.1' in abs_url):
+                        abs_url = abs_url.replace('http://', 'https://', 1)
+                    return abs_url
                 except Exception:
                     if val_str.startswith('http://') or val_str.startswith('https://'):
+                        if is_ssl and val_str.startswith('http://') and not ('localhost' in val_str or '127.0.0.1' in val_str):
+                            return val_str.replace('http://', 'https://', 1)
                         return val_str
                     return None
 
