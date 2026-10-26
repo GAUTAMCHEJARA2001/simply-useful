@@ -15,6 +15,7 @@ import { SettingsTab } from './InventoryManagement/components/SettingsTab';
 import { PurchaseOrdersTab } from './InventoryManagement/components/PurchaseOrdersTab';
 import { PurchasesTab } from './InventoryManagement/components/PurchasesTab';
 import { SalesTab } from './InventoryManagement/components/SalesTab';
+import { DeletedSalesTab } from './InventoryManagement/components/DeletedSalesTab';
 import { ProductionsTab } from './InventoryManagement/components/ProductionsTab';
 import { DeletedProductionsTab } from './InventoryManagement/components/DeletedProductionsTab';
 import { AdjustmentsTab } from './InventoryManagement/components/AdjustmentsTab';
@@ -50,6 +51,7 @@ const InventoryManagement: React.FC = () => {
         {tab === 'purchase_orders' && <PurchaseOrdersTab />}
         {tab === 'purchases' && <PurchasesTab />}
         {tab === 'sales' && <SalesTab />}
+        {tab === 'deleted_sales' && <DeletedSalesTab />}
         {tab === 'productions' && <ProductionsTab onTabChange={setTab} />}
         {tab === 'deleted_productions' && <DeletedProductionsTab />}
         {tab === 'production_approvals' && <ProductionApprovalsTab />}

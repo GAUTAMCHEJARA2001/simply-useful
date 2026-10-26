@@ -228,12 +228,54 @@ def report_stock_ledger(request, pk):
     
     purchase_items = list(purchase_items_qs.select_related('purchaseid', 'purchaseid__warehouseid'))
 
+    # Validate and heal orphaned dispatch stock transactions (e.g. deleted dispatches)
+    valid_st_txs = []
+    from api.models import Dispatchlog, Order
+    for t in st_txs:
+        t_type = (t.transactiontype or '').upper()
+        if t_type == 'DISPATCH':
+            ref_str = str(t.referenceid or '').strip()
+            dl_exists = False
+            if ref_str:
+                dl_exists = Dispatchlog.objects.filter(
+                    Q(id=ref_str) | Q(invoicenumber=ref_str) | Q(orderid__orderid=ref_str) | Q(orderid__id=ref_str)
+                ).exists()
+            if not dl_exists and t.reason:
+                import re
+                inv_match = re.search(r'Invoice:\s*([^\)]+)', t.reason)
+                if inv_match:
+                    inv_val = inv_match.group(1).strip()
+                    if inv_val and inv_val != '-':
+                        dl_exists = Dispatchlog.objects.filter(invoicenumber=inv_val).exists()
+                if not dl_exists:
+                    ord_match = re.search(r'Dispatched Order\s+([^\s\(]+)', t.reason)
+                    if ord_match:
+                        ord_target = ord_match.group(1).strip()
+                        dl_exists = Dispatchlog.objects.filter(
+                            Q(orderid__orderid=ord_target) | Q(orderid__id=ord_target)
+                        ).exists()
+                        if not dl_exists:
+                            ord_obj = Order.objects.filter(Q(orderid=ord_target) | Q(id=ord_target)).first()
+                            if ord_obj and ord_obj.status in ['Dispatched', 'Completed', 'Partially Dispatched', 'Delivered']:
+                                dl_exists = True
+
+            if not dl_exists:
+                # Dispatch was deleted (e.g., Kiran's deleted dispatch order)! Auto-heal & skip!
+                try:
+                    t.is_deleted = True
+                    t.delete_reason = 'Deleted dispatch auto-healed in stock ledger'
+                    t.save(update_fields=['is_deleted', 'delete_reason'])
+                except Exception:
+                    pass
+                continue
+        valid_st_txs.append(t)
+
     # Track doc numbers from Stocktransaction to prevent duplicates
-    st_ref_ids = {str(t.referenceid) for t in st_txs if t.referenceid}
+    st_ref_ids = {str(t.referenceid) for t in valid_st_txs if t.referenceid}
 
     events = []
 
-    for t in st_txs:
+    for t in valid_st_txs:
         qty = float(t.quantity or 0)
         t_type = (t.transactiontype or '').upper()
         dt = t.createdat

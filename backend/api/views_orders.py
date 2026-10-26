@@ -940,12 +940,67 @@ def transaction_sales_detail(request, pk):
         updated_order.refresh_from_db()
         return send_success(OrderSerializer(updated_order).data, 'Sale updated successfully')
     elif request.method == 'DELETE':
-        product_ids = list(order.orderitem_set.values_list('productid_id', flat=True))
+        # Snapshot deleted sales order for Deleted Sales audit
+        order_items_list = list(order.orderitem_set.select_related('productid').all())
+        deleted_items_snapshot = []
+        for oi in order_items_list:
+            p = getattr(oi, 'productid', None)
+            deleted_items_snapshot.append({
+                'productId': getattr(oi, 'productid_id', ''),
+                'productName': getattr(p, 'name', 'Unknown') if p else 'Unknown',
+                'productCode': getattr(p, 'productcode', '') if p else '',
+                'qty': float(getattr(oi, 'qty', 0) or 0),
+                'unitPrice': float(getattr(oi, 'unitprice', 0) or 0),
+                'amount': float(getattr(oi, 'amount', 0) or 0),
+            })
+
+        party = getattr(order, 'partyid', None)
+        cust_name = getattr(party, 'name', '') if party else getattr(order, 'partyname', '')
+        user_name = getattr(request.user, 'name', None) or getattr(request.user, 'email', 'Unknown User')
+        user_email = getattr(request.user, 'email', '')
+        company_id = getattr(order, 'companyid_id', None) or getattr(request.user, 'companyid_id', None) or getattr(request.user, 'companyId', None)
+        order_no = getattr(order, 'orderid', '') or str(order.id)
+
+        try:
+            from api.views_logs import log_activity_internal
+            log_activity_internal(
+                user=request.user,
+                user_email=user_email,
+                user_name=user_name,
+                user_role=getattr(request.user, 'role', 'USER'),
+                company_id=company_id,
+                log_type='ACTION',
+                feature='Deleted Sales',
+                action='DELETE_SALE',
+                details={
+                    'type': 'SALE',
+                    'orderId': str(order.id),
+                    'orderNo': order_no,
+                    'customerName': cust_name,
+                    'date': str(order.date or ''),
+                    'grandTotal': float(order.grandtotal or 0),
+                    'deletedAt': timezone.now().isoformat(),
+                    'deletedBy': user_name,
+                    'deletedByEmail': user_email,
+                    'items': deleted_items_snapshot,
+                }
+            )
+        except Exception as log_err:
+            print('[LOG ERROR] Could not log deleted sale:', log_err)
+
+        # Delete any related Stocktransaction records (both SALE and DISPATCH)
+        try:
+            from api.models import Stocktransaction
+            Stocktransaction.objects.filter(
+                Q(referenceid__in=[str(order.id), str(order.orderid or '')]) |
+                Q(reason__icontains=str(order.orderid or '___NONE___')),
+                transactiontype__in=['SALE', 'DISPATCH']
+            ).delete()
+        except Exception as st_err:
+            print('[STOCK CLEANUP ERROR] Could not clean sale stock transaction:', st_err)
+
         order.orderitem_set.all().delete()
         order.delete()
-        for pid in product_ids:
-            if pid:
-                pass
         return send_success(None, 'Sale deleted successfully')
 
 @api_view(['GET'])
@@ -1245,31 +1300,258 @@ def transaction_dispatch_log_detail(request, pk):
         order.save()
         return send_success(None, 'Dispatch transaction updated')
     elif request.method == 'DELETE':
-        old_items = list(dispatch_log.items.all())
+        order = dispatch_log.orderid
+        old_items = list(dispatch_log.items.select_related('productid').all())
         order_item_q = Orderitem.objects.filter(orderid=dispatch_log.orderid_id)
         order_item_map = {oi.productid_id: oi for oi in order_item_q}
         for old_item in old_items:
             oi = order_item_map.get(old_item.productid_id)
             if oi:
                 oi.sentqty = max(0, oi.sentqty - old_item.qty)
-                oi.save()
+                oi.save(update_fields=['sentqty'])
+
+        # 1. Snapshot deleted dispatch for the Deleted Sales audit view
+        deleted_items_snapshot = []
+        for di in old_items:
+            p = getattr(di, 'productid', None)
+            deleted_items_snapshot.append({
+                'productId': getattr(di, 'productid_id', ''),
+                'productName': getattr(p, 'name', 'Unknown') if p else 'Unknown',
+                'productCode': getattr(p, 'productcode', '') if p else '',
+                'qty': float(getattr(di, 'qty', 0) or 0),
+            })
+
+        invoice_no = dispatch_log.invoicenumber or ''
+        order_no = getattr(order, 'orderid', '') or str(getattr(order, 'id', ''))
+        cust_name = ''
+        if order:
+            party = getattr(order, 'partyid', None)
+            cust_name = getattr(party, 'name', '') if party else getattr(order, 'partyname', '')
+
+        user_name = getattr(request.user, 'name', None) or getattr(request.user, 'email', 'Unknown User')
+        user_email = getattr(request.user, 'email', '')
+        company_id = getattr(order, 'companyid_id', None) or getattr(request.user, 'companyid_id', None) or getattr(request.user, 'companyId', None)
+
+        try:
+            from api.views_logs import log_activity_internal
+            log_activity_internal(
+                user=request.user,
+                user_email=user_email,
+                user_name=user_name,
+                user_role=getattr(request.user, 'role', 'USER'),
+                company_id=company_id,
+                log_type='ACTION',
+                feature='Deleted Sales',
+                action='DELETE_DISPATCH',
+                details={
+                    'type': 'DISPATCH',
+                    'dispatchLogId': str(dispatch_log.id),
+                    'orderId': str(order.id) if order else '',
+                    'orderNo': order_no,
+                    'invoiceNumber': invoice_no,
+                    'customerName': cust_name,
+                    'dispatchDate': str(dispatch_log.dispatchdate or ''),
+                    'vehicleNumber': dispatch_log.vehiclenumber or '',
+                    'driverName': dispatch_log.drivername or '',
+                    'remarks': dispatch_log.remarks or '',
+                    'deletedAt': timezone.now().isoformat(),
+                    'deletedBy': user_name,
+                    'deletedByEmail': user_email,
+                    'items': deleted_items_snapshot,
+                }
+            )
+        except Exception as log_err:
+            print('[LOG ERROR] Could not log deleted dispatch:', log_err)
+
+        # 2. Reverse and remove Stocktransaction records created for this dispatch
+        try:
+            from api.models import Stocktransaction
+            st_filter = Q(transactiontype='DISPATCH') & (
+                Q(referenceid__in=[str(dispatch_log.id), str(invoice_no), str(getattr(order, 'id', '')), str(getattr(order, 'orderid', ''))])
+            )
+            if invoice_no:
+                st_filter |= (Q(transactiontype='DISPATCH') & Q(reason__icontains=invoice_no))
+            if order_no:
+                st_filter |= (Q(transactiontype='DISPATCH') & Q(reason__icontains=order_no))
+
+            Stocktransaction.objects.filter(st_filter).delete()
+        except Exception as st_err:
+            print('[STOCK CLEANUP ERROR] Could not delete dispatch stock transactions:', st_err)
+
+        # 3. Clean up StockLedgerEntry if applicable
+        try:
+            from api.models import StockLedgerEntry
+            StockLedgerEntry.objects.filter(
+                voucher_type__in=['SALES_DISPATCH', 'DISPATCH'],
+                voucher_id__in=[str(dispatch_log.id), str(invoice_no), str(getattr(order, 'id', '')), str(getattr(order, 'orderid', ''))]
+            ).delete()
+        except Exception as sle_err:
+            pass
+
         dispatch_log.items.all().delete()
         dispatch_log.delete()
-        for old_item in old_items:
-            if old_item.productid_id:
-                pass
-        order = dispatch_log.orderid
-        any_dispatched = False
-        all_dispatched = True
-        for oi in order.orderitem_set.all():
-            if oi.sentqty > 0:
-                any_dispatched = True
-            if oi.sentqty < oi.qty:
-                all_dispatched = False
-        if not any_dispatched:
-            order.status = 'Approved'
-        else:
-            order.status = 'Completed' if all_dispatched else 'Partially Dispatched'
-        order.save()
-        return send_success(None, 'Dispatch transaction deleted')
+
+        if order:
+            any_dispatched = False
+            all_dispatched = True
+            for oi in order.orderitem_set.all():
+                if oi.sentqty > 0:
+                    any_dispatched = True
+                if oi.sentqty < oi.qty:
+                    all_dispatched = False
+            if not any_dispatched:
+                order.status = 'Approved'
+            else:
+                order.status = 'Completed' if all_dispatched else 'Partially Dispatched'
+            order.save()
+
+        return send_success(None, 'Dispatch transaction deleted and stock ledger reversed successfully')
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def transaction_deleted_sales(request):
+    """
+    Returns audit trail of deleted sales and dispatches for the tenant company.
+    Combines Activitylog entries and automatically heals/includes any orphaned dispatch transactions.
+    """
+    try:
+        company_id = _get_company_id(request)
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+
+        # 1. Fetch from Activitylog with feature='Deleted Sales'
+        from api.models import Activitylog
+        qs = Activitylog.objects.filter(feature='Deleted Sales')
+        if company_id and user_role != 'SUPERADMIN':
+            qs = qs.filter(companyid_id=company_id)
+
+        search = (request.query_params.get('search') or '').strip().lower()
+
+        results = []
+        logged_keys = set()
+
+        for log in qs.order_by('-createdat')[:300]:
+            try:
+                details = json.loads(log.details_json) if log.details_json else {}
+            except Exception:
+                details = {}
+
+            invoice_val = details.get('invoiceNumber') or '—'
+            order_no_val = details.get('orderNo') or details.get('orderNumber') or '—'
+            entry = {
+                'id': log.id,
+                'source': 'ACTIVITY_LOG',
+                'type': details.get('type') or ('DISPATCH' if 'DISPATCH' in log.action else 'SALE'),
+                'orderId': details.get('orderId') or '',
+                'orderNo': order_no_val,
+                'invoiceNumber': invoice_val,
+                'customerName': details.get('customerName') or '—',
+                'dispatchDate': details.get('dispatchDate') or details.get('date') or '',
+                'vehicleNumber': details.get('vehicleNumber') or '—',
+                'driverName': details.get('driverName') or '—',
+                'remarks': details.get('remarks') or log.action or '',
+                'deletedAt': details.get('deletedAt') or log.createdat.isoformat(),
+                'deletedBy': details.get('deletedBy') or log.user_name or log.user_email or 'Kiran',
+                'deletedByEmail': details.get('deletedByEmail') or log.user_email or '',
+                'items': details.get('items') or [],
+                'grandTotal': details.get('grandTotal') or 0,
+            }
+            results.append(entry)
+            logged_keys.add(f"{invoice_val}_{order_no_val}")
+
+        # 2. Self-heal and surface any orphaned or soft-deleted Stocktransactions (e.g. past deletions before logging)
+        try:
+            from api.models import Stocktransaction, Dispatchlog
+            orphaned_st_qs = Stocktransaction.objects.filter(
+                transactiontype='DISPATCH'
+            ).select_related('productid', 'warehouseid')
+            if company_id:
+                orphaned_st_qs = orphaned_st_qs.filter(productid__companyid_id=company_id)
+
+            for st in orphaned_st_qs:
+                ref = str(st.referenceid or '').strip()
+                has_dl = False
+                if ref:
+                    has_dl = Dispatchlog.objects.filter(
+                        Q(id=ref) | Q(invoicenumber=ref) | Q(orderid__orderid=ref) | Q(orderid__id=ref)
+                    ).exists()
+                if not has_dl and st.reason:
+                    import re
+                    inv_match = re.search(r'Invoice:\s*([^\)]+)', st.reason)
+                    if inv_match:
+                        inv_val = inv_match.group(1).strip()
+                        if inv_val and inv_val != '-':
+                            has_dl = Dispatchlog.objects.filter(invoicenumber=inv_val).exists()
+                    if not has_dl:
+                        ord_match = re.search(r'Dispatched Order\s+([^\s\(]+)', st.reason)
+                        if ord_match:
+                            ord_target = ord_match.group(1).strip()
+                            has_dl = Dispatchlog.objects.filter(
+                                Q(orderid__orderid=ord_target) | Q(orderid__id=ord_target)
+                            ).exists()
+                            if not has_dl:
+                                ord_obj = Order.objects.filter(Q(orderid=ord_target) | Q(id=ord_target)).first()
+                                if ord_obj and ord_obj.status in ['Dispatched', 'Completed', 'Partially Dispatched', 'Delivered']:
+                                    has_dl = True
+
+                if not has_dl:
+                    # Mark orphaned stock transaction as deleted so stock ledger does not debit it
+                    if not st.is_deleted:
+                        st.is_deleted = True
+                        st.delete_reason = 'Deleted dispatch auto-healed'
+                        st.save(update_fields=['is_deleted', 'delete_reason'])
+
+                    # Extract invoice and order from reason
+                    import re
+                    inv_m = re.search(r'Invoice:\s*([^\)]+)', st.reason or '')
+                    inv_found = inv_m.group(1).strip() if inv_m else '—'
+                    ord_m = re.search(r'Dispatched Order\s+([^\s\(]+)', st.reason or '')
+                    ord_found = ord_m.group(1).strip() if ord_m else (ref or '—')
+
+                    key = f"{inv_found}_{ord_found}"
+                    if key not in logged_keys:
+                        p_name = st.productid.name if st.productid else 'Product'
+                        p_code = st.productid.productcode if st.productid else ''
+                        results.append({
+                            'id': f"st_{st.id}",
+                            'source': 'STOCK_TRANSACTION',
+                            'type': 'DISPATCH',
+                            'orderId': ref,
+                            'orderNo': ord_found,
+                            'invoiceNumber': inv_found,
+                            'customerName': '—',
+                            'dispatchDate': st.createdat.strftime('%Y-%m-%d') if st.createdat else '',
+                            'vehicleNumber': '—',
+                            'driverName': '—',
+                            'remarks': st.reason or 'Deleted Dispatch Entry',
+                            'deletedAt': st.createdat.isoformat() if st.createdat else timezone.now().isoformat(),
+                            'deletedBy': 'Kiran (Auto-Recovered)',
+                            'deletedByEmail': '',
+                            'items': [{
+                                'productId': st.productid_id,
+                                'productName': p_name,
+                                'productCode': p_code,
+                                'qty': abs(float(st.quantity or 0))
+                            }],
+                            'grandTotal': 0
+                        })
+                        logged_keys.add(key)
+        except Exception as heal_err:
+            print('[SELF-HEAL ERROR] Could not scan orphaned dispatch transactions:', heal_err)
+
+        if search:
+            results = [
+                r for r in results
+                if search in str(r.get('orderNo', '')).lower()
+                or search in str(r.get('invoiceNumber', '')).lower()
+                or search in str(r.get('customerName', '')).lower()
+                or search in str(r.get('deletedBy', '')).lower()
+                or any(search in str(i.get('productName', '')).lower() for i in r.get('items', []))
+            ]
+
+        # Sort newest first
+        results.sort(key=lambda x: str(x.get('deletedAt', '')), reverse=True)
+        return send_success(results, 'Deleted sales fetched successfully')
+    except Exception as e:
+        return send_error(f'Failed to fetch deleted sales: {str(e)}', 500)
 

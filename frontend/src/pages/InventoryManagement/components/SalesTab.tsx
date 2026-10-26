@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
-import { Plus, RotateCcw, Eye, Package, X, ChevronsUpDown, Check } from 'lucide-react';
+import { Plus, RotateCcw, Eye, Package, X, ChevronsUpDown, Check, Trash2 } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { useSales, useSaleMutations } from '@/hooks/inventory/useSales';
@@ -26,6 +27,7 @@ const extractChallanNumber = (narration: string) => {
 };
 
 export const SalesTab: React.FC = () => {
+  const navigate = useNavigate();
   const { data: sales = [], isLoading, error, refetch } = useSales();
   const { deleteSale, deleteDispatchLog } = useSaleMutations();
   const { toast } = useToast();
@@ -309,6 +311,14 @@ export const SalesTab: React.FC = () => {
             <option value="Approved">Approved</option>
             <option value="Cancelled">Cancelled</option>
           </select>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigate('/inventory/manage?tab=deleted_sales')}
+            className="shrink-0 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
+          >
+            <Trash2 className="w-4 h-4 mr-1.5" /> Deleted Sales
+          </Button>
           <Button size="sm" onClick={handleAdd} className="shrink-0">
             <Plus className="w-4 h-4 mr-1.5" /> New Sale
           </Button>

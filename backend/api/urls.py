@@ -51,6 +51,7 @@ from api.views_orders import (
     transaction_dispatch,
     transaction_reject,
     transaction_dispatch_log_detail,
+    transaction_deleted_sales,
 )
 
 from api.views_busy import sync_busy_data, get_party_ledger, search_busy_parties, import_busy_ledger, get_sync_status, ledger_requests_view, fulfill_ledger_request
@@ -166,6 +167,7 @@ urlpatterns = [
     path('transactions/sales', transaction_sales, name='tx-sales'),
     path('transactions/sales/<str:pk>', transaction_sales_detail, name='tx-sales-detail'),
     path('transactions/dispatch-logs/<str:pk>', transaction_dispatch_log_detail, name='tx-dispatch-log-detail'),
+    path('transactions/deleted-sales', transaction_deleted_sales, name='tx-deleted-sales'),
     path('transactions/approvals', transaction_approvals, name='tx-approvals'),
     path('transactions/approvals/<str:pk>', transaction_approval_detail, name='tx-approval-detail'),
     path('transactions/approvals/<str:pk>/approve', transaction_approve, name='tx-approve'),

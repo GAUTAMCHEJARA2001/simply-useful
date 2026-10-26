@@ -4,11 +4,11 @@ import { useToast } from '@/hooks/use-toast';
 import { api } from '@/api/client';
 
 export type Tab = 'dashboard' | 'products' | 'categories' | 'sub_categories' | 'brands' | 'units' | 'suppliers' |
-  'purchases' | 'sales' | 'productions' | 'deleted_productions' | 'adjustments' | 'approvals' | 'sales_returns' | 'purchase_returns' | 'reports' | 'settings' | 'stock_ledger' | 'purchase_orders' | 'total_stock' | 'bom' | 'production_approvals';
+  'purchases' | 'sales' | 'deleted_sales' | 'productions' | 'deleted_productions' | 'adjustments' | 'approvals' | 'sales_returns' | 'purchase_returns' | 'reports' | 'settings' | 'stock_ledger' | 'purchase_orders' | 'total_stock' | 'bom' | 'production_approvals';
 
 const VALID_TABS = new Set<string>([
   'dashboard', 'products', 'categories', 'sub_categories', 'brands', 'units', 'suppliers',
-  'purchases', 'sales', 'productions', 'deleted_productions', 'adjustments', 'approvals',
+  'purchases', 'sales', 'deleted_sales', 'productions', 'deleted_productions', 'adjustments', 'approvals',
   'sales_returns', 'purchase_returns', 'reports', 'settings', 'stock_ledger', 'purchase_orders',
   'total_stock', 'bom', 'production_approvals'
 ]);

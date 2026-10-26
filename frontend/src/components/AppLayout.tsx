@@ -86,6 +86,7 @@ const navItems: NavItem[] = [
   { label: 'Purchase Orders', path: '/inventory/manage?tab=purchase_orders', icon: ClipboardList, feature: 'view_inventory_dashboard', domain: 'SUPPLY_CHAIN', subgroup: 'Transactions', description: 'Vendor PO generation and tracking' },
   { label: 'Purchases', path: '/inventory/manage?tab=purchases', icon: ShoppingCart, feature: 'view_inventory_dashboard', domain: 'SUPPLY_CHAIN', subgroup: 'Transactions', description: 'Goods receipt notes (GRN) & inward stock entries' },
   { label: 'Sales', path: '/inventory/manage?tab=sales', icon: DollarSign, feature: 'view_inventory_dashboard', domain: 'SUPPLY_CHAIN', subgroup: 'Transactions', description: 'Outward billing and stock deduction logs' },
+  { label: 'Deleted Sales', path: '/inventory/manage?tab=deleted_sales', icon: Trash2, feature: 'view_inventory_dashboard', domain: 'SUPPLY_CHAIN', subgroup: 'Transactions', description: 'Audit log of removed dispatch logs and deleted sales' },
   { label: 'Production', path: '/inventory/manage?tab=productions', icon: Factory, feature: 'view_inventory_dashboard', domain: 'SUPPLY_CHAIN', subgroup: 'Transactions', description: 'Manufacturing work orders & raw material conversions' },
   { label: 'Deleted Production', path: '/inventory/manage?tab=deleted_productions', icon: Trash2, feature: 'view_inventory_dashboard', domain: 'SUPPLY_CHAIN', subgroup: 'Transactions', description: 'Audit log of cancelled or removed production batches' },
   { label: 'Production Approvals', path: '/inventory/manage?tab=production_approvals', icon: UserCheck, feature: 'view_inventory_dashboard', domain: 'SUPPLY_CHAIN', subgroup: 'Transactions', description: 'Quality check and manager approval for manufactured batches' },
@@ -339,6 +340,15 @@ export const INVENTORY_SUB_PAGES: SubPageSearchItem[] = [
     icon: Factory,
     keywords: 'production manufacturing batch processing conversion work order daily manufacturing factory',
     description: 'Manufacturing work orders & raw material conversions',
+  },
+  {
+    id: 'inv_deleted_sales',
+    label: 'Deleted Sales',
+    group: 'Inventory • Transactions',
+    path: '/inventory/manage?tab=deleted_sales',
+    icon: Trash2,
+    keywords: 'deleted sales dispatch removed orders trash cancelled dispatches audit log kiran',
+    description: 'Audit log of removed dispatch logs and deleted sales',
   },
   {
     id: 'inv_deleted_production',
