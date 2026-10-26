@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
-import { Plus, RotateCcw, Eye, Package } from 'lucide-react';
+import { Plus, RotateCcw, Eye, Package, X } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useSales, useSaleMutations } from '@/hooks/inventory/useSales';
 import { SalesModal } from '../modals/SalesModal';
@@ -135,8 +135,26 @@ export const SalesTab: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('AllSales');
+  const [selectedItemFilter, setSelectedItemFilter] = useState('');
 
   const { filterBySelectedFY } = useFinancialYear();
+
+  // Extract all unique product names from the current sales with occurrence count
+  const availableProducts = useMemo(() => {
+    const counts = new Map<string, number>();
+    sales.forEach((s: any) => {
+      (s.items || []).forEach((it: any) => {
+        const pName = it.productName || (typeof it.product === 'object' ? it.product?.name : it.product);
+        if (pName && typeof pName === 'string' && pName.trim()) {
+          const clean = pName.trim();
+          counts.set(clean, (counts.get(clean) || 0) + 1);
+        }
+      });
+    });
+    return Array.from(counts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ name, count }));
+  }, [sales]);
 
   const filteredSales = filterBySelectedFY(sales, (s: any) => s.dispatchDate || s.date || s.createdAt).filter((s: any) => {
     const customer = (s.customerName || s.partyName || '').toLowerCase();
@@ -144,6 +162,16 @@ export const SalesTab: React.FC = () => {
     const status = s.status || 'Pending';
     const sTerm = searchTerm.toLowerCase().trim();
 
+    // Specific Item dropdown filter
+    if (selectedItemFilter) {
+      const hasItem = (s.items || []).some((it: any) => {
+        const pName = it.productName || (typeof it.product === 'object' ? it.product?.name : it.product);
+        return pName && typeof pName === 'string' && pName.trim().toLowerCase() === selectedItemFilter.toLowerCase();
+      });
+      if (!hasItem) return false;
+    }
+
+    // Text search (matches customer, challan, or any item name)
     const itemsMatch = sTerm ? (s.items || []).some((it: any) => {
       const pName = (it.productName || (typeof it.product === 'object' ? it.product?.name : it.product) || '').toLowerCase();
       return pName.includes(sTerm);
@@ -160,19 +188,56 @@ export const SalesTab: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
+  // Calculate stats when a specific item is filtered
+  const itemFilterStats = useMemo(() => {
+    if (!selectedItemFilter) return null;
+    let totalQtySold = 0;
+    let totalAmountSold = 0;
+    filteredSales.forEach((s: any) => {
+      (s.items || []).forEach((it: any) => {
+        const pName = it.productName || (typeof it.product === 'object' ? it.product?.name : it.product);
+        if (pName && typeof pName === 'string' && pName.trim().toLowerCase() === selectedItemFilter.toLowerCase()) {
+          const qty = it.qty ?? it.sentQty ?? 0;
+          const ret = it.returnedqty || it.returnedQty || 0;
+          const netQ = Math.max(0, qty - ret);
+          totalQtySold += netQ;
+          totalAmountSold += netQ * (it.price ?? it.rate ?? 0);
+        }
+      });
+    });
+    return { totalQtySold, totalAmountSold };
+  }, [selectedItemFilter, filteredSales]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-xl font-bold">Sales (Invoices)</h1>
         
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <input
             type="text"
             placeholder="Search customer, invoice, or item..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:w-[260px] text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
+            className="w-full sm:w-[220px] text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
           />
+
+          <select
+            value={selectedItemFilter}
+            onChange={(e) => setSelectedItemFilter(e.target.value)}
+            className={`text-sm border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50 max-w-[200px] truncate ${
+              selectedItemFilter ? 'border-primary text-primary font-semibold' : 'border-border'
+            }`}
+            title={selectedItemFilter ? `Filtering by: ${selectedItemFilter}` : "Filter by item / product"}
+          >
+            <option value="">All Items ({availableProducts.length})</option>
+            {availableProducts.map(({ name, count }) => (
+              <option key={name} value={name}>
+                {name} ({count})
+              </option>
+            ))}
+          </select>
+
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -194,6 +259,41 @@ export const SalesTab: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {selectedItemFilter && itemFilterStats && (
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg text-xs">
+          <div className="flex items-center gap-1.5 font-medium text-foreground">
+            <Package className="w-3.5 h-3.5 text-primary" />
+            <span>Item Filter:</span>
+            <span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+              {selectedItemFilter}
+            </span>
+          </div>
+          <span className="text-muted-foreground">•</span>
+          <span className="text-muted-foreground">
+            <strong>{filteredSales.length}</strong> invoices
+          </span>
+          <span className="text-muted-foreground">•</span>
+          <span className="text-muted-foreground">
+            <strong>{itemFilterStats.totalQtySold}</strong> units dispatched
+          </span>
+          {itemFilterStats.totalAmountSold > 0 && (
+            <>
+              <span className="text-muted-foreground">•</span>
+              <span className="text-muted-foreground">
+                Item Total: <strong className="text-foreground">{Currency(itemFilterStats.totalAmountSold)}</strong>
+              </span>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setSelectedItemFilter('')}
+            className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground bg-background hover:bg-muted border border-border px-2 py-0.5 rounded transition-colors"
+          >
+            <X className="w-3 h-3" /> Clear Filter
+          </button>
+        </div>
+      )}
 
       <SafeDataView data={sales} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable 
@@ -228,44 +328,67 @@ export const SalesTab: React.FC = () => {
             const items: any[] = s.items || [];
             const totalUnits = items.reduce((acc: number, it: any) => acc + (Number(it.qty || it.sentQty || 0)), 0);
 
-            const itemsTooltip = items.map((it: any) => {
+            // If an item is filtered, pin that item to top of the list
+            const sortedItems = [...items].sort((a: any, b: any) => {
+              if (!selectedItemFilter) return 0;
+              const nameA = (a.productName || (typeof a.product === 'object' ? a.product?.name : a.product) || '').trim().toLowerCase();
+              const nameB = (b.productName || (typeof b.product === 'object' ? b.product?.name : b.product) || '').trim().toLowerCase();
+              const fLower = selectedItemFilter.toLowerCase();
+              if (nameA === fLower && nameB !== fLower) return -1;
+              if (nameB === fLower && nameA !== fLower) return 1;
+              return 0;
+            });
+
+            const itemsTooltip = sortedItems.map((it: any) => {
               const pName = it.productName || (typeof it.product === 'object' ? it.product?.name : it.product) || '—';
               const qty = it.qty ?? it.sentQty ?? 0;
               const ret = it.returnedqty || it.returnedQty || 0;
               return `${pName}: ${qty}${ret > 0 ? ` (${ret} ret)` : ''}`;
             }).join(', ');
 
-            const itemsCell = items.length === 0 ? (
+            const itemsCell = sortedItems.length === 0 ? (
               <span key={`items-${s.id}`} className="text-xs text-muted-foreground italic">No items</span>
             ) : (
               <div key={`items-${s.id}`} className="flex flex-col gap-1 min-w-[190px] max-w-[270px]" title={itemsTooltip}>
                 <div className="space-y-1">
-                  {items.slice(0, 2).map((it: any, idx: number) => {
+                  {sortedItems.slice(0, 2).map((it: any, idx: number) => {
                     const pName = it.productName || (typeof it.product === 'object' ? it.product?.name : it.product) || '—';
                     const qty = it.qty ?? it.sentQty ?? 0;
                     const retQty = it.returnedqty || it.returnedQty || 0;
+                    const isFiltered = selectedItemFilter && pName.trim().toLowerCase() === selectedItemFilter.toLowerCase();
+
                     return (
-                      <div 
-                        key={idx} 
-                        className="flex items-center justify-between gap-1.5 text-[11px] bg-muted/40 hover:bg-muted/70 transition-colors border border-border/50 rounded px-1.5 py-0.5"
+                      <button 
+                        key={idx}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedItemFilter(isFiltered ? '' : pName.trim());
+                        }}
+                        className={`w-full text-left flex items-center justify-between gap-1.5 text-[11px] rounded px-1.5 py-0.5 border transition-all cursor-pointer ${
+                          isFiltered
+                            ? 'bg-primary/15 border-primary text-primary font-bold ring-1 ring-primary/40'
+                            : 'bg-muted/40 hover:bg-muted/80 border-border/50 text-foreground'
+                        }`}
+                        title={isFiltered ? `Click to remove filter for ${pName}` : `Click to filter invoices by ${pName}`}
                       >
-                        <span className="truncate font-medium text-foreground max-w-[180px]" title={pName}>{pName}</span>
-                        <span className="shrink-0 font-semibold text-muted-foreground whitespace-nowrap">
+                        <span className="truncate max-w-[170px]" title={pName}>{pName}</span>
+                        <span className="shrink-0 font-semibold whitespace-nowrap">
                           {retQty > 0 ? (
                             <span>
-                              <span className="text-foreground">{qty - retQty}</span>
+                              <span>{qty - retQty}</span>
                               <span className="text-amber-600 text-[10px] ml-1">(-{retQty})</span>
                             </span>
                           ) : (
                             `×${qty}`
                           )}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
 
-                {items.length > 2 && (
+                {sortedItems.length > 2 && (
                   <Popover>
                     <PopoverTrigger asChild>
                       <button 
@@ -273,7 +396,7 @@ export const SalesTab: React.FC = () => {
                         className="text-[10px] font-semibold text-primary hover:underline text-left inline-flex items-center gap-1 cursor-pointer w-fit py-0.5"
                       >
                         <Package className="w-2.5 h-2.5" />
-                        <span>+{items.length - 2} more ({totalUnits} total units)</span>
+                        <span>+{sortedItems.length - 2} more ({totalUnits} total units)</span>
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80 p-3 shadow-lg" align="start">
@@ -281,20 +404,34 @@ export const SalesTab: React.FC = () => {
                         <div className="flex items-center justify-between border-b border-border pb-1.5">
                           <span className="font-bold text-xs flex items-center gap-1.5">
                             <Package className="w-3.5 h-3.5 text-primary" />
-                            Invoice Items ({items.length})
+                            Invoice Items ({sortedItems.length})
                           </span>
                           <span className="text-[10px] font-medium bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{totalUnits} units</span>
                         </div>
                         <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
-                          {items.map((it: any, idx: number) => {
+                          {sortedItems.map((it: any, idx: number) => {
                             const pName = it.productName || (typeof it.product === 'object' ? it.product?.name : it.product) || '—';
                             const qty = it.qty ?? it.sentQty ?? 0;
                             const price = it.price ?? it.rate ?? 0;
                             const retQty = it.returnedqty || it.returnedQty || 0;
+                            const isFiltered = selectedItemFilter && pName.trim().toLowerCase() === selectedItemFilter.toLowerCase();
+
                             return (
-                              <div key={idx} className="p-1.5 rounded bg-muted/40 border border-border/40 text-xs">
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setSelectedItemFilter(isFiltered ? '' : pName.trim())}
+                                className={`w-full text-left p-1.5 rounded border text-xs transition-colors cursor-pointer ${
+                                  isFiltered 
+                                    ? 'bg-primary/10 border-primary ring-1 ring-primary/30' 
+                                    : 'bg-muted/40 hover:bg-muted/70 border-border/40'
+                                }`}
+                                title={isFiltered ? "Click to clear filter" : `Click to filter invoices by ${pName}`}
+                              >
                                 <div className="flex justify-between items-start gap-1">
-                                  <span className="font-semibold text-foreground text-[11px] leading-tight">{pName}</span>
+                                  <span className={`text-[11px] leading-tight ${isFiltered ? 'font-bold text-primary' : 'font-semibold text-foreground'}`}>
+                                    {pName}
+                                  </span>
                                   <span className="font-bold text-[11px] shrink-0 text-foreground">
                                     {price > 0 ? Currency(qty * price) : `×${qty}`}
                                   </span>
@@ -303,7 +440,7 @@ export const SalesTab: React.FC = () => {
                                   <span>Qty: {qty}{retQty > 0 && <span className="text-amber-600 font-semibold ml-1">({retQty} returned)</span>}</span>
                                   {price > 0 && <span>@{Currency(price)}</span>}
                                 </div>
-                              </div>
+                              </button>
                             );
                           })}
                         </div>
