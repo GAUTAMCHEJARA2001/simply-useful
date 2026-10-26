@@ -1,3 +1,6 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/api/client';
+import { toast } from 'sonner';
 
 // --- LEAVE MANAGEMENT ---
 export const useLeaveTypes = () => {
@@ -7,7 +10,6 @@ export const useLeaveTypes = () => {
       const res = await api.get('/hr/leave-types');
       return res.data.data;
     },
-    refetchInterval: 10000
   });
 };
 
@@ -18,7 +20,6 @@ export const useLeaveBalances = () => {
       const res = await api.get('/hr/leave-balances');
       return res.data.data;
     },
-    refetchInterval: 10000
   });
 };
 
@@ -29,7 +30,6 @@ export const useLeaveRecords = () => {
       const res = await api.get('/hr/leave-records');
       return res.data.data;
     },
-    refetchInterval: 10000
   });
 };
 

@@ -30,6 +30,5 @@ export const useStocksByWarehouse = () => {
       const res = await api.get('/reports/stocks-by-warehouse');
       return (res.data?.data || res.data || {}) as Record<string, Record<string, number>>;
     },
-    refetchInterval: 10000,
   });
 };

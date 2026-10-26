@@ -210,9 +210,10 @@ urlpatterns = [
 
 from django.urls import re_path
 from django.views.static import serve
+from django.views.decorators.cache import cache_control
 
 urlpatterns += [
-    re_path(r'^media/(?P<path>.*)$', serve, {
+    re_path(r'^media/(?P<path>.*)$', cache_control(max_age=2592000, public=True)(serve), {
         'document_root': settings.MEDIA_ROOT,
     }),
 ]

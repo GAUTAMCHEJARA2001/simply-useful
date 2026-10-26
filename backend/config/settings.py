@@ -78,6 +78,7 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',  # High-performance static files serving
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.middleware.http.ConditionalGetMiddleware',  # Returns 304 Not Modified when ETag matches, saving 100% egress body
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -126,7 +127,7 @@ if DATABASE_URL:
         'PASSWORD': unquote(url.password) if url.password else None,
         'HOST': url.hostname,
         'PORT': url.port or 5432,
-        'CONN_MAX_AGE': 60,  # Reclaim idle database connection memory quickly
+        'CONN_MAX_AGE': 20,  # Reclaim idle database connection memory quickly
         'CONN_HEALTH_CHECKS': True,
     }
 
@@ -213,9 +214,14 @@ MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 WHITENOISE_MANIFEST_STRICT = False
 
+USE_ETAGS = True
+
+# Cloudinary credentials check
+_has_cloudinary = bool(os.environ.get('CLOUDINARY_URL') or os.environ.get('CLOUDINARY_API_KEY') or os.environ.get('CLOUDINARY_CLOUD_NAME'))
+
 STORAGES = {
     "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage" if os.environ.get('CLOUDINARY_URL') else "django.core.files.storage.FileSystemStorage",
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage" if _has_cloudinary else "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
@@ -293,10 +299,10 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'simply-useful-cache',
-        'TIMEOUT': 300,
+        'TIMEOUT': 180,
         'OPTIONS': {
-            'MAX_ENTRIES': 1000,
-            'CULL_FREQUENCY': 3,
+            'MAX_ENTRIES': 250,
+            'CULL_FREQUENCY': 2,
         }
     }
 }

@@ -9,7 +9,6 @@ export const useLabour = () => {
       const res = await api.get('/masters/labours');
       return (res.data?.data || res.data || []) as any[];
     },
-    refetchInterval: 10000,
   });
 };
 

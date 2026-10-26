@@ -51,7 +51,11 @@ const LedgerRequestsPanel: React.FC = () => {
 
   useEffect(() => {
     fetchRequests();
-    const interval = setInterval(fetchRequests, 30000); // Poll every 30s
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchRequests();
+      }
+    }, 60000); // Poll every 60s only when active tab
     return () => clearInterval(interval);
   }, []);
 

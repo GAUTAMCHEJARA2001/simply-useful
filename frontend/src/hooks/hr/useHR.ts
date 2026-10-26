@@ -9,7 +9,6 @@ export const useHREmployees = () => {
       const res = await api.get('/hr/employees');
       return (res.data?.data || res.data || []) as any[];
     },
-    refetchInterval: 10000,
   });
 };
 
@@ -20,7 +19,6 @@ export const useHRUsers = () => {
       const res = await api.get('/users');
       return (res.data?.data || res.data || []) as any[];
     },
-    refetchInterval: 10000,
   });
 };
 
@@ -31,7 +29,6 @@ export const useHRAttendance = (month: string) => {
       const res = await api.get(`/hr/attendance?month=${month}`);
       return (res.data?.data || res.data || []) as any[];
     },
-    refetchInterval: 10000,
     enabled: !!month
   });
 };
@@ -43,7 +40,6 @@ export const useHRPayroll = (month: string) => {
       const res = await api.get(`/hr/payroll/generate?month=${month}`);
       return (res.data?.data || res.data || []) as any[];
     },
-    refetchInterval: 10000,
     enabled: !!month
   });
 };
@@ -123,7 +119,6 @@ export const useHRDepartments = () => {
       const res = await api.get('/hr/departments');
       return (res.data?.data || []) as any[];
     },
-    refetchInterval: 10000
   });
 };
 
@@ -134,7 +129,6 @@ export const useHRDesignations = () => {
       const res = await api.get('/hr/designations');
       return (res.data?.data || []) as any[];
     },
-    refetchInterval: 10000
   });
 };
 
@@ -182,7 +176,6 @@ export const useEmployeeLedger = (labourId: number | string) => {
       const res = await api.get('/hr/ledger/' + labourId);
       return res.data?.data;
     },
-    refetchInterval: 10000,
     enabled: !!labourId
   });
 };
@@ -310,7 +303,6 @@ export const useLeaveTypes = () => {
       const res = await api.get('/hr/leave-types');
       return res.data.data;
     },
-    refetchInterval: 10000
   });
 };
 
@@ -321,7 +313,6 @@ export const useLeaveBalances = () => {
       const res = await api.get('/hr/leave-balances');
       return res.data.data;
     },
-    refetchInterval: 10000
   });
 };
 
@@ -332,7 +323,6 @@ export const useLeaveRecords = () => {
       const res = await api.get('/hr/leave-records');
       return res.data.data;
     },
-    refetchInterval: 10000
   });
 };
 
@@ -407,7 +397,6 @@ export const useLeavePolicies = () => {
       const res = await api.get('/hr/leave-policies');
       return res.data?.data || [];
     },
-    refetchInterval: 10000
   });
 };
 
