@@ -175,12 +175,14 @@ def report_stock_ledger(request, pk):
     start_date = request.GET.get('startDate') or request.GET.get('start_date') or request.GET.get('dateFrom') or request.GET.get('date_from')
     end_date = request.GET.get('endDate') or request.GET.get('end_date') or request.GET.get('dateTo') or request.GET.get('date_to')
 
-    # 1. Fetch Stocktransaction entries
+    # 1. Fetch Stocktransaction entries (exclude SALE and DISPATCH to prevent double-counting, as sales are sourced from Dispatchlogitem and Orderitem)
     st_qs = Stocktransaction.objects.filter(
         Q(productid_id=product.id) | Q(productid__productcode=product.productcode)
     ).exclude(
         reason__in=['PENDING_APPROVAL', 'REJECTED']
-    ).exclude(is_deleted=True).exclude(referenceid__startswith='REV-')
+    ).exclude(is_deleted=True).exclude(referenceid__startswith='REV-').exclude(
+        transactiontype__in=['SALE', 'DISPATCH']
+    )
     if company_id:
         st_qs = st_qs.filter(productid__companyid_id=company_id)
     if target_wh_ids:
