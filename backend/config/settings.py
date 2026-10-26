@@ -216,12 +216,31 @@ WHITENOISE_MANIFEST_STRICT = False
 
 USE_ETAGS = True
 
-# Cloudinary credentials check
-_has_cloudinary = bool(os.environ.get('CLOUDINARY_URL') or os.environ.get('CLOUDINARY_API_KEY') or os.environ.get('CLOUDINARY_CLOUD_NAME'))
+# Cloudinary Configuration
+import cloudinary
+CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dzwbkbl1c')
+CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '254329233351233')
+CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '8znWPK17INO_JC1GdYPqIMPaZqY')
+
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': CLOUDINARY_CLOUD_NAME,
+    'API_KEY': CLOUDINARY_API_KEY,
+    'API_SECRET': CLOUDINARY_API_SECRET,
+}
+
+if not os.environ.get('CLOUDINARY_URL') and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET and CLOUDINARY_CLOUD_NAME:
+    os.environ['CLOUDINARY_URL'] = f"cloudinary://{CLOUDINARY_API_KEY}:{CLOUDINARY_API_SECRET}@{CLOUDINARY_CLOUD_NAME}"
+
+cloudinary.config(
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    api_key=CLOUDINARY_API_KEY,
+    api_secret=CLOUDINARY_API_SECRET,
+    secure=True
+)
 
 STORAGES = {
     "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage" if _has_cloudinary else "django.core.files.storage.FileSystemStorage",
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage" if CLOUDINARY_CLOUD_NAME else "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
@@ -331,19 +350,6 @@ REST_FRAMEWORK = {
 }
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'simply-useful-secret-key-123-super-secure-key-2026')
-
-# Cloudinary Configuration
-import cloudinary
-CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dzwbkbl1c')
-CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '254329233351233')
-CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '8znWPK17INO_JC1GdYPqIMPaZqY')
-
-cloudinary.config(
-    cloud_name=CLOUDINARY_CLOUD_NAME,
-    api_key=CLOUDINARY_API_KEY,
-    api_secret=CLOUDINARY_API_SECRET,
-    secure=True
-)
 
 # VAPID Keys
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', 'rAOGyrUNZNYBKe92vKNlvMd9YkVnGHQGQcq1QBfMFaQ')

@@ -8,7 +8,7 @@
     "install:all": "npm install && cd frontend && npm install && cd .. && cd backend && venv\\Scripts\\pip install -r requirements.txt",
     "build": "cd frontend && npm run build",
     "check": "cd backend && venv\\Scripts\\python manage.py check && cd ../frontend && npm run build",
-    "start": "cd backend && python manage.py migrate && python seed_kamla.py && MALLOC_ARENA_MAX=2 gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --threads 3 --max-requests 250 --max-requests-jitter 30"
+    "start": "cd backend && python manage.py migrate && python seed_kamla.py && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --threads 3 --max-requests 250 --max-requests-jitter 30"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
