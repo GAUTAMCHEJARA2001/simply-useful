@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
-import { Plus, RotateCcw, Eye, Package, X } from 'lucide-react';
+import { Plus, RotateCcw, Eye, Package, X, ChevronsUpDown, Check } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { useSales, useSaleMutations } from '@/hooks/inventory/useSales';
 import { SalesModal } from '../modals/SalesModal';
 import { SafeDataView } from '@/components/SafeDataView';
@@ -136,6 +137,7 @@ export const SalesTab: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('AllSales');
   const [selectedItemFilter, setSelectedItemFilter] = useState('');
+  const [openItemCombobox, setOpenItemCombobox] = useState(false);
 
   const { filterBySelectedFY } = useFinancialYear();
 
@@ -222,21 +224,74 @@ export const SalesTab: React.FC = () => {
             className="w-full sm:w-[220px] text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
           />
 
-          <select
-            value={selectedItemFilter}
-            onChange={(e) => setSelectedItemFilter(e.target.value)}
-            className={`text-sm border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50 max-w-[200px] truncate ${
-              selectedItemFilter ? 'border-primary text-primary font-semibold' : 'border-border'
-            }`}
-            title={selectedItemFilter ? `Filtering by: ${selectedItemFilter}` : "Filter by item / product"}
-          >
-            <option value="">All Items ({availableProducts.length})</option>
-            {availableProducts.map(({ name, count }) => (
-              <option key={name} value={name}>
-                {name} ({count})
-              </option>
-            ))}
-          </select>
+          <Popover open={openItemCombobox} onOpenChange={setOpenItemCombobox}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={openItemCombobox}
+                className={`h-[34px] text-xs px-2.5 justify-between font-normal max-w-[230px] min-w-[170px] truncate border rounded-lg ${
+                  selectedItemFilter ? 'border-primary text-primary font-semibold bg-primary/5 hover:bg-primary/10' : 'border-border text-foreground'
+                }`}
+                title={selectedItemFilter ? `Filtering by: ${selectedItemFilter}` : "Filter by item / product"}
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  <Package className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">
+                    {selectedItemFilter ? selectedItemFilter : `All Items (${availableProducts.length})`}
+                  </span>
+                </div>
+                <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[300px] sm:w-[360px] p-0 shadow-lg border border-border" align="start">
+              <Command>
+                <CommandInput placeholder="Search 100+ items..." className="h-9 text-xs" />
+                <CommandList className="max-h-[280px] overflow-y-auto">
+                  <CommandEmpty className="p-3 text-xs text-muted-foreground text-center">No matching items found.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="all items all products reset clear"
+                      onSelect={() => {
+                        setSelectedItemFilter('');
+                        setOpenItemCombobox(false);
+                      }}
+                      className="py-1.5 px-2.5 text-xs cursor-pointer flex items-center justify-between"
+                    >
+                      <span className={!selectedItemFilter ? "font-bold text-primary" : "font-medium text-foreground"}>
+                        All Items ({availableProducts.length})
+                      </span>
+                      {!selectedItemFilter && <Check className="h-3.5 w-3.5 text-primary" />}
+                    </CommandItem>
+                    {availableProducts.map(({ name, count }) => {
+                      const isSelected = selectedItemFilter.toLowerCase() === name.toLowerCase();
+                      return (
+                        <CommandItem
+                          key={name}
+                          value={name}
+                          onSelect={() => {
+                            setSelectedItemFilter(isSelected ? '' : name);
+                            setOpenItemCombobox(false);
+                          }}
+                          className="py-1.5 px-2.5 text-xs cursor-pointer flex items-center justify-between gap-2"
+                        >
+                          <span className={`truncate text-xs ${isSelected ? "font-bold text-primary" : "text-foreground"}`}>
+                            {name}
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                              {count}
+                            </span>
+                            {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
+                          </div>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
 
           <select
             value={statusFilter}
