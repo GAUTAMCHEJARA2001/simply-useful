@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
-import { Plus, RotateCcw, Eye } from 'lucide-react';
+import { Plus, RotateCcw, Eye, Package } from 'lucide-react';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useSales, useSaleMutations } from '@/hooks/inventory/useSales';
 import { SalesModal } from '../modals/SalesModal';
 import { SafeDataView } from '@/components/SafeDataView';
@@ -141,8 +142,14 @@ export const SalesTab: React.FC = () => {
     const customer = (s.customerName || s.partyName || '').toLowerCase();
     const challan = (s.challanNumber || s.invoiceNumber || extractChallanNumber(s.narration) || '').toLowerCase();
     const status = s.status || 'Pending';
+    const sTerm = searchTerm.toLowerCase().trim();
+
+    const itemsMatch = sTerm ? (s.items || []).some((it: any) => {
+      const pName = (it.productName || (typeof it.product === 'object' ? it.product?.name : it.product) || '').toLowerCase();
+      return pName.includes(sTerm);
+    }) : false;
     
-    const matchesSearch = customer.includes(searchTerm.toLowerCase()) || challan.includes(searchTerm.toLowerCase());
+    const matchesSearch = !sTerm || customer.includes(sTerm) || challan.includes(sTerm) || itemsMatch;
     const matchesStatus = 
       (statusFilter === 'AllSales' || statusFilter === 'Completed')
         ? ['Completed', 'Dispatched', 'Partially Dispatched', 'Partially Returned'].includes(status)
@@ -161,10 +168,10 @@ export const SalesTab: React.FC = () => {
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <input
             type="text"
-            placeholder="Search by customer or invoice..."
+            placeholder="Search customer, invoice, or item..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:w-[250px] text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
+            className="w-full sm:w-[260px] text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-1 focus:ring-primary/50"
           />
           <select
             value={statusFilter}
@@ -190,7 +197,7 @@ export const SalesTab: React.FC = () => {
 
       <SafeDataView data={sales} isLoading={isLoading} error={error} onRetry={() => refetch()}>
         <DataTable 
-          columns={['Customer', 'Challan', 'Net Amount', 'Status', 'Dispatch Date', 'Sales Return']}
+          columns={['Customer', 'Challan', 'Items', 'Net Amount', 'Status', 'Dispatch Date', 'Sales Return']}
           rows={filteredSales.map((s: any) => {
             const cleanNarration = s.narration ? s.narration
               .replace(/\[INVOICE:\s*[^\]]+\]/gi, '')
@@ -218,7 +225,95 @@ export const SalesTab: React.FC = () => {
               status === 'Completed' ? 'bg-green-100 text-green-700 border-green-200' :
               'bg-gray-100 text-gray-700 border-gray-200';
 
-            const items = s.items || [];
+            const items: any[] = s.items || [];
+            const totalUnits = items.reduce((acc: number, it: any) => acc + (Number(it.qty || it.sentQty || 0)), 0);
+
+            const itemsTooltip = items.map((it: any) => {
+              const pName = it.productName || (typeof it.product === 'object' ? it.product?.name : it.product) || '—';
+              const qty = it.qty ?? it.sentQty ?? 0;
+              const ret = it.returnedqty || it.returnedQty || 0;
+              return `${pName}: ${qty}${ret > 0 ? ` (${ret} ret)` : ''}`;
+            }).join(', ');
+
+            const itemsCell = items.length === 0 ? (
+              <span key={`items-${s.id}`} className="text-xs text-muted-foreground italic">No items</span>
+            ) : (
+              <div key={`items-${s.id}`} className="flex flex-col gap-1 min-w-[190px] max-w-[270px]" title={itemsTooltip}>
+                <div className="space-y-1">
+                  {items.slice(0, 2).map((it: any, idx: number) => {
+                    const pName = it.productName || (typeof it.product === 'object' ? it.product?.name : it.product) || '—';
+                    const qty = it.qty ?? it.sentQty ?? 0;
+                    const retQty = it.returnedqty || it.returnedQty || 0;
+                    return (
+                      <div 
+                        key={idx} 
+                        className="flex items-center justify-between gap-1.5 text-[11px] bg-muted/40 hover:bg-muted/70 transition-colors border border-border/50 rounded px-1.5 py-0.5"
+                      >
+                        <span className="truncate font-medium text-foreground max-w-[180px]" title={pName}>{pName}</span>
+                        <span className="shrink-0 font-semibold text-muted-foreground whitespace-nowrap">
+                          {retQty > 0 ? (
+                            <span>
+                              <span className="text-foreground">{qty - retQty}</span>
+                              <span className="text-amber-600 text-[10px] ml-1">(-{retQty})</span>
+                            </span>
+                          ) : (
+                            `×${qty}`
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {items.length > 2 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button 
+                        type="button" 
+                        className="text-[10px] font-semibold text-primary hover:underline text-left inline-flex items-center gap-1 cursor-pointer w-fit py-0.5"
+                      >
+                        <Package className="w-2.5 h-2.5" />
+                        <span>+{items.length - 2} more ({totalUnits} total units)</span>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-3 shadow-lg" align="start">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between border-b border-border pb-1.5">
+                          <span className="font-bold text-xs flex items-center gap-1.5">
+                            <Package className="w-3.5 h-3.5 text-primary" />
+                            Invoice Items ({items.length})
+                          </span>
+                          <span className="text-[10px] font-medium bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{totalUnits} units</span>
+                        </div>
+                        <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                          {items.map((it: any, idx: number) => {
+                            const pName = it.productName || (typeof it.product === 'object' ? it.product?.name : it.product) || '—';
+                            const qty = it.qty ?? it.sentQty ?? 0;
+                            const price = it.price ?? it.rate ?? 0;
+                            const retQty = it.returnedqty || it.returnedQty || 0;
+                            return (
+                              <div key={idx} className="p-1.5 rounded bg-muted/40 border border-border/40 text-xs">
+                                <div className="flex justify-between items-start gap-1">
+                                  <span className="font-semibold text-foreground text-[11px] leading-tight">{pName}</span>
+                                  <span className="font-bold text-[11px] shrink-0 text-foreground">
+                                    {price > 0 ? Currency(qty * price) : `×${qty}`}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] text-muted-foreground mt-0.5">
+                                  <span>Qty: {qty}{retQty > 0 && <span className="text-amber-600 font-semibold ml-1">({retQty} returned)</span>}</span>
+                                  {price > 0 && <span>@{Currency(price)}</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+            );
+
             const netBase = items.reduce((acc: number, it: any) => 
               acc + Math.max(0, (it.qty || 0) - (it.returnedqty || it.returnedQty || 0)) * (it.price || it.rate || 0)
             , 0);
@@ -230,6 +325,7 @@ export const SalesTab: React.FC = () => {
             return [
               s.customerName || s.partyName || '—', 
               s.challanNumber || s.invoiceNumber || extractChallanNumber(s.narration) || '—', 
+              itemsCell,
               <div key={`amt-${s.id}`} className="flex flex-col">
                 <span className="font-semibold text-xs sm:text-sm">{Currency(netGross)}</span>
                 {gstAmount > 0.01 && (
