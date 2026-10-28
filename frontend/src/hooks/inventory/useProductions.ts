@@ -9,6 +9,8 @@ export const useProductions = () => {
       const res = await api.get('/transactions/productions');
       return (res.data?.data || res.data || []) as any[];
     },
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 };
 

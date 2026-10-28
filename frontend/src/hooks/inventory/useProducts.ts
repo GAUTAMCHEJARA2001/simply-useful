@@ -27,6 +27,8 @@ export const useProducts = (params?: { search?: string, warehouseId?: string, gl
       
       return data as Product[];
     },
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 };
 

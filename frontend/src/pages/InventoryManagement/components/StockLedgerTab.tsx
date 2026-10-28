@@ -160,9 +160,11 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
   });
 
   // Calculate Summary Cards
-  const totalInward = ledger.reduce((sum, l) => sum + parseFloat(l.credit || 0), 0);
+  const totalInward = ledger
+    .filter(l => l.transactionType !== 'OPENING_STOCK' && l.type !== 'OPENING_STOCK')
+    .reduce((sum, l) => sum + parseFloat(l.credit || 0), 0);
   const totalOutward = ledger.reduce((sum, l) => sum + parseFloat(l.debit || 0), 0);
-  const openingStock = ledger.length > 0 ? (parseFloat(ledger[0].balance) - parseFloat(ledger[0].quantityChange)) : 0;
+  const openingStock = summary.opening;
   console.log('Stock Report Summary:', { totalInward, totalOutward, openingStock });
 
   return (

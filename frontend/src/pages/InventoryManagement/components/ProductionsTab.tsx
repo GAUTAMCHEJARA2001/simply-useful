@@ -60,7 +60,7 @@ export const ProductionsTab: React.FC<{ onTabChange?: (tab: any) => void, mode?:
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [deleteModal, setDeleteModal] = useState<{show: boolean, idx: number, reason: string}>({ show: false, idx: -1, reason: '' });
 
-  const { data: products = [] } = useProducts({ warehouseId: form.warehouseId || undefined });
+  const { data: products = [] } = useProducts({ global: true });
 
   const productsById = useMemo(() => {
     const map = new Map<string, any>();

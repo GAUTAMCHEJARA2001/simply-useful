@@ -1608,9 +1608,16 @@ class BOMViewSet(viewsets.ModelViewSet):
 def _compute_all_product_stocks(company_id=None, request=None, target_wh_ids=None):
     from api.models import Product, Orderitem, Purchaseitem, Stocktransaction
     from django.db.models import Sum
+    from django.core.cache import cache
     if target_wh_ids is None and request is not None:
         target_wh_ids = _get_request_warehouse_ids(request)
     
+    cache_wh_str = '_'.join(sorted(map(str, target_wh_ids))) if target_wh_ids else 'all'
+    cache_key = f"stock_agg_{company_id or 'all'}_{cache_wh_str}"
+    cached_stocks = cache.get(cache_key)
+    if cached_stocks is not None:
+        return cached_stocks
+
     stock_map = {}
     products = Product.objects.select_related('categoryid', 'unitid').all()
     if company_id:
@@ -1739,6 +1746,11 @@ def _compute_all_product_stocks(company_id=None, request=None, target_wh_ids=Non
         data['availableStock'] = data['currentStock']
         final_stock_list.append(data)
     
+    try:
+        cache.set(cache_key, final_stock_list, timeout=15)
+    except Exception:
+        pass
+
     return final_stock_list
 
 @api_view(['GET'])

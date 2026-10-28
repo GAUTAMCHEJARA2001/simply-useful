@@ -306,11 +306,12 @@ class OrderViewSet(viewsets.ModelViewSet):
                 ).aggregate(total=Sum('qty'))
                 stock -= float(purchases_ret['total'] or 0)
                 
-                sales = Orderitem.objects.filter(
-                    orderid__status='Completed',
+                sales_qs = Orderitem.objects.filter(
+                    orderid__status__in=['Completed', 'Dispatched', 'Partially Dispatched', 'Delivered'],
                     productid_id=p_id
-                ).aggregate(total=Sum('qty'))
-                stock -= float(sales['total'] or 0)
+                ).exclude(orderid_id=instance.id)
+                sales_qty = sum(float(oi.sentqty if oi.sentqty > 0 else (oi.qty or 0)) for oi in sales_qs)
+                stock -= sales_qty
                 
                 sales_ret = Orderitem.objects.filter(
                     orderid__status='Returned',
