@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   salesTargetService,
   OfficerSalesTargetRecord,
@@ -1376,7 +1377,7 @@ export const SalesTargetManagementTab: React.FC = () => {
 
       {/* 5. MULTI-TARGET ALLOCATION MODAL */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl xl:max-w-6xl w-[95vw] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base font-bold">
               <Target className="w-5 h-5 text-primary" />
@@ -1388,7 +1389,7 @@ export const SalesTargetManagementTab: React.FC = () => {
           </DialogHeader>
 
           <Tabs value={modalTab} onValueChange={setModalTab} className="w-full">
-            <TabsList className="grid grid-cols-4 w-full h-9">
+            <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-auto sm:h-9 gap-1 sm:gap-0 p-1">
               <TabsTrigger value="collections" className="text-xs">
                 1. Collections &amp; Sales (₹)
               </TabsTrigger>
@@ -1672,14 +1673,22 @@ export const SalesTargetManagementTab: React.FC = () => {
                             {/* Dynamic Selectors depending on Target By */}
                             {tType === 'product' && (
                               <>
-                                {/* Filter Brand dropdown */}
+                                {/* Filter Brand dropdown with search */}
                                 <div className="w-full sm:w-36 shrink-0">
                                   <label className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
                                     <Tag className="w-3 h-3 text-amber-600" /> Brand
                                   </label>
-                                  <Select
+                                  <SearchableSelect
+                                    options={[
+                                      { value: 'ALL', label: 'All Brands', icon: <span>🏷️</span> },
+                                      ...(masters?.brands || []).map((b) => ({
+                                        value: String(b.id),
+                                        label: b.name,
+                                        icon: <span>🏷️</span>,
+                                      })),
+                                    ]}
                                     value={currentBrandId || 'ALL'}
-                                    onValueChange={(bId) => {
+                                    onChange={(bId) => {
                                       const brandId = bId === 'ALL' ? '' : bId;
                                       const brandObj = masters?.brands?.find((b) => String(b.id) === String(brandId));
                                       const prodsMatchingBrand = (masters?.products || []).filter(
@@ -1705,29 +1714,28 @@ export const SalesTargetManagementTab: React.FC = () => {
                                           : pt.target_amount,
                                       });
                                     }}
-                                  >
-                                    <SelectTrigger className="h-8 mt-0.5 text-xs">
-                                      <SelectValue placeholder="All Brands" />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-60">
-                                      <SelectItem value="ALL" className="text-xs font-semibold">🏷️ All Brands</SelectItem>
-                                      {(masters?.brands || []).map((b) => (
-                                        <SelectItem key={b.id} value={String(b.id)} className="text-xs">
-                                          {b.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    placeholder="All Brands"
+                                    searchPlaceholder="Search brand..."
+                                    triggerClassName="h-8 mt-0.5 text-xs"
+                                  />
                                 </div>
 
-                                {/* Filter Category dropdown */}
+                                {/* Filter Category dropdown with search */}
                                 <div className="w-full sm:w-36 shrink-0">
                                   <label className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
                                     <FolderTree className="w-3 h-3 text-blue-600" /> Category
                                   </label>
-                                  <Select
+                                  <SearchableSelect
+                                    options={[
+                                      { value: 'ALL', label: 'All Categories', icon: <span>📁</span> },
+                                      ...availableCategoriesForRow.map((c) => ({
+                                        value: String(c.id),
+                                        label: c.name,
+                                        icon: <span>📁</span>,
+                                      })),
+                                    ]}
                                     value={currentCatId || 'ALL'}
-                                    onValueChange={(cId) => {
+                                    onChange={(cId) => {
                                       const catId = cId === 'ALL' ? '' : cId;
                                       const catObj = masters?.categories?.find((c) => String(c.id) === String(catId));
                                       const prodsMatching = (masters?.products || []).filter(
@@ -1750,22 +1758,13 @@ export const SalesTargetManagementTab: React.FC = () => {
                                           : pt.target_amount,
                                       });
                                     }}
-                                  >
-                                    <SelectTrigger className="h-8 mt-0.5 text-xs">
-                                      <SelectValue placeholder="All Categories" />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-60">
-                                      <SelectItem value="ALL" className="text-xs font-semibold">📁 All Categories</SelectItem>
-                                      {availableCategoriesForRow.map((c) => (
-                                        <SelectItem key={c.id} value={String(c.id)} className="text-xs">
-                                          {c.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    placeholder="All Categories"
+                                    searchPlaceholder="Search category..."
+                                    triggerClassName="h-8 mt-0.5 text-xs"
+                                  />
                                 </div>
 
-                                {/* Select Product SKU */}
+                                {/* Select Product SKU with search */}
                                 <div className="flex-1 min-w-[200px]">
                                   <label className="text-[10px] font-semibold text-muted-foreground flex items-center justify-between">
                                     <span className="flex items-center gap-1">
@@ -1775,45 +1774,45 @@ export const SalesTargetManagementTab: React.FC = () => {
                                       ({matchingProdsForRow.length} available)
                                     </span>
                                   </label>
-                                  <Select
+                                  <SearchableSelect
+                                    options={matchingProdsForRow.map((p) => {
+                                      const bObj = masters?.brands?.find((b) => String(b.id) === String(p.brand_id));
+                                      return {
+                                        value: p.id,
+                                        label: p.name + (p.bag_size ? ` (${p.bag_size})` : ''),
+                                        subtitle: `Code: ${p.code} • ₹${p.rate || 0}${bObj ? ` • [${bObj.name}]` : ''}`,
+                                        icon: <span>📦</span>,
+                                      };
+                                    })}
                                     value={pt.product_id || ''}
-                                    onValueChange={(val) => handleUpdateProductTarget(idx, 'item_selection', val)}
-                                  >
-                                    <SelectTrigger className="h-8 mt-0.5 text-xs font-medium">
-                                      <SelectValue placeholder="Choose Product SKU..." />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-60">
-                                      {matchingProdsForRow.map((p) => {
-                                        const bObj = masters?.brands?.find((b) => String(b.id) === String(p.brand_id));
-                                        return (
-                                          <SelectItem key={p.id} value={p.id} className="text-xs">
-                                            <span className="font-semibold">{p.name}</span>
-                                            {p.bag_size ? <span className="text-muted-foreground"> ({p.bag_size})</span> : ''}
-                                            {bObj ? (
-                                              <span className="ml-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
-                                                [{bObj.name}]
-                                              </span>
-                                            ) : ''}
-                                            <span className="ml-1 text-[10px] text-muted-foreground">— {p.code} (₹{p.rate || 0})</span>
-                                          </SelectItem>
-                                        );
-                                      })}
-                                    </SelectContent>
-                                  </Select>
+                                    onChange={(val) => handleUpdateProductTarget(idx, 'item_selection', val)}
+                                    placeholder="Choose Product SKU..."
+                                    searchPlaceholder="Search SKU, name, code..."
+                                    triggerClassName="h-8 mt-0.5 text-xs font-medium"
+                                    popoverWidth="min-w-[320px] max-w-[480px]"
+                                  />
                                 </div>
                               </>
                             )}
 
                             {tType === 'category' && (
                               <>
-                                {/* Optional Brand Filter */}
+                                {/* Optional Brand Filter with search */}
                                 <div className="w-full sm:w-36 shrink-0">
                                   <label className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
                                     <Tag className="w-3 h-3 text-amber-600" /> Filter Brand
                                   </label>
-                                  <Select
+                                  <SearchableSelect
+                                    options={[
+                                      { value: 'ALL', label: 'All Brands', icon: <span>🏷️</span> },
+                                      ...(masters?.brands || []).map((b) => ({
+                                        value: String(b.id),
+                                        label: b.name,
+                                        icon: <span>🏷️</span>,
+                                      })),
+                                    ]}
                                     value={pt.brand_id || 'ALL'}
-                                    onValueChange={(bId) => {
+                                    onChange={(bId) => {
                                       const brandId = bId === 'ALL' ? '' : bId;
                                       const brandObj = masters?.brands?.find((b) => String(b.id) === String(brandId));
                                       handleUpdateProductTargetRow(idx, {
@@ -1821,65 +1820,52 @@ export const SalesTargetManagementTab: React.FC = () => {
                                         brand_name: brandObj?.name || '',
                                       });
                                     }}
-                                  >
-                                    <SelectTrigger className="h-8 mt-0.5 text-xs">
-                                      <SelectValue placeholder="All Brands" />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-60">
-                                      <SelectItem value="ALL" className="text-xs font-semibold">🏷️ All Brands</SelectItem>
-                                      {(masters?.brands || []).map((b) => (
-                                        <SelectItem key={b.id} value={String(b.id)} className="text-xs">
-                                          {b.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    placeholder="All Brands"
+                                    searchPlaceholder="Search brand..."
+                                    triggerClassName="h-8 mt-0.5 text-xs"
+                                  />
                                 </div>
 
-                                {/* Category Selector */}
-                                <div className="flex-1">
+                                {/* Category Selector with search (Open in user's screenshot) */}
+                                <div className="flex-1 min-w-[200px]">
                                   <label className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
                                     <FolderTree className="w-3 h-3 text-blue-600" /> Select Category
                                   </label>
-                                  <Select
+                                  <SearchableSelect
+                                    options={availableCategoriesForRow.map((c) => ({
+                                      value: String(c.id),
+                                      label: c.name,
+                                      icon: <span>📁</span>,
+                                    }))}
                                     value={pt.category_id || pt.product_id || ''}
-                                    onValueChange={(val) => handleUpdateProductTarget(idx, 'item_selection', val)}
-                                  >
-                                    <SelectTrigger className="h-8 mt-0.5 text-xs">
-                                      <SelectValue placeholder="Choose Category..." />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-60">
-                                      {availableCategoriesForRow.map((c) => (
-                                        <SelectItem key={c.id} value={String(c.id)} className="text-xs">
-                                          📁 {c.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    onChange={(val) => handleUpdateProductTarget(idx, 'item_selection', val)}
+                                    placeholder="Choose Category..."
+                                    searchPlaceholder="Search category..."
+                                    triggerClassName="h-8 mt-0.5 text-xs font-semibold"
+                                    popoverWidth="min-w-[280px] max-w-[420px]"
+                                  />
                                 </div>
                               </>
                             )}
 
                             {tType === 'brand' && (
-                              <div className="flex-1">
+                              <div className="flex-1 min-w-[200px]">
                                 <label className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1">
                                   <Tag className="w-3 h-3 text-amber-600" /> Select Brand
                                 </label>
-                                <Select
+                                <SearchableSelect
+                                  options={(masters?.brands || []).map((b) => ({
+                                    value: String(b.id),
+                                    label: b.name,
+                                    icon: <span>🏷️</span>,
+                                  }))}
                                   value={pt.brand_id || pt.product_id || ''}
-                                  onValueChange={(val) => handleUpdateProductTarget(idx, 'item_selection', val)}
-                                >
-                                  <SelectTrigger className="h-8 mt-0.5 text-xs">
-                                    <SelectValue placeholder="Choose Brand..." />
-                                  </SelectTrigger>
-                                  <SelectContent className="max-h-60">
-                                    {(masters?.brands || []).map((b) => (
-                                      <SelectItem key={b.id} value={String(b.id)} className="text-xs">
-                                        🏷️ {b.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  onChange={(val) => handleUpdateProductTarget(idx, 'item_selection', val)}
+                                  placeholder="Choose Brand..."
+                                  searchPlaceholder="Search brand..."
+                                  triggerClassName="h-8 mt-0.5 text-xs font-semibold"
+                                  popoverWidth="min-w-[280px] max-w-[420px]"
+                                />
                               </div>
                             )}
 
@@ -2363,7 +2349,7 @@ export const SalesTargetManagementTab: React.FC = () => {
 
       {/* 7. STAFF MANAGEMENT STYLE PRODUCT PICKER DIALOG */}
       <Dialog open={isStaffCatalogOpen} onOpenChange={setIsStaffCatalogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base font-bold">
               <Shield className="w-5 h-5 text-primary" />
@@ -2407,72 +2393,79 @@ export const SalesTargetManagementTab: React.FC = () => {
             </div>
           )}
 
-          {/* 3-Column Cascading Filter (Brand, Category, Subcategory) - Exact Staff Management Style */}
+          {/* 3-Column Cascading Filter (Brand, Category, Subcategory) with Search Bars */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-card border rounded-xl">
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
                 Filter Brand
               </label>
-              <select
+              <SearchableSelect
+                options={[
+                  { value: '', label: `All Brands (${masters?.brands?.length || 0})`, icon: <span>🏷️</span> },
+                  ...(masters?.brands || []).map((b) => ({
+                    value: String(b.id),
+                    label: b.name,
+                    icon: <span>🏷️</span>,
+                  })),
+                ]}
                 value={staffCatalogBrandFilter || ''}
-                onChange={(e) => {
-                  const val = e.target.value || null;
-                  setStaffCatalogBrandFilter(val);
+                onChange={(val) => {
+                  setStaffCatalogBrandFilter(val || null);
                   setStaffCatalogParentCatFilter(null);
                   setStaffCatalogSubCatFilter(null);
                 }}
-                className="w-full border border-border rounded-lg px-2.5 py-1.5 bg-background text-xs"
-              >
-                <option value="">All Brands ({masters?.brands?.length || 0})</option>
-                {(masters?.brands || []).map((b) => (
-                  <option key={b.id} value={String(b.id)}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+                placeholder="All Brands"
+                searchPlaceholder="Search brand..."
+                triggerClassName="h-8 text-xs"
+              />
             </div>
 
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
                 Filter Category
               </label>
-              <select
+              <SearchableSelect
+                options={[
+                  { value: '', label: 'All Categories', icon: <span>📁</span> },
+                  ...getStaffCatalogRelatedMainCategories().map((c) => ({
+                    value: String(c.id),
+                    label: c.name,
+                    icon: <span>📁</span>,
+                  })),
+                ]}
                 value={staffCatalogParentCatFilter || ''}
-                onChange={(e) => {
-                  const val = e.target.value || null;
-                  setStaffCatalogParentCatFilter(val);
+                onChange={(val) => {
+                  setStaffCatalogParentCatFilter(val || null);
                   setStaffCatalogSubCatFilter(null);
                 }}
-                className="w-full border border-border rounded-lg px-2.5 py-1.5 bg-background text-xs"
-              >
-                <option value="">All Categories</option>
-                {getStaffCatalogRelatedMainCategories().map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                placeholder="All Categories"
+                searchPlaceholder="Search category..."
+                triggerClassName="h-8 text-xs"
+              />
             </div>
 
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
                 Filter Subcategory
               </label>
-              <select
+              <SearchableSelect
+                options={[
+                  { value: '', label: 'All Subcategories', icon: <span>📂</span> },
+                  ...(masters?.categories || [])
+                    .filter((c) => String(c.parent_id) === String(staffCatalogParentCatFilter))
+                    .map((c) => ({
+                      value: String(c.id),
+                      label: c.name,
+                      icon: <span>📂</span>,
+                    })),
+                ]}
                 value={staffCatalogSubCatFilter || ''}
-                onChange={(e) => setStaffCatalogSubCatFilter(e.target.value || null)}
+                onChange={(val) => setStaffCatalogSubCatFilter(val || null)}
                 disabled={!staffCatalogParentCatFilter}
-                className="w-full border border-border rounded-lg px-2.5 py-1.5 bg-background text-xs disabled:opacity-50"
-              >
-                <option value="">All Subcategories</option>
-                {(masters?.categories || [])
-                  .filter((c) => String(c.parent_id) === String(staffCatalogParentCatFilter))
-                  .map((c) => (
-                    <option key={c.id} value={String(c.id)}>
-                      {c.name}
-                    </option>
-                  ))}
-              </select>
+                placeholder="All Subcategories"
+                searchPlaceholder="Search subcategory..."
+                triggerClassName="h-8 text-xs"
+              />
             </div>
           </div>
 

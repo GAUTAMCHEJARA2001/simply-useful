@@ -1117,38 +1117,38 @@ export const DailyTravelPage: React.FC = () => {
   };
 
   return (
-    <div className="container max-w-5xl mx-auto py-6 px-4 space-y-6">
+    <div className="container max-w-5xl mx-auto py-4 sm:py-6 px-3 sm:px-4 space-y-4 sm:space-y-6">
       {/* HEADER WITH WORKFLOW TABS */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 sm:pb-5">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="p-2.5 bg-primary/10 text-primary rounded-xl">
-              <Compass className="w-6 h-6" />
+            <div className="p-2 sm:p-2.5 bg-primary/10 text-primary rounded-xl shrink-0">
+              <Compass className="w-5 h-5 sm:w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-foreground">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
                 Daily Field Travel &amp; Tour Plan
               </h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-none">
                 Plan stops &amp; targets, record odometer readings, reconcile dealer execution, and push to payroll
               </p>
             </div>
           </div>
         </div>
 
-        {/* Top Navigation Tabs */}
-        <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border/40 shrink-0">
+        {/* Top Navigation Tabs - Scrollable on mobile, no layout clipping */}
+        <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border/40 overflow-x-auto max-w-full scrollbar-none w-full md:w-auto shrink-0">
           <button
             onClick={() => handleSelectTab('TRIP')}
             className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap",
               activeTab === 'TRIP' ? "bg-background text-primary shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Car className="w-4 h-4" />
+            <Car className="w-4 h-4 shrink-0" />
             <span>Today's Trip</span>
             {todayLog && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             )}
           </button>
 
@@ -1158,13 +1158,13 @@ export const DailyTravelPage: React.FC = () => {
               setPlannerDate(tomorrowStr);
             }}
             className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5",
+              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer",
               activeTab === 'PLANNER' ? "bg-background text-primary shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Target className="w-4 h-4 text-purple-600" />
+            <Target className="w-4 h-4 text-purple-600 shrink-0" />
             <span>Tour Planner</span>
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+            <Badge variant="secondary" className="hidden sm:inline-flex text-[10px] px-1.5 py-0 bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
               Plan Next Day
             </Badge>
           </button>
@@ -1172,24 +1172,24 @@ export const DailyTravelPage: React.FC = () => {
           <button
             onClick={() => handleSelectTab('HISTORY')}
             className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap",
               activeTab === 'HISTORY' ? "bg-background text-primary shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Clock className="w-4 h-4" />
+            <Clock className="w-4 h-4 shrink-0" />
             <span>History</span>
           </button>
 
           <button
             onClick={() => handleSelectTab('SCORECARD')}
             className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+              "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap",
               activeTab === 'SCORECARD' ? "bg-background text-primary shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Trophy className="w-4 h-4 text-amber-500" />
+            <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
             <span>{['SUPERADMIN', 'ADMIN', 'HR'].includes((user?.role || '').toUpperCase()) || (user as any)?.is_superuser ? 'Scorecard' : 'My Score'}</span>
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold">
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold shrink-0">
               KPI
             </Badge>
           </button>
@@ -2008,7 +2008,54 @@ export const DailyTravelPage: React.FC = () => {
                         <span>Planned vs Actual Stops Breakdown</span>
                       </h4>
 
-                      <div className="border rounded-xl overflow-hidden text-xs">
+                      {/* Mobile Cards Breakdown */}
+                      <div className="divide-y border rounded-xl overflow-hidden md:hidden">
+                        {todayLog.stops.map((stop, idx) => (
+                          <div key={stop.id || idx} className="p-3 bg-card space-y-2 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-foreground truncate">
+                                {stop.dealer_name}
+                                {stop.is_unplanned && <span className="ml-1 text-[9px] text-blue-600 font-bold">(Spot)</span>}
+                              </span>
+                              <Badge 
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] font-bold py-0 shrink-0",
+                                  stop.actual_status === 'COMPLETED' && "bg-emerald-50 text-emerald-700 border-emerald-300",
+                                  stop.actual_status === 'CONVERTED_NEW_DEALER' && "bg-purple-50 text-purple-700 border-purple-300",
+                                  stop.actual_status === 'PARTIALLY_FULFILLED' && "bg-amber-50 text-amber-700 border-amber-300",
+                                  stop.actual_status === 'NOT_FULFILLED' && "bg-red-50 text-red-700 border-red-300",
+                                  stop.actual_status === 'SKIPPED' && "bg-gray-100 text-gray-600 border-gray-300"
+                                )}
+                              >
+                                {stop.actual_status || 'PENDING'}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-[11px] bg-muted/30 p-2 rounded-lg">
+                              <div>
+                                <span className="text-muted-foreground block text-[10px]">Target</span>
+                                {(stop.target_order_bags || 0) > 0 && <span>{stop.target_order_bags} bags </span>}
+                                {(stop.target_collection_value || 0) > 0 && <span>₹{Number(stop.target_collection_value).toLocaleString('en-IN')}</span>}
+                                {!(stop.target_order_bags || 0) && !(stop.target_collection_value || 0) && '--'}
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground block text-[10px]">Actual Outcome</span>
+                                {(stop.actual_order_bags || 0) > 0 && <span className="text-purple-600 font-semibold">{stop.actual_order_bags} bags </span>}
+                                {(stop.actual_collection_value || 0) > 0 && <span className="text-emerald-600 font-semibold">₹{Number(stop.actual_collection_value).toLocaleString('en-IN')}</span>}
+                                {!(stop.actual_order_bags || 0) && !(stop.actual_collection_value || 0) && 'Nil'}
+                              </div>
+                            </div>
+                            {(stop.shortfall_reason || stop.actual_notes) && (
+                              <p className="text-[11px] text-muted-foreground italic">
+                                Notes: {stop.shortfall_reason || stop.actual_notes}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Desktop Table Breakdown */}
+                      <div className="hidden md:block border rounded-xl overflow-x-auto text-xs">
                         <table className="w-full text-left">
                           <thead className="bg-muted/40 font-semibold text-muted-foreground border-b text-[11px]">
                             <tr>
@@ -2297,87 +2344,168 @@ export const DailyTravelPage: React.FC = () => {
                 No past travel records found.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/40 text-muted-foreground border-b uppercase text-[10px]">
-                    <tr>
-                      <th className="px-4 py-3 font-semibold">Date</th>
-                      <th className="px-4 py-3 font-semibold">Vehicle</th>
-                      <th className="px-4 py-3 font-semibold">Distance</th>
-                      <th className="px-4 py-3 font-semibold">Performance Score</th>
-                      <th className="px-4 py-3 font-semibold">HR Status</th>
-                      <th className="px-4 py-3 font-semibold">Details</th>
-                      <th className="px-4 py-3 font-semibold text-right">Photos</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {history.map((item) => (
-                      <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-4 py-3 font-bold whitespace-nowrap">{item.date}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {item.vehicle_type === 'CAR' ? '🚗 Car' : '🏍️ Bike'}
-                        </td>
-                        <td className="px-4 py-3 font-bold whitespace-nowrap">{item.total_km} KM</td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {getRatingBadge(item.performance_rating, item.target_achievement_pct)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="flex flex-col gap-1 items-start">
-                            <Badge 
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] font-bold py-0",
-                                item.status === 'APPROVED' && "bg-emerald-50 text-emerald-700 border-emerald-300",
-                                item.status === 'REJECTED' && "bg-red-50 text-red-700 border-red-300",
-                                item.status === 'PENDING' && "bg-amber-50 text-amber-700 border-amber-300"
-                              )}
-                            >
-                              {item.status}
-                            </Badge>
-                            {item.is_admin_edited && (
-                              <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 border-purple-300 text-[9px] font-black py-0 uppercase">
-                                EDITED BY ADMIN
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => setViewingHistoryLog(item)}
-                            className="text-[11px] h-7 gap-1"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> View Scorecard
-                          </Button>
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap space-x-1">
+              <>
+                {/* Mobile Card List View (Visible on screens < md) */}
+                <div className="divide-y md:hidden">
+                  {history.map((item) => (
+                    <div key={item.id} className="p-3.5 space-y-2.5 bg-card hover:bg-muted/10 transition-colors">
+                      {/* Top Row: Date, Vehicle, Distance */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-foreground">{item.date}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-md bg-muted font-medium">
+                            {item.vehicle_type === 'CAR' ? '🚗 Car' : '🏍️ Bike'}
+                          </span>
+                        </div>
+                        <div className="text-xs font-black px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
+                          {item.total_km} KM
+                        </div>
+                      </div>
+
+                      {/* Middle Row: Performance Badge & HR Status */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {getRatingBadge(item.performance_rating, item.target_achievement_pct)}
+                        <Badge 
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] font-bold py-0.5 px-2",
+                            item.status === 'APPROVED' && "bg-emerald-50 text-emerald-700 border-emerald-300",
+                            item.status === 'REJECTED' && "bg-red-50 text-red-700 border-red-300",
+                            item.status === 'PENDING' && "bg-amber-50 text-amber-700 border-amber-300"
+                          )}
+                        >
+                          {item.status}
+                        </Badge>
+                        {item.is_admin_edited && (
+                          <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 border-purple-300 text-[9px] font-black py-0 uppercase">
+                            EDITED BY ADMIN
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Bottom Row: Scorecard Action & Photos */}
+                      <div className="flex items-center justify-between pt-1 border-t border-border/50">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setViewingHistoryLog(item)}
+                          className="text-xs h-7.5 px-2.5 gap-1 font-semibold text-primary border-primary/30 hover:bg-primary/5 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> View Scorecard
+                        </Button>
+
+                        <div className="flex items-center gap-1.5">
                           {item.start_photo && (
                             <button 
                               type="button" 
                               onClick={() => setPreviewImage(item.start_photo || null)}
-                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors inline-block"
+                              className="px-2 py-1 rounded-md bg-muted hover:bg-muted/80 text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
                               title="View Start Photo"
                             >
-                              <Camera className="w-3.5 h-3.5" />
+                              <Camera className="w-3.5 h-3.5 text-primary" />
+                              <span>Start</span>
                             </button>
                           )}
                           {item.end_photo && (
                             <button 
                               type="button" 
                               onClick={() => setPreviewImage(item.end_photo || null)}
-                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors inline-block"
+                              className="px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 font-medium transition-colors flex items-center gap-1 cursor-pointer"
                               title="View End Photo"
                             >
                               <Camera className="w-3.5 h-3.5 text-amber-500" />
+                              <span>End</span>
                             </button>
                           )}
-                        </td>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/40 text-muted-foreground border-b uppercase text-[10px]">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Date</th>
+                        <th className="px-4 py-3 font-semibold">Vehicle</th>
+                        <th className="px-4 py-3 font-semibold">Distance</th>
+                        <th className="px-4 py-3 font-semibold">Performance Score</th>
+                        <th className="px-4 py-3 font-semibold">HR Status</th>
+                        <th className="px-4 py-3 font-semibold">Details</th>
+                        <th className="px-4 py-3 font-semibold text-right">Photos</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y">
+                      {history.map((item) => (
+                        <tr key={item.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="px-4 py-3 font-bold whitespace-nowrap">{item.date}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {item.vehicle_type === 'CAR' ? '🚗 Car' : '🏍️ Bike'}
+                          </td>
+                          <td className="px-4 py-3 font-bold whitespace-nowrap">{item.total_km} KM</td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {getRatingBadge(item.performance_rating, item.target_achievement_pct)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge 
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] font-bold py-0",
+                                  item.status === 'APPROVED' && "bg-emerald-50 text-emerald-700 border-emerald-300",
+                                  item.status === 'REJECTED' && "bg-red-50 text-red-700 border-red-300",
+                                  item.status === 'PENDING' && "bg-amber-50 text-amber-700 border-amber-300"
+                                )}
+                              >
+                                {item.status}
+                              </Badge>
+                              {item.is_admin_edited && (
+                                <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 border-purple-300 text-[9px] font-black py-0 uppercase">
+                                  EDITED BY ADMIN
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => setViewingHistoryLog(item)}
+                              className="text-[11px] h-7 gap-1"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> View Scorecard
+                            </Button>
+                          </td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap space-x-1">
+                            {item.start_photo && (
+                              <button 
+                                type="button" 
+                                onClick={() => setPreviewImage(item.start_photo || null)}
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors inline-block"
+                                title="View Start Photo"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {item.end_photo && (
+                              <button 
+                                type="button" 
+                                onClick={() => setPreviewImage(item.end_photo || null)}
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors inline-block"
+                                title="View End Photo"
+                              >
+                                <Camera className="w-3.5 h-3.5 text-amber-500" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

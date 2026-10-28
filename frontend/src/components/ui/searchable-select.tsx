@@ -1,61 +1,61 @@
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { ChevronDown, Check, Search } from 'lucide-react';
+import { ChevronDown, Check, Search, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { Popover, PopoverTrigger, PopoverContent } from './popover';
 
-interface Option {
+export interface SearchableSelectOption {
   value: string;
   label: string;
   subtitle?: string;
+  icon?: React.ReactNode;
 }
 
-interface SearchableSelectProps {
-  options: Option[];
+export interface SearchableSelectProps {
+  options: SearchableSelectOption[];
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  searchPlaceholder?: string;
   className?: string;
+  triggerClassName?: string;
+  popoverWidth?: string;
+  disabled?: boolean;
 }
 
-export function SearchableSelect({ options, value, onChange, placeholder = "Select...", className }: SearchableSelectProps) {
+export function SearchableSelect({
+  options,
+  value,
+  onChange,
+  placeholder = "Select...",
+  searchPlaceholder = "Search...",
+  className,
+  triggerClassName,
+  popoverWidth,
+  disabled = false,
+}: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [activeIndex, setActiveIndex] = useState(-1);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
-  const filteredOptions = options.filter(opt => 
-    opt.label.toLowerCase().includes(search.toLowerCase())
+  const filteredOptions = options.filter(opt =>
+    opt.label.toLowerCase().includes(search.toLowerCase()) ||
+    (opt.subtitle && opt.subtitle.toLowerCase().includes(search.toLowerCase()))
   );
 
   const selectedOption = options.find(opt => opt.value === value);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
     if (isOpen) {
       setSearch('');
       setActiveIndex(-1);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setTimeout(() => inputRef.current?.focus(), 60);
     }
   }, [isOpen]);
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (!isOpen) {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        setIsOpen(true);
-      }
-      return;
-    }
+    if (!isOpen) return;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -84,70 +84,103 @@ export function SearchableSelect({ options, value, onChange, placeholder = "Sele
   };
 
   return (
-    <div className={cn("relative w-full text-sm", className)} ref={containerRef}>
-      <div 
-        className="flex items-center justify-between w-full border border-border rounded-lg px-3 py-2 bg-background cursor-pointer text-foreground"
-        onClick={() => setIsOpen(!isOpen)}
-        onKeyDown={handleKeyDown}
-        tabIndex={0}
-      >
-        <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>
-          {selectedOption ? selectedOption.label : placeholder}
-        </span>
-        <ChevronDown className="w-4 h-4 text-muted-foreground opacity-50" />
-      </div>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild disabled={disabled}>
+        <button
+          type="button"
+          className={cn(
+            "flex items-center justify-between w-full border border-border rounded-lg px-2.5 py-1.5 bg-background cursor-pointer text-foreground text-xs transition-colors hover:bg-muted/30 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed",
+            triggerClassName,
+            className
+          )}
+        >
+          <span className={cn("truncate flex items-center gap-1.5 text-left", !selectedOption && "text-muted-foreground")}>
+            {selectedOption?.icon}
+            <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
+          </span>
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground opacity-60 shrink-0 ml-1.5" />
+        </button>
+      </PopoverTrigger>
 
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-md">
-          <div className="flex items-center px-3 py-2 border-b border-border">
-            <Search className="w-4 h-4 mr-2 text-muted-foreground opacity-50" />
-            <input 
-              ref={inputRef}
-              className="w-full bg-transparent outline-none text-sm placeholder:text-muted-foreground"
-              placeholder="Search..."
-              value={search}
-              onChange={e => {
-                setSearch(e.target.value);
-                setActiveIndex(0);
+      <PopoverContent
+        align="start"
+        className={cn(
+          "p-0 w-[var(--radix-popover-trigger-width)] min-w-[220px] max-w-[420px] bg-popover border border-border rounded-xl shadow-xl z-[99999] overflow-hidden",
+          popoverWidth
+        )}
+      >
+        {/* Integrated Search Bar with icon and clear */}
+        <div className="flex items-center px-2.5 py-2 border-b border-border/80 bg-muted/30">
+          <Search className="w-3.5 h-3.5 mr-2 text-muted-foreground shrink-0" />
+          <input
+            ref={inputRef}
+            className="w-full bg-transparent outline-none text-xs placeholder:text-muted-foreground text-foreground"
+            placeholder={searchPlaceholder}
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setActiveIndex(0);
+            }}
+            onKeyDown={handleKeyDown}
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('');
+                inputRef.current?.focus();
               }}
-              onKeyDown={handleKeyDown}
-            />
-          </div>
-          <ul 
-            ref={listRef}
-            className="max-h-60 overflow-y-auto py-1"
-            role="listbox"
-          >
-            {filteredOptions.length === 0 ? (
-              <li className="px-3 py-2 text-muted-foreground text-sm text-center">No results found.</li>
-            ) : (
-              filteredOptions.map((opt, idx) => (
-                <li
-                  key={opt.value}
-                  role="option"
-                  aria-selected={value === opt.value}
-                  className={cn(
-                    "flex items-center px-3 py-2 cursor-pointer text-sm",
-                    activeIndex === idx ? "bg-accent text-accent-foreground" : "hover:bg-accent hover:text-accent-foreground",
-                    value === opt.value && "font-medium"
-                  )}
-                  onClick={() => {
-                    onChange(opt.value);
-                    setIsOpen(false);
-                  }}
-                  onMouseEnter={() => setActiveIndex(idx)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="truncate">{opt.label}</div>
-                    {opt.subtitle && <div className="text-[11px] text-muted-foreground truncate">{opt.subtitle}</div>}
-                  </div>
-                  {value === opt.value && <Check className="w-4 h-4 ml-2 flex-shrink-0" />}
-                </li>
-              ))
-            )}
-          </ul>
+              className="text-muted-foreground hover:text-foreground p-0.5 cursor-pointer"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
         </div>
-      )}
-    </div>
+
+        {/* Options List */}
+        <ul
+          ref={listRef}
+          className="max-h-60 overflow-y-auto p-1 text-xs divide-y divide-border/20"
+          role="listbox"
+        >
+          {filteredOptions.length === 0 ? (
+            <li className="px-3 py-4 text-muted-foreground text-xs text-center">
+              No results found for "{search}"
+            </li>
+          ) : (
+            filteredOptions.map((opt, idx) => (
+              <li
+                key={opt.value}
+                role="option"
+                aria-selected={value === opt.value}
+                className={cn(
+                  "flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer text-xs transition-colors",
+                  activeIndex === idx ? "bg-accent text-accent-foreground" : "hover:bg-accent/60 hover:text-accent-foreground",
+                  value === opt.value && "bg-primary/10 text-primary font-bold"
+                )}
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                onMouseEnter={() => setActiveIndex(idx)}
+              >
+                <div className="flex-1 min-w-0 pr-2">
+                  <div className="truncate flex items-center gap-1.5">
+                    {opt.icon}
+                    <span className="truncate">{opt.label}</span>
+                  </div>
+                  {opt.subtitle && (
+                    <div className="text-[10px] text-muted-foreground truncate mt-0.5">
+                      {opt.subtitle}
+                    </div>
+                  )}
+                </div>
+                {value === opt.value && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-1.5" />}
+              </li>
+            ))
+          )}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
