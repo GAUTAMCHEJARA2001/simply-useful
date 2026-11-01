@@ -151,6 +151,17 @@ const flushLogs = async () => {
 };
 
 export const recordLog = (payload: LogPayload) => {
+  // Never send network errors to the server logger to avoid recursive request loops
+  const msg = String(payload.action || '') + ' ' + (typeof payload.details === 'object' ? JSON.stringify(payload.details) : String(payload.details || ''));
+  if (
+    msg.includes('Network Error') ||
+    msg.includes('Network disconnected') ||
+    msg.includes('Failed to dispatch logs') ||
+    msg.includes('ERR_CONNECTION') ||
+    msg.includes('net::ERR')
+  ) {
+    return;
+  }
   // Automatically enrich every log with page, button, time, and console
   const enrichedDetails = {
     ...(typeof payload.details === 'object' && payload.details ? payload.details : {}),

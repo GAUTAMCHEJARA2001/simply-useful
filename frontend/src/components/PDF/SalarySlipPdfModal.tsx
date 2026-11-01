@@ -19,6 +19,7 @@ import {
 import { amountToWords } from './utils/amountToWords';
 import { useToast } from '@/hooks/use-toast';
 import { useSettings } from '@/hooks/inventory/useMasters';
+import { generateRTGSSlip } from '@/utils/pdfGenerator';
 
 export interface SalarySlipItem {
   id?: number | string;
@@ -214,6 +215,43 @@ export const SalarySlipPdfModal: React.FC<SalarySlipPdfModalProps> = ({
     }
   };
 
+  const handleFillRTGS = async () => {
+    if (activeSlips.length === 0) return;
+    try {
+      setIsGenerating(true);
+      for (const s of activeSlips) {
+        await generateRTGSSlip({
+          beneficiaryName: s.labour_name,
+          bankName: s.bank_details?.bank_name || '',
+          accountNumber: s.bank_details?.account_no || '',
+          ifscCode: s.bank_details?.ifsc || '',
+          amount: s.net_pay,
+          companyName: s.company?.name || settings?.company_name || 'Kamla Conchem Pvt Ltd',
+          companyAccount: settings?.company_bank_account || '',
+          companyBank: settings?.company_bank_name || 'Axis Bank',
+          companyIfsc: settings?.company_bank_ifsc || '',
+          companyAddress: s.company?.address || settings?.company_address || '',
+          narration: `Salary ${formatMonthName(s.month)}`
+        });
+        if (activeSlips.length > 1) {
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      toast({
+        title: 'RTGS Form Downloaded',
+        description: `Successfully filled Axis Bank RTGS form for ${activeSlips.length} slip(s).`
+      });
+    } catch (err: any) {
+      toast({
+        title: 'RTGS Error',
+        description: err?.message || 'Failed to fill RTGS form.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleBrowserPrint = () => {
     window.print();
   };
@@ -236,6 +274,18 @@ export const SalarySlipPdfModal: React.FC<SalarySlipPdfModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isGenerating || activeSlips.length === 0}
+              onClick={handleFillRTGS}
+              className="h-8 text-xs gap-1.5 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 font-semibold cursor-pointer"
+            >
+              <Landmark className="w-3.5 h-3.5 text-blue-600" />
+              Fill RTGS Form ({activeSlips.length})
+            </Button>
+
             <Button
               type="button"
               variant="outline"

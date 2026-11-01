@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Cpu, Database, Sparkles, AlertCircle, 
   CheckCircle, ArrowUpRight, BarChart3, TrendingUp, 
@@ -15,6 +16,8 @@ const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en
 const Percent = (v: number) => `${Number(v || 0).toFixed(1)}%`;
 
 export const DecisionIntelligenceTab: React.FC = () => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'SUPERADMIN' || (user as any)?.is_superuser;
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isCompiling, setIsCompiling] = useState(false);
@@ -101,7 +104,7 @@ export const DecisionIntelligenceTab: React.FC = () => {
       accent: 'emerald',
       barColor: 'bg-emerald-600 font-bold'
     },
-    {
+    ...(isSuperAdmin ? [{
       title: 'Gross Margin Efficiency',
       value: Percent(kpis?.gross_margin_pct || 0),
       desc: 'Profit margins computed net of 18% GST and Landed Cost estimates',
@@ -110,7 +113,7 @@ export const DecisionIntelligenceTab: React.FC = () => {
       icon: TrendingUp,
       accent: 'purple',
       barColor: 'bg-purple-600'
-    },
+    }] : []),
     {
       title: 'Supply Chain Inventory Turnover',
       value: String(kpis?.inventory_turnover_rate || '4.2'),
@@ -170,6 +173,7 @@ export const DecisionIntelligenceTab: React.FC = () => {
               </CardContent>
             </Card>
 
+            {isSuperAdmin && (
             <Card className="border-none shadow-lg bg-gradient-to-br from-emerald-500/5 to-emerald-600/10 backdrop-blur-xl ring-1 ring-emerald-500/10">
               <CardContent className="p-5 flex items-center justify-between">
                 <div>
@@ -184,6 +188,7 @@ export const DecisionIntelligenceTab: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
+            )}
 
             <Card className="border-none shadow-lg bg-gradient-to-br from-rose-500/5 to-rose-600/10 backdrop-blur-xl ring-1 ring-rose-500/10">
               <CardContent className="p-5 flex items-center justify-between">
@@ -356,7 +361,7 @@ export const DecisionIntelligenceTab: React.FC = () => {
                   )}
 
                   {/* Profit Margin Alert */}
-                  {(kpis?.gross_margin_pct || 0) < 12.0 ? (
+                  {isSuperAdmin && (kpis?.gross_margin_pct || 0) < 12.0 ? (
                     <div className="flex gap-3 p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 rounded-2xl text-xs">
                       <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
                       <div>

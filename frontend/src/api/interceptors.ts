@@ -7,6 +7,15 @@ import { recordLog, logUserError, logPermissionError } from '@/utils/auditLogger
 
 const IS_DEV = import.meta.env.DEV;
 
+let lastNetworkToastTime = 0;
+const showDebouncedNetworkError = () => {
+  const now = Date.now();
+  if (now - lastNetworkToastTime > 6000) {
+    lastNetworkToastTime = now;
+    toast.error('Network Error: Unable to reach backend server. Please verify connection.');
+  }
+};
+
 /**
  * Track whether a token refresh is already in-flight so
  * concurrent 401s don't fire multiple refresh calls.
@@ -305,10 +314,7 @@ export function setupInterceptors(client: AxiosInstance) {
             reason: serverMsg || 'Record not found',
           });
         } else if (!status) {
-          toast.error('Network Error: Unable to reach server. Please check your connection.');
-          logUserError(feature, 'Network Error — Connection failed or server is unreachable.', {
-            reason: error.message || 'Network disconnected',
-          });
+          showDebouncedNetworkError();
         }
       }
 

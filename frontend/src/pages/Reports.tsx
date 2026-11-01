@@ -50,6 +50,7 @@ const SALES_SUB_VIEWS: { id: SalesSubView; label: string; icon: React.FC<any> }[
 
 const Reports: React.FC = () => {
   const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'SUPERADMIN' || (user as any)?.is_superuser;
   const { orders, visits, expenses, users, products, warehouses, dealers, distributors } = useData();
 
 
@@ -319,7 +320,7 @@ const Reports: React.FC = () => {
       { key: 'month', label: 'Accounting Period (Month)', sortable: true, align: 'left' },
       { key: 'ordersCount', label: 'Orders volume', sortable: true, align: 'right' },
       { key: 'revenue', label: 'Gross Revenue', sortable: true, align: 'right', render: formatCurrency },
-      { key: 'profit', label: 'Est. Profit (COGS)', sortable: true, align: 'right', render: formatCurrency }
+      ...(isSuperAdmin ? [{ key: 'profit', label: 'Est. Profit (COGS)', sortable: true, align: 'right', render: formatCurrency }] : [])
     ],
     'sales-analysis': activeSalesView !== 'heatmap' ? salesAnalysisColumns[activeSalesView] : [],
   };
@@ -379,6 +380,9 @@ const Reports: React.FC = () => {
       case 'monthly': {
         const ordersCount = rows.reduce((s, r: MonthlyFinancialRow) => s + r.ordersCount, 0);
         const revenue = rows.reduce((s, r: MonthlyFinancialRow) => s + r.revenue, 0);
+        if (!isSuperAdmin) {
+          return { ordersCount, revenue };
+        }
         const profit = rows.reduce((s, r: MonthlyFinancialRow) => s + r.profit, 0);
         return { ordersCount, revenue, profit };
       }
@@ -440,7 +444,7 @@ const Reports: React.FC = () => {
       }
       if (activeDomain === 'monthly') {
         const r = row as MonthlyFinancialRow;
-        return { name: r.month, value: r.revenue, profit: r.profit };
+        return { name: r.month, value: r.revenue, ...(isSuperAdmin ? { profit: r.profit } : {}) };
       }
       // Sales Analysis
       const revenueKey = (row as any).revenue ?? 0;
@@ -495,7 +499,7 @@ const Reports: React.FC = () => {
         }
         case 'monthly': {
           const r = row as MonthlyFinancialRow;
-          return [r.month, r.ordersCount, r.revenue, r.profit];
+          return [r.month, r.ordersCount, r.revenue, ...(isSuperAdmin ? [r.profit] : [])];
         }
         case 'sales-analysis': {
           if (activeSalesView === 'brand') {

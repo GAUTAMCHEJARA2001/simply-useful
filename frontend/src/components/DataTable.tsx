@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Trash2, Edit, ChevronUp, ChevronDown, Eye, Search, 
-  ChevronLeft, ChevronRight, Inbox, X 
+  ChevronLeft, ChevronRight, Inbox, X, RefreshCw 
 } from 'lucide-react';
 
 interface DataTableProps {
   columns: string[];
   rows: any[][];
+  loading?: boolean;
   onDelete?: (idx: number) => void;
   onEdit?: (idx: number) => void;
   onView?: (idx: number) => void;
@@ -51,6 +52,7 @@ const getCellValue = (cell: any): string | number => {
 export const DataTable: React.FC<DataTableProps> = ({ 
   columns, 
   rows, 
+  loading = false,
   onDelete, 
   onEdit, 
   onView, 
@@ -237,7 +239,16 @@ export const DataTable: React.FC<DataTableProps> = ({
             </tr>
           </thead>
           <tbody>
-            {paginatedRows.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={columns.length + (onDelete || onEdit || customActions ? 1 : 0)} className="px-4 py-16 text-center text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <RefreshCw className="w-7 h-7 text-primary animate-spin" />
+                    <p className="font-semibold text-sm text-foreground">Loading records...</p>
+                  </div>
+                </td>
+              </tr>
+            ) : paginatedRows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length + (onDelete || onEdit || customActions ? 1 : 0)} className="px-4 py-12 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
@@ -297,7 +308,12 @@ export const DataTable: React.FC<DataTableProps> = ({
 
       {/* Mobile View */}
       <div className="sm:hidden flex flex-col divide-y divide-border/50">
-        {paginatedRows.length === 0 ? (
+        {loading ? (
+          <div className="px-4 py-12 text-center text-muted-foreground text-sm flex flex-col items-center justify-center gap-2">
+            <RefreshCw className="w-7 h-7 text-primary animate-spin" />
+            <p className="font-semibold text-sm text-foreground">Loading records...</p>
+          </div>
+        ) : paginatedRows.length === 0 ? (
           <div className="px-4 py-10 text-center text-muted-foreground text-sm flex flex-col items-center justify-center gap-2">
             <Inbox className="w-7 h-7 text-muted-foreground/40" />
             <p className="font-medium text-sm text-foreground">No records found</p>

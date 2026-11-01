@@ -131,16 +131,16 @@ def director_boardroom_command_center(request):
     Payroll, Market Collections, Ratios, and Factory/Field Operational Health.
     """
     now = timezone.now()
-    # 1. Privileged Role Check
+    # 1. Privileged Role Check - Exclusively Super Admin
     user = getattr(request, 'user', None)
     user_role = (getattr(user, 'role', '') or '').upper()
-    is_privileged = (
+    is_superadmin = (
         getattr(user, 'is_superuser', False) or
-        user_role in ('SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER')
+        user_role in ('SUPERADMIN', 'SUPER_ADMIN')
     )
-    if not is_privileged:
+    if not is_superadmin:
         return send_error(
-            'Director Boardroom Command Center is exclusively restricted to Directors and Administrators.',
+            'Director Boardroom Command Center and P&L metrics are exclusively restricted to Super Admin.',
             status_code=status.HTTP_403_FORBIDDEN
         )
 

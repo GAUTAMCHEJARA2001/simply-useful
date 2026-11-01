@@ -59,6 +59,10 @@ from api.views_party_ledger import (
     cn_discount_requests_list_create,
     review_cn_discount_request,
     get_live_party_ledger,
+    add_party_ledger_entry,
+    delete_party_ledger_entry,
+    set_party_opening_balance,
+    import_party_ledger_file,
 )
 from api.views_travel import (
     travel_today, travel_start, travel_end, travel_my_history,
@@ -256,6 +260,10 @@ urlpatterns = [
     path('parties/cn-requests', cn_discount_requests_list_create, name='cn-discount-requests'),
     path('parties/cn-requests/<str:pk>/review', review_cn_discount_request, name='cn-discount-review'),
     path('parties/ledger/<str:party_type>/<str:party_id>', get_live_party_ledger, name='live-party-ledger'),
+    path('parties/ledger-entry', add_party_ledger_entry, name='add-party-ledger-entry'),
+    path('parties/ledger-entry/<str:entry_id>', delete_party_ledger_entry, name='delete-party-ledger-entry'),
+    path('parties/opening-balance', set_party_opening_balance, name='set-party-opening-balance'),
+    path('parties/import-ledger', import_party_ledger_file, name='import-party-ledger-file'),
 
     # Director / Owner Executive Boardroom Command Center
     path('director/dashboard', director_boardroom_command_center, name='director-boardroom-command-center'),

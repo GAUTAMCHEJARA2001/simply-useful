@@ -747,7 +747,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
     if (item.path === '/director/dashboard') {
       const roleUpper = (user.role || '').toUpperCase();
-      return ['SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'OWNER'].includes(roleUpper);
+      return ['SUPERADMIN', 'SUPER_ADMIN'].includes(roleUpper) || !!(user as any)?.is_superuser;
     }
     if (item.domain === 'HR' || item.path.startsWith('/hr')) return ['SUPERADMIN', 'ADMIN', 'HR'].includes(user.role);
     if (item.domain === 'ADMIN' || item.path.startsWith('/admin')) return ['SUPERADMIN', 'ADMIN'].includes(user.role);
@@ -911,7 +911,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <FinancialYearProvider>
-      <div className="h-screen print:h-auto w-full flex bg-background overflow-hidden print:overflow-visible">
+      <div className="h-screen h-[100dvh] min-h-[100dvh] print:h-auto w-full flex bg-background overflow-hidden print:overflow-visible">
         {/* Mobile overlay */}
         {sidebarOpen && (
           <div
@@ -1102,10 +1102,14 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         {/* Sidebar */}
         <aside
           className={cn(
-            "fixed lg:static top-0 left-0 z-50 h-full bg-sidebar flex flex-col transition-all duration-300 shrink-0 print:hidden border-r border-sidebar-border",
+            "fixed lg:static top-0 left-0 z-50 h-full bg-sidebar flex flex-col transition-all duration-300 shrink-0 print:hidden border-r border-sidebar-border pt-safe pb-safe lg:pt-0 lg:pb-0",
             sidebarCollapsed ? "lg:w-0 lg:overflow-hidden lg:border-r-0" : "w-64",
             sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           )}
+          style={{
+            paddingTop: 'max(env(safe-area-inset-top, 0px), 0px)',
+            paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)'
+          }}
         >
           {/* Sidebar header */}
           <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border shrink-0">
@@ -1394,7 +1398,11 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden print:block print:h-auto">
           {/* Top bar */}
           {!hideTopBar ? (
-            <header className="flex-none h-14 bg-card border-b border-border flex items-center justify-between px-2 sm:px-4 lg:px-6 w-full z-30 print:hidden transition-all duration-300 gap-1.5 sm:gap-2">
+            <header
+              className="sticky top-0 z-30 shrink-0 bg-card/95 backdrop-blur-md border-b border-border w-full print:hidden transition-all duration-300 pt-safe"
+              style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 0px)' }}
+            >
+              <div className="h-14 flex items-center justify-between px-2 sm:px-4 lg:px-6 w-full gap-1.5 sm:gap-2">
               {/* Left side: Hamburger Toggle Button + Mobile Brand */}
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
@@ -1461,10 +1469,14 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   <Maximize2 className="w-4 h-4" />
                 </button>
               </div>
-            </header>
+            </div>
+          </header>
           ) : (
             /* Floating restore pill when top bar is hidden */
-            <div className="fixed top-3 right-4 z-50 print:hidden flex items-center gap-2 animate-in fade-in duration-200">
+            <div 
+              className="fixed right-4 z-50 print:hidden flex items-center gap-2 animate-in fade-in duration-200"
+              style={{ top: 'calc(0.75rem + env(safe-area-inset-top, 0px))' }}
+            >
               {sidebarCollapsed && (
                 <button
                   onClick={toggleDesktopSidebar}
@@ -1515,7 +1527,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           )}
 
           {/* Page content */}
-          <main className="flex-1 min-h-0 h-full p-3 sm:p-4 lg:p-6 overflow-x-hidden overflow-y-auto min-w-0 print:p-0 print:overflow-visible">
+          <main
+            className="flex-1 min-h-0 p-3 sm:p-4 lg:p-6 overflow-x-hidden overflow-y-auto min-w-0 print:p-0 print:overflow-visible"
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+          >
             {children}
           </main>
         </div>

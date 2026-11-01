@@ -44,8 +44,14 @@ import {
   SlidersHorizontal,
   ExternalLink,
   Percent,
+  Upload,
+  Trash2,
+  Edit3,
+  FileSpreadsheet,
+  BookOpen,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import * as XLSX from 'xlsx';
 
 interface PartySummary {
   total_sales_billed: number;
@@ -74,6 +80,8 @@ interface PartyInfo {
   gst_number?: string;
   credit_limit: number;
   outstanding: number;
+  opening_balance?: number;
+  opening_balance_date?: string | null;
   active: boolean;
 }
 
@@ -155,6 +163,28 @@ export const PartyLedgerPage: React.FC = () => {
   const [statement, setStatement] = useState<LedgerEntry[]>([]);
   const [pendingRequests, setPendingRequests] = useState<CNDiscountRequest[]>([]);
   const [loadingLedger, setLoadingLedger] = useState(false);
+
+  // Opening Balance Modal State
+  const [showOpeningModal, setShowOpeningModal] = useState(false);
+  const [openingAmount, setOpeningAmount] = useState<string>('');
+  const [openingSide, setOpeningSide] = useState<'DR' | 'CR'>('DR');
+  const [openingDate, setOpeningDate] = useState<string>('2026-04-01');
+  const [savingOpening, setSavingOpening] = useState(false);
+
+  // Add Manual Entry Modal State
+  const [showAddEntryModal, setShowAddEntryModal] = useState(false);
+  const [entryVoucherType, setEntryVoucherType] = useState<string>('SALES');
+  const [entryVoucherNo, setEntryVoucherNo] = useState<string>('');
+  const [entryDate, setEntryDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [entryAmount, setEntryAmount] = useState<string>('');
+  const [entrySide, setEntrySide] = useState<'DR' | 'CR'>('DR');
+  const [entryNarration, setEntryNarration] = useState<string>('');
+  const [savingEntry, setSavingEntry] = useState(false);
+
+  // One-Time Excel / CSV Import Modal State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
   // Statement Filters
   const [statementFilterType, setStatementFilterType] = useState<string>('ALL');
@@ -766,11 +796,52 @@ export const PartyLedgerPage: React.FC = () => {
                   <div className="flex items-center gap-2 flex-wrap">
                     <Button
                       size="sm"
+                      onClick={() => setShowAddEntryModal(true)}
+                      className="text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Add Entry
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setOpeningAmount(String(Math.abs(partyInfo.opening_balance || 0)));
+                        setOpeningSide((partyInfo.opening_balance || 0) >= 0 ? 'DR' : 'CR');
+                        setOpeningDate(partyInfo.opening_balance_date || '2026-04-01');
+                        setShowOpeningModal(true);
+                      }}
+                      className="text-xs h-8 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 mr-1 text-amber-600" /> Set Opening
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowImportModal(true)}
+                      className="text-xs h-8 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-semibold"
+                    >
+                      <Upload className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Import Excel
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleExportStatementExcel}
+                      className="text-xs h-8 border-slate-300 dark:border-slate-800 font-medium"
+                    >
+                      <Download className="w-3.5 h-3.5 mr-1 text-muted-foreground" /> Export Excel
+                    </Button>
+
+                    <Button
+                      size="sm"
                       onClick={() => navigate(`/finance/cn-requests/new?partyType=${selectedPartyType}&partyId=${partyInfo.id}`)}
                       className="text-xs h-8 bg-primary text-primary-foreground font-semibold"
                     >
-                      <Plus className="w-3.5 h-3.5 mr-1" /> Raise CN / Discount
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Raise CN
                     </Button>
+
                     <Button
                       size="sm"
                       variant="outline"
@@ -783,24 +854,37 @@ export const PartyLedgerPage: React.FC = () => {
                 </div>
 
                 {/* Accounting Balances Strip */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-border/60">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground">CURRENT OUTSTANDING</span>
-                    <div className="text-lg md:text-xl font-bold font-mono text-rose-600 dark:text-rose-400">
-                      ₹{(summary?.current_net_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      <span className="text-xs font-semibold text-muted-foreground ml-1">Dr</span>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-border/60">
+                  <div className="cursor-pointer group" onClick={() => {
+                    setOpeningAmount(String(Math.abs(partyInfo.opening_balance || 0)));
+                    setOpeningSide((partyInfo.opening_balance || 0) >= 0 ? 'DR' : 'CR');
+                    setOpeningDate(partyInfo.opening_balance_date || '2026-04-01');
+                    setShowOpeningModal(true);
+                  }}>
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1 group-hover:text-primary transition-colors">
+                      <span>OPENING BALANCE</span>
+                      <Edit3 className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100" />
+                    </span>
+                    <div className="text-lg md:text-xl font-bold font-mono text-foreground group-hover:text-primary transition-colors">
+                      ₹{Math.abs(partyInfo.opening_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      <span className="text-xs font-semibold text-muted-foreground ml-1">
+                        {(partyInfo.opening_balance || 0) >= 0 ? 'Dr' : 'Cr'}
+                      </span>
                     </div>
+                    <span className="text-[10px] text-muted-foreground block">
+                      As of {partyInfo.opening_balance_date ? format(new Date(partyInfo.opening_balance_date), 'dd-MMM-yyyy') : '01-Apr-2026'}
+                    </span>
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground">TOTAL SALES BILLED (DR)</span>
-                    <div className="text-lg md:text-xl font-bold font-mono text-foreground">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">TOTAL SALES (DR)</span>
+                    <div className="text-lg md:text-xl font-bold font-mono text-rose-600 dark:text-rose-400">
                       ₹{(summary?.total_sales_billed || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground">TOTAL COLLECTIONS (CR)</span>
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">COLLECTIONS (CR)</span>
                     <div className="text-lg md:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
                       ₹{(summary?.total_payments_collected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </div>
@@ -811,6 +895,17 @@ export const PartyLedgerPage: React.FC = () => {
                     <div className="text-lg md:text-xl font-bold font-mono text-purple-600 dark:text-purple-400">
                       ₹{((summary?.total_credit_notes || 0) + (summary?.total_discounts || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">CURRENT OUTSTANDING</span>
+                    <div className="text-lg md:text-xl font-bold font-mono text-rose-600 dark:text-rose-400">
+                      ₹{Math.abs(summary?.current_net_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      <span className="text-xs font-semibold text-muted-foreground ml-1">
+                        {(summary?.current_net_balance || 0) >= 0 ? 'Dr' : 'Cr'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground block font-medium">Reconciled Net Balance</span>
                   </div>
                 </div>
               </div>
@@ -831,6 +926,7 @@ export const PartyLedgerPage: React.FC = () => {
                         { id: 'CREDIT_NOTES', label: 'Credit Notes (Cr)' },
                         { id: 'DISCOUNTS', label: 'Discounts (Cr)' },
                         { id: 'RETURNS', label: 'Returns (Cr)' },
+                        { id: 'GENERAL_JV', label: 'Journal / JV' },
                       ].map(pill => (
                         <button
                           key={pill.id}
@@ -966,6 +1062,16 @@ export const PartyLedgerPage: React.FC = () => {
                                 <div className="space-y-1">
                                   <p className="text-foreground leading-relaxed">{entry.narration}</p>
                                   <div className="flex items-center gap-2 flex-wrap">
+                                    {entry.is_manual && entry.manual_id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteManualEntry(entry.manual_id!)}
+                                        title="Delete this manual entry"
+                                        className="text-red-500 hover:text-red-700 p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                     {entry.payment_mode && (
                                       <span className="inline-block text-[10px] font-semibold uppercase px-1.5 py-0.2 rounded bg-muted text-muted-foreground">
                                         Mode: {entry.payment_mode}
@@ -1049,6 +1155,266 @@ export const PartyLedgerPage: React.FC = () => {
       )}
 
 
+
+
+      {/* ---------------------------------------------------- */}
+      {/* MODAL 1: SET / EDIT OPENING BALANCE                  */}
+      {/* ---------------------------------------------------- */}
+      <Dialog open={showOpeningModal} onOpenChange={setShowOpeningModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-amber-600" />
+              Set Opening Balance
+            </DialogTitle>
+            <DialogDescription>
+              Write the cutoff opening balance for {partyInfo?.name} to match with your Busy/accounting books.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveOpeningBalance} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Opening Balance Amount (₹)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="e.g. 150000.00"
+                value={openingAmount}
+                onChange={e => setOpeningAmount(e.target.value)}
+                required
+                className="font-mono"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Balance Type</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOpeningSide('DR')}
+                  className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all ${
+                    openingSide === 'DR'
+                      ? 'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
+                      : 'border-border text-muted-foreground hover:bg-accent'
+                  }`}
+                >
+                  Debit (Dr) — Party Owes You
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpeningSide('CR')}
+                  className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all ${
+                    openingSide === 'CR'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                      : 'border-border text-muted-foreground hover:bg-accent'
+                  }`}
+                >
+                  Credit (Cr) — Advance / You Owe
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Opening Balance As-Of Date</Label>
+              <Input
+                type="date"
+                value={openingDate}
+                onChange={e => setOpeningDate(e.target.value)}
+                required
+                className="font-mono text-xs"
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowOpeningModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={savingOpening} className="bg-amber-600 hover:bg-amber-700 text-white">
+                {savingOpening ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+                Save Opening Balance
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------------------------------------------- */}
+      {/* MODAL 2: ADD MANUAL ENTRY (SALES, PAYMENT, JV, ETC.) */}
+      {/* ---------------------------------------------------- */}
+      <Dialog open={showAddEntryModal} onOpenChange={setShowAddEntryModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-blue-600" />
+              Add One-Time Ledger Entry
+            </DialogTitle>
+            <DialogDescription>
+              Record a manual transaction for {partyInfo?.name} (as per Busy bill or receipt).
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveManualEntry} className="space-y-3.5 pt-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Entry / Voucher Type</Label>
+              <select
+                value={entryVoucherType}
+                onChange={e => {
+                  const val = e.target.value;
+                  setEntryVoucherType(val);
+                  if (val === 'SALES') setEntrySide('DR');
+                  else if (['PAYMENT', 'SALES_RETURN', 'DISCOUNT'].includes(val)) setEntrySide('CR');
+                }}
+                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-xs font-semibold"
+              >
+                <option value="SALES">Sales Invoice (Debit — Increases Outstanding)</option>
+                <option value="PAYMENT">Payment Received (Credit — Reduces Outstanding)</option>
+                <option value="SALES_RETURN">Sales Return / Credit Note (Credit)</option>
+                <option value="GENERAL_JV">Journal Voucher / General JV (Adjustment)</option>
+                <option value="DISCOUNT">Discount / Rebate / Incentive (Credit)</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Voucher / Bill No.</Label>
+                <Input
+                  placeholder="e.g. INV-1045 or RCP-204"
+                  value={entryVoucherNo}
+                  onChange={e => setEntryVoucherNo(e.target.value)}
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Date</Label>
+                <Input
+                  type="date"
+                  value={entryDate}
+                  onChange={e => setEntryDate(e.target.value)}
+                  required
+                  className="font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Amount (₹)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="e.g. 25000.00"
+                  value={entryAmount}
+                  onChange={e => setEntryAmount(e.target.value)}
+                  required
+                  className="font-mono font-bold text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Accounting Side</Label>
+                <select
+                  value={entrySide}
+                  onChange={e => setEntrySide(e.target.value as any)}
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-background text-xs font-semibold"
+                >
+                  <option value="DR">Debit (Dr) — Receivable</option>
+                  <option value="CR">Credit (Cr) — Received / Deduction</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Narration / Remarks</Label>
+              <Textarea
+                placeholder="e.g. As per Busy Invoice #1045 dated 25-Oct-2026"
+                value={entryNarration}
+                onChange={e => setEntryNarration(e.target.value)}
+                rows={2}
+                className="text-xs"
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowAddEntryModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={savingEntry} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold">
+                {savingEntry ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+                Record Entry
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------------------------------------------- */}
+      {/* MODAL 3: ONE-TIME EXCEL / CSV IMPORT                 */}
+      {/* ---------------------------------------------------- */}
+      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+              Import Busy Ledger (Excel / CSV)
+            </DialogTitle>
+            <DialogDescription>
+              Upload an Excel (.xlsx, .xls) or CSV file exported from Busy to bulk-import transactions for {partyInfo?.name}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleImportExcel} className="space-y-4 pt-2">
+            <div className="border-2 border-dashed border-border rounded-xl p-5 text-center space-y-2 hover:border-primary/50 transition-colors">
+              <Upload className="w-8 h-8 text-muted-foreground mx-auto" />
+              <div className="text-xs text-muted-foreground">
+                <label className="text-primary font-bold hover:underline cursor-pointer">
+                  Browse file
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={e => {
+                      if (e.target.files && e.target.files[0]) {
+                        setImportFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                </label>
+                {' '}or drag &amp; drop
+              </div>
+              <p className="text-[10px] text-muted-foreground">Supports .xlsx, .xls, and .csv formats</p>
+              {importFile && (
+                <div className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs py-1 px-2 rounded-md font-mono mt-2 inline-block">
+                  ✓ Selected: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+                </div>
+              )}
+            </div>
+
+            <div className="bg-muted/40 p-3 rounded-lg border border-border text-[11px] text-muted-foreground space-y-1">
+              <p className="font-semibold text-foreground">Expected Excel Columns (Any order):</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li><strong>Date</strong> (e.g. 2026-10-25 or 25/10/2026)</li>
+                <li><strong>Voucher Type</strong> (Sales, Receipt, Return, JV, Discount)</li>
+                <li><strong>Voucher No</strong> (Bill / Doc number)</li>
+                <li><strong>Debit / Credit</strong> (or Amount)</li>
+                <li><strong>Particulars / Narration</strong></li>
+              </ul>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowImportModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={importing || !importFile} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
+                {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
+                Import Entries
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

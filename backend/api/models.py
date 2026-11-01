@@ -73,6 +73,8 @@ class Dealer(models.Model):
     distributorname = models.TextField(db_column='distributorName', blank=True, null=True)  # Field name made lowercase.
     creditlimit = models.DecimalField(db_column='creditLimit', max_digits=14, decimal_places=2, default=Decimal('0.00'))  # Field name made lowercase.
     outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    openingbalance = models.DecimalField(db_column='openingBalance', max_digits=14, decimal_places=2, default=Decimal('0.00'), blank=True, null=True)
+    openingbalancedate = models.DateField(db_column='openingBalanceDate', blank=True, null=True)
     active = models.BooleanField()
     territory = models.TextField(blank=True, null=True)
     party_type = models.CharField(max_length=50, default='DEALER', db_column='partyType')
@@ -116,6 +118,8 @@ class Distributor(models.Model):
     brand = models.TextField(blank=True, null=True)
     creditlimit = models.DecimalField(db_column='creditLimit', max_digits=14, decimal_places=2, default=Decimal('0.00'))  # Field name made lowercase.
     outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    openingbalance = models.DecimalField(db_column='openingBalance', max_digits=14, decimal_places=2, default=Decimal('0.00'), blank=True, null=True)
+    openingbalancedate = models.DateField(db_column='openingBalanceDate', blank=True, null=True)
     active = models.BooleanField()
     territory = models.TextField(blank=True, null=True)
     
@@ -955,6 +959,27 @@ class BusyLedgerEntry(models.Model):
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     short_nar = models.CharField(max_length=500, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PartyManualLedgerEntry(models.Model):
+    id = models.CharField(max_length=64, primary_key=True)
+    partytype = models.CharField(max_length=20, db_column='partyType')  # DEALER, DISTRIBUTOR
+    partyid = models.CharField(max_length=100, db_column='partyId')
+    partyname = models.CharField(max_length=255, db_column='partyName')
+    companyid = models.ForeignKey(Company, models.DO_NOTHING, db_column='companyId', blank=True, null=True, db_constraint=False)
+    date = models.DateField()
+    vouchertype = models.CharField(max_length=30, db_column='voucherType')  # SALES, PAYMENT, SALES_RETURN, GENERAL_JV, DISCOUNT, OPENING_BALANCE
+    voucherno = models.CharField(max_length=100, db_column='voucherNo', blank=True, null=True)
+    debit = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
+    credit = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
+    narration = models.TextField(blank=True, null=True)
+    source = models.CharField(max_length=30, default='MANUAL')  # MANUAL, EXCEL_IMPORT, BUSY
+    createdby = models.CharField(max_length=100, db_column='createdBy', blank=True, null=True)
+    createdat = models.DateTimeField(db_column='createdAt', default=timezone.now)
+
+    class Meta:
+        db_table = 'PartyManualLedgerEntry'
+
 
 
 class Activitylog(models.Model):

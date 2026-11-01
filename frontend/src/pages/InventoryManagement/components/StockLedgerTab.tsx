@@ -11,6 +11,7 @@ import { SafeDataView } from '@/components/SafeDataView';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDecimal } from '@/utils/format';
 import { useFinancialYear } from '@/contexts/FinancialYearContext';
+import * as XLSX from 'xlsx';
 
 
 const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
@@ -167,6 +168,233 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
   const openingStock = summary.opening;
   console.log('Stock Report Summary:', { totalInward, totalOutward, openingStock });
 
+  const exportOverviewToExcel = () => {
+    if (!filteredStock || filteredStock.length === 0) {
+      toast({ title: 'No Data to Export', description: 'There are no records matching your current filter.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const headers = [
+        'Product Name',
+        'SKU',
+        'Category',
+        'Unit',
+        'Warehouse',
+        'Opening Stock',
+        'Production',
+        'Consumed',
+        'Purchase',
+        'Sales',
+        'Sales Return',
+        'Purchase Return',
+        'Adjustment',
+        'Closing Stock',
+        'Status'
+      ];
+
+      let sumOpening = 0;
+      let sumProd = 0;
+      let sumCons = 0;
+      let sumPurch = 0;
+      let sumSales = 0;
+      let sumSalesRet = 0;
+      let sumPurchRet = 0;
+      let sumAdj = 0;
+      let sumClosing = 0;
+
+      const dataRows = filteredStock.map(s => {
+        const opening = parseFloat(s.openingStock || 0);
+        const prod = parseFloat(s.production || 0);
+        const cons = parseFloat(s.consumed || 0);
+        const purch = parseFloat(s.purchase || 0);
+        const sales = parseFloat(s.sales || 0);
+        const salesRet = parseFloat(s.salesReturn || 0);
+        const purchRet = parseFloat(s.purchaseReturn || 0);
+        const adj = parseFloat(s.adjustment || 0);
+        const closing = parseFloat(s.currentStock || 0);
+        const minStock = parseFloat(s.minimumStock || 0);
+
+        sumOpening += opening;
+        sumProd += prod;
+        sumCons += cons;
+        sumPurch += purch;
+        sumSales += sales;
+        sumSalesRet += salesRet;
+        sumPurchRet += purchRet;
+        sumAdj += adj;
+        sumClosing += closing;
+
+        return [
+          s.productName || '',
+          `${s.sku || ''}-${s.warehouseName || 'Global'}`,
+          s.categoryName || '—',
+          s.unit?.name || (typeof s.unit === 'string' ? s.unit : '') || '—',
+          s.warehouseName || 'Global',
+          opening,
+          prod,
+          cons,
+          purch,
+          sales,
+          salesRet,
+          purchRet,
+          adj,
+          closing,
+          closing <= minStock ? 'Low Stock' : 'Adequate'
+        ];
+      });
+
+      const totalRow = [
+        'TOTAL',
+        '',
+        '',
+        '',
+        '',
+        Math.round(sumOpening * 100) / 100,
+        Math.round(sumProd * 100) / 100,
+        Math.round(sumCons * 100) / 100,
+        Math.round(sumPurch * 100) / 100,
+        Math.round(sumSales * 100) / 100,
+        Math.round(sumSalesRet * 100) / 100,
+        Math.round(sumPurchRet * 100) / 100,
+        Math.round(sumAdj * 100) / 100,
+        Math.round(sumClosing * 100) / 100,
+        ''
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows, totalRow]);
+      ws['!cols'] = [
+        { wch: 32 },
+        { wch: 22 },
+        { wch: 18 },
+        { wch: 10 },
+        { wch: 18 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 15 },
+        { wch: 12 },
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Stock Ledger Overview');
+
+      const dateStr = new Date().toISOString().split('T')[0];
+      const filename = `Stock_Ledger_Overview_${dateStr}.xlsx`;
+      XLSX.writeFile(wb, filename);
+
+      toast({
+        title: 'Excel Download Started',
+        description: `Exported ${filteredStock.length} items to ${filename}`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Export Failed',
+        description: err.message || 'Could not generate Excel file',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const exportDetailedLedgerToExcel = () => {
+    if (!selectedProduct) return;
+
+    try {
+      const titleRows = [
+        ['STOCK LEDGER REPORT', ''],
+        ['Product Name:', selectedProduct.productName || ''],
+        ['SKU:', `${selectedProduct.sku}-${selectedProduct.warehouseName || 'Global'}`],
+        ['Warehouse:', selectedProduct.warehouseName || 'All Warehouses'],
+        ['Date Range:', `${popDateFrom || 'All Time'} to ${popDateTo || 'Present'}`],
+        ['Unit:', selectedProduct.unit?.name || (typeof selectedProduct.unit === 'string' ? selectedProduct.unit : '') || 'Bags'],
+        [''],
+        ['SUMMARY METRICS', ''],
+        ['Opening Balance', summary.opening],
+        ['Total Inward (Credit)', totalInward],
+        ['Total Outward (Debit)', totalOutward],
+        ['Available / Closing Stock', summary.current],
+        [''],
+        ['TRANSACTION LEDGER', '']
+      ];
+
+      const tableHeaders = [
+        'Date',
+        'Transaction Type',
+        'Reference ID / Doc No',
+        'Debit (Outward)',
+        'Credit (Inward)',
+        'Balance'
+      ];
+
+      const txRows = ledger.map(l => {
+        const isOpening = l.transactionType === 'OPENING_STOCK' || l.transactionType === 'OPENING STOCK' || l.type === 'OPENING_STOCK';
+        const dateFormatted = l.date ? (isNaN(new Date(l.date).getTime()) ? l.date : new Date(l.date).toLocaleDateString('en-IN')) : '—';
+        const typeStr = isOpening ? 'Opening Balance' : (l.transactionType || l.type || '—');
+        const refStr = l.referenceId || l.docNo || '—';
+        const debit = parseFloat(l.debit || 0);
+        const credit = parseFloat(l.credit || 0);
+        const balance = parseFloat(l.balance || 0);
+
+        return [
+          dateFormatted,
+          typeStr,
+          refStr,
+          debit > 0 ? debit : '',
+          credit > 0 ? credit : '',
+          balance
+        ];
+      });
+
+      const totalRow = [
+        'TOTAL',
+        '',
+        '',
+        totalOutward,
+        totalInward,
+        summary.current
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet([
+        ...titleRows,
+        tableHeaders,
+        ...txRows,
+        totalRow
+      ]);
+
+      ws['!cols'] = [
+        { wch: 16 },
+        { wch: 22 },
+        { wch: 26 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 16 },
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Detailed Ledger');
+
+      const safeSku = (selectedProduct.sku || 'ITEM').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `Ledger_${safeSku}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, filename);
+
+      toast({
+        title: 'Excel Download Started',
+        description: `Exported ledger for ${selectedProduct.productName} to ${filename}`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Export Failed',
+        description: err.message || 'Could not export ledger to Excel',
+        variant: 'destructive'
+      });
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -181,6 +409,15 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
           <p className="text-xs text-muted-foreground mt-0.5">Real-time synchronized inventory tracking across all warehouses</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={exportOverviewToExcel}
+            variant="outline"
+            className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-500/50"
+          >
+            <Download className="w-4 h-4 mr-1.5 text-emerald-600 dark:text-emerald-400" />
+            Download Excel
+          </Button>
           <Button
             size="sm"
             onClick={runAudit}
@@ -290,7 +527,9 @@ export const StockLedgerTab: React.FC<{ onViewTransaction?: (type: string, refId
                   filename={`Ledger_${selectedProduct.sku}_${selectedProduct.warehouseName || 'Global'}.pdf`}
                   buttonLabel="Download Ledger"
                 />
-                <Button size="sm" variant="outline" onClick={() => toast({ title: 'Exporting to CSV...' })}><Download className="w-3.5 h-3.5 mr-1" /> Export</Button>
+                <Button size="sm" variant="outline" onClick={exportDetailedLedgerToExcel} className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10">
+                  <Download className="w-3.5 h-3.5 mr-1 text-emerald-600 dark:text-emerald-400" /> Download Excel
+                </Button>
               </div>
             </div>
 

@@ -8,6 +8,16 @@ import { orderService } from '@/api/services/order.service';
 import { useToast } from '@/hooks/use-toast';
 import { Order } from '@/types';
 import { SmartDatePicker } from '@/components/ui/SmartDatePicker';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const DispatchOrderPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +38,8 @@ const DispatchOrderPage: React.FC = () => {
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [dispatchTime, setDispatchTime] = useState(new Date().toTimeString().split(' ')[0].slice(0, 5));
   const [reason, setReason] = useState('');
+  const [showDeficitModal, setShowDeficitModal] = useState(false);
+  const [deficitWarningMsg, setDeficitWarningMsg] = useState('');
 
   const initializedRef = useRef(false);
 
@@ -113,7 +125,7 @@ const DispatchOrderPage: React.FC = () => {
     );
   }
 
-  const handleConfirmDispatch = async () => {
+  const handleConfirmDispatch = async (allowDeficit: boolean = false) => {
     try {
       setLoading(true);
 
@@ -150,7 +162,8 @@ const DispatchOrderPage: React.FC = () => {
         warehouseDetails: warehouseDetails,
         remarks: reason,
         actionDate: dispatchDate,
-        actionTime: dispatchTime
+        actionTime: dispatchTime,
+        allow_deficit: allowDeficit
       });
 
       toast({
@@ -162,11 +175,18 @@ const DispatchOrderPage: React.FC = () => {
       navigate('/inventory');
     } catch (err: any) {
       console.error(err);
-      toast({
-        title: 'Dispatch Failed',
-        description: err.message || 'An error occurred during dispatch.',
-        variant: 'destructive',
-      });
+      const errData = err.response?.data || err.data;
+      const msg = errData?.message || err.message || 'An error occurred during dispatch.';
+      if (errData?.error_type === 'INSUFFICIENT_STOCK' || (typeof msg === 'string' && msg.toLowerCase().includes('insufficient stock'))) {
+        setDeficitWarningMsg(msg);
+        setShowDeficitModal(true);
+      } else {
+        toast({
+          title: 'Dispatch Failed',
+          description: msg,
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -469,6 +489,34 @@ const DispatchOrderPage: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={showDeficitModal} onOpenChange={setShowDeficitModal}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-5 w-5" /> Insufficient Stock Warning
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-foreground/90">
+              <p className="font-medium text-amber-800 dark:text-amber-400">{deficitWarningMsg}</p>
+              <p className="text-sm text-muted-foreground">
+                Do you want to override and confirm this dispatch anyway (allowing deficit / negative inventory)?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDeficitModal(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => {
+                setShowDeficitModal(false);
+                handleConfirmDispatch(true);
+              }}
+            >
+              Confirm Dispatch (Allow Deficit)
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

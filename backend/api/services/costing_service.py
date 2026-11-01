@@ -6,7 +6,8 @@ and computes accurate BOM (Bill of Materials) price lists based on raw material 
 from decimal import Decimal
 from django.db.models import Sum, Q
 from django.utils import timezone
-from api.models import Product, Purchaseitem, Bom, Bomitem, Company
+from django.core.cache import cache
+from api.models import Product, Purchaseitem, Bom, Bomitem, Company, Orderitem
 
 
 def compute_product_warehouse_costs(company_id=None, warehouse_ids=None):
@@ -17,6 +18,12 @@ def compute_product_warehouse_costs(company_id=None, warehouse_ids=None):
     Returns:
         tuple: (cost_map_by_id, cost_map_by_name)
     """
+    cache_wh_str = '_'.join(sorted(map(str, warehouse_ids))) if warehouse_ids else 'all'
+    cache_key = f"prod_wh_costs_{company_id or 'all'}_{cache_wh_str}"
+    cached_val = cache.get(cache_key)
+    if cached_val is not None:
+        return cached_val
+
     # 1. Fetch Company Stock Valuation Method (FIFO vs WEIGHTED_AVG)
     stock_method = 'FIFO'
     if company_id:
@@ -156,13 +163,44 @@ def compute_product_warehouse_costs(company_id=None, warehouse_ids=None):
         if p.name:
             cost_map_by_name[p.name.strip().lower()] = val_data
 
+    cache.set(cache_key, (cost_map_by_id, cost_map_by_name), 60)
     return cost_map_by_id, cost_map_by_name
 
 
-def compute_bom_cost_breakdown(bom, valuation_by_id=None, valuation_by_name=None, warehouse_ids=None, company_id=None):
+def compute_product_sales_rates(company_id=None):
+    """
+    Computes the actual Average Selling Price (ASP) for every product based on real sales orders.
+    Formula: Total Net Sales Value / Total Quantity Sold (excluding REJECTED orders).
+    """
+    oi_qs = Orderitem.objects.exclude(orderid__status='REJECTED')
+    if company_id:
+        oi_qs = oi_qs.filter(orderid__companyid_id=company_id)
+
+    sales_agg = (
+        oi_qs.values('productid')
+        .annotate(total_revenue=Sum('total'), total_qty=Sum('qty'))
+        .filter(total_qty__gt=0)
+    )
+
+    sales_map = {}
+    for item in sales_agg:
+        pid = item['productid']
+        rev = float(item['total_revenue'] or 0.0)
+        qty = float(item['total_qty'] or 0.0)
+        if qty > 0:
+            sales_map[pid] = {
+                'avgSellingRate': round(rev / qty, 2),
+                'totalSoldQty': qty,
+                'totalSalesRevenue': round(rev, 2)
+            }
+    return sales_map
+
+
+def compute_bom_cost_breakdown(bom, valuation_by_id=None, valuation_by_name=None, warehouse_ids=None, company_id=None, sales_rates_by_id=None, prod_map=None):
     """
     Computes the accurate price list & manufacturing cost for a single BOM (Bill of Materials)
     based on the warehouse's FIFO / Weighted Average raw material costs.
+    based on the warehouse's FIFO / Weighted Average raw material costs and average realized selling price.
     """
     if valuation_by_id is None or valuation_by_name is None:
         cid = company_id or (bom.companyid_id if hasattr(bom, 'companyid_id') else None)
@@ -183,10 +221,12 @@ def compute_bom_cost_breakdown(bom, valuation_by_id=None, valuation_by_name=None
         # Look up product valuation by name or sku
         cost_info = valuation_by_name.get(mat_lower)
         if not cost_info:
-            # Try partial search or productcode
-            matched_prod = Product.objects.filter(
-                Q(name__iexact=mat_name) | Q(productcode__iexact=mat_name)
-            ).first()
+            # Try fast in-memory map first to avoid N+1 remote database roundtrips
+            matched_prod = (prod_map.get(mat_lower) or prod_map.get(mat_name)) if prod_map else None
+            if not matched_prod and not prod_map:
+                matched_prod = Product.objects.filter(
+                    Q(name__iexact=mat_name) | Q(productcode__iexact=mat_name)
+                ).first()
             if matched_prod and matched_prod.id in valuation_by_id:
                 cost_info = valuation_by_id[matched_prod.id]
 
@@ -227,11 +267,35 @@ def compute_bom_cost_breakdown(bom, valuation_by_id=None, valuation_by_name=None
     unit_cost = round(total_batch_cost / output_qty, 2)
 
     # Finished product master rate (Base Selling Rate)
-    finished_prod = Product.objects.filter(
-        Q(productcode=bom.productcode) | Q(name=bom.name)
-    ).first()
+    # Finished product master rate & actual average selling rate from orders
+    finished_prod = None
+    if prod_map:
+        b_code = (bom.productcode or '').strip().lower()
+        b_name = (bom.name or '').strip().lower()
+        finished_prod = prod_map.get(b_code) or prod_map.get(b_name)
+    if not finished_prod:
+        finished_prod = Product.objects.filter(
+            Q(productcode=bom.productcode) | Q(name=bom.name)
+        ).first()
 
     selling_rate = round(float(finished_prod.rate or 0.0), 2) if finished_prod else 0.0
+    base_master_rate = round(float(finished_prod.rate or 0.0), 2) if finished_prod else 0.0
+
+    if sales_rates_by_id is None:
+        sales_rates_by_id = compute_product_sales_rates(company_id=company_id)
+
+    sales_info = sales_rates_by_id.get(finished_prod.id, {}) if finished_prod else {}
+    avg_selling_rate = sales_info.get('avgSellingRate')
+    units_sold = sales_info.get('totalSoldQty', 0)
+
+    # Use Average Realized Selling Rate from customer sales orders, fallback to Master Rate
+    if avg_selling_rate is not None and avg_selling_rate > 0:
+        selling_rate = avg_selling_rate
+        rate_source = 'AVERAGE_SALES_PRICE'
+    else:
+        selling_rate = base_master_rate
+        rate_source = 'MASTER_CATALOG_RATE'
+
     gst_percent = float(finished_prod.gst if finished_prod and finished_prod.gst is not None else 18.0)
     gross_margin = round(selling_rate - unit_cost, 2)
     margin_pct = round((gross_margin / selling_rate * 100), 1) if selling_rate > 0 else 0.0
@@ -251,6 +315,10 @@ def compute_bom_cost_breakdown(bom, valuation_by_id=None, valuation_by_name=None
         'totalBatchCost': total_batch_cost,
         'unitCost': unit_cost,
         'sellingRate': selling_rate,
+        'avgSellingRate': avg_selling_rate or base_master_rate,
+        'masterRate': base_master_rate,
+        'sellingRateSource': rate_source,
+        'unitsSold': units_sold,
         'gstPercent': gst_percent,
         'grossMargin': gross_margin,
         'marginPct': margin_pct,
@@ -264,7 +332,17 @@ def get_all_bom_valuations(company_id=None, warehouse_ids=None):
     Returns accurate price list & manufacturing cost for all approved BOMs.
     """
     val_by_id, val_by_name = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=warehouse_ids)
+    sales_rates_by_id = compute_product_sales_rates(company_id=company_id)
     
+    # Pre-build in-memory product map to avoid N+1 remote queries per recipe item
+    prod_map = {}
+    prod_qs = Product.objects.filter(companyid_id=company_id) if company_id else Product.objects.all()
+    for p in prod_qs:
+        if p.name:
+            prod_map[p.name.strip().lower()] = p
+        if p.productcode:
+            prod_map[p.productcode.strip().lower()] = p
+
     bom_qs = Bom.objects.filter(companyid_id=company_id) if company_id else Bom.objects.all()
     if warehouse_ids:
         bom_qs = bom_qs.filter(Q(warehouseid_id__in=warehouse_ids) | Q(warehouseid__isnull=True))
@@ -276,7 +354,9 @@ def get_all_bom_valuations(company_id=None, warehouse_ids=None):
             valuation_by_id=val_by_id,
             valuation_by_name=val_by_name,
             warehouse_ids=warehouse_ids,
-            company_id=company_id
+            company_id=company_id,
+            sales_rates_by_id=sales_rates_by_id,
+            prod_map=prod_map
         )
         results.append(data)
 

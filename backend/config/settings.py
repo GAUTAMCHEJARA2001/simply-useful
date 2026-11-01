@@ -17,6 +17,12 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / '.env')
+except ImportError:
+    pass
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -127,7 +133,7 @@ if DATABASE_URL:
         'PASSWORD': unquote(url.password) if url.password else None,
         'HOST': url.hostname,
         'PORT': url.port or 5432,
-        'CONN_MAX_AGE': 20,  # Reclaim idle database connection memory quickly
+        'CONN_MAX_AGE': 600,  # Keep connection alive across queries to avoid 265ms SSL/TCP re-handshakes
         'CONN_HEALTH_CHECKS': True,
     }
 

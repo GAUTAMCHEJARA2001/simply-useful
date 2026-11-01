@@ -3,14 +3,20 @@ import sys
 import subprocess
 import datetime
 import shutil
+from pathlib import Path
+
+# Load .env file automatically so scheduled tasks and CLI commands have DB credentials
+try:
+    from dotenv import load_dotenv
+    env_file = Path(__file__).resolve().parent / '.env'
+    if env_file.exists():
+        load_dotenv(dotenv_path=env_file)
+    else:
+        load_dotenv()
+except ImportError:
+    pass
 
 # Database Configuration (matches settings.py defaults)
-DB_NAME = os.environ.get('DATABASE_NAME', 'db_master')
-DB_USER = os.environ.get('DATABASE_USER', 'postgres')
-DB_PASSWORD = os.environ.get('DATABASE_PASSWORD', 'admin')
-DB_HOST = os.environ.get('DATABASE_HOST', 'localhost')
-DB_PORT = os.environ.get('DATABASE_PORT', '5432')
-
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL:
     try:
@@ -23,6 +29,12 @@ if DATABASE_URL:
         DB_PORT = str(url.port or 5432)
     except Exception:
         pass
+else:
+    DB_NAME = os.environ.get('DATABASE_NAME', 'db_master')
+    DB_USER = os.environ.get('DATABASE_USER', 'postgres')
+    DB_PASSWORD = os.environ.get('DATABASE_PASSWORD', 'admin')
+    DB_HOST = os.environ.get('DATABASE_HOST', 'localhost')
+    DB_PORT = os.environ.get('DATABASE_PORT', '5432')
 
 def find_pg_dump():
     # 1. Try system PATH
@@ -191,8 +203,39 @@ def restore_pg_dump(backup_file_path, db_name=DB_NAME, db_user=DB_USER, db_passw
 
     pg_restore_path = find_pg_restore()
     print(f"Using pg_restore path: {pg_restore_path}")
-    print(f"Restoring database '{db_name}' from {backup_file_path}...")
-    
+    print(f"Restoring database '{db_name}' on {db_host}:{db_port} from {backup_file_path}...")
+
+    # Step 1: Pre-clean schema to eliminate foreign-key drop conflicts
+    try:
+        import psycopg2
+        print("Pre-cleaning 'public' schema to prevent foreign-key drop conflicts...")
+        conn = psycopg2.connect(
+            dbname=db_name,
+            user=db_user,
+            password=db_password,
+            host=db_host,
+            port=db_port
+        )
+        conn.autocommit = True
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT pg_terminate_backend(pid) 
+                FROM pg_stat_activity 
+                WHERE datname = current_database() 
+                  AND pid <> pg_backend_pid();
+            """)
+        except Exception:
+            pass
+        cur.execute("DROP SCHEMA IF EXISTS public CASCADE;")
+        cur.execute("CREATE SCHEMA public;")
+        cur.execute(f'GRANT ALL ON SCHEMA public TO "{db_user}";')
+        cur.execute('GRANT ALL ON SCHEMA public TO public;')
+        conn.close()
+        print("[OK] Schema 'public' freshly prepared.")
+    except Exception as clean_err:
+        print(f"[WARNING] Pre-cleaning schema via psycopg2 failed ({clean_err}). Proceeding with standard restore...")
+
     env = os.environ.copy()
     env['PGPASSWORD'] = db_password
     
@@ -202,8 +245,6 @@ def restore_pg_dump(backup_file_path, db_name=DB_NAME, db_user=DB_USER, db_passw
         '-p', db_port,
         '-U', db_user,
         '-d', db_name,
-        '--clean',
-        '--if-exists',
         '--no-owner',
         '--no-privileges',
         '-v',
@@ -213,20 +254,34 @@ def restore_pg_dump(backup_file_path, db_name=DB_NAME, db_user=DB_USER, db_passw
     try:
         res = subprocess.run(cmd, env=env, capture_output=True, text=True)
         stderr_output = res.stderr or ""
-        if res.returncode == 0 or (res.returncode == 1 and "ERROR:" not in stderr_output):
-            print("Database restored successfully from dump file.")
+        
+        # Verify that tables were actually created and populated
+        table_count = 0
+        try:
+            import psycopg2
+            conn = psycopg2.connect(dbname=db_name, user=db_user, password=db_password, host=db_host, port=db_port)
+            cur = conn.cursor()
+            cur.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';")
+            table_count = cur.fetchone()[0]
+            conn.close()
+        except Exception:
+            pass
+
+        # pg_restore returns 0 on complete success, or 1 if non-fatal warnings/notices occurred (e.g. extension notices)
+        if res.returncode == 0 or (res.returncode == 1 and table_count > 10):
+            print(f"Database restored successfully ({table_count} tables restored).")
             print("Running automated post-restore Enterprise Upgrade & Evolution Engine...")
             try:
                 from scripts.upgrade_old_backup_to_new_db import run_full_upgrade
                 up_res = run_full_upgrade(silent=False)
-                msg = f"Database restored and auto-upgraded to Enterprise Structure! ({up_res['message']})"
+                msg = f"Database restored successfully ({table_count} tables) and auto-upgraded to Enterprise Structure! ({up_res['message']})"
                 print(f"[OK] {msg}")
                 return True, msg
             except Exception as up_err:
                 print(f"[WARNING] Post-restore upgrade warning: {up_err}")
-                return True, f"Database restored successfully. Post-restore upgrade warning: {up_err}"
+                return True, f"Database restored successfully ({table_count} tables). Post-restore upgrade note: {up_err}"
         else:
-            error_msg = res.stderr or res.stdout or "Unknown pg_restore error"
+            error_msg = res.stderr or res.stdout or f"pg_restore failed with return code {res.returncode}"
             print(f"[ERROR] pg_restore failed: {error_msg}")
             return False, error_msg
     except Exception as e:

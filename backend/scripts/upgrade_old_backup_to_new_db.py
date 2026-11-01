@@ -204,6 +204,59 @@ def step1_ensure_schema(silent=False):
             CREATE INDEX IF NOT EXISTS idx_payalloc_rcpt ON "PaymentAllocation" ("paymentReceiptId");
             CREATE INDEX IF NOT EXISTS idx_payalloc_ord ON "PaymentAllocation" ("orderId");
         """)
+
+        # Dealer & Distributor Opening Balances & PartyManualLedgerEntry
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_schema = 'public' AND table_name = 'Dealer' AND column_name = 'openingBalance'
+                ) THEN
+                    ALTER TABLE "Dealer" ADD COLUMN "openingBalance" NUMERIC(14, 2) DEFAULT 0.00;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_schema = 'public' AND table_name = 'Dealer' AND column_name = 'openingBalanceDate'
+                ) THEN
+                    ALTER TABLE "Dealer" ADD COLUMN "openingBalanceDate" DATE NULL;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_schema = 'public' AND table_name = 'Distributor' AND column_name = 'openingBalance'
+                ) THEN
+                    ALTER TABLE "Distributor" ADD COLUMN "openingBalance" NUMERIC(14, 2) DEFAULT 0.00;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_schema = 'public' AND table_name = 'Distributor' AND column_name = 'openingBalanceDate'
+                ) THEN
+                    ALTER TABLE "Distributor" ADD COLUMN "openingBalanceDate" DATE NULL;
+                END IF;
+            END $$;
+
+            CREATE TABLE IF NOT EXISTS "PartyManualLedgerEntry" (
+                "id" SERIAL PRIMARY KEY,
+                "partyType" VARCHAR(20) NOT NULL,
+                "partyId" BIGINT NOT NULL,
+                "partyName" VARCHAR(255) NULL,
+                "companyId" VARCHAR(100) NULL,
+                "date" DATE NOT NULL,
+                "voucherType" VARCHAR(50) NOT NULL,
+                "voucherNo" VARCHAR(100) NULL,
+                "debit" NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+                "credit" NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+                "narration" TEXT NULL,
+                "source" VARCHAR(50) NOT NULL DEFAULT 'MANUAL_ENTRY',
+                "createdBy" VARCHAR(100) NULL,
+                "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_party_manual_entry_lookup ON "PartyManualLedgerEntry" ("partyType", "partyId", "date");
+            CREATE INDEX IF NOT EXISTS idx_party_manual_entry_company ON "PartyManualLedgerEntry" ("companyId");
+        """)
     if not silent:
         print("[OK] Schema verified and all 6 modern tables active.")
 
@@ -397,6 +450,27 @@ def run_full_upgrade(silent=False):
     step2_relational_linkage(silent=silent)
     ledger_entries = step3_reconstruct_stock_ledger(silent=silent)
     
+    # Reset all serial sequences to max(id) to avoid UniqueViolation errors
+    try:
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command('sqlsequencereset', 'api', 'core', stdout=out)
+        sql = out.getvalue()
+        with connection.cursor() as cursor:
+            for s in sql.split(';'):
+                clean = s.strip()
+                if clean and clean.upper() not in ('BEGIN', 'COMMIT'):
+                    try:
+                        cursor.execute(clean)
+                    except Exception:
+                        pass
+        if not silent:
+            print("[OK] Database sequences synchronized with table maximums.")
+    except Exception as seq_err:
+        if not silent:
+            print(f"[NOTE] Sequence synchronization bypassed: {seq_err}")
+
     # Run VACUUM ANALYZE to update PostgreSQL query planner
     with connection.cursor() as cursor:
         cursor.execute("VACUUM ANALYZE;")

@@ -10,7 +10,7 @@ from rest_framework.response import Response
 
 from api.models import (
     Dealer, Distributor, Order, Returnlog, PaymentReceipt,
-    CreditNoteDiscountRequest, Company
+    CreditNoteDiscountRequest, Company, PartyManualLedgerEntry
 )
 from core.models import User
 from api.views import send_success, send_error, _get_company_id
@@ -372,6 +372,8 @@ def get_live_party_ledger(request, party_type, party_id):
                 'gst_number': d.gst_number,
                 'credit_limit': float(d.creditlimit or 0.0),
                 'outstanding': float(d.outstanding or 0.0),
+                'opening_balance': float(d.openingbalance or 0.0),
+                'opening_balance_date': d.openingbalancedate.strftime('%Y-%m-%d') if d.openingbalancedate else None,
                 'active': d.active,
             }
         else:
@@ -417,6 +419,8 @@ def get_live_party_ledger(request, party_type, party_id):
                 'gst_number': dist.gst_number,
                 'credit_limit': float(dist.creditlimit or 0.0),
                 'outstanding': float(dist.outstanding or 0.0),
+                'opening_balance': float(dist.openingbalance or 0.0),
+                'opening_balance_date': dist.openingbalancedate.strftime('%Y-%m-%d') if dist.openingbalancedate else None,
                 'active': dist.active,
             }
         else:
@@ -591,9 +595,65 @@ def get_live_party_ledger(request, party_type, party_id):
             'created_at': p_req.created_at.strftime('%Y-%m-%d %H:%M') if p_req.created_at else '',
         })
 
+    # 3b. OPENING BALANCE ENTRY
+    party_obj = d if p_type == 'DEALER' else dist
+    opening_val = float(party_obj.openingbalance or 0.0) if party_obj else 0.0
+    opening_dt = party_obj.openingbalancedate.strftime('%Y-%m-%d') if (party_obj and party_obj.openingbalancedate) else '2026-04-01'
+    opening_entries = []
+    if opening_val != 0.0 or (party_obj and party_obj.openingbalancedate):
+        opening_entries.append({
+            'id': f"opening_{party_obj.id}",
+            'date': opening_dt,
+            'type': 'OPENING_BALANCE',
+            'type_label': 'Opening Balance',
+            'voucher_no': 'OPENING',
+            'debit': opening_val if opening_val > 0 else 0.0,
+            'credit': abs(opening_val) if opening_val < 0 else 0.0,
+            'narration': f"Opening Balance Brought Forward as of {opening_dt}",
+            'status': 'VERIFIED',
+            'is_opening': True,
+            'ref_id': 'OPENING',
+        })
+
+    # 3c. DIRECT MANUAL / EXCEL IMPORTED ENTRIES (Sales, Returns, Payments, JVs, Discounts)
+    m_qs = PartyManualLedgerEntry.objects.filter(
+        models.Q(partyid=party_id) | models.Q(partyid=party_code) | models.Q(partyname__iexact=party_name)
+    )
+    if company_id:
+        m_qs = m_qs.filter(companyid_id=company_id)
+
+    manual_entries = []
+    type_label_map = {
+        'SALES': 'Sales Invoice (Manual)',
+        'PAYMENT': 'Payment Received (Manual)',
+        'SALES_RETURN': 'Sales Return (Manual)',
+        'GENERAL_JV': 'Journal Voucher (JV)',
+        'DISCOUNT': 'Discount / Rebate',
+        'OPENING_BALANCE': 'Opening Balance',
+    }
+
+    for m in m_qs:
+        v_type = m.vouchertype.upper()
+        t_label = type_label_map.get(v_type, m.vouchertype)
+        manual_entries.append({
+            'id': f"man_{m.id}",
+            'date': m.date.strftime('%Y-%m-%d') if m.date else '',
+            'type': v_type,
+            'type_label': t_label,
+            'voucher_no': m.voucherno or f"MAN-{m.id[-6:].upper()}",
+            'debit': round(float(m.debit or 0.0), 2),
+            'credit': round(float(m.credit or 0.0), 2),
+            'narration': m.narration or t_label,
+            'status': 'VERIFIED',
+            'is_manual': True,
+            'manual_id': m.id,
+            'source': m.source,
+            'ref_id': m.voucherno or m.id,
+        })
+
     # Combine all transactions and sort chronologically
-    all_transactions = sales_entries + payment_entries + cn_entries
-    all_transactions.sort(key=lambda x: (x.get('date') or '', x.get('id') or ''))
+    all_transactions = opening_entries + sales_entries + payment_entries + cn_entries + manual_entries
+    all_transactions.sort(key=lambda x: (x.get('date') or '', 0 if x.get('is_opening') else 1, x.get('id') or ''))
 
     # Calculate Running Balance
     running_balance = 0.0
@@ -643,3 +703,443 @@ def get_live_party_ledger(request, party_type, party_id):
     }
 
     return send_success(response_payload, f"Live ledger statement fetched for {party_name}")
+
+
+def _recalculate_party_outstanding(p_type: str, party_obj, company_id=None):
+    """
+    Recalculates total net outstanding balance for a Dealer or Distributor:
+      Outstanding = Opening Balance + Total Debits (Sales, Manual Dr, JV Dr) - Total Credits (Payments, CNs, Discounts, Manual Cr, JV Cr)
+    """
+    p_name = getattr(party_obj, 'dealername', None) or getattr(party_obj, 'distributorname', None)
+    p_code = getattr(party_obj, 'dealercode', None) or getattr(party_obj, 'distributorcode', None)
+    p_id = party_obj.id
+
+    opening_bal = Decimal(str(party_obj.openingbalance or 0.0))
+
+    # Sales Orders (Dispatched/Completed/Approved/Partially Returned/Returned)
+    orders_qs = Order.objects.filter(
+        models.Q(partyname__iexact=p_name) | models.Q(partyname=p_name)
+    )
+    if company_id:
+        orders_qs = orders_qs.filter(companyid_id=company_id)
+    billed_statuses = ['DISPATCHED', 'COMPLETED', 'APPROVED', 'PARTIALLY RETURNED', 'RETURNED']
+    sales_total = orders_qs.filter(status__in=billed_statuses).aggregate(s=models.Sum('grandtotal'))['s'] or 0.0
+    sales_total = Decimal(str(round(sales_total, 2)))
+
+    # Payment Receipts (Verified)
+    pay_qs = PaymentReceipt.objects.filter(
+        models.Q(party_name__iexact=p_name) | models.Q(party_id=p_id) | models.Q(party_id=p_code),
+        status='VERIFIED'
+    )
+    if company_id:
+        pay_qs = pay_qs.filter(companyid_id=company_id)
+    pay_total = pay_qs.aggregate(s=models.Sum('amount'))['s'] or 0.0
+    pay_total = Decimal(str(round(pay_total, 2)))
+
+    # Approved Credit Notes & Discounts
+    cn_qs = CreditNoteDiscountRequest.objects.filter(
+        models.Q(party_name__iexact=p_name) | models.Q(party_id=p_id) | models.Q(party_id=p_code),
+        status='APPROVED'
+    )
+    if company_id:
+        cn_qs = cn_qs.filter(companyid_id=company_id)
+    cn_total = cn_qs.aggregate(s=models.Sum('amount'))['s'] or 0.0
+    cn_total = Decimal(str(round(cn_total, 2)))
+
+    # Manual entries (from PartyManualLedgerEntry)
+    m_qs = PartyManualLedgerEntry.objects.filter(
+        models.Q(partyid=p_id) | models.Q(partyid=p_code) | models.Q(partyname__iexact=p_name)
+    )
+    if company_id:
+        m_qs = m_qs.filter(companyid_id=company_id)
+    manual_debits = m_qs.aggregate(s=models.Sum('debit'))['s'] or 0.0
+    manual_credits = m_qs.aggregate(s=models.Sum('credit'))['s'] or 0.0
+    manual_debits = Decimal(str(round(manual_debits, 2)))
+    manual_credits = Decimal(str(round(manual_credits, 2)))
+
+    net_outstanding = opening_bal + sales_total + manual_debits - pay_total - cn_total - manual_credits
+    party_obj.outstanding = net_outstanding
+    party_obj.save(update_fields=['outstanding'])
+    return net_outstanding
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_party_opening_balance(request):
+    """
+    Sets or updates the Opening Balance for a Dealer or Distributor as-of a specific date.
+    Recalculates the party's live outstanding balance.
+    """
+    company_id = _get_company_id(request)
+    data = request.data or {}
+
+    party_type = (data.get('party_type') or 'DEALER').upper()
+    party_id = str(data.get('party_id') or '').strip()
+    raw_amount = float(data.get('opening_balance') or 0.0)
+    balance_type = (data.get('balance_type') or 'DR').upper()  # 'DR' (Debit/Receivable) or 'CR' (Credit/Payable)
+    opening_date_str = str(data.get('opening_balance_date') or '').strip()
+
+    if not party_id:
+        return send_error("party_id is required", 400)
+
+    # Resolve Party
+    party_obj = None
+    if party_type == 'DEALER':
+        party_obj = (
+            Dealer.objects.filter(id=party_id).first() or
+            Dealer.objects.filter(dealercode=party_id).first() or
+            Dealer.objects.filter(dealername__iexact=party_id).first()
+        )
+    else:
+        party_obj = (
+            Distributor.objects.filter(id=party_id).first() or
+            Distributor.objects.filter(distributorcode=party_id).first() or
+            Distributor.objects.filter(distributorname__iexact=party_id).first()
+        )
+
+    if not party_obj:
+        return send_error(f"Party '{party_id}' not found", 404)
+
+    # In accounting, Debit = receivable (positive), Credit = advance/payable (negative)
+    net_val = Decimal(str(round(raw_amount if balance_type == 'DR' else -raw_amount, 2)))
+    party_obj.openingbalance = net_val
+
+    if opening_date_str:
+        try:
+            party_obj.openingbalancedate = datetime.strptime(opening_date_str[:10], '%Y-%m-%d').date()
+        except Exception:
+            pass
+
+    party_obj.save(update_fields=['openingbalance', 'openingbalancedate'])
+
+    # Recalculate outstanding balance
+    new_outstanding = _recalculate_party_outstanding(party_type, party_obj, company_id=company_id)
+
+    p_name = getattr(party_obj, 'dealername', None) or getattr(party_obj, 'distributorname', None)
+    return send_success({
+        'party_id': party_obj.id,
+        'party_name': p_name,
+        'opening_balance': float(party_obj.openingbalance),
+        'opening_balance_date': party_obj.openingbalancedate.strftime('%Y-%m-%d') if party_obj.openingbalancedate else None,
+        'outstanding': float(new_outstanding),
+    }, f"Opening balance updated successfully for {p_name}")
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_party_ledger_entry(request):
+    """
+    Creates a direct one-time manual transaction for a Dealer or Distributor:
+      - SALES (Debit)
+      - PAYMENT (Credit)
+      - SALES_RETURN (Credit)
+      - GENERAL_JV (Debit or Credit)
+      - DISCOUNT (Credit)
+    Automatically updates the party's live outstanding balance.
+    """
+    company_id = _get_company_id(request)
+    data = request.data or {}
+
+    party_type = (data.get('party_type') or 'DEALER').upper()
+    party_id = str(data.get('party_id') or '').strip()
+    voucher_type = (data.get('voucher_type') or 'SALES').upper()
+    voucher_no = str(data.get('voucher_no') or '').strip()
+    date_str = str(data.get('date') or datetime.now().strftime('%Y-%m-%d')).strip()[:10]
+    amount = Decimal(str(round(float(data.get('amount') or 0.0), 2)))
+    entry_side = (data.get('entry_side') or 'DR').upper()  # 'DR' or 'CR'
+    narration = str(data.get('narration') or '').strip()
+
+    if not party_id:
+        return send_error("party_id is required", 400)
+    if amount <= 0:
+        return send_error("Amount must be greater than zero", 400)
+
+    # Resolve Party
+    party_obj = None
+    if party_type == 'DEALER':
+        party_obj = (
+            Dealer.objects.filter(id=party_id).first() or
+            Dealer.objects.filter(dealercode=party_id).first() or
+            Dealer.objects.filter(dealername__iexact=party_id).first()
+        )
+    else:
+        party_obj = (
+            Distributor.objects.filter(id=party_id).first() or
+            Distributor.objects.filter(distributorcode=party_id).first() or
+            Distributor.objects.filter(distributorname__iexact=party_id).first()
+        )
+
+    if not party_obj:
+        return send_error(f"Party '{party_id}' not found", 404)
+
+    p_name = getattr(party_obj, 'dealername', None) or getattr(party_obj, 'distributorname', None)
+
+    # Determine Debit vs Credit based on Voucher Type and Side
+    # Standard rules:
+    # SALES -> Debit
+    # PAYMENT -> Credit
+    # SALES_RETURN -> Credit
+    # DISCOUNT -> Credit
+    # GENERAL_JV -> Based on entry_side ('DR' or 'CR')
+    if voucher_type == 'SALES':
+        debit_amt = amount
+        credit_amt = Decimal('0.00')
+    elif voucher_type in ['PAYMENT', 'SALES_RETURN', 'DISCOUNT']:
+        debit_amt = Decimal('0.00')
+        credit_amt = amount
+    else:  # GENERAL_JV
+        if entry_side == 'CR':
+            debit_amt = Decimal('0.00')
+            credit_amt = amount
+        else:
+            debit_amt = amount
+            credit_amt = Decimal('0.00')
+
+    entry_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    entry_id = f"ple_{uuid.uuid4().hex[:16]}"
+
+    created_by_user = getattr(request.user, 'name', None) or getattr(request.user, 'email', 'Admin')
+
+    entry = PartyManualLedgerEntry.objects.create(
+        id=entry_id,
+        partytype=party_type,
+        partyid=party_obj.id,
+        partyname=p_name,
+        companyid_id=company_id,
+        date=entry_date,
+        vouchertype=voucher_type,
+        voucherno=voucher_no or f"MAN-{entry_id[-6:].upper()}",
+        debit=debit_amt,
+        credit=credit_amt,
+        narration=narration,
+        source='MANUAL',
+        createdby=created_by_user
+    )
+
+    new_outstanding = _recalculate_party_outstanding(party_type, party_obj, company_id=company_id)
+
+    return send_success({
+        'id': entry.id,
+        'voucher_no': entry.voucherno,
+        'voucher_type': entry.vouchertype,
+        'date': entry.date.strftime('%Y-%m-%d'),
+        'debit': float(entry.debit),
+        'credit': float(entry.credit),
+        'narration': entry.narration,
+        'outstanding': float(new_outstanding)
+    }, f"Entry recorded successfully for {p_name}")
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_party_ledger_entry(request, entry_id):
+    """
+    Deletes a manual ledger entry and recalculates the party's outstanding balance.
+    """
+    company_id = _get_company_id(request)
+    entry = PartyManualLedgerEntry.objects.filter(id=entry_id).first()
+    if not entry:
+        return send_error(f"Entry '{entry_id}' not found", 404)
+
+    party_type = entry.partytype
+    party_id = entry.partyid
+
+    # Resolve Party
+    party_obj = None
+    if party_type == 'DEALER':
+        party_obj = Dealer.objects.filter(id=party_id).first()
+    else:
+        party_obj = Distributor.objects.filter(id=party_id).first()
+
+    entry.delete()
+
+    new_outstanding = 0.0
+    if party_obj:
+        new_outstanding = _recalculate_party_outstanding(party_type, party_obj, company_id=company_id)
+
+    return send_success({
+        'deleted_id': entry_id,
+        'outstanding': float(new_outstanding)
+    }, "Ledger entry deleted successfully")
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
+def import_party_ledger_file(request):
+    """
+    One-time bulk Excel / CSV importer for Busy ledger statements.
+    Parses columns: Date, Voucher Type, Voucher No, Particulars/Narration, Debit, Credit.
+    Creates PartyManualLedgerEntry records and updates party outstanding balance.
+    """
+    company_id = _get_company_id(request)
+    party_type = (request.data.get('party_type') or 'DEALER').upper()
+    party_id = str(request.data.get('party_id') or '').strip()
+
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return send_error("Excel (.xlsx) or CSV file is required", 400)
+
+    # Resolve Party
+    party_obj = None
+    if party_type == 'DEALER':
+        party_obj = (
+            Dealer.objects.filter(id=party_id).first() or
+            Dealer.objects.filter(dealercode=party_id).first() or
+            Dealer.objects.filter(dealername__iexact=party_id).first()
+        )
+    else:
+        party_obj = (
+            Distributor.objects.filter(id=party_id).first() or
+            Distributor.objects.filter(distributorcode=party_id).first() or
+            Distributor.objects.filter(distributorname__iexact=party_id).first()
+        )
+
+    if not party_obj:
+        return send_error(f"Party '{party_id}' not found", 404)
+
+    p_name = getattr(party_obj, 'dealername', None) or getattr(party_obj, 'distributorname', None)
+
+    # Read rows from Excel or CSV
+    filename = uploaded_file.name.lower()
+    parsed_rows = []
+
+    def clean_num(v):
+        if not v:
+            return 0.0
+        try:
+            return float(str(v).replace(',', '').replace('₹', '').replace('Rs.', '').replace(' ', '').strip())
+        except Exception:
+            return 0.0
+
+    def parse_dt(v):
+        if isinstance(v, datetime):
+            return v.date()
+        s = str(v).strip()
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y', '%d-%b-%Y', '%d-%b-%y'):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+        try:
+            return datetime.strptime(s[:10], '%Y-%m-%d').date()
+        except Exception:
+            return None
+
+    if filename.endswith('.xlsx') or filename.endswith('.xls'):
+        import openpyxl
+        wb = openpyxl.load_workbook(uploaded_file, data_only=True)
+        sheet = wb.active
+        raw_data = list(sheet.iter_rows(values_only=True))
+        if not raw_data or len(raw_data) < 2:
+            return send_error("The uploaded Excel sheet contains no data rows", 400)
+
+        # Detect header row
+        header_row_idx = 0
+        for idx, row in enumerate(raw_data[:10]):
+            r_str = " ".join([str(c or '').lower() for c in row])
+            if any(k in r_str for k in ['date', 'vch', 'voucher', 'debit', 'credit', 'amount']):
+                header_row_idx = idx
+                break
+
+        headers = [str(c or '').strip().lower() for c in raw_data[header_row_idx]]
+        for row in raw_data[header_row_idx + 1:]:
+            if not any(row):
+                continue
+            row_dict = {headers[i]: row[i] for i in range(min(len(headers), len(row)))}
+            parsed_rows.append(row_dict)
+    else:
+        import csv
+        import io
+        content = uploaded_file.read().decode('utf-8', errors='ignore')
+        reader = csv.DictReader(io.StringIO(content))
+        for r in reader:
+            parsed_rows.append({k.strip().lower(): v for k, v in r.items() if k})
+
+    if not parsed_rows:
+        return send_error("No valid data rows found in the uploaded file", 400)
+
+    # Find column keys
+    sample = parsed_rows[0]
+    keys = list(sample.keys())
+    date_key = next((k for k in keys if any(w in k for w in ['date', 'dt'])), None)
+    vch_type_key = next((k for k in keys if any(w in k for w in ['type', 'vch_type', 'vch type'])), None)
+    vch_no_key = next((k for k in keys if any(w in k for w in ['vch_no', 'vchno', 'bill no', 'inv', 'no', 'number'])), None)
+    nar_key = next((k for k in keys if any(w in k for w in ['narration', 'particular', 'desc', 'remarks'])), None)
+    debit_key = next((k for k in keys if any(w in k for w in ['debit', 'dr'])), None)
+    credit_key = next((k for k in keys if any(w in k for w in ['credit', 'cr'])), None)
+    amount_key = next((k for k in keys if any(w in k for w in ['amount', 'amt', 'value'])), None)
+
+    created_entries = []
+    user_name = getattr(request.user, 'name', None) or getattr(request.user, 'email', 'Admin')
+
+    for r in parsed_rows:
+        dt = parse_dt(r.get(date_key)) if date_key else None
+        if not dt:
+            continue
+
+        deb = clean_num(r.get(debit_key)) if debit_key else 0.0
+        cred = clean_num(r.get(credit_key)) if credit_key else 0.0
+
+        if not debit_key and not credit_key and amount_key:
+            amt = clean_num(r.get(amount_key))
+            if amt > 0:
+                deb = amt
+            else:
+                cred = abs(amt)
+
+        # Voucher type classification
+        raw_vtype = str(r.get(vch_type_key) or '').strip().lower()
+        if any(w in raw_vtype for w in ['sale', 'inv']):
+            v_type = 'SALES'
+        elif any(w in raw_vtype for w in ['return', 'cn', 'credit note']):
+            v_type = 'SALES_RETURN'
+        elif any(w in raw_vtype for w in ['receipt', 'pay', 'rcpt']):
+            v_type = 'PAYMENT'
+        elif any(w in raw_vtype for w in ['discount', 'disc', 'rebate']):
+            v_type = 'DISCOUNT'
+        elif any(w in raw_vtype for w in ['journal', 'jv']):
+            v_type = 'GENERAL_JV'
+        elif any(w in raw_vtype for w in ['opening', 'op bal']):
+            v_type = 'OPENING_BALANCE'
+        else:
+            v_type = 'SALES' if deb > 0 else 'PAYMENT'
+
+        v_no = str(r.get(vch_no_key) or '').strip()
+        nar = str(r.get(nar_key) or '').strip()
+
+        # If opening balance row detected, also set openingbalance on party
+        if v_type == 'OPENING_BALANCE' or 'opening' in nar.lower():
+            net_op = Decimal(str(round(deb - cred, 2)))
+            party_obj.openingbalance = net_op
+            party_obj.openingbalancedate = dt
+            party_obj.save(update_fields=['openingbalance', 'openingbalancedate'])
+            continue
+
+        created_entries.append(PartyManualLedgerEntry(
+            id=f"ple_{uuid.uuid4().hex[:16]}",
+            partytype=party_type,
+            partyid=party_obj.id,
+            partyname=p_name,
+            companyid_id=company_id,
+            date=dt,
+            vouchertype=v_type,
+            voucherno=v_no or 'EXCEL',
+            debit=Decimal(str(round(deb, 2))),
+            credit=Decimal(str(round(cred, 2))),
+            narration=nar or f"Imported from {filename}",
+            source='EXCEL_IMPORT',
+            createdby=user_name
+        ))
+
+    if created_entries:
+        PartyManualLedgerEntry.objects.bulk_create(created_entries, batch_size=500)
+
+    new_outstanding = _recalculate_party_outstanding(party_type, party_obj, company_id=company_id)
+
+    return send_success({
+        'imported_count': len(created_entries),
+        'party_id': party_obj.id,
+        'party_name': p_name,
+        'outstanding': float(new_outstanding)
+    }, f"Successfully imported {len(created_entries)} ledger entries for {p_name}")

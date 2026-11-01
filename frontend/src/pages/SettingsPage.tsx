@@ -105,7 +105,7 @@ const SettingsPage: React.FC = () => {
 
     const handleInitiateUploadRestore = () => {
         if (!restoreFile) {
-            toast.error('Please select a .dump file to upload first.');
+            toast.error('Please select a backup file (.dump or .json) to upload first.');
             return;
         }
         setSelectedBackupFilename(null);
@@ -130,7 +130,7 @@ const SettingsPage: React.FC = () => {
                 formData.append('file', selectedBackupUpload);
                 const res = await api.post('/system/restore-postgres-dump', formData, {
                     headers: { 'Content-Type': 'multipart/form-data' },
-                    timeout: 60000
+                    timeout: 600000
                 });
                 if (res.data?.success) {
                     toast.success(res.data.message || 'Database restored successfully!', { id: loadToast });
@@ -148,7 +148,7 @@ const SettingsPage: React.FC = () => {
                 const res = await api.post('/system/restore-postgres-dump', {
                     filename: selectedBackupFilename
                 }, {
-                    timeout: 60000
+                    timeout: 600000
                 });
                 if (res.data?.success) {
                     toast.success(res.data.message || 'Database restored successfully!', { id: loadToast });
@@ -180,12 +180,16 @@ const SettingsPage: React.FC = () => {
     const handleDownloadPostgresDump = async () => {
         setIsDownloadingDump(true);
         try {
-            const res = await api.get('/system/download-postgres-dump', { responseType: 'blob' });
+            const res = await api.get('/system/download-postgres-dump', { 
+                responseType: 'blob',
+                timeout: 600000 
+            });
             const timestamp = new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '');
             downloadBlob(res.data, `db_backup_${timestamp}.dump`);
-            toast.success('PostgreSQL Database Dump downloaded successfully!');
+            toast.success('PostgreSQL Database Dump downloaded & saved successfully!');
+            fetchLocalBackups();
         } catch (error: any) {
-            toast.error('Failed to download database dump');
+            toast.error('Failed to download database dump: ' + (error?.message || 'Timeout / Server error'));
         } finally {
             setIsDownloadingDump(false);
         }
@@ -829,7 +833,7 @@ const SettingsPage: React.FC = () => {
                                             <Input
                                                 id="restore-file-upload"
                                                 type="file"
-                                                accept=".dump"
+                                                accept=".dump,.sql,.json"
                                                 onChange={(e) => setRestoreFile(e.target.files?.[0] || null)}
                                                 className="bg-background mt-2 text-xs"
                                                 disabled={isRestoring}

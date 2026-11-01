@@ -1,5 +1,6 @@
 import datetime
 import calendar
+import collections
 import uuid
 import cloudinary.uploader
 from django.utils import timezone
@@ -521,9 +522,7 @@ def hr_generate_payroll(request):
     except Exception:
         days_in_month = 30
     
-    employees = Labour.objects.filter(active=True).exclude(employee_type='NONE')
-    payroll_data = []
-    # Load salary component settings and company branding
+    employees = list(Labour.objects.filter(active=True).exclude(employee_type='NONE').select_related('user'))
     settings_data = load_settings()
     company_info = {
         'name': settings_data.get('company_name') or settings_data.get('companyName') or 'Company Name',
@@ -531,21 +530,61 @@ def hr_generate_payroll(request):
         'phone': settings_data.get('company_phone') or '',
         'email': settings_data.get('company_email') or '',
         'gst': settings_data.get('company_gst') or '',
-        'logo': settings_data.get('company_logo') or '',
+        'logo': '',
     }
     hr_salary_components = settings_data.get('hr_salary_components', {})
     basic_pct = float(hr_salary_components.get('basic', 50)) / 100.0
     hra_pct = float(hr_salary_components.get('hra', 30)) / 100.0
     allowance_pct = float(hr_salary_components.get('allowances', 20)) / 100.0
-    
+
+    # 1. Bulk prefetch existing salary slips
+    existing_slips = {s.labourid_id: s for s in SalarySlip.objects.filter(month=month)}
+
+    # 2. Bulk prefetch attendance for this month
+    all_attendance = DailyAttendance.objects.filter(date__startswith=month)
+    attendance_by_emp = collections.defaultdict(list)
+    for att in all_attendance:
+        attendance_by_emp[att.labourid_id].append(att)
+
+    # 3. Bulk prefetch paid leaves
+    all_leaves = LeaveRecord.objects.filter(date__startswith=month, is_paid=True)
+    paid_leaves_by_emp = collections.defaultdict(float)
+    for l in all_leaves:
+        val = 0.5 if l.status == 'HALF_DAY' else 1.0
+        paid_leaves_by_emp[l.labourid_id] += val
+
+    # 4. Bulk prefetch users and approved expenses
+    all_users = list(User.objects.all())
+    users_by_email = {u.email.strip().lower(): u for u in all_users if u.email}
+    users_by_name = {u.name.strip().lower(): u for u in all_users if u.name}
+
+    approved_expenses = list(Expense.objects.filter(
+        status='APPROVED',
+        date__year=int(y_str),
+        date__month=int(m_str)
+    ).select_related('soemail'))
+    expenses_by_email = collections.defaultdict(list)
+    for exp in approved_expenses:
+        exp_email = (getattr(exp, 'soemail_id', '') or getattr(getattr(exp, 'soemail', None), 'email', '') or '').strip().lower()
+        if exp_email:
+            expenses_by_email[exp_email].append(exp)
+
+    # 5. Bulk prefetch active advances
+    all_advances = list(SalaryAdvance.objects.filter(remaining_balance__gt=0))
+    advances_by_emp = collections.defaultdict(list)
+    for adv in all_advances:
+        advances_by_emp[adv.labourid_id].append(adv)
+
+    payroll_data = []
+
     for emp in employees:
-        # Freeze past data ONLY if slip is already paid. If finalized but unpaid, calculate live so new loans/advances are reflected.
-        slip = SalarySlip.objects.filter(labourid=emp, month=month).first()
+        slip = existing_slips.get(emp.id)
         if slip and slip.is_finalized and slip.is_paid and slip.slip_data:
-            # Reconstruct exact past payload to avoid dynamic recalculation
             stored_data = slip.slip_data.copy()
             stored_data['is_finalized'] = True
             stored_data['is_paid'] = True
+            if isinstance(stored_data.get('company'), dict):
+                stored_data['company']['logo'] = ''
             if 'company' not in stored_data or not stored_data.get('company'):
                 stored_data['company'] = company_info
             if 'month' not in stored_data:
@@ -558,93 +597,78 @@ def hr_generate_payroll(request):
                 stored_data['department'] = emp.department
             payroll_data.append(stored_data)
             continue
-            
-        # Fetch attendance for this month
-        attendance = DailyAttendance.objects.filter(labourid=emp, date__startswith=month)
-        
-        # Aggregations
-        present_count = attendance.filter(status='PRESENT').count()
-        half_day_count = attendance.filter(status='HALF_DAY').count()
-        absent_count = attendance.filter(status='ABSENT').count()
-        wo_count = attendance.filter(status='WEEKLY_OFF').count()
-        
-        total_ot_hours = attendance.aggregate(Sum('ot_hours'))['ot_hours__sum'] or 0.0
-        total_late_hours = attendance.aggregate(Sum('late_hours'))['late_hours__sum'] or 0.0
-        total_km = attendance.aggregate(Sum('km_travelled'))['km_travelled__sum'] or 0.0
-        total_bags = attendance.aggregate(Sum('bags_produced'))['bags_produced__sum'] or 0.0
-        total_sales = attendance.aggregate(Sum('sales_achieved'))['sales_achieved__sum'] or 0.0
-        total_daily_advance = attendance.aggregate(Sum('daily_advance'))['daily_advance__sum'] or 0.0
 
-        # Calculate Payable Days
+        emp_att = attendance_by_emp.get(emp.id, [])
+        present_count = 0
+        half_day_count = 0
+        absent_count = 0
+        wo_count = 0
+        total_ot_hours = 0.0
+        total_late_hours = 0.0
+        total_km = 0.0
+        total_bags = 0.0
+        total_sales = 0.0
+        total_daily_advance = 0.0
+
+        travel_pay = 0.0
+        bike_km_total = 0.0
+        car_km_total = 0.0
+        other_travel_total = 0.0
+
+        for att in emp_att:
+            st = att.status
+            if st == 'PRESENT':
+                present_count += 1
+            elif st == 'HALF_DAY':
+                half_day_count += 1
+            elif st == 'ABSENT':
+                absent_count += 1
+            elif st == 'WEEKLY_OFF':
+                wo_count += 1
+
+            total_ot_hours += float(att.ot_hours or 0.0)
+            total_late_hours += float(att.late_hours or 0.0)
+            total_km += float(att.km_travelled or 0.0)
+            total_bags += float(att.bags_produced or 0.0)
+            total_sales += float(att.sales_achieved or 0.0)
+            total_daily_advance += float(att.daily_advance or 0.0)
+
+            if att.travel_vehicle == 'BIKE':
+                travel_pay += (float(att.km_travelled or 0) * float(emp.bike_allowance_per_km or 0))
+                bike_km_total += float(att.km_travelled or 0)
+            elif att.travel_vehicle == 'CAR':
+                travel_pay += (float(att.km_travelled or 0) * float(emp.car_allowance_per_km or 0))
+                car_km_total += float(att.km_travelled or 0)
+            elif att.travel_vehicle == 'OTHER':
+                amt = float(att.actual_travel_amount or 0)
+                travel_pay += amt
+                other_travel_total += amt
+
         payable_days = present_count + (half_day_count * 0.5)
-        
-        # Add Paid Leaves
-        paid_leave_count = LeaveRecord.objects.filter(
-            labourid=emp, 
-            date__startswith=month, 
-            is_paid=True
-        ).aggregate(
-            total=Sum(
-                Case(
-                    When(status='FULL_DAY', then=1.0),
-                    When(status='HALF_DAY', then=0.5),
-                    default=1.0,
-                    output_field=FloatField()
-                )
-            )
-        )['total'] or 0.0
+        paid_leave_count = paid_leaves_by_emp.get(emp.id, 0.0)
         payable_days += paid_leave_count
 
         if emp.employee_type == 'FIXED':
-            payable_days += wo_count # Weekly offs are paid for Fixed
-
-        # Base Pay
-        basic_pay = 0.0
-        basic_calc = ""
-        daily_rate = 0.0
-        if emp.employee_type == 'FIXED':
-            # Indian Norm: Split Base Salary Monthly into Basic(50%) and HRA(30%) and Allowances(20%)
-            daily_rate = emp.base_salary_monthly / days_in_month
+            payable_days += wo_count
+            daily_rate = float(emp.base_salary_monthly or 0) / days_in_month
             gross_base = daily_rate * payable_days
             basic_pay = gross_base * basic_pct
             hra = gross_base * hra_pct
             other_allowances = gross_base * allowance_pct
             basic_calc = f"(₹{emp.base_salary_monthly}/{days_in_month}) * {payable_days} days * {int(basic_pct * 100)}% = ₹{basic_pay:.2f}"
+            base_hourly_rate = daily_rate / 8.0
         else:
-            # Variable / Daily
-            daily_rate = emp.dailywage
-            gross_base = emp.dailywage * payable_days
+            daily_rate = float(emp.dailywage or 0)
+            gross_base = daily_rate * payable_days
             basic_pay = gross_base
             hra = 0.0
             other_allowances = 0.0
             basic_calc = f"₹{emp.dailywage}/day * {payable_days} days = ₹{basic_pay:.2f}"
-            
-        
-        # Additions
-        if emp.employee_type == 'FIXED':
-            base_hourly_rate = (emp.base_salary_monthly / days_in_month) / 8.0
-        else:
-            base_hourly_rate = emp.dailywage / 8.0
+            base_hourly_rate = daily_rate / 8.0
 
-        ot_pay = total_ot_hours * (base_hourly_rate * emp.overtime_hourly_rate)
+        ot_pay = total_ot_hours * (base_hourly_rate * float(emp.overtime_hourly_rate or 0))
         ot_calc = f"{total_ot_hours} hrs * (₹{base_hourly_rate:.2f}/hr * {emp.overtime_hourly_rate}x) = ₹{ot_pay:.2f}" if total_ot_hours > 0 else ""
-        
-        # Calculate dynamic travel pay based on each day
-        travel_pay = 0.0
-        bike_km_total = 0.0
-        car_km_total = 0.0
-        other_travel_total = 0.0
-        for att in attendance:
-            if att.travel_vehicle == 'BIKE':
-                travel_pay += (att.km_travelled * emp.bike_allowance_per_km)
-                bike_km_total += att.km_travelled
-            elif att.travel_vehicle == 'CAR':
-                travel_pay += (att.km_travelled * emp.car_allowance_per_km)
-                car_km_total += att.km_travelled
-            elif att.travel_vehicle == 'OTHER':
-                travel_pay += att.actual_travel_amount
-                other_travel_total += att.actual_travel_amount
-                
+
         travel_calc = ""
         if travel_pay > 0:
             parts = []
@@ -652,77 +676,45 @@ def hr_generate_payroll(request):
             if car_km_total > 0: parts.append(f"{car_km_total} km * ₹{emp.car_allowance_per_km}/km (Car)")
             if other_travel_total > 0: parts.append(f"₹{other_travel_total} (Other)")
             travel_calc = " + ".join(parts) + f" = ₹{travel_pay:.2f}"
-                
-        incentives = (total_bags * emp.bag_incentive_rate) + (total_sales * emp.sales_incentive_pct)
+
+        incentives = (total_bags * float(emp.bag_incentive_rate or 0)) + (total_sales * float(emp.sales_incentive_pct or 0))
         incentive_calc = ""
         if incentives > 0:
             parts = []
             if total_bags > 0: parts.append(f"{total_bags} bags * ₹{emp.bag_incentive_rate}")
-            if total_sales > 0: parts.append(f"₹{total_sales} sales * {emp.sales_incentive_pct * 100}%")
+            if total_sales > 0: parts.append(f"₹{total_sales} sales * {float(emp.sales_incentive_pct or 0) * 100}%")
             incentive_calc = " + ".join(parts) + f" = ₹{incentives:.2f}"
-        
-        # Approved Expenses from Expense Entry (Only APPROVED expenses for the given month)
-        emp_emails = []
+
+        # Resolve employee emails for approved expense reimbursement
+        emp_emails = set()
         if emp.user and emp.user.email:
-            emp_emails.append(emp.user.email.strip().lower())
+            emp_emails.add(emp.user.email.strip().lower())
         else:
-            # Auto-link employee to User profile if unlinked (exact name, contact email, or word match)
-            matched_user = None
             if emp.contactinfo and '@' in str(emp.contactinfo):
                 for piece in str(emp.contactinfo).replace(',', ' ').replace(';', ' ').split():
                     if '@' in piece:
                         clean_e = piece.strip().strip('<>()[]').lower()
-                        matched_user = User.objects.filter(email__iexact=clean_e).first()
-                        if matched_user:
+                        if clean_e in users_by_email:
+                            emp_emails.add(clean_e)
                             break
-            if not matched_user:
-                matched_user = User.objects.filter(name__iexact=emp.name).first()
-            if not matched_user:
-                # Fuzzy match: e.g. 'PRITIKA PATEL' in 'PRITIKA NILESH PATEL'
-                emp_name_clean = emp.name.strip().lower()
-                for cand_user in User.objects.all():
-                    cand_name = (cand_user.name or '').strip().lower()
-                    if cand_name and len(cand_name) > 3:
-                        cand_parts = [p for p in cand_name.split() if len(p) > 2]
-                        if cand_parts and all(p in emp_name_clean for p in cand_parts):
-                            matched_user = cand_user
-                            break
-
-            if matched_user:
-                try:
-                    emp.user = matched_user
-                    emp.save(update_fields=['user'])
-                    if matched_user.email:
-                        emp_emails.append(matched_user.email.strip().lower())
-                except Exception:
-                    if matched_user.email:
-                        emp_emails.append(matched_user.email.strip().lower())
+            if not emp_emails and emp.name:
+                clean_name = emp.name.strip().lower()
+                if clean_name in users_by_name:
+                    u = users_by_name[clean_name]
+                    if u.email:
+                        emp_emails.add(u.email.strip().lower())
 
         if emp.contactinfo:
             for piece in str(emp.contactinfo).replace(',', ' ').replace(';', ' ').split():
                 if '@' in piece:
-                    clean_email = piece.strip().strip('<>()[]').lower()
-                    if clean_email and clean_email not in emp_emails:
-                        emp_emails.append(clean_email)
+                    clean_e = piece.strip().strip('<>()[]').lower()
+                    if clean_e:
+                        emp_emails.add(clean_e)
 
-        matching_users = User.objects.filter(name__iexact=emp.name)
-        for mu in matching_users:
-            if mu.email and mu.email.strip().lower() not in emp_emails:
-                emp_emails.append(mu.email.strip().lower())
-                
         approved_expenses_total = 0.0
         expense_calc_parts = []
-        if emp_emails:
-            approved_exp_qs = Expense.objects.filter(
-                status='APPROVED',
-                date__year=int(y_str),
-                date__month=int(m_str)
-            )
-            exp_list = [
-                e for e in approved_exp_qs 
-                if (getattr(e, 'soemail_id', '') or getattr(getattr(e, 'soemail', None), 'email', '') or '').strip().lower() in emp_emails
-            ]
-            for exp in exp_list:
+        for e_mail in emp_emails:
+            for exp in expenses_by_email.get(e_mail, []):
                 amt = float(exp.amount or 0.0)
                 if amt > 0:
                     approved_expenses_total += amt
@@ -730,42 +722,36 @@ def hr_generate_payroll(request):
                     expense_calc_parts.append(f"₹{amt:.2f} ({cat})")
 
         expense_calc = " + ".join(expense_calc_parts) + f" = ₹{approved_expenses_total:.2f}" if expense_calc_parts else ""
-
         gross_pay = basic_pay + hra + other_allowances + ot_pay + travel_pay + incentives + approved_expenses_total
-        
-        # Deductions
-        late_deduction = total_late_hours * (base_hourly_rate * emp.late_deduction_rate)
+
+        late_deduction = total_late_hours * (base_hourly_rate * float(emp.late_deduction_rate or 0))
         late_calc = f"{total_late_hours} hrs * (₹{base_hourly_rate:.2f}/hr * {emp.late_deduction_rate}x) = ₹{late_deduction:.2f}" if total_late_hours > 0 else ""
-        
-        # Salary Advance (Check for active advances)
-        advances = SalaryAdvance.objects.filter(labourid=emp, remaining_balance__gt=0)
+
+        emp_advances = advances_by_emp.get(emp.id, [])
         advance_deduction = 0.0
         advance_calc_parts = []
-        
-        for adv in advances:
-            emi = adv.deduction_per_month if (adv.deduction_per_month and adv.deduction_per_month > 0) else adv.remaining_balance
-            deduct = min(emi, adv.remaining_balance)
+        for adv in emp_advances:
+            rem = float(adv.remaining_balance or 0)
+            emi = float(adv.deduction_per_month) if (adv.deduction_per_month and adv.deduction_per_month > 0) else rem
+            deduct = min(emi, rem)
             if deduct > 0:
                 advance_deduction += deduct
                 advance_calc_parts.append(f"₹{deduct:.2f} (Loan/Adv EMI)")
-            
+
         if total_daily_advance > 0:
             advance_calc_parts.append(f"₹{total_daily_advance:.2f} (Daily Advances)")
-            
+
         advance_calc = " + ".join(advance_calc_parts) + f" = ₹{advance_deduction + total_daily_advance:.2f}" if advance_calc_parts else ""
-            
         net_pay = round(gross_pay - late_deduction - advance_deduction - total_daily_advance, 2)
-        
-        # Check if finalized
-        slip = SalarySlip.objects.filter(labourid=emp, month=month).first()
+
         is_finalized = slip.is_finalized if slip else False
         is_paid = slip.is_paid if slip else False
-        
+
         if slip and slip.manual_advance_override is not None:
-            # Recompute net_pay based on override
-            advance_deduction = max(0.0, slip.manual_advance_override - total_daily_advance)
-            net_pay = max(0.0, round(gross_pay - late_deduction - slip.manual_advance_override, 2))
-        
+            override_val = float(slip.manual_advance_override)
+            advance_deduction = max(0.0, override_val - total_daily_advance)
+            net_pay = max(0.0, round(gross_pay - late_deduction - override_val, 2))
+
         payroll_data.append({
             'month': month,
             'labour_id': emp.id,
@@ -830,8 +816,8 @@ def hr_generate_payroll(request):
                 'bike_rate': emp.bike_allowance_per_km,
                 'car_km': car_km_total,
                 'car_rate': emp.car_allowance_per_km,
-                'ot_rate': base_hourly_rate * emp.overtime_hourly_rate,
-                'late_rate': base_hourly_rate * emp.late_deduction_rate,
+                'ot_rate': base_hourly_rate * float(emp.overtime_hourly_rate or 0),
+                'late_rate': base_hourly_rate * float(emp.late_deduction_rate or 0),
                 'bag_rate': emp.bag_incentive_rate
             }
         })
@@ -1298,7 +1284,7 @@ def hr_salary_slips(request):
         'phone': settings_data.get('company_phone') or '',
         'email': settings_data.get('company_email') or '',
         'gst': settings_data.get('company_gst') or '',
-        'logo': settings_data.get('company_logo') or '',
+        'logo': '',
     }
     
     results = []

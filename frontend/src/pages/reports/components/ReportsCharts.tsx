@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ResponsiveContainer,
@@ -47,6 +48,8 @@ export const ReportsCharts: React.FC<ReportsChartsProps> = React.memo(({
   formatter,
   chartLabel
 }) => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'SUPERADMIN' || (user as any)?.is_superuser;
   // Clean data for charting (e.g. limit to top 10 items for Pie/Bar charts to avoid clutter)
   const chartDataset = useMemo(() => {
     if (chartStyle === 'pie' || chartStyle === 'bar') {
@@ -63,12 +66,12 @@ export const ReportsCharts: React.FC<ReportsChartsProps> = React.memo(({
     'so-performance': 'Sales Officers Net Achieved Revenue',
     'inventory': 'Inventory Product Stock Quantities',
     'partners': 'Party Billing Volumes (Top 10)',
-    'monthly': 'Monthly Revenue & Est. Profit Trends',
+    'monthly': isSuperAdmin ? 'Monthly Revenue & Est. Profit Trends' : 'Monthly Revenue Trends',
     'sales-analysis': chartLabel || 'Sales Analysis — Top Items by Revenue'
   };
 
   // Double value tracking for Monthly (Revenue vs Profit)
-  const showDoubleSeries = domain === 'monthly';
+  const showDoubleSeries = domain === 'monthly' && isSuperAdmin;
 
   // 1. Chart Component Map Strategy (Requirement #6)
   const chartComponentMap = {

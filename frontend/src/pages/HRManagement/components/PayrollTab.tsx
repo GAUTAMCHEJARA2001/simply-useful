@@ -4,6 +4,10 @@ import { useHRPayroll, useLedgerMutations } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Download, Search, FileText, Calculator } from 'lucide-react';
 import { SalarySlipPdfModal } from '@/components/PDF/SalarySlipPdfModal';
+import { useToast } from '@/hooks/use-toast';
+import { useSettings } from '@/hooks/inventory/useMasters';
+import { generateRTGSSlip } from '@/utils/pdfGenerator';
+import { Landmark } from 'lucide-react';
 
 const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -20,6 +24,56 @@ export const PayrollTab: React.FC = () => {
   const [overrides, setOverrides] = useState<Record<number, number>>({});
   
   const { finalizePayroll } = useLedgerMutations();
+  const { toast } = useToast();
+  const { data: settings } = useSettings();
+
+  const getNetPay = (slip: any) => {
+    const adv = overrides[slip.labour_id] !== undefined ? overrides[slip.labour_id] : (slip.deductions?.advance || 0);
+    return (slip.earnings?.gross || 0) - (slip.deductions?.late || 0) - adv;
+  };
+
+  const handlePrintRTGS = async (slip: any) => {
+    try {
+      const netPay = getNetPay(slip);
+      const mStr = slip.month || fetchMonth || '';
+      await generateRTGSSlip({
+        beneficiaryName: slip.labour_name,
+        bankName: slip.bank_details?.bank_name || '',
+        accountNumber: slip.bank_details?.account_no || '',
+        ifscCode: slip.bank_details?.ifsc || '',
+        amount: netPay,
+        date: new Date().toISOString().slice(0, 10),
+        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
+        companyAccount: settings?.company_bank_account || '925030009706188',
+        companyBank: settings?.company_bank_name || 'AXIS BANK',
+        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
+        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
+        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
+        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
+        companyPhone: settings?.company_phone || '8866322700',
+        beneficiaryBranch: 'NAVSARI',
+        narration: `SALARY ${mStr ? mStr.toUpperCase() : ''}`
+      });
+      toast({ title: 'RTGS Form Ready', description: `Axis Bank RTGS Form filled & downloaded for ${slip.labour_name}` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message || 'Failed to generate RTGS form', variant: 'destructive' });
+    }
+  };
+
+  const handleBulkRTGS = async () => {
+    if (payroll.length === 0) return;
+    toast({ title: 'Generating RTGS Forms', description: `Generating forms for ${payroll.length} employees...` });
+    for (const slip of payroll) {
+      try {
+        await handlePrintRTGS(slip);
+        if (payroll.length > 1) {
+          await new Promise(r => setTimeout(r, 400));
+        }
+      } catch (e) {
+        console.error('RTGS error:', e);
+      }
+    }
+  };
 
   const handleGenerate = () => {
     setFetchMonth(selectedMonth);
@@ -73,6 +127,14 @@ export const PayrollTab: React.FC = () => {
             <Calculator className="w-4 h-4" /> {showBreakdown ? 'Hide Breakdown' : 'Show Breakdown'}
           </Button>
           <Button onClick={handleGenerate} className="gap-2 cursor-pointer"><Search className="w-4 h-4" /> Run Payroll</Button>
+          <Button 
+            variant="outline" 
+            disabled={payroll.length === 0} 
+            onClick={handleBulkRTGS}
+            className="gap-2 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 cursor-pointer font-medium"
+          >
+            <Landmark className="w-4 h-4 text-blue-600" /> RTGS Forms ({payroll.length})
+          </Button>
           <Button 
             variant="outline" 
             disabled={payroll.length === 0} 
@@ -149,16 +211,28 @@ export const PayrollTab: React.FC = () => {
                   </div>
                 )}
               </div>
-              <Button 
-                variant="secondary" 
-                className="w-full gap-2 cursor-pointer font-medium" 
-                onClick={() => {
-                  setModalSlips([slip]);
-                  setPdfModalOpen(true);
-                }}
-              >
-                <FileText className="w-4 h-4" /> View Salary Slip (PDF)
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  className="w-full gap-1.5 cursor-pointer font-medium text-xs h-9" 
+                  onClick={() => {
+                    setModalSlips([slip]);
+                    setPdfModalOpen(true);
+                  }}
+                >
+                  <FileText className="w-3.5 h-3.5" /> Payslip
+                </Button>
+
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full gap-1.5 cursor-pointer font-semibold text-xs h-9 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10" 
+                  onClick={() => handlePrintRTGS(slip)}
+                >
+                  <Landmark className="w-3.5 h-3.5 text-blue-600" /> RTGS Form
+                </Button>
+              </div>
             </div>
           ))}
           {payroll.length === 0 && (

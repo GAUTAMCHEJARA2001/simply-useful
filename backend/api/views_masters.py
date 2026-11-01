@@ -99,22 +99,25 @@ class ProductViewSet(viewsets.ModelViewSet):
         except Exception:
             sku_qty_map = {}
 
-        # Valuation & Costing per Warehouse (FIFO & Weighted Average)
+        # Valuation & Costing per Warehouse (FIFO & Weighted Average) - Strictly restricted to SUPERADMIN
         cost_map = {}
-        try:
-            from django.core.cache import cache
-            cache_wh_str = '_'.join(sorted(map(str, target_wh_ids))) if target_wh_ids else 'all'
-            cost_cache_key = f"cost_agg_{company_id or 'all'}_{cache_wh_str}"
-            cached_cost = cache.get(cost_cache_key)
-            if cached_cost is not None:
-                cost_map = cached_cost
-            else:
-                from api.services.costing_service import compute_product_warehouse_costs
-                cost_map, _ = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
-                cache.set(cost_cache_key, cost_map, timeout=60)
-        except Exception as e:
-            print("Error computing product costs in ProductViewSet:", e)
-            cost_map = {}
+        user_role_str = (getattr(self.request.user, 'role', '') or '').upper()
+        is_superadmin_user = user_role_str == 'SUPERADMIN' or getattr(self.request.user, 'is_superuser', False)
+        if is_superadmin_user:
+            try:
+                from django.core.cache import cache
+                cache_wh_str = '_'.join(sorted(map(str, target_wh_ids))) if target_wh_ids else 'all'
+                cost_cache_key = f"cost_agg_{company_id or 'all'}_{cache_wh_str}"
+                cached_cost = cache.get(cost_cache_key)
+                if cached_cost is not None:
+                    cost_map = cached_cost
+                else:
+                    from api.services.costing_service import compute_product_warehouse_costs
+                    cost_map, _ = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
+                    cache.set(cost_cache_key, cost_map, timeout=60)
+            except Exception as e:
+                print("Error computing product costs in ProductViewSet:", e)
+                cost_map = {}
 
         is_global = request.query_params.get('global', '').lower() == 'true' or request.query_params.get('all', '').lower() == 'true'
         if target_wh_ids and not is_global:
@@ -164,11 +167,14 @@ class ProductViewSet(viewsets.ModelViewSet):
             sku_qty_map = {}
 
         cost_map = {}
-        try:
-            from api.services.costing_service import compute_product_warehouse_costs
-            cost_map, _ = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
-        except Exception:
-            cost_map = {}
+        user_role_str = (getattr(request.user, 'role', '') or '').upper()
+        is_superadmin_user = user_role_str == 'SUPERADMIN' or getattr(request.user, 'is_superuser', False)
+        if is_superadmin_user:
+            try:
+                from api.services.costing_service import compute_product_warehouse_costs
+                cost_map, _ = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
+            except Exception:
+                cost_map = {}
             
         serializer = ProductSerializer(instance, context={'request': request, 'sku_qty_map': sku_qty_map, 'cost_map': cost_map})
         return send_success(serializer.data, 'Product fetched successfully')

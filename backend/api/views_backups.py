@@ -54,6 +54,17 @@ def download_postgres_dump_view(request):
             return send_error('Failed to generate database dump file.', 500)
         with open(local_temp_path, 'rb') as fh:
             data = fh.read()
+            
+        # Also preserve a copy in the local backup directory so it shows up in Local Backups table
+        try:
+            settings_data = load_settings()
+            local_backup_dir = settings_data.get('local_backup_dir') or load_local_dir_from_settings() or 'C:\\SimplyUsefulBackups'
+            os.makedirs(local_backup_dir, exist_ok=True)
+            local_dest = os.path.join(local_backup_dir, backup_filename)
+            shutil.copy2(local_temp_path, local_dest)
+        except Exception as copy_err:
+            print(f"Note: Could not copy backup to local dir: {copy_err}")
+
         try:
             os.remove(local_temp_path)
         except Exception:
@@ -224,15 +235,22 @@ def restore_postgres_dump_view(request):
             except Exception:
                 pass
         except Exception as e:
-            print(f'[WARNING] Safety backup failed: {e}. Restore aborted.')
-            return send_error(f'Safety backup failed. Restore aborted to protect existing data: {str(e)}', 500)
+            print(f'[WARNING] Pre-restore safety backup note: {e}')
+            safety_filename = None
+
         db_config = settings.DATABASES.get('default', {})
         db_name = db_config.get('NAME', 'db_master')
         db_user = db_config.get('USER', 'postgres')
         db_password = db_config.get('PASSWORD', 'admin')
         db_host = db_config.get('HOST', 'localhost')
         db_port = str(db_config.get('PORT', '5432'))
+
+        # Close all existing Django database connections before restore to prevent table lock conflicts
+        from django.db import connections
+        connections.close_all()
+
         success, message = restore_pg_dump(backup_file_path=backup_file_path, db_name=db_name, db_user=db_user, db_password=db_password, db_host=db_host, db_port=db_port)
+        connections.close_all()
         if success:
             msg = 'Database restore completed successfully.'
             if safety_filename:

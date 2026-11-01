@@ -44,6 +44,7 @@ export const ProductsTab: React.FC = () => {
   const { data: units = [] } = useUnits();
   const { data: settings } = useSettings();
   const { activeWarehouseId, activeWarehouseName } = useWarehouse();
+  const isSuperAdmin = user?.role === 'SUPERADMIN' || (user as any)?.is_superuser;
 
   // Mutations
   const { saveProduct, deleteProduct } = useProductMutations();
@@ -219,7 +220,12 @@ export const ProductsTab: React.FC = () => {
         emptyMessage={search ? "No products match your search" : "No products found"}
       >
         <DataTable
-          columns={['SKU', 'Name', 'Category', 'Unit', user?.role === 'SUPERADMIN' ? 'Shortage' : 'Available Stock', 'Avg Cost (WAC/FIFO)', 'Base Rate (Excl. GST)']}
+          columns={[
+            'SKU', 'Name', 'Category', 'Unit', 
+            isSuperAdmin ? 'Shortage' : 'Available Stock', 
+            ...(isSuperAdmin ? ['Avg Cost (WAC/FIFO)'] : []), 
+            'Base Rate (Excl. GST)'
+          ]}
           rows={filtered.map((p: any) => {
             const avail = p.availableStock || p.stockQty || 0;
             const min = p.minimumStock || 0;
@@ -227,12 +233,12 @@ export const ProductsTab: React.FC = () => {
             const rateVal = p.rate || p.defaultPrice || 0;
             const costVal = p.avgCost !== undefined && p.avgCost !== null ? p.avgCost : rateVal;
             const gstVal = p.gst !== undefined && p.gst !== null ? p.gst : 18;
-            return [
+            const rowCells: any[] = [
               p.productCode || p.sku || '—', 
               p.name || p.productName || '—', 
               p.categoryRef?.name || p.categoryName || p.category?.name || '—',
               p.unit?.name || p.unit || '—', 
-              user?.role === 'SUPERADMIN' ? (
+              isSuperAdmin ? (
                 <span className={`font-bold ${shortage > 0 ? 'text-destructive' : 'text-success'}`}>
                   {shortage}
                 </span>
@@ -240,16 +246,23 @@ export const ProductsTab: React.FC = () => {
                 <span className={`font-bold ${avail <= min ? 'text-destructive' : 'text-success'}`}>
                   {avail}
                 </span>
-              ), 
-              <div className="flex flex-col items-end justify-center">
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400">{Currency(costVal)}</span>
-                <span className="text-[10px] text-muted-foreground/80 font-medium">Warehouse Cost</span>
-              </div>,
-              <div className="flex flex-col items-end justify-center">
+              ),
+            ];
+            if (isSuperAdmin) {
+              rowCells.push(
+                <div key="cost" className="flex flex-col items-end justify-center">
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">{Currency(costVal)}</span>
+                  <span className="text-[10px] text-muted-foreground/80 font-medium">Warehouse Cost</span>
+                </div>
+              );
+            }
+            rowCells.push(
+              <div key="rate" className="flex flex-col items-end justify-center">
                 <span className="font-bold text-foreground">{Currency(rateVal)}</span>
                 <span className="text-[10px] text-muted-foreground/80 font-medium">Excl. {gstVal}% GST</span>
               </div>
-            ];
+            );
+            return rowCells;
           })}
           onEdit={canManage ? (i: number) => { setForm(filtered[i]); setModal(true); } : undefined}
           onDelete={canManage ? (i: number) => { setDeleteTarget(filtered[i].id!); setDeleteDialogOpen(true); } : undefined} 
@@ -428,8 +441,12 @@ export const ProductsTab: React.FC = () => {
             <div><span className="font-semibold text-muted-foreground">Opening Stock:</span> {viewProduct.openingStock || 0}</div>
             <div><span className="font-semibold text-muted-foreground">Stock:</span> {viewProduct.availableStock || viewProduct.stockQty || 0}</div>
             <div><span className="font-semibold text-muted-foreground">Default Price:</span> {Currency(viewProduct.rate || viewProduct.defaultPrice || 0)}</div>
-            <div><span className="font-semibold text-muted-foreground">Warehouse Avg Cost:</span> <span className="font-bold text-emerald-600 dark:text-emerald-400">{Currency(viewProduct.avgCost || viewProduct.rate || 0)}</span></div>
-            <div><span className="font-semibold text-muted-foreground">Total Inventory Value:</span> <span className="font-bold">{Currency((viewProduct.availableStock || 0) * (viewProduct.avgCost || viewProduct.rate || 0))}</span></div>
+            {isSuperAdmin && (
+              <>
+                <div><span className="font-semibold text-muted-foreground">Warehouse Avg Cost:</span> <span className="font-bold text-emerald-600 dark:text-emerald-400">{Currency(viewProduct.avgCost || viewProduct.rate || 0)}</span></div>
+                <div><span className="font-semibold text-muted-foreground">Total Inventory Value:</span> <span className="font-bold">{Currency((viewProduct.availableStock || 0) * (viewProduct.avgCost || viewProduct.rate || 0))}</span></div>
+              </>
+            )}
             <div><span className="font-semibold text-muted-foreground">Warehouse:</span> {warehouses.find((w: any) => w.id === viewProduct.defaultWarehouseId)?.name || '—'}</div>
             <div><span className="font-semibold text-muted-foreground">GST:</span> {viewProduct.gst !== undefined ? viewProduct.gst : 18}%</div>
             <div className="col-span-2"><span className="font-semibold text-muted-foreground">CGST / SGST / IGST:</span> {(viewProduct.gst !== undefined ? viewProduct.gst : 18) / 2}% / {(viewProduct.gst !== undefined ? viewProduct.gst : 18) / 2}% / {viewProduct.gst !== undefined ? viewProduct.gst : 18}%</div>

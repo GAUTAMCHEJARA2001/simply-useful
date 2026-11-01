@@ -402,9 +402,8 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
         />
       </div>
 
-      {loading && <div className="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading Recipes…</div>}
-
       <DataTable
+        loading={loading}
         columns={tableColumns}
         rows={filteredRecipes.map((r: any, idx: number) => {
           const rowData: any[] = [
@@ -698,7 +697,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                                       <div className="truncate flex items-center gap-1.5">
                                         <span className="font-medium text-foreground">{p.name}</span>
                                         <span className="text-[11px] text-muted-foreground">({p.productCode || p.sku})</span>
-                                        {currentCost > 0 && (
+                                        {isSuperAdmin && currentCost > 0 && (
                                           <span className="text-[11px] font-mono font-semibold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.2 rounded">
                                             ₹{formatDecimal(currentCost)}
                                           </span>
@@ -817,7 +816,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
       )}
 
       {/* Accurate BOM Price List Modal */}
-      {showPriceListModal && (
+      {showPriceListModal && isSuperAdmin && (
         <Modal 
           title="Accurate BOM Price List & Yield Valuation" 
           maxWidth="max-w-5xl" 
@@ -880,7 +879,7 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                       <th className="py-2.5 px-3 text-right">Yield Qty</th>
                       <th className="py-2.5 px-3 text-right">Batch Cost</th>
                       <th className="py-2.5 px-3 text-right">Unit Cost</th>
-                      <th className="py-2.5 px-3 text-right">Selling Rate</th>
+                      <th className="py-2.5 px-3 text-right">Avg Selling Price</th>
                       <th className="py-2.5 px-3 text-right">Gross Margin</th>
                       <th className="py-2.5 px-3 text-center">Breakdown</th>
                     </tr>
@@ -912,6 +911,15 @@ export const RecipesTab: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) 
                             </td>
                             <td className="py-2.5 px-3 text-right font-mono font-medium text-foreground">
                               {item.sellingRate ? `₹${formatDecimal(item.sellingRate)}` : '—'}
+                              {item.sellingRateSource === 'AVERAGE_SALES_PRICE' ? (
+                                <span className="block text-[9px] text-emerald-600 font-sans font-medium">
+                                  Avg Sales ({item.unitsSold || 0} sold)
+                                </span>
+                              ) : (
+                                <span className="block text-[9px] text-muted-foreground font-sans">
+                                  Catalog Master
+                                </span>
+                              )}
                             </td>
                             <td className="py-2.5 px-3 text-right">
                               {item.sellingRate ? (

@@ -288,7 +288,7 @@ const App = () => {
                       <Route path="/admin/distributors" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><DistributorManagement /></ProtectedRoute>} />
                       <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><UserManagement /></ProtectedRoute>} />
                       <Route path="/admin/warehouses" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><WarehouseManagement /></ProtectedRoute>} />
-                      <Route path="/admin/bom" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><BOMManagement /></ProtectedRoute>} />
+                      <Route path="/admin/bom" element={<ProtectedRoute allowedRoles={['SUPERADMIN']}><BOMManagement /></ProtectedRoute>} />
                       <Route path="/admin/so-mapping" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><SOMapping /></ProtectedRoute>} />
                       <Route path="/admin/activity-logs" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><AuditLogsPage /></ProtectedRoute>} />
                       <Route path="/admin/ledger-requests" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><AdminLedgerRequestsPage /></ProtectedRoute>} />
@@ -312,7 +312,7 @@ const App = () => {
                       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
 
                       {/* Director Command Center */}
-                      <Route path="/director/dashboard" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN']}><DirectorDashboardPage /></ProtectedRoute>} />
+                      <Route path="/director/dashboard" element={<ProtectedRoute allowedRoles={['SUPERADMIN']}><DirectorDashboardPage /></ProtectedRoute>} />
 
                     </Routes>
                   </Suspense>

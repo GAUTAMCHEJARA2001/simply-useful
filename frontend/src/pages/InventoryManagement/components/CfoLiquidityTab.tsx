@@ -9,12 +9,15 @@ import {
   Activity, Landmark as TreasuryIcon, Award, TrendingUp
 } from 'lucide-react';
 import { DataTable } from '@/components/DataTable';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const Num = (v: number | string) => Number(v || 0).toLocaleString('en-IN');
 const Percent = (v: number) => `${Number(v || 0).toFixed(1)}%`;
 
 export const CfoLiquidityTab: React.FC = () => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'SUPERADMIN' || (user as any)?.is_superuser;
   const { data: liquidity, isLoading, error } = useQuery({
     queryKey: ['analytics', 'cfo-liquidity'],
     queryFn: async () => {
@@ -131,6 +134,7 @@ export const CfoLiquidityTab: React.FC = () => {
             </Card>
 
             {/* Sales Officer Net Profitability Matrix */}
+            {isSuperAdmin && (
             <Card className="border-none shadow-lg bg-card/30 backdrop-blur-xl ring-1 ring-border/50 overflow-hidden">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-bold">Sales Officer Net Profitability Matrix</CardTitle>
@@ -159,6 +163,7 @@ export const CfoLiquidityTab: React.FC = () => {
                 )}
               </CardContent>
             </Card>
+            )}
 
           </div>
 
@@ -166,6 +171,7 @@ export const CfoLiquidityTab: React.FC = () => {
           <div className="space-y-6">
             
             {/* Efficiency Award Leaderboard */}
+            {isSuperAdmin && (
             <Card className="border-none shadow-lg bg-gradient-to-b from-card/80 to-card/40 backdrop-blur-xl ring-1 ring-border/50">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -198,6 +204,7 @@ export const CfoLiquidityTab: React.FC = () => {
                 })}
               </CardContent>
             </Card>
+            )}
 
             {/* CFO working capital warnings */}
             <Card className="border-none shadow-lg bg-card/30 backdrop-blur-xl ring-1 ring-border/50">

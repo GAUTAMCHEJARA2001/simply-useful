@@ -298,31 +298,47 @@ class ProductSerializer(serializers.ModelSerializer):
             'avgCost', 'fifoCost', 'weightedAvgCost', 'inventoryValue'
         ]
 
+    def _is_superadmin(self):
+        req = self.context.get('request')
+        user = getattr(req, 'user', None)
+        role = (getattr(user, 'role', '') or '').upper() if user else ''
+        return role == 'SUPERADMIN' or getattr(user, 'is_superuser', False)
+
     def get_avgCost(self, obj):
+        if not self._is_superadmin():
+            return 0.0
         cost_map = self.context.get('cost_map', {})
         if obj.id in cost_map:
             return cost_map[obj.id].get('effectiveCost', float(obj.rate or 0.0))
         return float(obj.rate or 0.0)
 
     def get_fifoCost(self, obj):
+        if not self._is_superadmin():
+            return 0.0
         cost_map = self.context.get('cost_map', {})
         if obj.id in cost_map:
             return cost_map[obj.id].get('fifoCost', float(obj.rate or 0.0))
         return float(obj.rate or 0.0)
 
     def get_weightedAvgCost(self, obj):
+        if not self._is_superadmin():
+            return 0.0
         cost_map = self.context.get('cost_map', {})
         if obj.id in cost_map:
             return cost_map[obj.id].get('weightedAvgCost', float(obj.rate or 0.0))
         return float(obj.rate or 0.0)
 
     def get_inventoryValue(self, obj):
+        if not self._is_superadmin():
+            return 0.0
         cost_map = self.context.get('cost_map', {})
         if obj.id in cost_map:
             return cost_map[obj.id].get('stockValue', 0.0)
         return 0.0
 
     def get_brand(self, obj):
+        if self.context.get('skip_stock') or self.context.get('skip_details'):
+            return {'id': obj.brandid_id} if obj.brandid_id else None
         try:
             if obj.brandid:
                 return {'id': obj.brandid.id, 'name': obj.brandid.name}
@@ -366,6 +382,8 @@ class ProductSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
     def get_unit(self, obj):
+        if self.context.get('skip_stock') or self.context.get('skip_details'):
+            return {'id': obj.unitid_id} if obj.unitid_id else None
         try:
             if obj.unitid:
                 return {'id': obj.unitid.id, 'name': obj.unitid.name}
@@ -374,6 +392,8 @@ class ProductSerializer(serializers.ModelSerializer):
         return None
 
     def get_categoryRef(self, obj):
+        if self.context.get('skip_stock') or self.context.get('skip_details'):
+            return {'id': obj.categoryid_id} if obj.categoryid_id else None
         try:
             if obj.categoryid:
                 parent_data = None
@@ -481,6 +501,10 @@ class ProductSerializer(serializers.ModelSerializer):
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
                 ).exclude(
                     transactiontype__in=['SALE', 'DISPATCH']
+                ).exclude(
+                    is_deleted=True
+                ).exclude(
+                    referenceid__startswith='REV-'
                 ).aggregate(s=Sum('quantity'))['s'] or 0
                 total += float(st_total)
 
@@ -720,8 +744,12 @@ class OrderSerializer(serializers.ModelSerializer):
         try:
             from api.utils_gst import calculate_gst_split
             from api.models import Company
-            company = Company.objects.filter(id=instance.companyid_id).first()
-            company_gst = getattr(company, 'gst_number', '') or ''
+            company_gst = self.context.get('company_gst') if self.context else None
+            if company_gst is None:
+                company = Company.objects.filter(id=instance.companyid_id).first()
+                company_gst = getattr(company, 'gst_number', '') or ''
+                if self.context is not None:
+                    self.context['company_gst'] = company_gst
             
             party_gst = ""
             party_details = ret.get('partyDetails')
@@ -774,9 +802,11 @@ class OrderSerializer(serializers.ModelSerializer):
         p_type = str(obj.partytype).upper()
         
         if not hasattr(self, '_party_cache'):
-            self._party_cache = {}
+            pre = self.context.get('preloaded_party_cache') if self.context else None
+            self._party_cache = pre.copy() if pre else {}
             
-        cache_key = (p_type, obj.partyname)
+        party_name_clean = (obj.partyname or '').strip().lower()
+        cache_key = (p_type, party_name_clean)
         if cache_key in self._party_cache:
             return self._party_cache[cache_key]
         
@@ -949,16 +979,29 @@ class BomitemSerializer(serializers.ModelSerializer):
         prod = product_map.get(obj.materialname)
         return prod.id if prod else ""
 
+    def _is_superadmin(self):
+        req = self.context.get('request')
+        user = getattr(req, 'user', None)
+        role = (getattr(user, 'role', '') or '').upper() if user else ''
+        return role == 'SUPERADMIN' or getattr(user, 'is_superuser', False)
+
     def get_unitCost(self, obj):
+        if not self._is_superadmin():
+            return 0.0
         val_map = self.context.get('val_by_name', {})
         mat_name = (obj.materialname or '').strip().lower()
         if mat_name in val_map:
             return val_map[mat_name].get('effectiveCost', 0.0)
-        from api.models import Product
-        prod = Product.objects.filter(name__iexact=obj.materialname).first()
+        pmap = self.context.get('product_map', {})
+        prod = pmap.get(mat_name) or pmap.get(obj.materialname)
+        if not prod:
+            from api.models import Product
+            prod = Product.objects.filter(name__iexact=obj.materialname).first()
         return float(prod.rate or 0.0) if prod else 0.0
 
     def get_lineCost(self, obj):
+        if not self._is_superadmin():
+            return 0.0
         unit_cost = self.get_unitCost(obj)
         return round(float(obj.qty or 0.0) * unit_cost, 2)
 
@@ -1058,6 +1101,15 @@ class BomListSerializer(serializers.ModelSerializer):
     def get_grossMargin(self, obj):
         return self.get_bomCost(obj).get('grossMargin', 0.0)
 
+    def get_masterRate(self, obj):
+        return self.get_bomCost(obj).get('masterRate', 0.0)
+
+    def get_avgSellingRate(self, obj):
+        return self.get_bomCost(obj).get('avgSellingRate', 0.0)
+
+    def get_sellingRateSource(self, obj):
+        return self.get_bomCost(obj).get('sellingRateSource', 'MASTER_CATALOG_RATE')
+
     def get_marginPct(self, obj):
         return self.get_bomCost(obj).get('marginPct', 0.0)
 
@@ -1078,6 +1130,9 @@ class BomSerializer(serializers.ModelSerializer):
     unitCost = serializers.SerializerMethodField(read_only=True)
     batchCost = serializers.SerializerMethodField(read_only=True)
     sellingRate = serializers.SerializerMethodField(read_only=True)
+    masterRate = serializers.SerializerMethodField(read_only=True)
+    avgSellingRate = serializers.SerializerMethodField(read_only=True)
+    sellingRateSource = serializers.SerializerMethodField(read_only=True)
     grossMargin = serializers.SerializerMethodField(read_only=True)
     marginPct = serializers.SerializerMethodField(read_only=True)
 
@@ -1086,7 +1141,8 @@ class BomSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'productCode', 'name', 'companyId', 'createdAt', 'updatedAt', 'items', 'outputQuantity',
             'productId', 'productName', 'status', 'assignedWarehouse', 'assignedWarehouseName',
-            'unitCost', 'batchCost', 'sellingRate', 'grossMargin', 'marginPct'
+            'unitCost', 'batchCost', 'sellingRate', 'masterRate', 'avgSellingRate', 'sellingRateSource',
+            'grossMargin', 'marginPct'
         ]
 
     def get_assignedWarehouseName(self, obj):
@@ -1130,6 +1186,15 @@ class BomSerializer(serializers.ModelSerializer):
 
     def get_grossMargin(self, obj):
         return self.get_bomCost(obj).get('grossMargin', 0.0)
+
+    def get_masterRate(self, obj):
+        return self.get_bomCost(obj).get('masterRate', 0.0)
+
+    def get_avgSellingRate(self, obj):
+        return self.get_bomCost(obj).get('avgSellingRate', 0.0)
+
+    def get_sellingRateSource(self, obj):
+        return self.get_bomCost(obj).get('sellingRateSource', 'MASTER_CATALOG_RATE')
 
     def get_marginPct(self, obj):
         return self.get_bomCost(obj).get('marginPct', 0.0)

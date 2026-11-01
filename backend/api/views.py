@@ -545,10 +545,11 @@ def _fy_date_filter(request, queryset, date_field='date'):
       ?start=2024-04-01&end=2025-04-01  — explicit ISO dates (endExclusive)
     If neither param is present, returns the queryset unchanged.
     """
-    fy_param = request.query_params.get('fy')
-    quarter_param = request.query_params.get('quarter')
-    start_param = request.query_params.get('start')
-    end_param = request.query_params.get('end')
+    params = getattr(request, 'query_params', getattr(request, 'GET', {}))
+    fy_param = params.get('fy')
+    quarter_param = params.get('quarter')
+    start_param = params.get('start')
+    end_param = params.get('end')
     quarter = None
     if quarter_param:
         q_str = str(quarter_param).strip().upper()
@@ -1431,13 +1432,15 @@ class BOMViewSet(viewsets.ModelViewSet):
         from django.db.models import Count
         from api.models import Product
         from api.services.costing_service import compute_product_warehouse_costs, compute_bom_cost_breakdown
-        queryset = self.get_queryset().annotate(item_count=Count('bomitem')).prefetch_related('bomitem_set', 'warehouseid')
+        all_boms = list(self.get_queryset().annotate(item_count=Count('bomitem')).select_related('warehouseid').prefetch_related('bomitem_set'))
         product_map = {}
-        for p in Product.objects.only('id', 'productcode', 'name'):
+        for p in Product.objects.select_related('unitid').only('id', 'productcode', 'name', 'rate', 'unitid__name', 'gst'):
             if p.productcode:
                 product_map[p.productcode] = p
+                product_map[p.productcode.strip().lower()] = p
             if p.name:
                 product_map[p.name] = p
+                product_map[p.name.strip().lower()] = p
 
         company_id = _get_company_id(request)
         wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
@@ -1453,17 +1456,20 @@ class BOMViewSet(viewsets.ModelViewSet):
                 target_wh_ids = [str(wh_header)]
 
             try:
+                from api.services.costing_service import compute_product_sales_rates
+                sales_rates_by_id = compute_product_sales_rates(company_id=company_id)
                 val_by_id, val_by_name = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
-                for bom in queryset:
+                for bom in all_boms:
                     bom_cost_map[bom.id] = compute_bom_cost_breakdown(
-                        bom, valuation_by_id=val_by_id, valuation_by_name=val_by_name, warehouse_ids=target_wh_ids, company_id=company_id
+                        bom, valuation_by_id=val_by_id, valuation_by_name=val_by_name, warehouse_ids=target_wh_ids,
+                        company_id=company_id, sales_rates_by_id=sales_rates_by_id, prod_map=product_map
                     )
             except Exception as e:
                 print("Error computing BOM costs:", e)
                 val_by_id, val_by_name, bom_cost_map = {}, {}, {}
 
         serializer = BomListSerializer(
-            queryset, many=True,
+            all_boms, many=True,
             context={'request': request, 'product_map': product_map, 'val_by_id': val_by_id, 'val_by_name': val_by_name, 'bom_cost_map': bom_cost_map}
         )
         return send_success(serializer.data, 'BOMs fetched successfully')
@@ -1524,6 +1530,9 @@ class BOMViewSet(viewsets.ModelViewSet):
         Returns accurate price list & manufacturing costing for all BOM recipes
         based on warehouse FIFO and Weighted Average raw material purchase prices.
         """
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        if user_role != 'SUPERADMIN' and not getattr(request.user, 'is_superuser', False):
+            return send_error('Unauthorized. Only Super Admin can view BOM unit costs and price lists.', 403)
         company_id = _get_company_id(request)
         wh_header = request.headers.get('X-Warehouse-Id') or request.headers.get('X-Warehouse-ID') or request.headers.get('x-warehouse-id')
         target_wh_ids = None
@@ -1577,21 +1586,26 @@ class BOMViewSet(viewsets.ModelViewSet):
             except (ValueError, TypeError):
                 pass
         
-        try:
-            val_by_id, val_by_name = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
-            bom_cost = compute_bom_cost_breakdown(
-                instance, valuation_by_id=val_by_id, valuation_by_name=val_by_name, warehouse_ids=target_wh_ids, company_id=company_id
-            )
-            bom_cost_map = {instance.id: bom_cost}
-        except Exception:
-            val_by_id, val_by_name, bom_cost_map = {}, {}, {}
+        user_role = (getattr(request.user, 'role', '') or '').upper()
+        is_superadmin = user_role == 'SUPERADMIN' or getattr(request.user, 'is_superuser', False)
+
+        val_by_id, val_by_name, bom_cost_map = {}, {}, {}
+        if is_superadmin:
+            try:
+                val_by_id, val_by_name = compute_product_warehouse_costs(company_id=company_id, warehouse_ids=target_wh_ids)
+                bom_cost = compute_bom_cost_breakdown(
+                    instance, valuation_by_id=val_by_id, valuation_by_name=val_by_name, warehouse_ids=target_wh_ids, company_id=company_id
+                )
+                bom_cost_map = {instance.id: bom_cost}
+            except Exception:
+                val_by_id, val_by_name, bom_cost_map = {}, {}, {}
 
         serializer = BomSerializer(
             instance,
             context={'request': request, 'product_map': product_map, 'val_by_id': val_by_id, 'val_by_name': val_by_name, 'bom_cost_map': bom_cost_map}
         )
         data = serializer.data
-        if instance.id in bom_cost_map:
+        if is_superadmin and instance.id in bom_cost_map:
             data['costBreakdown'] = bom_cost_map[instance.id]
         return send_success(data, 'BOM fetched successfully')
 

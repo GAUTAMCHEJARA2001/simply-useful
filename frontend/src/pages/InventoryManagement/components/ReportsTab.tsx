@@ -16,6 +16,7 @@ const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en
 
 export const ReportsTab: React.FC = () => {
   const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'SUPERADMIN' || (user as any)?.is_superuser;
   const [activeSubTab, setActiveSubTab] = useState<'operational' | 'analytics'>('operational');
   const [analyticsView, setAnalyticsView] = useState<'kpi' | 'alerts' | 'forecast' | 'liquidity' | 'bottlenecks' | 'quality'>('kpi');
 
@@ -98,12 +99,12 @@ export const ReportsTab: React.FC = () => {
               <CardContent className="p-0">
                 <SafeDataView data={salesSummary} isLoading={salesLoading} error={salesError}>
                   <DataTable 
-                    columns={['Date', '# Sales', 'Revenue', 'Profit']}
+                    columns={isSuperAdmin ? ['Date', '# Sales', 'Revenue', 'Profit'] : ['Date', '# Sales', 'Revenue']}
                     rows={salesSummary.map((r: any) => [
                       r.day || r.date || '—', 
                       r.total_sales || 0, 
                       Currency(r.total_revenue || 0), 
-                      Currency(r.total_profit || 0)
+                      ...(isSuperAdmin ? [Currency(r.total_profit || 0)] : [])
                     ])} 
                   />
                 </SafeDataView>

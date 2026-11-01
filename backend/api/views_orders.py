@@ -23,7 +23,7 @@ from api.models import (
     Order, Orderitem, Dispatchlog, Dispatchlogitem, Returnlog, Returnlogitem,
     Stocktransaction, PaymentReceipt, Userwarehouseaccess, Purchaseitem
 )
-from api.serializers import OrderSerializer, ProductSerializer, DispatchlogSerializer, ReturnlogSerializer
+from api.serializers import OrderSerializer, ProductSerializer, DispatchlogSerializer, ReturnlogSerializer, DealerSerializer, DistributorSerializer
 from api.db_router import get_tenant_model_cross_db
 from api.services.ledger_service import record_stock_ledger_entry
 from api.views import (
@@ -120,7 +120,32 @@ class OrderViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         qs = self.get_queryset()
         qs = _fy_date_filter(request, qs, date_field='date')
-        serialized_data = OrderSerializer(qs.prefetch_related('orderitem_set'), many=True, context={'skip_stock': True}).data
+        
+        # Optimize N+1 by selecting warehouse and prefetching order items with products
+        qs = qs.select_related('warehouseid').prefetch_related('orderitem_set__productid')
+        
+        # Preload company GST and party details into serializer context to eliminate hundreds of DB roundtrips
+        from api.models import Dealer, Distributor, Company
+        company_id = _get_company_id(request)
+        company = Company.objects.filter(id=company_id).first() if company_id else Company.objects.first()
+        company_gst = getattr(company, 'gst_number', '') or ''
+        
+        dealers = {d.dealername.strip().lower(): DealerSerializer(d).data for d in Dealer.objects.all().select_related('warehouseid') if d.dealername}
+        distributors = {d.distributorname.strip().lower(): DistributorSerializer(d).data for d in Distributor.objects.all().select_related('warehouseid') if d.distributorname}
+        party_cache = {}
+        for name, data in dealers.items():
+            party_cache[('DEALER', name)] = data
+        for name, data in distributors.items():
+            party_cache[('DISTRIBUTOR', name)] = data
+            
+        context = {
+            'skip_stock': True,
+            'skip_details': True,
+            'company_gst': company_gst,
+            'preloaded_party_cache': party_cache
+        }
+        
+        serialized_data = OrderSerializer(qs, many=True, context=context).data
         all_orders = list(serialized_data)
         all_orders.sort(key=lambda x: x.get('date', ''), reverse=True)
         return send_success(all_orders, 'Orders fetched successfully')
@@ -132,6 +157,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         user_role = (getattr(request.user, 'role', '') or '').upper()
+        is_superadmin = user_role == 'SUPERADMIN' or getattr(request.user, 'is_superuser', False)
         if user_role.startswith('INVENTORY') or user_role == 'INVENTORY':
             return send_error('Inventory users are not authorized to create sales orders.', 403)
         data = request.data.copy()
@@ -323,11 +349,23 @@ class OrderViewSet(viewsets.ModelViewSet):
                     reason__in=['PENDING_APPROVAL', 'REJECTED']
                 ).exclude(
                     transactiontype__in=['SALE', 'DISPATCH']
+                ).exclude(
+                    is_deleted=True
+                ).exclude(
+                    referenceid__startswith='REV-'
                 ).filter(productid_id=p_id).aggregate(total=Sum('quantity'))
                 stock += float(st_aggs['total'] or 0)
                 
-                if stock < qty_to_send:
-                    return Response({'success': False, 'message': f'Cannot dispatch! Insufficient stock for {p.name}. Available: {stock}, Requested: {qty_to_send}'}, status=400)
+                allow_deficit = bool(data.get('allow_deficit') or data.get('allow_negative') or data.get('force'))
+                if stock < qty_to_send and not allow_deficit:
+                    return Response({
+                        'success': False,
+                        'error_type': 'INSUFFICIENT_STOCK',
+                        'message': f'Cannot dispatch! Insufficient stock for {p.name}. Available: {stock}, Requested: {qty_to_send}',
+                        'available': stock,
+                        'requested': qty_to_send,
+                        'product': p.name
+                    }, status=400)
             import uuid
             from django.utils import timezone
             from api.models import Dispatchlog, Dispatchlogitem
@@ -681,21 +719,41 @@ def transaction_sales(request):
                 pass
         company_id = _get_company_id(request)
         user_role = (getattr(request.user, 'role', '') or '').upper()
+        is_superadmin = user_role == 'SUPERADMIN' or getattr(request.user, 'is_superuser', False)
 
-        orders_qs = Order.objects.all().prefetch_related('orderitem_set__productid')
+        orders_qs = Order.objects.all().select_related('warehouseid').prefetch_related('orderitem_set__productid')
         if company_id and user_role != 'SUPERADMIN':
             orders_qs = orders_qs.filter(companyid_id=company_id)
         if assigned_wh_ids:
             orders_qs = orders_qs.filter(warehouseid_id__in=assigned_wh_ids)
 
+        from api.models import Dealer, Distributor, Company
+        company = Company.objects.filter(id=company_id).first() if company_id else Company.objects.first()
+        company_gst = getattr(company, 'gst_number', '') or ''
+
+        dealers = {d.dealername.strip().lower(): DealerSerializer(d).data for d in Dealer.objects.all().select_related('warehouseid') if d.dealername}
+        distributors = {d.distributorname.strip().lower(): DistributorSerializer(d).data for d in Distributor.objects.all().select_related('warehouseid') if d.distributorname}
+        party_cache = {}
+        for name, p_data in dealers.items():
+            party_cache[('DEALER', name)] = p_data
+        for name, p_data in distributors.items():
+            party_cache[('DISTRIBUTOR', name)] = p_data
+
+        context = {
+            'skip_stock': True,
+            'skip_details': True,
+            'company_gst': company_gst,
+            'preloaded_party_cache': party_cache
+        }
+
         all_orders = list(orders_qs)
-        serialized = OrderSerializer(all_orders, many=True, context={'skip_stock': True}).data
+        serialized = OrderSerializer(all_orders, many=True, context=context).data
         
         expanded_sales = []
         order_ids = [d['id'] for d in serialized]
         
         from api.models import Dispatchlog, Orderitem, Returnlog, Product
-        dispatch_logs_list = list(Dispatchlog.objects.filter(orderid_id__in=order_ids).prefetch_related('items__productid'))
+        dispatch_logs_list = list(Dispatchlog.objects.filter(orderid_id__in=order_ids).select_related('warehouseid', 'orderid').prefetch_related('items__productid'))
         return_logs_list = list(Returnlog.objects.filter(orderid_id__in=order_ids).prefetch_related('items'))
         order_items_list = list(Orderitem.objects.filter(orderid_id__in=order_ids))
         
@@ -799,7 +857,8 @@ def transaction_sales(request):
                         sale['items'] = dispatch_items
                         sale['grandTotal'] = total_amount
                         sale['netAmount'] = total_amount
-                        sale['totalProfit'] = max(0.0, total_amount - total_cost)
+                        if is_superadmin:
+                            sale['totalProfit'] = max(0.0, total_amount - total_cost)
                     if total_returned >= total_dispatched and total_dispatched > 0:
                         sale['status'] = 'Returned'
                     elif total_returned > 0:
@@ -838,7 +897,8 @@ def transaction_sales(request):
                     item_revenue = qty * price
                     item_cost = qty * cost_price
                     total_profit += item_revenue - item_cost
-                d['totalProfit'] = max(0.0, total_profit)
+                if is_superadmin:
+                    d['totalProfit'] = max(0.0, total_profit)
                 expanded_sales.append(d)
         return send_success(expanded_sales, 'Sales transactions fetched')
     elif request.method == 'POST':
@@ -1119,7 +1179,8 @@ def transaction_dispatch(request, pk):
                         shortages.append({'product': prod.name, 'required': float(item.qty), 'available': avail})
                 except Exception:
                     pass
-        if shortages:
+        allow_deficit = bool(data.get('allow_deficit') or data.get('allow_negative') or data.get('force'))
+        if shortages and not allow_deficit:
             msg = ', '.join([s['product'] + ' (Req: ' + str(s['required']) + ', Avail: ' + str(s['available']) + ')' for s in shortages])
             return send_error(f"Insufficient stock for: {msg}", 400)
 
@@ -1419,6 +1480,7 @@ def transaction_deleted_sales(request):
     try:
         company_id = _get_company_id(request)
         user_role = (getattr(request.user, 'role', '') or '').upper()
+        is_superadmin = user_role == 'SUPERADMIN' or getattr(request.user, 'is_superuser', False)
 
         # 1. Fetch from Activitylog with feature='Deleted Sales'
         from api.models import Activitylog
