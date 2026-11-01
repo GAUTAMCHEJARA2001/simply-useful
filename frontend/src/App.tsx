@@ -68,6 +68,7 @@ const NotFound = safeLazy(() => import("./pages/NotFound"), "NotFound");
 const BOMManagement = safeLazy(() => import("./pages/BOMManagement"), "BOMManagement");
 const ReturnedOrders = safeLazy(() => import("./pages/ReturnedOrders"), "ReturnedOrders");
 const RejectedOrders = safeLazy(() => import("./pages/RejectedOrders"), "RejectedOrders");
+const BankRtgsHubPage = safeLazy(() => import("./pages/BankRtgsHubPage"), "BankRtgsHubPage");
 const SalesLedgerRequestsPage = safeLazy(() => import("./pages/SalesLedgerRequestsPage"), "SalesLedgerRequestsPage");
 const NewLedgerRequest = safeLazy(() => import("./pages/NewLedgerRequest"), "NewLedgerRequest");
 const SubmitPaymentPage = safeLazy(() => import("./pages/SubmitPaymentPage"), "SubmitPaymentPage");
@@ -299,6 +300,8 @@ const App = () => {
                       {/* HR Module */}
                       <Route path="/hr" element={<Navigate to="/hr/manage" replace />} />
                       <Route path="/hr/manage" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR']}><HRManagement /></ProtectedRoute>} />
+                      <Route path="/hr/rtgs-hub" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR']}><BankRtgsHubPage /></ProtectedRoute>} />
+                      <Route path="/finance/rtgs-hub" element={<Navigate to="/hr/rtgs-hub" replace />} />
 
                       {/* Inventory */}
                       <Route path="/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />

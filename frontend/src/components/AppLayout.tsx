@@ -8,7 +8,7 @@ import {
   PanelLeftClose, PanelLeft, Maximize2, Minimize2, Gauge, Trophy, Target,
   Search, ChevronDown, ChevronRight, Briefcase, Truck, CreditCard, ShieldCheck, Zap,
   Clock, Award, FileBarChart, CalendarCheck, Sliders, DollarSign, Factory, Trash2, Wallet, Percent,
-  Crown
+  Crown, Landmark
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -113,11 +113,13 @@ const navItems: NavItem[] = [
   { label: 'Leave Management', path: '/hr/manage?tab=leaves', icon: CalendarCheck, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Attendance & Operations', description: 'Leave approvals & holiday tracker' },
   { label: 'Employee Ledger', path: '/hr/manage?tab=ledger', icon: Wallet, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Staff advance salary & running balances' },
   { label: 'Payroll & Slips', path: '/hr/manage?tab=payroll', icon: FileBarChart, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Salary calculations & payslip generation' },
+  { label: 'Bank RTGS / NEFT Hub', path: '/hr/rtgs-hub', icon: Landmark, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Generate Advance & Salary RTGS slips for all 10 Indian banks' },
   { label: 'HR Config', path: '/hr/manage?tab=config', icon: FileText, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'HR policy settings & compliance parameters' },
 
   // 6. Administration
   { label: 'Admin Panels', path: '/admin', icon: ShieldCheck, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Master control dashboard' },
   { label: 'Party Ledgers', path: '/finance/ledger', icon: Wallet, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Live statements, sales billing, returns, and transaction ledger' },
+  { label: 'Bank RTGS / NEFT Hub', path: '/finance/rtgs-hub', icon: Landmark, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Official 10-Bank fillable RTGS & NEFT remittances' },
   { label: 'CN & Discount Approvals', path: '/finance/cn-requests', icon: Percent, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Examine & approve credit notes, special discounts & ledger write-offs' },
   { label: 'Manage Staff', path: '/admin/users', icon: Users, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Staff logins, roles & warehouse permissions' },
   { label: 'Dealers', path: '/admin/dealers', icon: Store, feature: 'manage_customers', domain: 'ADMIN', description: 'Manage retail shops, dealers and credit limits' },

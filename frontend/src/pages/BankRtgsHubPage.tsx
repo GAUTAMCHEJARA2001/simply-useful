@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Landmark, Download, Printer, RotateCcw, Sparkles, Building2, 
-  CreditCard, Globe, CheckCircle2, ShieldCheck, FileText, ArrowRightLeft
+  CreditCard, Globe, CheckCircle2, ShieldCheck, FileText, ArrowRightLeft, Users
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import apiClient from '@/api/client';
 
 // ----------------------------------------------------------------------
 // 10 MAJOR INDIAN BANKS SPECIFICATION
@@ -447,6 +448,56 @@ export default function BankRtgsHubPage() {
   });
   const [coins, setCoins] = useState<number>(0);
 
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [selectedEmpId, setSelectedEmpId] = useState<string>('');
+  const [remittanceType, setRemittanceType] = useState<'ADVANCE' | 'SALARY' | 'CUSTOM'>('ADVANCE');
+
+  useEffect(() => {
+    apiClient<any[]>('/hr/employees')
+      .then(res => {
+        const list = res?.data || (Array.isArray(res) ? res : []);
+        setEmployees(list);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleEmployeeSelect = (empId: string, currentType = remittanceType) => {
+    setSelectedEmpId(empId);
+    if (!empId) return;
+    const emp = employees.find(e => String(e.id) === String(empId));
+    if (!emp) return;
+
+    const acc = emp.bank_account_number || emp.bank_details?.account_no || '';
+    const ifsc = (emp.bank_ifsc || emp.bank_details?.ifsc || '').toUpperCase();
+    const bank = (emp.bank_name || emp.bank_details?.bank_name || '').toUpperCase();
+
+    if (bank) {
+      const match = INDIAN_BANKS.find(b => bank.includes(b.id.toUpperCase()) || b.name.includes(bank));
+      if (match) setSelectedBankId(match.id);
+    }
+
+    setForm(prev => ({
+      ...prev,
+      beneName: (emp.name || '').toUpperCase(),
+      beneAcc: acc,
+      beneAccConfirm: acc,
+      beneBank: bank || prev.beneBank,
+      beneIfsc: ifsc,
+      beneBranch: emp.bank_branch || prev.beneBranch,
+      remitterPurpose: currentType === 'ADVANCE' 
+        ? `STAFF SALARY ADVANCE - ${emp.name}` 
+        : (currentType === 'SALARY' ? `MONTHLY SALARY - ${emp.name}` : prev.remitterPurpose),
+    }));
+    toast.success(`⚡ Auto-filled ${emp.name}'s bank credentials!`);
+  };
+
+  const handleTypeSwitch = (type: 'ADVANCE' | 'SALARY' | 'CUSTOM') => {
+    setRemittanceType(type);
+    if (selectedEmpId) {
+      handleEmployeeSelect(selectedEmpId, type);
+    }
+  };
+
   const activeBank = useMemo(() => {
     return INDIAN_BANKS.find(b => b.id === selectedBankId) || INDIAN_BANKS[0];
   }, [selectedBankId]);
@@ -818,6 +869,77 @@ export default function BankRtgsHubPage() {
               </button>
             );
           })}
+        </div>
+        {/* Quick Pre-Fill Beneficiary Card (Employee Advance / Salary / Vendor) */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 p-3.5 rounded-xl shadow-lg flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 bg-indigo-500/20 text-indigo-300 px-2.5 py-1 rounded-lg border border-indigo-500/30 text-xs font-bold">
+              <Users className="w-4 h-4" />
+              <span>HR / Staff Quick Fill:</span>
+            </div>
+
+            {/* Type selector */}
+            <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleTypeSwitch('ADVANCE')}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                  remittanceType === 'ADVANCE'
+                    ? 'bg-amber-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ⚡ Advance RTGS
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTypeSwitch('SALARY')}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                  remittanceType === 'SALARY'
+                    ? 'bg-emerald-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                💼 Salary RTGS
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTypeSwitch('CUSTOM')}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                  remittanceType === 'CUSTOM'
+                    ? 'bg-sky-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🏢 Custom / Vendor
+              </button>
+            </div>
+
+            {/* Employee Dropdown */}
+            <select
+              value={selectedEmpId}
+              onChange={(e) => handleEmployeeSelect(e.target.value)}
+              className="bg-slate-900 border border-indigo-400/40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-xs"
+            >
+              <option value="">-- Select Employee (Auto-fills Bank & IFSC) --</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name} {emp.designation ? `(${emp.designation})` : ''} {emp.bank_name ? `• ${emp.bank_name}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            {selectedEmpId ? (
+              <span className="text-emerald-400 font-medium flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Employee bank details active
+              </span>
+            ) : (
+              <span>Select an employee to auto-fill account, IFSC & purpose</span>
+            )}
+          </div>
         </div>
       </div>
 

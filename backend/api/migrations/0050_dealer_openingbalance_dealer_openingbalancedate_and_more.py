@@ -34,41 +34,6 @@ class Migration(migrations.Migration):
             name='openingbalancedate',
             field=models.DateField(blank=True, db_column='openingBalanceDate', null=True),
         ),
-        migrations.AddField(
-            model_name='expense',
-            name='km_travelled',
-            field=models.FloatField(blank=True, default=0.0, null=True),
-        ),
-        migrations.AddField(
-            model_name='expense',
-            name='location_tag',
-            field=models.TextField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='expense',
-            name='odometer_end',
-            field=models.FloatField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='expense',
-            name='odometer_start',
-            field=models.FloatField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='expense',
-            name='start_photo',
-            field=models.TextField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='expense',
-            name='verified_at',
-            field=models.DateTimeField(blank=True, db_column='verifiedAt', null=True),
-        ),
-        migrations.AddField(
-            model_name='expense',
-            name='verified_by',
-            field=models.ForeignKey(blank=True, db_column='verifiedBy', db_constraint=False, null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='verified_expenses', to='core.user'),
-        ),
         migrations.CreateModel(
             name='PartyManualLedgerEntry',
             fields=[
