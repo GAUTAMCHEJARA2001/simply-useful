@@ -300,8 +300,8 @@ const App = () => {
                       {/* HR Module */}
                       <Route path="/hr" element={<Navigate to="/hr/manage" replace />} />
                       <Route path="/hr/manage" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR']}><HRManagement /></ProtectedRoute>} />
-                      <Route path="/hr/rtgs-hub" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR']}><BankRtgsHubPage /></ProtectedRoute>} />
-                      <Route path="/finance/rtgs-hub" element={<Navigate to="/hr/rtgs-hub" replace />} />
+                      <Route path="/hr/rtgs-hub" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR', 'INVENTORY']}><BankRtgsHubPage /></ProtectedRoute>} />
+                      <Route path="/finance/rtgs-hub" element={<ProtectedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'HR', 'INVENTORY']}><BankRtgsHubPage /></ProtectedRoute>} />
 
                       {/* Inventory */}
                       <Route path="/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />

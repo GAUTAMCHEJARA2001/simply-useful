@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
-import { Plus } from 'lucide-react';
+import { Plus, Landmark } from 'lucide-react';
 import { useSuppliers, useSupplierMutations } from '@/hooks/inventory/useSuppliers';
 import { Modal } from '@/components/Modal';
 import { SafeDataView } from '@/components/SafeDataView';
@@ -9,6 +10,7 @@ import { SafeDataView } from '@/components/SafeDataView';
 const Currency = (v: number | string) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
 export const SuppliersTab: React.FC = () => {
+  const navigate = useNavigate();
   const { data: suppliers = [], isLoading, error, refetch } = useSuppliers();
   const { saveSupplier, deleteSupplier } = useSupplierMutations();
   const [modal, setModal] = useState(false);
@@ -29,9 +31,19 @@ export const SuppliersTab: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Suppliers</h1>
-        <Button size="sm" onClick={() => { setForm({}); setModal(true); }}>
-          <Plus className="w-4 h-4 mr-1.5" /> Add Supplier
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => navigate('/finance/rtgs-hub?tab=supplier')}
+            className="border-blue-500/30 text-blue-400 hover:text-blue-300 hover:bg-blue-950/30"
+          >
+            <Landmark className="w-4 h-4 mr-1.5 text-blue-400" /> Generate Supplier RTGS
+          </Button>
+          <Button size="sm" onClick={() => { setForm({}); setModal(true); }}>
+            <Plus className="w-4 h-4 mr-1.5" /> Add Supplier
+          </Button>
+        </div>
       </div>
 
       <SafeDataView data={suppliers} isLoading={isLoading} error={error} onRetry={() => refetch()}>

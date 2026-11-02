@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Landmark, Download, Printer, RotateCcw, Sparkles, Building2, 
-  CreditCard, Globe, CheckCircle2, ShieldCheck, FileText, ArrowRightLeft, Users
+  CreditCard, Globe, CheckCircle2, ShieldCheck, FileText, ArrowRightLeft, Users,
+  Zap, Save, Search, AlertCircle, BookmarkCheck, ExternalLink, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
@@ -448,33 +450,203 @@ export default function BankRtgsHubPage() {
   });
   const [coins, setCoins] = useState<number>(0);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = (searchParams.get('tab') || '').toUpperCase();
+  const initialCategoryTab: 'SUPPLIER' | 'ADVANCE' | 'SALARY' | 'CUSTOM' = 
+    (urlTab === 'SUPPLIER' || urlTab === 'ADVANCE' || urlTab === 'SALARY' || urlTab === 'CUSTOM') 
+      ? urlTab 
+      : 'SUPPLIER';
+
+  const [categoryTab, setCategoryTab] = useState<'SUPPLIER' | 'ADVANCE' | 'SALARY' | 'CUSTOM'>(initialCategoryTab);
+
+  // Suppliers state
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
+  const [supplierSearch, setSupplierSearch] = useState<string>('');
+  const [invoiceRef, setInvoiceRef] = useState<string>('');
+  const [quickAmount, setQuickAmount] = useState<string>('');
+
+  // Cached supplier bank details map in localStorage
+  const [supplierBankMap, setSupplierBankMap] = useState<Record<string, { bankName: string, bankAcc: string, bankIfsc: string, bankBranch: string }>>(() => {
+    try {
+      const raw = localStorage.getItem('simply_supplier_banks_cache_v1');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Employees state
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
-  const [remittanceType, setRemittanceType] = useState<'ADVANCE' | 'SALARY' | 'CUSTOM'>('ADVANCE');
+  const [employeeSearch, setEmployeeSearch] = useState<string>('');
+
+  // Auto-detect and switch bank from IFSC prefix or Bank Name
+  const detectAndSwitchBank = (bankName: string, ifsc: string) => {
+    const cleanIfsc = (ifsc || '').toUpperCase().trim();
+    const cleanName = (bankName || '').toUpperCase().trim();
+    const prefix = cleanIfsc.slice(0, 4);
+
+    const match = INDIAN_BANKS.find(b => {
+      const bId = b.id.toUpperCase();
+      if (prefix === 'SBIN' && b.id === 'sbi') return true;
+      if (prefix === 'UTIB' && b.id === 'axis') return true;
+      if (prefix === 'HDFC' && b.id === 'hdfc') return true;
+      if (prefix === 'ICIC' && b.id === 'icici') return true;
+      if (prefix === 'PUNB' && b.id === 'pnb') return true;
+      if (prefix === 'BARB' && b.id === 'bob') return true;
+      if (prefix === 'KKBK' && b.id === 'kotak') return true;
+      if (prefix === 'CNRB' && b.id === 'canara') return true;
+      if (prefix === 'UBIN' && b.id === 'union') return true;
+      if (prefix === 'INDB' && b.id === 'indusind') return true;
+      return cleanName && (cleanName.includes(bId) || b.name.includes(cleanName));
+    });
+
+    if (match) {
+      setSelectedBankId(match.id);
+    }
+  };
 
   useEffect(() => {
+    // 1. Fetch suppliers
+    apiClient<any[]>('/masters/suppliers')
+      .then(res => {
+        const list = res?.data || (Array.isArray(res) ? res : []);
+        setSuppliers(list);
+
+        const sId = searchParams.get('supplierId');
+        if (sId) {
+          const match = list.find((s: any) => String(s.id) === String(sId));
+          if (match) {
+            handleSupplierSelect(String(match.id), list);
+          }
+        }
+      })
+      .catch(() => {});
+
+    // 2. Fetch employees
     apiClient<any[]>('/hr/employees')
       .then(res => {
         const list = res?.data || (Array.isArray(res) ? res : []);
         setEmployees(list);
+
+        const empId = searchParams.get('empId');
+        if (empId) {
+          const match = list.find((e: any) => String(e.id) === String(empId));
+          if (match) {
+            handleEmployeeSelect(String(match.id), categoryTab, list);
+          }
+        }
       })
       .catch(() => {});
   }, []);
 
-  const handleEmployeeSelect = (empId: string, currentType = remittanceType) => {
+  const switchCategoryTab = (tab: 'SUPPLIER' | 'ADVANCE' | 'SALARY' | 'CUSTOM') => {
+    setCategoryTab(tab);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab.toLowerCase());
+      return next;
+    }, { replace: true });
+
+    if (tab === 'SUPPLIER') {
+      if (selectedSupplierId) {
+        handleSupplierSelect(selectedSupplierId, suppliers);
+      } else {
+        setForm(prev => ({ ...prev, remitterPurpose: 'SUPPLIER PAYMENT' }));
+      }
+    } else if (tab === 'ADVANCE') {
+      if (selectedEmpId) {
+        handleEmployeeSelect(selectedEmpId, 'ADVANCE', employees);
+      } else {
+        setForm(prev => ({ ...prev, remitterPurpose: 'STAFF SALARY ADVANCE' }));
+      }
+    } else if (tab === 'SALARY') {
+      if (selectedEmpId) {
+        handleEmployeeSelect(selectedEmpId, 'SALARY', employees);
+      } else {
+        setForm(prev => ({ ...prev, remitterPurpose: 'MONTHLY SALARY DISBURSEMENT' }));
+      }
+    } else if (tab === 'CUSTOM') {
+      setForm(prev => ({ ...prev, remitterPurpose: prev.remitterPurpose || 'GENERAL REMITTANCE' }));
+    }
+  };
+
+  const handleSupplierSelect = (suppId: string, currentSuppliers = suppliers) => {
+    setSelectedSupplierId(suppId);
+    if (!suppId) return;
+    const s = currentSuppliers.find(x => String(x.id) === String(suppId));
+    if (!s) return;
+
+    const saved = supplierBankMap[suppId] || {};
+    const bankName = saved.bankName || '';
+    const bankAcc = saved.bankAcc || '';
+    const bankIfsc = (saved.bankIfsc || '').toUpperCase();
+    const bankBranch = saved.bankBranch || '';
+
+    detectAndSwitchBank(bankName, bankIfsc);
+
+    const purpose = invoiceRef 
+      ? `SUPPLIER PAYMENT: ${s.name} (REF: ${invoiceRef})` 
+      : `SUPPLIER PAYMENT - ${s.name}`;
+
+    setForm(prev => ({
+      ...prev,
+      beneName: (s.name || '').toUpperCase(),
+      beneAddress: s.address || prev.beneAddress,
+      beneAcc: bankAcc || prev.beneAcc,
+      beneAccConfirm: bankAcc || prev.beneAccConfirm,
+      beneBank: bankName || prev.beneBank,
+      beneIfsc: bankIfsc || prev.beneIfsc,
+      beneBranch: bankBranch || prev.beneBranch,
+      remitterPurpose: purpose,
+    }));
+
+    toast.success(`🏢 Selected Supplier: ${s.name}${bankAcc ? ' (Saved Bank Details applied!)' : ''}`);
+  };
+
+  const handleSaveSupplierBank = () => {
+    if (!selectedSupplierId) {
+      toast.error('Please select a supplier first.');
+      return;
+    }
+    const s = suppliers.find(x => String(x.id) === String(selectedSupplierId));
+    const suppName = s ? s.name : 'Supplier';
+
+    const newMap = {
+      ...supplierBankMap,
+      [selectedSupplierId]: {
+        bankName: form.beneBank,
+        bankAcc: form.beneAcc,
+        bankIfsc: form.beneIfsc,
+        bankBranch: form.beneBranch,
+      }
+    };
+    setSupplierBankMap(newMap);
+    try {
+      localStorage.setItem('simply_supplier_banks_cache_v1', JSON.stringify(newMap));
+      toast.success(`💾 Bank details saved for ${suppName}! Will auto-fill automatically in future.`);
+    } catch {
+      toast.error('Could not save bank details to browser cache.');
+    }
+  };
+
+  const handleEmployeeSelect = (empId: string, currentTab = categoryTab, currentEmployees = employees) => {
     setSelectedEmpId(empId);
     if (!empId) return;
-    const emp = employees.find(e => String(e.id) === String(empId));
+    const emp = currentEmployees.find(e => String(e.id) === String(empId));
     if (!emp) return;
 
     const acc = emp.bank_account_number || emp.bank_details?.account_no || '';
     const ifsc = (emp.bank_ifsc || emp.bank_details?.ifsc || '').toUpperCase();
     const bank = (emp.bank_name || emp.bank_details?.bank_name || '').toUpperCase();
 
-    if (bank) {
-      const match = INDIAN_BANKS.find(b => bank.includes(b.id.toUpperCase()) || b.name.includes(bank));
-      if (match) setSelectedBankId(match.id);
-    }
+    detectAndSwitchBank(bank, ifsc);
+
+    const isAdvance = currentTab === 'ADVANCE';
+    const purpose = isAdvance 
+      ? `STAFF SALARY ADVANCE - ${emp.name}` 
+      : (currentTab === 'SALARY' ? `MONTHLY SALARY - ${emp.name}` : `PAYMENT - ${emp.name}`);
 
     setForm(prev => ({
       ...prev,
@@ -484,17 +656,79 @@ export default function BankRtgsHubPage() {
       beneBank: bank || prev.beneBank,
       beneIfsc: ifsc,
       beneBranch: emp.bank_branch || prev.beneBranch,
-      remitterPurpose: currentType === 'ADVANCE' 
-        ? `STAFF SALARY ADVANCE - ${emp.name}` 
-        : (currentType === 'SALARY' ? `MONTHLY SALARY - ${emp.name}` : prev.remitterPurpose),
+      remitterPurpose: purpose,
     }));
-    toast.success(`⚡ Auto-filled ${emp.name}'s bank credentials!`);
+    toast.success(`⚡ Auto-filled ${emp.name}'s bank credentials (${isAdvance ? 'Advance' : 'Salary'})!`);
   };
 
-  const handleTypeSwitch = (type: 'ADVANCE' | 'SALARY' | 'CUSTOM') => {
-    setRemittanceType(type);
-    if (selectedEmpId) {
-      handleEmployeeSelect(selectedEmpId, type);
+  const handleAmountChange = (val: string) => {
+    setQuickAmount(val);
+    setForm(prev => {
+      const a = parseFloat(val) || 0;
+      const c = parseFloat(prev.charges) || 0;
+      const t = a + c;
+      return {
+        ...prev,
+        amount: val,
+        totalAmount: t > 0 ? (t % 1 === 0 ? t.toString() : t.toFixed(2)) : val,
+      };
+    });
+  };
+
+  const handleInvoiceRefChange = (ref: string) => {
+    setInvoiceRef(ref);
+    const s = suppliers.find(x => String(x.id) === String(selectedSupplierId));
+    if (s) {
+      setForm(prev => ({
+        ...prev,
+        remitterPurpose: ref ? `SUPPLIER PAYMENT: ${s.name} (REF: ${ref})` : `SUPPLIER PAYMENT - ${s.name}`
+      }));
+    }
+  };
+
+  const applyCustomPreset = (preset: 'GST' | 'POWER' | 'RENT' | 'FREIGHT' | 'CLEAR') => {
+    if (preset === 'GST') {
+      setSelectedBankId('sbi');
+      setForm(prev => ({
+        ...prev,
+        beneName: 'GST TAX COLLECTION ACCOUNT',
+        beneBank: 'STATE BANK OF INDIA',
+        beneIfsc: 'SBIN0000001',
+        beneAccType: 'GOVERNMENT',
+        remitterPurpose: 'GST CHALLAN TAX COMPLIANCE PAYMENT',
+      }));
+      toast.success('🏛️ Applied GST Challan Remittance Template!');
+    } else if (preset === 'POWER') {
+      setForm(prev => ({
+        ...prev,
+        beneName: 'STATE ELECTRICITY BOARD / DGVCL',
+        remitterPurpose: 'FACTORY POWER & ELECTRICITY CHARGES',
+      }));
+      toast.success('⚡ Applied Electricity Bill Template!');
+    } else if (preset === 'RENT') {
+      setForm(prev => ({
+        ...prev,
+        remitterPurpose: 'FACTORY & WAREHOUSE PREMISES LEASE RENT',
+      }));
+      toast.success('🏢 Applied Premises Rent Template!');
+    } else if (preset === 'FREIGHT') {
+      setForm(prev => ({
+        ...prev,
+        remitterPurpose: 'GOODS TRANSPORTATION & FREIGHT CHARGES',
+      }));
+      toast.success('🚛 Applied Transporter Freight Template!');
+    } else if (preset === 'CLEAR') {
+      setForm(prev => ({
+        ...prev,
+        beneName: '',
+        beneAcc: '',
+        beneAccConfirm: '',
+        beneBank: '',
+        beneBranch: '',
+        beneIfsc: '',
+        remitterPurpose: '',
+      }));
+      toast.info('Cleared beneficiary fields for manual entry.');
     }
   };
 
@@ -838,10 +1072,534 @@ export default function BankRtgsHubPage() {
           </div>
         </div>
 
+        {/* ============================================================== */}
+        {/* UNIFIED RTGS DISBURSEMENT TABS BAR */}
+        {/* (Supplier RTGS, Employee Advance, Employee Salary, Other RTGS) */}
+        {/* ============================================================== */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden print:hidden space-y-0">
+          
+          {/* Main 4 Tabs Header */}
+          <div className="flex border-b border-slate-800 bg-slate-950/80 p-2 gap-2 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => switchCategoryTab('SUPPLIER')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                categoryTab === 'SUPPLIER'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25 scale-[1.02]'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+              }`}
+            >
+              <Building2 className="w-4 h-4" />
+              <span>1. Supplier / Vendor RTGS</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${categoryTab === 'SUPPLIER' ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                {suppliers.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => switchCategoryTab('ADVANCE')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                categoryTab === 'ADVANCE'
+                  ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/25 scale-[1.02]'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              <span>2. Employee Advance Pay</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${categoryTab === 'ADVANCE' ? 'bg-black/20 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
+                {employees.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => switchCategoryTab('SALARY')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                categoryTab === 'SALARY'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/25 scale-[1.02]'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>3. Employee Monthly Salary</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${categoryTab === 'SALARY' ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                {employees.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => switchCategoryTab('CUSTOM')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                categoryTab === 'CUSTOM'
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25 scale-[1.02]'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>4. Other / Custom RTGS Filling</span>
+            </button>
+          </div>
+
+          {/* Tab Content Drawer */}
+          <div className="p-4 bg-slate-900/90 space-y-3">
+            
+            {/* 1. SUPPLIER TAB DRAWER */}
+            {categoryTab === 'SUPPLIER' && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-blue-400 flex items-center gap-1.5">
+                      <Building2 className="w-4 h-4" /> Supplier Remittance Generator:
+                    </span>
+                    <span className="text-slate-400">
+                      Select your raw material, chemical or machinery supplier from master to auto-populate bank RTGS slip.
+                    </span>
+                  </div>
+                  {selectedSupplierId && supplierBankMap[selectedSupplierId]?.bankAcc && (
+                    <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
+                      <BookmarkCheck className="w-3.5 h-3.5" /> Saved Bank Credentials Active
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                  {/* Supplier dropdown */}
+                  <div className="md:col-span-4">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Choose Supplier / Vendor:
+                    </label>
+                    <select
+                      value={selectedSupplierId}
+                      onChange={(e) => handleSupplierSelect(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs font-medium px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Select Supplier ({suppliers.length} available) --</option>
+                      {suppliers.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} {s.gstnumber ? `• GST: ${s.gstnumber}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Invoice / PO Ref */}
+                  <div className="md:col-span-3">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Invoice / PO Ref # (Optional):
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. INV-2026/89 or PO-102"
+                      value={invoiceRef}
+                      onChange={(e) => handleInvoiceRefChange(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Payment Amount */}
+                  <div className="md:col-span-3">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Payment Amount (₹):
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Enter amount (e.g. 150000)"
+                      value={form.amount}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                      className="w-full bg-slate-950 border border-blue-500/50 text-blue-400 font-bold text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Save Bank Details Button */}
+                  <div className="md:col-span-2 pt-4">
+                    <button
+                      type="button"
+                      onClick={handleSaveSupplierBank}
+                      disabled={!selectedSupplierId}
+                      className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all disabled:opacity-40"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      Save Bank Info
+                    </button>
+                  </div>
+                </div>
+
+                {/* Supplier Bank credentials editor inline */}
+                {selectedSupplierId && (
+                  <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Beneficiary Acc No:</span>
+                      <input
+                        type="text"
+                        placeholder="Enter Bank Account #"
+                        value={form.beneAcc}
+                        onChange={(e) => {
+                          updateForm('beneAcc', e.target.value);
+                          updateForm('beneAccConfirm', e.target.value);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1 rounded text-xs mt-1"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] font-bold uppercase">IFSC Code:</span>
+                      <input
+                        type="text"
+                        placeholder="e.g. HDFC0001234"
+                        value={form.beneIfsc}
+                        onChange={(e) => {
+                          const ifsc = e.target.value.toUpperCase();
+                          updateForm('beneIfsc', ifsc);
+                          detectAndSwitchBank(form.beneBank, ifsc);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 text-sky-400 font-bold px-2.5 py-1 rounded text-xs mt-1 uppercase"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Bank Name:</span>
+                      <input
+                        type="text"
+                        placeholder="e.g. HDFC Bank, SBI..."
+                        value={form.beneBank}
+                        onChange={(e) => {
+                          updateForm('beneBank', e.target.value.toUpperCase());
+                          detectAndSwitchBank(e.target.value, form.beneIfsc);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1 rounded text-xs mt-1 uppercase"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Branch:</span>
+                      <input
+                        type="text"
+                        placeholder="Branch city/area"
+                        value={form.beneBranch}
+                        onChange={(e) => updateForm('beneBranch', e.target.value.toUpperCase())}
+                        className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1 rounded text-xs mt-1 uppercase"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 2. EMPLOYEE ADVANCE PAY TAB DRAWER */}
+            {categoryTab === 'ADVANCE' && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                      <Zap className="w-4 h-4" /> Employee Staff Advance Remittance:
+                    </span>
+                    <span className="text-slate-400">
+                      Disburse salary advances directly to employee bank accounts. Sets purpose as STAFF SALARY ADVANCE.
+                    </span>
+                  </div>
+                  {selectedEmpId && (
+                    <span className="text-amber-400 bg-amber-950/60 border border-amber-800/50 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Employee HR Profile Synced
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                  {/* Employee select */}
+                  <div className="md:col-span-5">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Choose Employee:
+                    </label>
+                    <select
+                      value={selectedEmpId}
+                      onChange={(e) => handleEmployeeSelect(e.target.value, 'ADVANCE')}
+                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs font-medium px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      <option value="">-- Select Staff Member ({employees.length} employees) --</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} {emp.designation ? `(${emp.designation})` : ''} {emp.bank_name ? `• ${emp.bank_name}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Advance Amount */}
+                  <div className="md:col-span-4">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Advance Amount (₹):
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Enter advance amount (e.g. 20000)"
+                      value={form.amount}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                      className="w-full bg-slate-950 border border-amber-500/50 text-amber-400 font-bold text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  {/* Cheque No */}
+                  <div className="md:col-span-3">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Enclosed Cheque No:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 541289"
+                      value={form.chequeNo}
+                      onChange={(e) => updateForm('chequeNo', e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Selected Employee Profile badge */}
+                {selectedEmpId && (
+                  <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Employee:</span>
+                        <span className="font-bold text-white">{form.beneName}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Account No:</span>
+                        <span className="font-mono font-bold text-sky-400">{form.beneAcc || 'Not set in HR profile'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">IFSC:</span>
+                        <span className="font-mono font-bold text-emerald-400">{form.beneIfsc || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Bank:</span>
+                        <span className="font-bold text-slate-300">{form.beneBank || 'N/A'}</span>
+                      </div>
+                    </div>
+                    <span className="text-amber-400/90 font-medium text-[11px]">
+                      Mandate Purpose: &quot;STAFF SALARY ADVANCE - {form.beneName}&quot;
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 3. EMPLOYEE MONTHLY SALARY TAB DRAWER */}
+            {categoryTab === 'SALARY' && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                      <Users className="w-4 h-4" /> Employee Monthly Salary Remittance:
+                    </span>
+                    <span className="text-slate-400">
+                      Disburse monthly payroll wages directly to employee bank accounts via RTGS / NEFT.
+                    </span>
+                  </div>
+                  {selectedEmpId && (
+                    <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Payroll Remittance Ready
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                  {/* Employee select */}
+                  <div className="md:col-span-5">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Choose Employee:
+                    </label>
+                    <select
+                      value={selectedEmpId}
+                      onChange={(e) => handleEmployeeSelect(e.target.value, 'SALARY')}
+                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs font-medium px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">-- Select Staff Member ({employees.length} employees) --</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} {emp.designation ? `(${emp.designation})` : ''} {emp.bank_name ? `• ${emp.bank_name}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Salary Amount */}
+                  <div className="md:col-span-4">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Net Salary Amount (₹):
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Enter salary amount (e.g. 35000)"
+                      value={form.amount}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                      className="w-full bg-slate-950 border border-emerald-500/50 text-emerald-400 font-bold text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Cheque No */}
+                  <div className="md:col-span-3">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Enclosed Cheque No:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 541290"
+                      value={form.chequeNo}
+                      onChange={(e) => updateForm('chequeNo', e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Selected Employee Profile badge */}
+                {selectedEmpId && (
+                  <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Employee:</span>
+                        <span className="font-bold text-white">{form.beneName}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Account No:</span>
+                        <span className="font-mono font-bold text-sky-400">{form.beneAcc || 'Not set'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">IFSC:</span>
+                        <span className="font-mono font-bold text-emerald-400">{form.beneIfsc || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Bank:</span>
+                        <span className="font-bold text-slate-300">{form.beneBank || 'N/A'}</span>
+                      </div>
+                    </div>
+                    <span className="text-emerald-400/90 font-medium text-[11px]">
+                      Mandate Purpose: &quot;MONTHLY SALARY - {form.beneName}&quot;
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 4. OTHER / CUSTOM RTGS TAB DRAWER */}
+            {categoryTab === 'CUSTOM' && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-purple-400 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4" /> Other Remittances & Quick Presets:
+                    </span>
+                    <span className="text-slate-400">
+                      1-Click templates for statutory taxes, power bills, factory rent, freight, or manual payee filling.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quick Presets Buttons */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyCustomPreset('GST')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/30 text-xs font-semibold transition-all"
+                  >
+                    <Landmark className="w-3.5 h-3.5 text-sky-400" />
+                    🏛️ GST Tax Challan
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyCustomPreset('POWER')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    ⚡ Electricity / Power
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyCustomPreset('RENT')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-all"
+                  >
+                    <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                    🏢 Premises Rent
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyCustomPreset('FREIGHT')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-all"
+                  >
+                    <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
+                    🚛 Freight / Transport
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyCustomPreset('CLEAR')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition-all"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                    📑 Blank Payee
+                  </button>
+                </div>
+
+                {/* Custom Payee Fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Beneficiary Name:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ABC ENTERPRISES"
+                      value={form.beneName}
+                      onChange={(e) => updateForm('beneName', e.target.value.toUpperCase())}
+                      className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1.5 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Remittance Amount (₹):
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 50000"
+                      value={form.amount}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                      className="w-full bg-slate-900 border border-purple-500/50 text-purple-300 font-bold px-2.5 py-1.5 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Payment Purpose / Narration:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ADVANCE PAYMENT"
+                      value={form.remitterPurpose}
+                      onChange={(e) => updateForm('remitterPurpose', e.target.value.toUpperCase())}
+                      className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1.5 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Enclosed Cheque #:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 102934"
+                      value={form.chequeNo}
+                      onChange={(e) => updateForm('chequeNo', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1.5 rounded text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* 10 Banks Selector Bar */}
         <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center gap-2 overflow-x-auto shadow-md">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 whitespace-nowrap">
-            Select Bank:
+            Select Bank Slip:
           </span>
           {INDIAN_BANKS.map(bank => {
             const isActive = bank.id === selectedBankId;
@@ -869,77 +1627,6 @@ export default function BankRtgsHubPage() {
               </button>
             );
           })}
-        </div>
-        {/* Quick Pre-Fill Beneficiary Card (Employee Advance / Salary / Vendor) */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 p-3.5 rounded-xl shadow-lg flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-indigo-500/20 text-indigo-300 px-2.5 py-1 rounded-lg border border-indigo-500/30 text-xs font-bold">
-              <Users className="w-4 h-4" />
-              <span>HR / Staff Quick Fill:</span>
-            </div>
-
-            {/* Type selector */}
-            <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800">
-              <button
-                type="button"
-                onClick={() => handleTypeSwitch('ADVANCE')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
-                  remittanceType === 'ADVANCE'
-                    ? 'bg-amber-500 text-slate-950 shadow'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                ⚡ Advance RTGS
-              </button>
-              <button
-                type="button"
-                onClick={() => handleTypeSwitch('SALARY')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
-                  remittanceType === 'SALARY'
-                    ? 'bg-emerald-500 text-slate-950 shadow'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                💼 Salary RTGS
-              </button>
-              <button
-                type="button"
-                onClick={() => handleTypeSwitch('CUSTOM')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
-                  remittanceType === 'CUSTOM'
-                    ? 'bg-sky-500 text-slate-950 shadow'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                🏢 Custom / Vendor
-              </button>
-            </div>
-
-            {/* Employee Dropdown */}
-            <select
-              value={selectedEmpId}
-              onChange={(e) => handleEmployeeSelect(e.target.value)}
-              className="bg-slate-900 border border-indigo-400/40 text-white text-xs font-semibold px-3 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-xs"
-            >
-              <option value="">-- Select Employee (Auto-fills Bank & IFSC) --</option>
-              {employees.map(emp => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.name} {emp.designation ? `(${emp.designation})` : ''} {emp.bank_name ? `• ${emp.bank_name}` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            {selectedEmpId ? (
-              <span className="text-emerald-400 font-medium flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Employee bank details active
-              </span>
-            ) : (
-              <span>Select an employee to auto-fill account, IFSC & purpose</span>
-            )}
-          </div>
         </div>
       </div>
 

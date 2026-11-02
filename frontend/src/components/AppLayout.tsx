@@ -59,6 +59,7 @@ const navItems: NavItem[] = [
   { label: 'CN & Discounts', path: '/finance/cn-requests', icon: Percent, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Credit Notes, special discounts & SuperAdmin approvals queue' },
   { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses', domain: 'FINANCE', description: 'Submit and review travel & field expenses' },
   { label: 'Payment Receipts', path: '/sales/payments/new', icon: CreditCard, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Record party cheque, RTGS or cash payments' },
+  { label: 'Bank RTGS & Remittances', path: '/finance/rtgs-hub', icon: Landmark, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Supplier RTGS, Employee Advances, Salary & Custom Bank Slips' },
   { label: 'Payment Approvals', path: '/admin/payments', icon: Receipt, feature: 'view_admin_dashboard', domain: 'FINANCE', description: 'Verify and approve party payment collections' },
   { label: 'My Ledger Requests', path: '/sales/ledger-requests', icon: FileText, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Request statement of accounts for dealers' },
   { label: 'Ledger Fulfillment', path: '/admin/ledger-requests', icon: FileText, feature: 'view_admin_dashboard', domain: 'FINANCE', description: 'Process and upload party financial ledgers' },
@@ -113,7 +114,7 @@ const navItems: NavItem[] = [
   { label: 'Leave Management', path: '/hr/manage?tab=leaves', icon: CalendarCheck, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Attendance & Operations', description: 'Leave approvals & holiday tracker' },
   { label: 'Employee Ledger', path: '/hr/manage?tab=ledger', icon: Wallet, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Staff advance salary & running balances' },
   { label: 'Payroll & Slips', path: '/hr/manage?tab=payroll', icon: FileBarChart, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Salary calculations & payslip generation' },
-  { label: 'Bank RTGS / NEFT Hub', path: '/hr/rtgs-hub', icon: Landmark, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Generate Advance & Salary RTGS slips for all 10 Indian banks' },
+  { label: 'Bank RTGS / Staff Advances', path: '/hr/rtgs-hub?tab=advance', icon: Landmark, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Staff salary advances & monthly salary bank RTGS slips' },
   { label: 'HR Config', path: '/hr/manage?tab=config', icon: FileText, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'HR policy settings & compliance parameters' },
 
   // 6. Administration
