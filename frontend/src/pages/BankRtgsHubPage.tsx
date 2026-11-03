@@ -1,2182 +1,929 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
-  Landmark, Download, Printer, RotateCcw, Sparkles, Building2, 
-  CreditCard, Globe, CheckCircle2, ShieldCheck, FileText, ArrowRightLeft, Users,
-  Zap, Save, Search, AlertCircle, BookmarkCheck, ExternalLink, RefreshCw
+  Landmark, Download, Plus, Search, Edit2, Trash2, CheckCircle2, 
+  AlertCircle, Building2, Users, FileText, X, Sparkles, ArrowRight, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { useSettings } from '@/hooks/inventory/useMasters';
+import { generateRTGSSlip } from '@/utils/pdfGenerator';
 import apiClient from '@/api/client';
 
-// ----------------------------------------------------------------------
-// 10 MAJOR INDIAN BANKS SPECIFICATION
-// ----------------------------------------------------------------------
-export interface BankProfile {
+export interface RtgsPayee {
   id: string;
   name: string;
-  subname: string;
-  primaryColor: string;
-  secondaryColor: string;
-  annexure: string;
-  title: string;
-  subtitle: string;
-  logoSvg: React.ReactNode;
+  category: 'SUPPLIER' | 'EMPLOYEE' | 'OTHER';
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  branch?: string;
+  phone?: string;
+  gstNumber?: string;
+  designation?: string;
 }
 
-export const INDIAN_BANKS: BankProfile[] = [
-  {
-    id: 'sbi',
-    name: 'STATE BANK OF INDIA',
-    subname: 'भारतीय स्टेट बैंक',
-    primaryColor: '#002D62',
-    secondaryColor: '#00b5ef',
-    annexure: 'Annexure-I (RTGS/NEFT)',
-    title: 'APPLICATION FOR RTGS / NEFT REMITTANCE',
-    subtitle: '(For RTGS - Amount must be ₹ 2,00,000/- or more)',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <circle cx="50" cy="50" r="48" fill="#002D62" />
-        <circle cx="50" cy="50" r="16" fill="#ffffff" />
-        <rect x="47" y="50" width="6" height="36" fill="#002D62" />
-      </svg>
-    )
-  },
-  {
-    id: 'axis',
-    name: 'AXIS BANK',
-    subname: 'एक्सिस बैंक',
-    primaryColor: '#97144D',
-    secondaryColor: '#700e39',
-    annexure: 'Annexure - RTGS/NEFT/IMPS',
-    title: 'APPLICATION FOR RTGS / NEFT / IMPS REMITTANCE',
-    subtitle: '(Customer Copy & Bank Mandate Form)',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <polygon points="50,10 90,85 10,85" fill="#97144D" />
-        <polygon points="50,35 75,80 25,80" fill="#ffffff" />
-      </svg>
-    )
-  },
-  {
-    id: 'hdfc',
-    name: 'HDFC BANK',
-    subname: 'एचडीएफसी बैंक',
-    primaryColor: '#004c8f',
-    secondaryColor: '#ed232a',
-    annexure: 'Form RTGS/NEFT-01',
-    title: 'APPLICATION FOR RTGS / NEFT FUNDS TRANSFER',
-    subtitle: '(Please fill in BLOCK letters)',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <rect width="100" height="100" fill="#004c8f" rx="10" />
-        <rect x="35" y="15" width="30" height="70" fill="#ffffff" />
-        <rect x="15" y="35" width="70" height="30" fill="#ffffff" />
-        <rect x="40" y="20" width="20" height="60" fill="#ed232a" />
-        <rect x="20" y="40" width="60" height="20" fill="#ed232a" />
-        <rect x="40" y="40" width="20" height="20" fill="#004c8f" />
-      </svg>
-    )
-  },
-  {
-    id: 'icici',
-    name: 'ICICI BANK',
-    subname: 'आईसीआईसीआई बैंक',
-    primaryColor: '#A6192E',
-    secondaryColor: '#F58220',
-    annexure: 'Form FT-02 (Annexure-1)',
-    title: 'FUNDS TRANSFER APPLICATION (RTGS / NEFT)',
-    subtitle: '(Remittance Voucher & Customer Counterfoil)',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <circle cx="50" cy="50" r="48" fill="#A6192E" />
-        <circle cx="50" cy="30" r="10" fill="#F58220" />
-        <path d="M42,45 L58,45 L58,82 L42,82 Z" fill="#F58220" />
-        <path d="M30,50 Q50,75 70,50" stroke="#ffffff" strokeWidth="5" fill="none" />
-      </svg>
-    )
-  },
-  {
-    id: 'bob',
-    name: 'BANK OF BARODA',
-    subname: 'बैंक ऑफ़ बड़ौदा',
-    primaryColor: '#F26522',
-    secondaryColor: '#0A2240',
-    annexure: 'BOB/RTGS-NEFT/01',
-    title: 'RTGS / NEFT REMITTANCE APPLICATION FORM',
-    subtitle: 'आरटीजीएस / नेफ्ट प्रेषण आवेदन पत्र',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <rect width="100" height="100" fill="#F26522" rx="10" />
-        <circle cx="50" cy="50" r="30" fill="#ffffff" />
-        <circle cx="50" cy="50" r="22" fill="#F26522" />
-        <text x="50" y="60" fontSize="28" fontWeight="bold" fill="#ffffff" textAnchor="middle">B</text>
-      </svg>
-    )
-  },
-  {
-    id: 'pnb',
-    name: 'PUNJAB NATIONAL BANK',
-    subname: 'पंजाब नेशनल बैंक',
-    primaryColor: '#A20000',
-    secondaryColor: '#FFCC00',
-    annexure: 'PNB-1142 (RTGS/NEFT)',
-    title: 'FUNDS TRANSFER APPLICATION (RTGS / NEFT)',
-    subtitle: 'धन प्रेषण आवेदन पत्र (शाखा प्रति एवं ग्राहक प्रति)',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <circle cx="50" cy="50" r="48" fill="#A20000" />
-        <circle cx="50" cy="50" r="34" fill="#FFCC00" />
-        <circle cx="50" cy="50" r="24" fill="#A20000" />
-        <text x="50" y="60" fontSize="26" fontWeight="bold" fill="#FFCC00" textAnchor="middle">pnb</text>
-      </svg>
-    )
-  },
-  {
-    id: 'canara',
-    name: 'CANARA BANK',
-    subname: 'केनरा बैंक',
-    primaryColor: '#0091DF',
-    secondaryColor: '#F39200',
-    annexure: 'NF 956 (NEFT/RTGS)',
-    title: 'APPLICATION FOR REMITTANCE THROUGH RTGS / NEFT',
-    subtitle: '(A Government of India Undertaking)',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <polygon points="30,20 70,20 90,60 50,60" fill="#0091DF" />
-        <polygon points="50,40 90,40 70,80 30,80" fill="#F39200" />
-      </svg>
-    )
-  },
-  {
-    id: 'union',
-    name: 'UNION BANK OF INDIA',
-    subname: 'यूनियन बैंक ऑफ इंडिया',
-    primaryColor: '#ED1C24',
-    secondaryColor: '#0054A6',
-    annexure: 'UBI/RTGS-NEFT/REV',
-    title: 'APPLICATION FOR RTGS / NEFT REMITTANCE',
-    subtitle: '(Good people to bank with)',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <rect width="100" height="100" fill="#ffffff" rx="10" stroke="#ED1C24" strokeWidth="2" />
-        <path d="M25,25 L25,60 Q25,80 50,80 Q75,80 75,60 L75,25" fill="none" stroke="#ED1C24" strokeWidth="12" />
-        <path d="M40,25 L40,55 Q40,65 50,65 Q60,65 60,55 L60,25" fill="none" stroke="#0054A6" strokeWidth="8" />
-      </svg>
-    )
-  },
-  {
-    id: 'kotak',
-    name: 'KOTAK MAHINDRA BANK',
-    subname: 'कोटक महिन्द्रा बैंक',
-    primaryColor: '#ED1C24',
-    secondaryColor: '#003366',
-    annexure: 'KMB-RTGS-01',
-    title: 'APPLICATION FORM FOR RTGS / NEFT REMITTANCE',
-    subtitle: '(Customer Receipt & Debit Mandate Slip)',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <rect width="100" height="100" fill="#ED1C24" rx="10" />
-        <path d="M25,25 L40,25 L40,75 L25,75 Z" fill="#ffffff" />
-        <path d="M40,50 L75,25 L75,42 L55,56 L75,75 L55,75 Z" fill="#ffffff" />
-      </svg>
-    )
-  },
-  {
-    id: 'uco',
-    name: 'UCO BANK',
-    subname: 'यूको बैंक',
-    primaryColor: '#003366',
-    secondaryColor: '#002244',
-    annexure: 'Annexure-1 (Form RTGS-1)',
-    title: 'NEFT/RTGS FUNDS REMITTANCE APPLICATION FORM',
-    subtitle: '(Honours Your Trust / आपके विश्वास का सम्मान)',
-    logoSvg: (
-      <svg viewBox="0 0 100 100" className="w-8 h-8 flex-shrink-0">
-        <polygon points="50,10 88,25 88,75 50,90 12,75 12,25" fill="#003366" />
-        <rect x="35" y="35" width="30" height="30" fill="#ffffff" rx="4" />
-        <circle cx="50" cy="50" r="7" fill="#003366" />
-      </svg>
-    )
-  }
-];
-
-// ----------------------------------------------------------------------
-// NUMBER TO WORDS ENGINE (ENGLISH, HINDI, GUJARATI)
-// ----------------------------------------------------------------------
-const HINDI_MAP: Record<number, string> = {
-  0: "शून्य", 1: "एक", 2: "दो", 3: "तीन", 4: "चार", 5: "पाँच", 6: "छह", 7: "सात", 8: "आठ", 9: "नौ", 10: "दस",
-  11: "ग्यारह", 12: "बारह", 13: "तेरह", 14: "चौदह", 15: "पंद्रह", 16: "सोलह", 17: "सत्रह", 18: "अठारह", 19: "उन्नीस", 20: "बीस",
-  21: "इक्कीस", 22: "बाईस", 23: "तेईस", 24: "चौबीस", 25: "पच्चीस", 26: "छब्बीस", 27: "सत्ताईस", 28: "अट्ठाईस", 29: "उनतीस", 30: "तीस",
-  31: "इकतीस", 32: "बत्तीस", 33: "तैंतीस", 34: "चौंतीस", 35: "पैंतीस", 36: "छत्तीस", 37: "सैंतीस", 38: "अड़तीस", 39: "उनतालीस", 40: "चालीस",
-  41: "इकतालीस", 42: "बयालीस", 43: "तैंतालीस", 44: "चौवालीस", 45: "पैंतालीस", 46: "छियालीस", 47: "सैंतालीस", 48: "अड़तालीस", 49: "उनचास", 50: "पचास",
-  51: "इक्यावन", 52: "बावन", 53: "तिरेपन", 54: "चौवन", 55: "पचपन", 56: "छप्पन", 57: "सत्तावन", 58: "अट्ठावन", 59: "उनसठ", 60: "साठ",
-  61: "इकसठ", 62: "बासठ", 63: "तिरेसठ", 64: "चौंसठ", 65: "पैंसठ", 66: "छियासठ", 67: "सरसठ", 68: "अड़सठ", 69: "उनहत्तर", 70: "सत्तर",
-  71: "इकहत्तर", 72: "बहत्तर", 73: "तिहत्तर", 74: "चौहत्तर", 75: "पचहत्तर", 76: "छिहत्तर", 77: "सतहत्तर", 78: "अठहत्तर", 79: "उनासी", 80: "अस्सी",
-  81: "इक्यासी", 82: "बयासी", 83: "तिरासी", 84: "चौरासी", 85: "पंचासी", 86: "छियासी", 87: "सत्तासी", 88: "अट्ठासी", 89: "नवासी", 90: "नब्बे",
-  91: "इक्यानवे", 92: "बानवे", 93: "तिरानवे", 94: "चौरानवे", 95: "पंचानवे", 96: "छियानवे", 97: "सत्तानवे", 98: "अट्ठानवे", 99: "निन्यानवे"
-};
-
-const GUJARATI_MAP: Record<number, string> = {
-  0: "શૂન્ય", 1: "એક", 2: "બે", 3: "ત્રણ", 4: "ચાર", 5: "પાંચ", 6: "છ", 7: "સાત", 8: "આઠ", 9: "નવ", 10: "દસ",
-  11: "અગિયાર", 12: "બાર", 13: "તેર", 14: "ચૌદ", 15: "પંદર", 16: "સોળ", 17: "સત્તર", 18: "અઢાર", 19: "ઓગણીસ", 20: "વીસ",
-  21: "એકવીસ", 22: "બાવીસ", 23: "તેવીસ", 24: "ચોવીસ", 25: "પચ્ચીસ", 26: "છવ્વીસ", 27: "સત્તાવીસ", 28: "અઠ્ઠાવીસ", 29: "ઓગણત્રીસ", 30: "ત્રીસ",
-  31: "એકત્રીસ", 32: "બત્રીસ", 33: "તેત્રીસ", 34: "ચોત્રીસ", 35: "પાંત્રીસ", 36: "છત્રીસ", 37: "સડત્રીસ", 38: "ઓડત્રીસ", 39: "ઓગણચાલીસ", 40: "ચાલીસ",
-  41: "એકતાલીસ", 42: "બેતાલીસ", 43: "તેતાલીસ", 44: "ચુંમાલીસ", 45: "પિસ્તાલીસ", 46: "છેતાલીસ", 47: "સુડતાલીસ", 48: "અડતાલીસ", 49: "ઓગણપચાસ", 50: "પચાસ",
-  51: "એકાવન", 52: "બાવન", 53: "તેપન", 54: "ચોપન", 55: "પંચાવન", 56: "છપ્પન", 57: "સત્તાવન", 58: "અઠ્ઠાવન", 59: "ઓગણસાઠ", 60: "સાઠ",
-  61: "એકસઠ", 62: "બાસઠ", 63: "તેસઠ", 64: "ચોસઠ", 65: "પાંસઠ", 66: "છાસઠ", 67: "સડસઠ", 68: "અડસઠ", 69: "અગણોસિત્તેર", 70: "સિત્તેર",
-  71: "એકોતેર", 72: "બોતેર", 73: "તોતેર", 74: "ચોંતેર", 75: "પંચોતેર", 76: "છોતેર", 77: "સંતોતેર", 78: "ઇઠોતેર", 79: "ઓગણએંસી", 80: "એંસી",
-  81: "એક્યાસી", 82: "બ્યાસી", 83: "ત્યાસી", 84: "ચોર્યાસી", 85: "પંચાસી", 86: "છ્યાસી", 87: "સત્યાસી", 88: "અઠ્યાસી", 89: "નેવ્યાસી", 90: "નેવું",
-  91: "એકાણવું", 92: "બાણવું", 93: "ત્રાણવું", 94: "ચોરાણવું", 95: "પંચાણવું", 96: "છન્નું", 97: "સત્તાણવું", 98: "અઠ્ઠાણવું", 99: "નવ્વાણવું"
-};
-
-function numToWordsIndian(numVal: string | number, lang: 'en' | 'hi' | 'gu' = 'en'): string {
-  if (!numVal) return lang === 'hi' ? "रुपये शून्य मात्र" : (lang === 'gu' ? "રૂપિયા શૂન્ય પૂરા" : "Rupees Zero Only");
-  const clean = ("" + numVal).replace(/[^0-9.]/g, "");
-  if (!clean) return lang === 'hi' ? "रुपये शून्य मात्र" : (lang === 'gu' ? "રૂપિયા શૂન્ય પૂરા" : "Rupees Zero Only");
-  const parts = clean.split(".");
-  let intPart = parseInt(parts[0], 10);
-  let decPart = 0;
-  if (parts.length > 1 && parts[1].length > 0) {
-    decPart = parseInt((parts[1] + "00").substring(0, 2), 10);
-  }
-  if (isNaN(intPart) && decPart === 0) return lang === 'hi' ? "रुपये शून्य मात्र" : (lang === 'gu' ? "રૂપિયા શૂન્ય પૂરા" : "Rupees Zero Only");
-
-  if (lang === 'hi') {
-    const chunkHi = (n: number) => {
-      if (n === 0) return "";
-      let s = "";
-      const h = Math.floor(n / 100);
-      const r = n % 100;
-      if (h > 0) s += HINDI_MAP[h] + " सौ ";
-      if (r > 0) s += HINDI_MAP[r];
-      return s.trim();
-    };
-
-    let words = "";
-    if (intPart > 0) {
-      const crore = Math.floor(intPart / 10000000);
-      intPart %= 10000000;
-      const lakh = Math.floor(intPart / 100000);
-      intPart %= 100000;
-      const thousand = Math.floor(intPart / 1000);
-      intPart %= 1000;
-      const hundreds = intPart;
-
-      const res: string[] = [];
-      if (crore > 0) res.push((HINDI_MAP[crore] || crore) + " करोड़");
-      if (lakh > 0) res.push((HINDI_MAP[lakh] || lakh) + " लाख");
-      if (thousand > 0) res.push((HINDI_MAP[thousand] || thousand) + " हज़ार");
-      if (hundreds > 0) res.push(chunkHi(hundreds));
-      words = res.join(" ");
-    }
-
-    let finalStr = "रुपये " + (words ? words : "शून्य");
-    if (decPart > 0) finalStr += " और " + (HINDI_MAP[decPart] || decPart) + " पैसे";
-    finalStr += " मात्र";
-    return finalStr;
-  }
-
-  if (lang === 'gu') {
-    const chunkGu = (n: number) => {
-      if (n === 0) return "";
-      let s = "";
-      const h = Math.floor(n / 100);
-      const r = n % 100;
-      if (h > 0) s += GUJARATI_MAP[h] + " સો ";
-      if (r > 0) s += GUJARATI_MAP[r];
-      return s.trim();
-    };
-
-    let words = "";
-    if (intPart > 0) {
-      const crore = Math.floor(intPart / 10000000);
-      intPart %= 10000000;
-      const lakh = Math.floor(intPart / 100000);
-      intPart %= 100000;
-      const thousand = Math.floor(intPart / 1000);
-      intPart %= 1000;
-      const hundreds = intPart;
-
-      const res: string[] = [];
-      if (crore > 0) res.push((GUJARATI_MAP[crore] || crore) + " કરોડ");
-      if (lakh > 0) res.push((GUJARATI_MAP[lakh] || lakh) + " લાખ");
-      if (thousand > 0) res.push((GUJARATI_MAP[thousand] || thousand) + " હજાર");
-      if (hundreds > 0) res.push(chunkGu(hundreds));
-      words = res.join(" ");
-    }
-
-    let finalStr = "રૂપિયા " + (words ? words : "શૂન્ય");
-    if (decPart > 0) finalStr += " અને " + (GUJARATI_MAP[decPart] || decPart) + " પૈસા";
-    finalStr += " પૂરા";
-    return finalStr;
-  }
-
-  // English
-  const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", 
-             "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
-  const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-
-  const c2 = (n: number) => {
-    if (n < 20) return a[n];
-    const tens = b[Math.floor(n / 10)];
-    const units = a[n % 10];
-    return units ? tens + " " + units : tens;
-  };
-
-  const c3 = (n: number) => {
-    let str = "";
-    const hundreds = Math.floor(n / 100);
-    const rem = n % 100;
-    if (hundreds > 0) str += a[hundreds] + " Hundred ";
-    if (rem > 0) str += c2(rem);
-    return str.trim();
-  };
-
-  let words = "";
-  if (intPart > 0) {
-    const crore = Math.floor(intPart / 10000000);
-    intPart %= 10000000;
-    const lakh = Math.floor(intPart / 100000);
-    intPart %= 100000;
-    const thousand = Math.floor(intPart / 1000);
-    intPart %= 1000;
-    const hundreds = intPart;
-
-    const res: string[] = [];
-    if (crore > 0) res.push(c3(crore) + " Crore");
-    if (lakh > 0) res.push(c2(lakh) + " Lakh");
-    if (thousand > 0) res.push(c2(thousand) + " Thousand");
-    if (hundreds > 0) res.push(c3(hundreds));
-    words = res.join(" ");
-  }
-
-  let finalStr = "Rupees " + (words ? words : "Zero");
-  if (decPart > 0) finalStr += " and " + c2(decPart) + " Paise";
-  finalStr += " Only";
-  return finalStr;
-}
-
-// ----------------------------------------------------------------------
-// COMB BOX INPUT COMPONENT
-// ----------------------------------------------------------------------
-interface CombInputProps {
-  value: string;
-  count: number;
-  onChange: (val: string) => void;
-  placeholder?: string;
-  className?: string;
-}
-
-const CombInput: React.FC<CombInputProps> = ({ value, count, onChange, placeholder, className = '' }) => {
-  const cleanVal = (value || '').toUpperCase();
-  return (
-    <div className={`relative flex items-center border border-neutral-400 bg-white rounded-none cursor-text ${className}`}>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value.substring(0, count))}
-        placeholder={placeholder}
-        maxLength={count}
-        className="absolute inset-0 opacity-0 z-10 w-full h-full cursor-text uppercase font-mono px-2"
-      />
-      <div className="flex w-full h-7">
-        {Array.from({ length: count }).map((_, i) => (
-          <div
-            key={i}
-            className="flex-1 flex items-center justify-center font-mono font-bold text-xs text-neutral-900 border-r border-neutral-300 last:border-r-0"
-          >
-            {cleanVal[i] || ''}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ----------------------------------------------------------------------
-// MAIN COMPONENT
-// ----------------------------------------------------------------------
-
-const REAL_FORMS_MAP: Record<string, string> = {
-  sbi: "01_SBI_Real_RTGS_Fillable.pdf",
-  axis: "02_AXIS_Real_RTGS_Fillable.pdf",
-  hdfc: "03_HDFC_Real_RTGS_Fillable.pdf",
-  icici: "04_ICICI_Real_RTGS_Fillable.pdf",
-  bob: "05_BOB_Real_RTGS_Fillable.pdf",
-  pnb: "06_PNB_Real_RTGS_Fillable.pdf",
-  canara: "07_CANARA_Real_RTGS_Fillable.pdf",
-  union: "08_UNION_Real_RTGS_Fillable.pdf",
-  kotak: "09_KOTAK_Real_RTGS_Fillable.pdf",
-  uco: "10_UCO_Real_RTGS_Fillable.pdf"
-};
+const STORAGE_KEY = 'simply_saved_rtgs_payees_v3';
 
 export default function BankRtgsHubPage() {
-  const [selectedBankId, setSelectedBankId] = useState<string>('sbi');
-  const [lang, setLang] = useState<'en' | 'hi' | 'gu'>('en');
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [searchParams] = useSearchParams();
+  const { data: settings } = useSettings();
 
-  // Form State
-  const [form, setForm] = useState({
-    mode: 'NEFT' as 'NEFT' | 'RTGS',
-    branch: '',
-    date: new Date().toLocaleDateString('en-GB'),
-    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-    beneName: '',
-    beneAcc: '',
-    beneAccConfirm: '',
-    beneBank: '',
-    beneBranch: '',
-    beneIfsc: '',
-    beneAccType: 'CURRENT',
-    beneAddress: '',
-    amount: '',
-    charges: '',
-    totalAmount: '',
-    remitterName: '',
-    remitterAcc: '',
-    solId: '',
-    remitterAddress: '',
-    remitterMobile: '',
-    remitterPan: '',
-    remitterEmail: '',
-    remitterPurpose: '',
-    chequeNo: '',
-  });
-
-  // Cash Denomination state
-  const [cash, setCash] = useState<Record<number, number>>({
-    2000: 0, 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0
-  });
-  const [coins, setCoins] = useState<number>(0);
-
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlTab = (searchParams.get('tab') || '').toUpperCase();
-  const initialCategoryTab: 'SUPPLIER' | 'ADVANCE' | 'SALARY' | 'CUSTOM' = 
-    (urlTab === 'SUPPLIER' || urlTab === 'ADVANCE' || urlTab === 'SALARY' || urlTab === 'CUSTOM') 
-      ? urlTab 
-      : 'SUPPLIER';
-
-  const [categoryTab, setCategoryTab] = useState<'SUPPLIER' | 'ADVANCE' | 'SALARY' | 'CUSTOM'>(initialCategoryTab);
-
-  // Suppliers state
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
-  const [supplierSearch, setSupplierSearch] = useState<string>('');
-  const [invoiceRef, setInvoiceRef] = useState<string>('');
-  const [quickAmount, setQuickAmount] = useState<string>('');
-
-  // Cached supplier bank details map in localStorage
-  const [supplierBankMap, setSupplierBankMap] = useState<Record<string, { bankName: string, bankAcc: string, bankIfsc: string, bankBranch: string }>>(() => {
+  // Payees master state
+  const [savedPayees, setSavedPayees] = useState<Record<string, Partial<RtgsPayee>>>(() => {
     try {
-      const raw = localStorage.getItem('simply_supplier_banks_cache_v1');
+      const raw = localStorage.getItem(STORAGE_KEY);
       return raw ? JSON.parse(raw) : {};
     } catch {
       return {};
     }
   });
 
-  // Employees state
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
-  const [selectedEmpId, setSelectedEmpId] = useState<string>('');
-  const [employeeSearch, setEmployeeSearch] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Auto-detect and switch bank from IFSC prefix or Bank Name
-  const detectAndSwitchBank = (bankName: string, ifsc: string) => {
-    const cleanIfsc = (ifsc || '').toUpperCase().trim();
-    const cleanName = (bankName || '').toUpperCase().trim();
-    const prefix = cleanIfsc.slice(0, 4);
+  // Filters & Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const initialTab = (searchParams.get('tab') || 'ALL').toUpperCase();
+  const [activeCategory, setActiveCategory] = useState<'ALL' | 'SUPPLIER' | 'EMPLOYEE' | 'OTHER'>(
+    initialTab === 'SUPPLIER' || initialTab === 'EMPLOYEE' || initialTab === 'OTHER' ? initialTab : 'ALL'
+  );
 
-    const match = INDIAN_BANKS.find(b => {
-      const bId = b.id.toUpperCase();
-      if (prefix === 'SBIN' && b.id === 'sbi') return true;
-      if (prefix === 'UTIB' && b.id === 'axis') return true;
-      if (prefix === 'HDFC' && b.id === 'hdfc') return true;
-      if (prefix === 'ICIC' && b.id === 'icici') return true;
-      if (prefix === 'PUNB' && b.id === 'pnb') return true;
-      if (prefix === 'BARB' && b.id === 'bob') return true;
-      if (prefix === 'KKBK' && b.id === 'kotak') return true;
-      if (prefix === 'CNRB' && b.id === 'canara') return true;
-      if (prefix === 'UBIN' && b.id === 'union') return true;
-      if (prefix === 'INDB' && b.id === 'indusind') return true;
-      return cleanName && (cleanName.includes(bId) || b.name.includes(cleanName));
-    });
+  // RTGS Generation Modal state
+  const [rtgsModalOpen, setRtgsModalOpen] = useState(false);
+  const [selectedPayee, setSelectedPayee] = useState<RtgsPayee | null>(null);
+  const [rtgsAmount, setRtgsAmount] = useState<string>('');
+  const [rtgsReason, setRtgsReason] = useState<string>('');
+  const [rtgsDate, setRtgsDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [rtgsChequeNo, setRtgsChequeNo] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState(false);
 
-    if (match) {
-      setSelectedBankId(match.id);
-    }
-  };
+  // Edit / Add Payee Modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<RtgsPayee>>({
+    name: '',
+    category: 'SUPPLIER',
+    bankName: '',
+    accountNumber: '',
+    ifscCode: '',
+    branch: '',
+  });
 
+  // Fetch Suppliers and Employees on mount
   useEffect(() => {
-    // 1. Fetch suppliers
-    apiClient<any[]>('/masters/suppliers')
-      .then(res => {
-        const list = res?.data || (Array.isArray(res) ? res : []);
-        setSuppliers(list);
+    setIsLoading(true);
+    Promise.all([
+      apiClient<any[]>('/masters/suppliers').catch(() => ({ data: [] })),
+      apiClient<any[]>('/hr/employees').catch(() => ({ data: [] })),
+    ]).then(([suppRes, empRes]) => {
+      const suppList = suppRes?.data || (Array.isArray(suppRes) ? suppRes : []);
+      const empList = empRes?.data || (Array.isArray(empRes) ? empRes : []);
+      setSuppliers(suppList);
+      setEmployees(empList);
+      setIsLoading(false);
 
-        const sId = searchParams.get('supplierId');
-        if (sId) {
-          const match = list.find((s: any) => String(s.id) === String(sId));
-          if (match) {
-            handleSupplierSelect(String(match.id), list);
-          }
+      // Auto-open RTGS for specific supplier or employee if query param passed
+      const targetSupplierId = searchParams.get('supplierId');
+      const targetEmpId = searchParams.get('empId');
+
+      if (targetSupplierId && suppList.length > 0) {
+        const s = suppList.find((x: any) => String(x.id) === String(targetSupplierId));
+        if (s) {
+          const cached = savedPayees[`supp_${s.id}`] || {};
+          openRtgsModal({
+            id: `supp_${s.id}`,
+            name: s.name,
+            category: 'SUPPLIER',
+            bankName: cached.bankName || '',
+            accountNumber: cached.accountNumber || '',
+            ifscCode: cached.ifscCode || '',
+            branch: cached.branch || s.address || 'NAVSARI',
+            gstNumber: s.gstnumber,
+          });
         }
-      })
-      .catch(() => {});
-
-    // 2. Fetch employees
-    apiClient<any[]>('/hr/employees')
-      .then(res => {
-        const list = res?.data || (Array.isArray(res) ? res : []);
-        setEmployees(list);
-
-        const empId = searchParams.get('empId');
-        if (empId) {
-          const match = list.find((e: any) => String(e.id) === String(empId));
-          if (match) {
-            handleEmployeeSelect(String(match.id), categoryTab, list);
-          }
+      } else if (targetEmpId && empList.length > 0) {
+        const e = empList.find((x: any) => String(x.id) === String(targetEmpId));
+        if (e) {
+          const cached = savedPayees[`emp_${e.id}`] || {};
+          openRtgsModal({
+            id: `emp_${e.id}`,
+            name: e.name,
+            category: 'EMPLOYEE',
+            bankName: cached.bankName || e.bank_name || '',
+            accountNumber: cached.accountNumber || e.bank_account_number || '',
+            ifscCode: cached.ifscCode || e.bank_ifsc || '',
+            branch: cached.branch || e.bank_branch || 'NAVSARI',
+            designation: e.designation,
+          });
         }
-      })
-      .catch(() => {});
+      }
+    });
   }, []);
 
-  const switchCategoryTab = (tab: 'SUPPLIER' | 'ADVANCE' | 'SALARY' | 'CUSTOM') => {
-    setCategoryTab(tab);
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set('tab', tab.toLowerCase());
-      return next;
-    }, { replace: true });
+  // Consolidate all payees into a single unified list
+  const allPayees = useMemo<RtgsPayee[]>(() => {
+    const list: RtgsPayee[] = [];
 
-    if (tab === 'SUPPLIER') {
-      if (selectedSupplierId) {
-        handleSupplierSelect(selectedSupplierId, suppliers);
-      } else {
-        setForm(prev => ({ ...prev, remitterPurpose: 'SUPPLIER PAYMENT' }));
+    // 1. Suppliers
+    suppliers.forEach(s => {
+      const cached = savedPayees[`supp_${s.id}`] || {};
+      list.push({
+        id: `supp_${s.id}`,
+        name: (s.name || '').toUpperCase(),
+        category: 'SUPPLIER',
+        bankName: (cached.bankName || '').toUpperCase(),
+        accountNumber: cached.accountNumber || '',
+        ifscCode: (cached.ifscCode || '').toUpperCase(),
+        branch: cached.branch || s.address || 'NAVSARI',
+        phone: s.contactinfo || s.contactInfo,
+        gstNumber: s.gstnumber,
+      });
+    });
+
+    // 2. Employees (Staff)
+    employees.forEach(e => {
+      const cached = savedPayees[`emp_${e.id}`] || {};
+      list.push({
+        id: `emp_${e.id}`,
+        name: (e.name || '').toUpperCase(),
+        category: 'EMPLOYEE',
+        bankName: (cached.bankName || e.bank_name || '').toUpperCase(),
+        accountNumber: cached.accountNumber || e.bank_account_number || '',
+        ifscCode: (cached.ifscCode || e.bank_ifsc || '').toUpperCase(),
+        branch: cached.branch || e.bank_branch || 'NAVSARI',
+        designation: e.designation,
+      });
+    });
+
+    // 3. Custom / Other Payees saved in localStorage
+    Object.entries(savedPayees).forEach(([key, val]) => {
+      if (key.startsWith('custom_') && val.name) {
+        list.push({
+          id: key,
+          name: val.name.toUpperCase(),
+          category: 'OTHER',
+          bankName: (val.bankName || '').toUpperCase(),
+          accountNumber: val.accountNumber || '',
+          ifscCode: (val.ifscCode || '').toUpperCase(),
+          branch: val.branch || 'NAVSARI',
+        });
       }
-    } else if (tab === 'ADVANCE') {
-      if (selectedEmpId) {
-        handleEmployeeSelect(selectedEmpId, 'ADVANCE', employees);
-      } else {
-        setForm(prev => ({ ...prev, remitterPurpose: 'STAFF SALARY ADVANCE' }));
+    });
+
+    return list;
+  }, [suppliers, employees, savedPayees]);
+
+  // Filtered Payees
+  const filteredPayees = useMemo(() => {
+    return allPayees.filter(p => {
+      if (activeCategory !== 'ALL' && p.category !== activeCategory) {
+        return false;
       }
-    } else if (tab === 'SALARY') {
-      if (selectedEmpId) {
-        handleEmployeeSelect(selectedEmpId, 'SALARY', employees);
-      } else {
-        setForm(prev => ({ ...prev, remitterPurpose: 'MONTHLY SALARY DISBURSEMENT' }));
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          p.name.toLowerCase().includes(q) ||
+          p.accountNumber.toLowerCase().includes(q) ||
+          p.ifscCode.toLowerCase().includes(q) ||
+          p.bankName.toLowerCase().includes(q)
+        );
       }
-    } else if (tab === 'CUSTOM') {
-      setForm(prev => ({ ...prev, remitterPurpose: prev.remitterPurpose || 'GENERAL REMITTANCE' }));
+      return true;
+    });
+  }, [allPayees, activeCategory, searchQuery]);
+
+  // Counts
+  const counts = useMemo(() => {
+    return {
+      all: allPayees.length,
+      suppliers: allPayees.filter(p => p.category === 'SUPPLIER').length,
+      employees: allPayees.filter(p => p.category === 'EMPLOYEE').length,
+      other: allPayees.filter(p => p.category === 'OTHER').length,
+    };
+  }, [allPayees]);
+
+  // Open RTGS Modal
+  const openRtgsModal = (payee: RtgsPayee) => {
+    setSelectedPayee(payee);
+    setRtgsAmount('');
+    setRtgsDate(new Date().toISOString().slice(0, 10));
+    setRtgsChequeNo('');
+
+    // Default reason according to category
+    if (payee.category === 'EMPLOYEE') {
+      setRtgsReason(`STAFF SALARY ADVANCE - ${payee.name}`);
+    } else if (payee.category === 'SUPPLIER') {
+      setRtgsReason(`SUPPLIER PAYMENT - ${payee.name}`);
+    } else {
+      setRtgsReason(`PAYMENT - ${payee.name}`);
     }
+
+    setRtgsModalOpen(true);
   };
 
-  const handleSupplierSelect = (suppId: string, currentSuppliers = suppliers) => {
-    setSelectedSupplierId(suppId);
-    if (!suppId) return;
-    const s = currentSuppliers.find(x => String(x.id) === String(suppId));
-    if (!s) return;
-
-    const saved = supplierBankMap[suppId] || {};
-    const bankName = saved.bankName || '';
-    const bankAcc = saved.bankAcc || '';
-    const bankIfsc = (saved.bankIfsc || '').toUpperCase();
-    const bankBranch = saved.bankBranch || '';
-
-    detectAndSwitchBank(bankName, bankIfsc);
-
-    const purpose = invoiceRef 
-      ? `SUPPLIER PAYMENT: ${s.name} (REF: ${invoiceRef})` 
-      : `SUPPLIER PAYMENT - ${s.name}`;
-
-    setForm(prev => ({
-      ...prev,
-      beneName: (s.name || '').toUpperCase(),
-      beneAddress: s.address || prev.beneAddress,
-      beneAcc: bankAcc || prev.beneAcc,
-      beneAccConfirm: bankAcc || prev.beneAccConfirm,
-      beneBank: bankName || prev.beneBank,
-      beneIfsc: bankIfsc || prev.beneIfsc,
-      beneBranch: bankBranch || prev.beneBranch,
-      remitterPurpose: purpose,
-    }));
-
-    toast.success(`🏢 Selected Supplier: ${s.name}${bankAcc ? ' (Saved Bank Details applied!)' : ''}`);
+  // Open Edit Bank Details Modal
+  const openEditModal = (payee?: RtgsPayee) => {
+    if (payee) {
+      setEditForm({
+        id: payee.id,
+        name: payee.name,
+        category: payee.category,
+        bankName: payee.bankName,
+        accountNumber: payee.accountNumber,
+        ifscCode: payee.ifscCode,
+        branch: payee.branch || 'NAVSARI',
+      });
+    } else {
+      setEditForm({
+        id: `custom_${Date.now()}`,
+        name: '',
+        category: 'SUPPLIER',
+        bankName: '',
+        accountNumber: '',
+        ifscCode: '',
+        branch: 'NAVSARI',
+      });
+    }
+    setEditModalOpen(true);
   };
 
-  const handleSaveSupplierBank = () => {
-    if (!selectedSupplierId) {
-      toast.error('Please select a supplier first.');
+  // Save Payee Bank Details
+  const handleSavePayeeDetails = () => {
+    if (!editForm.name?.trim()) {
+      toast.error('Please enter the Beneficiary Name.');
       return;
     }
-    const s = suppliers.find(x => String(x.id) === String(selectedSupplierId));
-    const suppName = s ? s.name : 'Supplier';
+    if (!editForm.accountNumber?.trim()) {
+      toast.error('Please enter Bank Account Number.');
+      return;
+    }
+    if (!editForm.ifscCode?.trim()) {
+      toast.error('Please enter IFSC Code.');
+      return;
+    }
 
-    const newMap = {
-      ...supplierBankMap,
-      [selectedSupplierId]: {
-        bankName: form.beneBank,
-        bankAcc: form.beneAcc,
-        bankIfsc: form.beneIfsc,
-        bankBranch: form.beneBranch,
+    const id = editForm.id || `custom_${Date.now()}`;
+    const updated = {
+      ...savedPayees,
+      [id]: {
+        name: editForm.name.trim().toUpperCase(),
+        category: editForm.category || 'OTHER',
+        bankName: (editForm.bankName || '').trim().toUpperCase(),
+        accountNumber: editForm.accountNumber.trim(),
+        ifscCode: editForm.ifscCode.trim().toUpperCase(),
+        branch: (editForm.branch || 'NAVSARI').trim().toUpperCase(),
       }
     };
-    setSupplierBankMap(newMap);
+
+    setSavedPayees(updated);
     try {
-      localStorage.setItem('simply_supplier_banks_cache_v1', JSON.stringify(newMap));
-      toast.success(`💾 Bank details saved for ${suppName}! Will auto-fill automatically in future.`);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      toast.success(`💾 Bank details saved for ${editForm.name}!`);
     } catch {
-      toast.error('Could not save bank details to browser cache.');
+      toast.error('Failed to save to local cache.');
     }
-  };
 
-  const handleEmployeeSelect = (empId: string, currentTab = categoryTab, currentEmployees = employees) => {
-    setSelectedEmpId(empId);
-    if (!empId) return;
-    const emp = currentEmployees.find(e => String(e.id) === String(empId));
-    if (!emp) return;
-
-    const acc = emp.bank_account_number || emp.bank_details?.account_no || '';
-    const ifsc = (emp.bank_ifsc || emp.bank_details?.ifsc || '').toUpperCase();
-    const bank = (emp.bank_name || emp.bank_details?.bank_name || '').toUpperCase();
-
-    detectAndSwitchBank(bank, ifsc);
-
-    const isAdvance = currentTab === 'ADVANCE';
-    const purpose = isAdvance 
-      ? `STAFF SALARY ADVANCE - ${emp.name}` 
-      : (currentTab === 'SALARY' ? `MONTHLY SALARY - ${emp.name}` : `PAYMENT - ${emp.name}`);
-
-    setForm(prev => ({
-      ...prev,
-      beneName: (emp.name || '').toUpperCase(),
-      beneAcc: acc,
-      beneAccConfirm: acc,
-      beneBank: bank || prev.beneBank,
-      beneIfsc: ifsc,
-      beneBranch: emp.bank_branch || prev.beneBranch,
-      remitterPurpose: purpose,
-    }));
-    toast.success(`⚡ Auto-filled ${emp.name}'s bank credentials (${isAdvance ? 'Advance' : 'Salary'})!`);
-  };
-
-  const handleAmountChange = (val: string) => {
-    setQuickAmount(val);
-    setForm(prev => {
-      const a = parseFloat(val) || 0;
-      const c = parseFloat(prev.charges) || 0;
-      const t = a + c;
-      return {
-        ...prev,
-        amount: val,
-        totalAmount: t > 0 ? (t % 1 === 0 ? t.toString() : t.toFixed(2)) : val,
-      };
-    });
-  };
-
-  const handleInvoiceRefChange = (ref: string) => {
-    setInvoiceRef(ref);
-    const s = suppliers.find(x => String(x.id) === String(selectedSupplierId));
-    if (s) {
-      setForm(prev => ({
-        ...prev,
-        remitterPurpose: ref ? `SUPPLIER PAYMENT: ${s.name} (REF: ${ref})` : `SUPPLIER PAYMENT - ${s.name}`
-      }));
+    // If currently editing selectedPayee in open modal, sync it
+    if (selectedPayee && selectedPayee.id === id) {
+      setSelectedPayee(prev => prev ? ({ ...prev, ...updated[id] } as RtgsPayee) : null);
     }
+
+    setEditModalOpen(false);
   };
 
-  const applyCustomPreset = (preset: 'GST' | 'POWER' | 'RENT' | 'FREIGHT' | 'CLEAR') => {
-    if (preset === 'GST') {
-      setSelectedBankId('sbi');
-      setForm(prev => ({
-        ...prev,
-        beneName: 'GST TAX COLLECTION ACCOUNT',
-        beneBank: 'STATE BANK OF INDIA',
-        beneIfsc: 'SBIN0000001',
-        beneAccType: 'GOVERNMENT',
-        remitterPurpose: 'GST CHALLAN TAX COMPLIANCE PAYMENT',
-      }));
-      toast.success('🏛️ Applied GST Challan Remittance Template!');
-    } else if (preset === 'POWER') {
-      setForm(prev => ({
-        ...prev,
-        beneName: 'STATE ELECTRICITY BOARD / DGVCL',
-        remitterPurpose: 'FACTORY POWER & ELECTRICITY CHARGES',
-      }));
-      toast.success('⚡ Applied Electricity Bill Template!');
-    } else if (preset === 'RENT') {
-      setForm(prev => ({
-        ...prev,
-        remitterPurpose: 'FACTORY & WAREHOUSE PREMISES LEASE RENT',
-      }));
-      toast.success('🏢 Applied Premises Rent Template!');
-    } else if (preset === 'FREIGHT') {
-      setForm(prev => ({
-        ...prev,
-        remitterPurpose: 'GOODS TRANSPORTATION & FREIGHT CHARGES',
-      }));
-      toast.success('🚛 Applied Transporter Freight Template!');
-    } else if (preset === 'CLEAR') {
-      setForm(prev => ({
-        ...prev,
-        beneName: '',
-        beneAcc: '',
-        beneAccConfirm: '',
-        beneBank: '',
-        beneBranch: '',
-        beneIfsc: '',
-        remitterPurpose: '',
-      }));
-      toast.info('Cleared beneficiary fields for manual entry.');
+  // Delete Custom Payee
+  const handleDeletePayee = (id: string, name: string) => {
+    if (!confirm(`Delete saved payee "${name}"?`)) return;
+    const updated = { ...savedPayees };
+    delete updated[id];
+    setSavedPayees(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    toast.success(`Removed ${name}.`);
+  };
+
+  // Generate Axis Bank RTGS PDF
+  const handleGeneratePdf = async () => {
+    if (!selectedPayee) return;
+
+    const amt = parseFloat(rtgsAmount);
+    if (!amt || isNaN(amt) || amt <= 0) {
+      toast.error('Please enter a valid transfer amount.');
+      return;
     }
-  };
 
-  const activeBank = useMemo(() => {
-    return INDIAN_BANKS.find(b => b.id === selectedBankId) || INDIAN_BANKS[0];
-  }, [selectedBankId]);
+    if (!selectedPayee.accountNumber) {
+      toast.error('Bank Account Number is required. Please edit details to add it.');
+      return;
+    }
 
-  // Sync calculations
-  const calculatedTotal = useMemo(() => {
-    const a = parseFloat(form.amount) || 0;
-    const c = parseFloat(form.charges) || 0;
-    const t = a + c;
-    return t > 0 ? (t % 1 === 0 ? t.toString() : t.toFixed(2)) : form.totalAmount || '';
-  }, [form.amount, form.charges, form.totalAmount]);
+    if (!selectedPayee.ifscCode) {
+      toast.error('IFSC Code is required. Please edit details to add it.');
+      return;
+    }
 
-  const amountInWords = useMemo(() => {
-    const effective = calculatedTotal || form.amount;
-    return numToWordsIndian(effective, lang);
-  }, [calculatedTotal, form.amount, lang]);
-
-  const cashGrandTotal = useMemo(() => {
-    let sum = 0;
-    Object.entries(cash).forEach(([denom, count]) => {
-      sum += (parseInt(denom, 10) * (count || 0));
-    });
-    sum += (coins || 0);
-    return sum;
-  }, [cash, coins]);
-
-  const updateForm = (key: keyof typeof form, value: any) => {
-    setForm(prev => {
-      const next = { ...prev, [key]: value };
-      if (key === 'beneAcc' && !prev.beneAccConfirm) {
-        next.beneAccConfirm = value;
-      }
-      return next;
-    });
-  };
-
-  const fillSampleDemo = () => {
-    setForm({
-      mode: 'NEFT',
-      branch: 'NAVSARI',
-      date: new Date().toLocaleDateString('en-GB'),
-      time: '11:30',
-      beneName: 'GAUTAM CHHJARA',
-      beneAcc: '12345678912345678912345',
-      beneAccConfirm: '12345678912345678912345',
-      beneBank: 'STATE BANK OF INDIA',
-      beneBranch: 'NAVSARI MAIN',
-      beneIfsc: 'SBIN0001234',
-      beneAccType: 'CURRENT',
-      beneAddress: '101, TRADE CENTER, NAVSARI, GUJARAT',
-      amount: '100000',
-      charges: '23.50',
-      totalAmount: '100023.50',
-      remitterName: 'SHREE SHYAM DEVELOPERS',
-      remitterAcc: '123456789123456',
-      solId: '123456',
-      remitterAddress: 'STATION ROAD, NAVSARI - 396445',
-      remitterMobile: '9876543210',
-      remitterPan: 'ABCDE1234F',
-      remitterEmail: 'contact@shreeshyam.com',
-      remitterPurpose: 'VENDOR PAYMENT',
-      chequeNo: '458921',
-    });
-    setCash(prev => ({ ...prev, 500: 200 }));
-    toast.success('✨ Sample demo details filled and synced across both counterfoil and main form!');
-  };
-
-  const clearForm = () => {
-    setForm({
-      mode: 'NEFT',
-      branch: '',
-      date: new Date().toLocaleDateString('en-GB'),
-      time: '',
-      beneName: '',
-      beneAcc: '',
-      beneAccConfirm: '',
-      beneBank: '',
-      beneBranch: '',
-      beneIfsc: '',
-      beneAccType: 'CURRENT',
-      beneAddress: '',
-      amount: '',
-      charges: '',
-      totalAmount: '',
-      remitterName: '',
-      remitterAcc: '',
-      solId: '',
-      remitterAddress: '',
-      remitterMobile: '',
-      remitterPan: '',
-      remitterEmail: '',
-      remitterPurpose: '',
-      chequeNo: '',
-    });
-    setCash({ 2000: 0, 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0 });
-    setCoins(0);
-    toast.info('Form cleared.');
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const generatePdf = async () => {
-    setIsGeneratingPdf(true);
+    setIsGenerating(true);
     try {
-      const pdfDoc = await PDFDocument.create();
-      // A4 Landscape: 841.89 x 595.28 pt
-      const page = pdfDoc.addPage([841.89, 595.28]);
-      const helv = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const helvBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-      const hexToRgb = (hex: string) => {
-        const c = hex.replace('#', '');
-        const n = parseInt(c, 16);
-        return {
-          r: ((n >> 16) & 255) / 255,
-          g: ((n >> 8) & 255) / 255,
-          b: (n & 255) / 255,
-        };
-      };
-      const primaryRgb = hexToRgb(activeBank.primaryColor);
-
-      // Header Bar
-      page.drawRectangle({
-        x: 20,
-        y: 545,
-        width: 801.89,
-        height: 35,
-        color: rgb(primaryRgb.r, primaryRgb.g, primaryRgb.b),
+      // Calls the real Axis Bank fillable PDF generator using the same template as salary RTGS
+      await generateRTGSSlip({
+        beneficiaryName: selectedPayee.name,
+        bankName: selectedPayee.bankName || 'AXIS BANK',
+        accountNumber: selectedPayee.accountNumber,
+        ifscCode: selectedPayee.ifscCode,
+        amount: amt,
+        date: rtgsDate || new Date().toISOString().slice(0, 10),
+        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
+        companyAccount: settings?.company_bank_account || '925030009706188',
+        companyBank: settings?.company_bank_name || 'AXIS BANK',
+        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
+        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
+        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
+        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
+        companyPhone: settings?.company_phone || '8866322700',
+        beneficiaryBranch: selectedPayee.branch || 'NAVSARI',
+        narration: (rtgsReason || `RTGS ${selectedPayee.name}`).toUpperCase(),
       });
 
-      page.drawText(activeBank.name, {
-        x: 35,
-        y: 558,
-        size: 14,
-        font: helvBold,
-        color: rgb(1, 1, 1),
-      });
-
-      page.drawText(activeBank.annexure, {
-        x: 680,
-        y: 558,
-        size: 9,
-        font: helvBold,
-        color: rgb(1, 1, 1),
-      });
-
-      // Divider Line between Counterfoil & Main Slip
-      page.drawLine({
-        start: { x: 260, y: 30 },
-        end: { x: 260, y: 535 },
-        thickness: 1,
-        color: rgb(0.2, 0.2, 0.2),
-        dashArray: [4, 3],
-      });
-
-      const drawTxt = (text: string, x: number, y: number, size = 8.5, isBold = false) => {
-        if (!text) return;
-        page.drawText(String(text), {
-          x, y, size,
-          font: isBold ? helvBold : helv,
-          color: rgb(0.1, 0.1, 0.1),
-        });
-      };
-
-      // Counterfoil Text
-      drawTxt("COUNTERFOIL / CUSTOMER COPY", 50, 520, 9.5, true);
-      drawTxt(`Branch: ${form.branch}`, 30, 498);
-      drawTxt(`Date: ${form.date}    Time: ${form.time}`, 30, 482);
-      drawTxt(`Remittance Favouring:`, 30, 464, 8, true);
-      drawTxt(form.beneName, 30, 450, 9, true);
-
-      drawTxt(`Beneficiary A/c: ${form.beneAcc}`, 30, 430);
-      drawTxt(`Bank: ${form.beneBank}`, 30, 412);
-      drawTxt(`Branch: ${form.beneBranch}`, 30, 394);
-      drawTxt(`IFS Code: ${form.beneIfsc}`, 30, 376, 8.5, true);
-      drawTxt(`Account Type: ${form.beneAccType}`, 30, 358);
-      drawTxt(`Amount: Rs. ${form.amount}`, 30, 340);
-      drawTxt(`Charges: Rs. ${form.charges}`, 30, 322);
-      drawTxt(`Total Amount: Rs. ${calculatedTotal || form.totalAmount}`, 30, 304, 9, true);
-      drawTxt(amountInWords, 30, 282, 7.5, true);
-
-      drawTxt(`Remitter Name: ${form.remitterName}`, 30, 255);
-      drawTxt(`Remitter A/c: ${form.remitterAcc}`, 30, 237);
-      drawTxt(`Mobile: ${form.remitterMobile}`, 30, 219);
-      drawTxt(`PAN: ${form.remitterPan}`, 30, 201);
-      drawTxt("Seal / Signature of Authorised Official", 50, 70, 7.5);
-
-      // Main Form Text
-      drawTxt(activeBank.title, 380, 520, 10.5, true);
-      drawTxt(`Branch: ${form.branch}`, 280, 498);
-      drawTxt(`Date: ${form.date}    Time: ${form.time}`, 550, 498);
-
-      // Beneficiary Box
-      page.drawRectangle({
-        x: 280, y: 345, width: 540, height: 135,
-        borderColor: rgb(0.2, 0.2, 0.2), borderWidth: 0.8,
-      });
-      drawTxt("BENEFICIARY DETAILS", 480, 465, 8.5, true);
-      drawTxt(`Name: ${form.beneName}`, 290, 445, 9, true);
-      drawTxt(`Account Number: ${form.beneAcc}`, 290, 427, 9, true);
-      drawTxt(`Bank Name & Branch: ${form.beneBank} - ${form.beneBranch}`, 290, 409);
-      drawTxt(`IFS Code: ${form.beneIfsc}    Type: ${form.beneAccType}`, 290, 391, 8.5, true);
-      drawTxt(`Remittance Amount: Rs. ${form.amount}    Charges: Rs. ${form.charges}`, 290, 373);
-      drawTxt(`Total Amount: Rs. ${calculatedTotal || form.totalAmount}`, 290, 355, 9, true);
-
-      // Applicant Box
-      page.drawRectangle({
-        x: 280, y: 220, width: 540, height: 115,
-        borderColor: rgb(0.2, 0.2, 0.2), borderWidth: 0.8,
-      });
-      drawTxt("APPLICANT DETAILS (REMITTER)", 460, 320, 8.5, true);
-      drawTxt(`Remitter Name: ${form.remitterName}`, 290, 302, 9, true);
-      drawTxt(`Debit Account No: ${form.remitterAcc}    Sol Id: ${form.solId}`, 290, 284, 8.5, true);
-      drawTxt(`Address: ${form.remitterAddress}`, 290, 266);
-      drawTxt(`Mobile: ${form.remitterMobile}    PAN: ${form.remitterPan}`, 290, 248, 8.5, true);
-      drawTxt(`Email: ${form.remitterEmail}    Purpose: ${form.remitterPurpose}`, 290, 230);
-
-      // Debit Mandate line
-      drawTxt(`Please debit Rs. ${calculatedTotal || form.totalAmount} from Account No. ${form.remitterAcc}`, 280, 195, 8.5, true);
-      drawTxt(`Enclosed Cheque No: ${form.chequeNo} Dated: ${form.date}`, 280, 178);
-      drawTxt(`Amount in Words: ${amountInWords}`, 280, 160, 8, true);
-
-      // Signatures
-      drawTxt("Signature of Customer / Remitter", 300, 70, 7.5);
-      drawTxt("Verifying Official", 510, 70, 7.5);
-      drawTxt("Maker Official", 650, 70, 7.5);
-      drawTxt("Checker Official", 760, 70, 7.5);
-
-      const pdfBytes = await pdfDoc.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${activeBank.name.replace(/\s+/g, '_')}_RTGS_NEFT_Filled.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success(`✅ Downloaded official filled PDF for ${activeBank.name}!`);
+      toast.success(`🎉 Official Axis Bank RTGS Form generated & downloaded for ${selectedPayee.name}!`);
+      setRtgsModalOpen(false);
     } catch (e: any) {
-      console.error(e);
-      toast.error('Failed to generate PDF: ' + e.message);
+      console.error('RTGS Generation Error:', e);
+      toast.error(e.message || 'Failed to generate Axis Bank RTGS PDF.');
     } finally {
-      setIsGeneratingPdf(false);
+      setIsGenerating(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6 print:p-0 print:bg-white print:text-black">
-      {/* ------------------------------------------------------------- */}
-      {/* TOP HEADER CONTROLS (HIDDEN ON PRINT) */}
-      {/* ------------------------------------------------------------- */}
-      <div className="max-w-7xl mx-auto mb-4 print:hidden space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
-              <Landmark className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-white flex items-center gap-2">
-                All Indian Banks RTGS / NEFT Remittance Hub
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  10 Major Banks
-                </span>
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6 space-y-6">
+      
+      {/* ── TOP HEADER ── */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl">
+        <div className="flex items-center gap-3.5">
+          <div className="p-3 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+            <Landmark className="w-7 h-7" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-white tracking-tight">
+                Axis Bank RTGS / NEFT Hub
               </h1>
-              <p className="text-xs text-slate-400">
-                Single data entry, switch any bank, character comb boxes, live multilingual number-to-words, and instant official PDF export.
-              </p>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                Official Form (02_AXIS)
+              </span>
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Language Selector */}
-            <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700">
-              <Globe className="w-4 h-4 text-sky-400" />
-              <label className="text-xs font-medium text-slate-300">Language:</label>
-              <select
-                value={lang}
-                onChange={(e) => {
-                  const newLang = e.target.value as any;
-                  setLang(newLang);
-                  const names = { en: "English", hi: "हिन्दी (Hindi)", gu: "ગુજરાતી (Gujarati)" };
-                  toast.success(`🌐 Language switched to ${names[newLang]}!`);
-                }}
-                className="bg-transparent text-sky-400 text-xs font-bold outline-none cursor-pointer"
-              >
-                <option value="en" className="bg-slate-900 text-white">English</option>
-                <option value="hi" className="bg-slate-900 text-white">हिन्दी (Hindi)</option>
-                <option value="gu" className="bg-slate-900 text-white">ગુજરાતી (Gujarati)</option>
-              </select>
-            </div>
-
-            <button
-              onClick={fillSampleDemo}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              Fill Demo
-            </button>
-
-            <button
-              onClick={clearForm}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-              Clear
-            </button>
-
-            <button
-              onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition-colors shadow-sm"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              Print (A4)
-            </button>
-
-            <button
-              onClick={generatePdf}
-              disabled={isGeneratingPdf}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-50"
-            >
-              <Download className="w-3.5 h-3.5" />
-              {isGeneratingPdf ? 'Generating...' : 'Download Official PDF'}
-            </button>
-
-            <button
-              onClick={() => {
-                const fname = REAL_FORMS_MAP[selectedBankId];
-                toast.success(`📂 Official Real ${activeBank.name} Form is ready: Downloads/Real_Indian_Bank_RTGS_Forms/All_10_Banks_Fillable/${fname}`);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors shadow-sm"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Real Bank Form ({activeBank.name.split(' ')[0]})
-            </button>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Save beneficiary bank credentials once, click RTGS, enter amount & reason, and download the official Axis Bank RTGS PDF.
+            </p>
           </div>
         </div>
 
-        {/* ============================================================== */}
-        {/* UNIFIED RTGS DISBURSEMENT TABS BAR */}
-        {/* (Supplier RTGS, Employee Advance, Employee Salary, Other RTGS) */}
-        {/* ============================================================== */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden print:hidden space-y-0">
-          
-          {/* Main 4 Tabs Header */}
-          <div className="flex border-b border-slate-800 bg-slate-950/80 p-2 gap-2 overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => switchCategoryTab('SUPPLIER')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                categoryTab === 'SUPPLIER'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25 scale-[1.02]'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>1. Supplier / Vendor RTGS</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${categoryTab === 'SUPPLIER' ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                {suppliers.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => switchCategoryTab('ADVANCE')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                categoryTab === 'ADVANCE'
-                  ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/25 scale-[1.02]'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
-              }`}
-            >
-              <Zap className="w-4 h-4" />
-              <span>2. Employee Advance Pay</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${categoryTab === 'ADVANCE' ? 'bg-black/20 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
-                {employees.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => switchCategoryTab('SALARY')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                categoryTab === 'SALARY'
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/25 scale-[1.02]'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>3. Employee Monthly Salary</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${categoryTab === 'SALARY' ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                {employees.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => switchCategoryTab('CUSTOM')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                categoryTab === 'CUSTOM'
-                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25 scale-[1.02]'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>4. Other / Custom RTGS Filling</span>
-            </button>
-          </div>
-
-          {/* Tab Content Drawer */}
-          <div className="p-4 bg-slate-900/90 space-y-3">
-            
-            {/* 1. SUPPLIER TAB DRAWER */}
-            {categoryTab === 'SUPPLIER' && (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-blue-400 flex items-center gap-1.5">
-                      <Building2 className="w-4 h-4" /> Supplier Remittance Generator:
-                    </span>
-                    <span className="text-slate-400">
-                      Select your raw material, chemical or machinery supplier from master to auto-populate bank RTGS slip.
-                    </span>
-                  </div>
-                  {selectedSupplierId && supplierBankMap[selectedSupplierId]?.bankAcc && (
-                    <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
-                      <BookmarkCheck className="w-3.5 h-3.5" /> Saved Bank Credentials Active
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                  {/* Supplier dropdown */}
-                  <div className="md:col-span-4">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Choose Supplier / Vendor:
-                    </label>
-                    <select
-                      value={selectedSupplierId}
-                      onChange={(e) => handleSupplierSelect(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs font-medium px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">-- Select Supplier ({suppliers.length} available) --</option>
-                      {suppliers.map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} {s.gstnumber ? `• GST: ${s.gstnumber}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Invoice / PO Ref */}
-                  <div className="md:col-span-3">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Invoice / PO Ref # (Optional):
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. INV-2026/89 or PO-102"
-                      value={invoiceRef}
-                      onChange={(e) => handleInvoiceRefChange(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  {/* Payment Amount */}
-                  <div className="md:col-span-3">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Payment Amount (₹):
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="Enter amount (e.g. 150000)"
-                      value={form.amount}
-                      onChange={(e) => handleAmountChange(e.target.value)}
-                      className="w-full bg-slate-950 border border-blue-500/50 text-blue-400 font-bold text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  {/* Save Bank Details Button */}
-                  <div className="md:col-span-2 pt-4">
-                    <button
-                      type="button"
-                      onClick={handleSaveSupplierBank}
-                      disabled={!selectedSupplierId}
-                      className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all disabled:opacity-40"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      Save Bank Info
-                    </button>
-                  </div>
-                </div>
-
-                {/* Supplier Bank credentials editor inline */}
-                {selectedSupplierId && (
-                  <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Beneficiary Acc No:</span>
-                      <input
-                        type="text"
-                        placeholder="Enter Bank Account #"
-                        value={form.beneAcc}
-                        onChange={(e) => {
-                          updateForm('beneAcc', e.target.value);
-                          updateForm('beneAccConfirm', e.target.value);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1 rounded text-xs mt-1"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">IFSC Code:</span>
-                      <input
-                        type="text"
-                        placeholder="e.g. HDFC0001234"
-                        value={form.beneIfsc}
-                        onChange={(e) => {
-                          const ifsc = e.target.value.toUpperCase();
-                          updateForm('beneIfsc', ifsc);
-                          detectAndSwitchBank(form.beneBank, ifsc);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-700 text-sky-400 font-bold px-2.5 py-1 rounded text-xs mt-1 uppercase"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Bank Name:</span>
-                      <input
-                        type="text"
-                        placeholder="e.g. HDFC Bank, SBI..."
-                        value={form.beneBank}
-                        onChange={(e) => {
-                          updateForm('beneBank', e.target.value.toUpperCase());
-                          detectAndSwitchBank(e.target.value, form.beneIfsc);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1 rounded text-xs mt-1 uppercase"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Branch:</span>
-                      <input
-                        type="text"
-                        placeholder="Branch city/area"
-                        value={form.beneBranch}
-                        onChange={(e) => updateForm('beneBranch', e.target.value.toUpperCase())}
-                        className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1 rounded text-xs mt-1 uppercase"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 2. EMPLOYEE ADVANCE PAY TAB DRAWER */}
-            {categoryTab === 'ADVANCE' && (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-amber-400 flex items-center gap-1.5">
-                      <Zap className="w-4 h-4" /> Employee Staff Advance Remittance:
-                    </span>
-                    <span className="text-slate-400">
-                      Disburse salary advances directly to employee bank accounts. Sets purpose as STAFF SALARY ADVANCE.
-                    </span>
-                  </div>
-                  {selectedEmpId && (
-                    <span className="text-amber-400 bg-amber-950/60 border border-amber-800/50 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Employee HR Profile Synced
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                  {/* Employee select */}
-                  <div className="md:col-span-5">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Choose Employee:
-                    </label>
-                    <select
-                      value={selectedEmpId}
-                      onChange={(e) => handleEmployeeSelect(e.target.value, 'ADVANCE')}
-                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs font-medium px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    >
-                      <option value="">-- Select Staff Member ({employees.length} employees) --</option>
-                      {employees.map(emp => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.name} {emp.designation ? `(${emp.designation})` : ''} {emp.bank_name ? `• ${emp.bank_name}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Advance Amount */}
-                  <div className="md:col-span-4">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Advance Amount (₹):
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="Enter advance amount (e.g. 20000)"
-                      value={form.amount}
-                      onChange={(e) => handleAmountChange(e.target.value)}
-                      className="w-full bg-slate-950 border border-amber-500/50 text-amber-400 font-bold text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                  </div>
-
-                  {/* Cheque No */}
-                  <div className="md:col-span-3">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Enclosed Cheque No:
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 541289"
-                      value={form.chequeNo}
-                      onChange={(e) => updateForm('chequeNo', e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Selected Employee Profile badge */}
-                {selectedEmpId && (
-                  <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Employee:</span>
-                        <span className="font-bold text-white">{form.beneName}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Account No:</span>
-                        <span className="font-mono font-bold text-sky-400">{form.beneAcc || 'Not set in HR profile'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">IFSC:</span>
-                        <span className="font-mono font-bold text-emerald-400">{form.beneIfsc || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Bank:</span>
-                        <span className="font-bold text-slate-300">{form.beneBank || 'N/A'}</span>
-                      </div>
-                    </div>
-                    <span className="text-amber-400/90 font-medium text-[11px]">
-                      Mandate Purpose: &quot;STAFF SALARY ADVANCE - {form.beneName}&quot;
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 3. EMPLOYEE MONTHLY SALARY TAB DRAWER */}
-            {categoryTab === 'SALARY' && (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-emerald-400 flex items-center gap-1.5">
-                      <Users className="w-4 h-4" /> Employee Monthly Salary Remittance:
-                    </span>
-                    <span className="text-slate-400">
-                      Disburse monthly payroll wages directly to employee bank accounts via RTGS / NEFT.
-                    </span>
-                  </div>
-                  {selectedEmpId && (
-                    <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2.5 py-1 rounded-md flex items-center gap-1 font-semibold">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Payroll Remittance Ready
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                  {/* Employee select */}
-                  <div className="md:col-span-5">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Choose Employee:
-                    </label>
-                    <select
-                      value={selectedEmpId}
-                      onChange={(e) => handleEmployeeSelect(e.target.value, 'SALARY')}
-                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs font-medium px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="">-- Select Staff Member ({employees.length} employees) --</option>
-                      {employees.map(emp => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.name} {emp.designation ? `(${emp.designation})` : ''} {emp.bank_name ? `• ${emp.bank_name}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Salary Amount */}
-                  <div className="md:col-span-4">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Net Salary Amount (₹):
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="Enter salary amount (e.g. 35000)"
-                      value={form.amount}
-                      onChange={(e) => handleAmountChange(e.target.value)}
-                      className="w-full bg-slate-950 border border-emerald-500/50 text-emerald-400 font-bold text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  {/* Cheque No */}
-                  <div className="md:col-span-3">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Enclosed Cheque No:
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 541290"
-                      value={form.chequeNo}
-                      onChange={(e) => updateForm('chequeNo', e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Selected Employee Profile badge */}
-                {selectedEmpId && (
-                  <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Employee:</span>
-                        <span className="font-bold text-white">{form.beneName}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Account No:</span>
-                        <span className="font-mono font-bold text-sky-400">{form.beneAcc || 'Not set'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">IFSC:</span>
-                        <span className="font-mono font-bold text-emerald-400">{form.beneIfsc || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Bank:</span>
-                        <span className="font-bold text-slate-300">{form.beneBank || 'N/A'}</span>
-                      </div>
-                    </div>
-                    <span className="text-emerald-400/90 font-medium text-[11px]">
-                      Mandate Purpose: &quot;MONTHLY SALARY - {form.beneName}&quot;
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 4. OTHER / CUSTOM RTGS TAB DRAWER */}
-            {categoryTab === 'CUSTOM' && (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-purple-400 flex items-center gap-1.5">
-                      <FileText className="w-4 h-4" /> Other Remittances & Quick Presets:
-                    </span>
-                    <span className="text-slate-400">
-                      1-Click templates for statutory taxes, power bills, factory rent, freight, or manual payee filling.
-                    </span>
-                  </div>
-                </div>
-
-                {/* Quick Presets Buttons */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => applyCustomPreset('GST')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/30 text-xs font-semibold transition-all"
-                  >
-                    <Landmark className="w-3.5 h-3.5 text-sky-400" />
-                    🏛️ GST Tax Challan
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => applyCustomPreset('POWER')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-amber-400" />
-                    ⚡ Electricity / Power
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => applyCustomPreset('RENT')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-all"
-                  >
-                    <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-                    🏢 Premises Rent
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => applyCustomPreset('FREIGHT')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-all"
-                  >
-                    <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
-                    🚛 Freight / Transport
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => applyCustomPreset('CLEAR')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition-all"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-                    📑 Blank Payee
-                  </button>
-                </div>
-
-                {/* Custom Payee Fields */}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Beneficiary Name:
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ABC ENTERPRISES"
-                      value={form.beneName}
-                      onChange={(e) => updateForm('beneName', e.target.value.toUpperCase())}
-                      className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1.5 rounded text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Remittance Amount (₹):
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 50000"
-                      value={form.amount}
-                      onChange={(e) => handleAmountChange(e.target.value)}
-                      className="w-full bg-slate-900 border border-purple-500/50 text-purple-300 font-bold px-2.5 py-1.5 rounded text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Payment Purpose / Narration:
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ADVANCE PAYMENT"
-                      value={form.remitterPurpose}
-                      onChange={(e) => updateForm('remitterPurpose', e.target.value.toUpperCase())}
-                      className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1.5 rounded text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Enclosed Cheque #:
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 102934"
-                      value={form.chequeNo}
-                      onChange={(e) => updateForm('chequeNo', e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 text-white px-2.5 py-1.5 rounded text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 10 Banks Selector Bar */}
-        <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center gap-2 overflow-x-auto shadow-md">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 whitespace-nowrap">
-            Select Bank Slip:
-          </span>
-          {INDIAN_BANKS.map(bank => {
-            const isActive = bank.id === selectedBankId;
-            return (
-              <button
-                key={bank.id}
-                onClick={() => {
-                  setSelectedBankId(bank.id);
-                  toast.info(`🏛️ Switched to ${bank.name}! All your entered values are retained.`);
-                }}
-                style={{
-                  backgroundColor: isActive ? bank.primaryColor : undefined,
-                  borderColor: isActive ? bank.secondaryColor : undefined,
-                }}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
-                  isActive
-                    ? 'text-white shadow-md scale-[1.02]'
-                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500 hover:text-white'
-                }`}
-              >
-                <div className="w-4 h-4 rounded-full bg-white flex items-center justify-center p-0.5">
-                  {bank.logoSvg}
-                </div>
-                <span>{bank.name.split(' ')[0]}</span>
-              </button>
-            );
-          })}
+        {/* Quick Add Button */}
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => openEditModal()}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-600/20"
+          >
+            <Plus className="w-4 h-4" />
+            Add / Save RTGS Payee
+          </button>
         </div>
       </div>
 
-      {/* ------------------------------------------------------------- */}
-      {/* FORM CANVAS (A4 LANDSCAPE SIMULATION & PRINT TEMPLATE) */}
-      {/* ------------------------------------------------------------- */}
-      <div className="max-w-7xl mx-auto bg-white text-neutral-900 rounded-lg shadow-2xl p-6 border border-slate-300 print:p-0 print:border-none print:shadow-none print:rounded-none">
-        
-        {/* Slip Header */}
-        <div className="flex items-center justify-between pb-3 mb-3 border-b-2" style={{ borderColor: activeBank.primaryColor }}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 flex-shrink-0">
-              {activeBank.logoSvg}
-            </div>
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-xl font-black tracking-tight" style={{ color: activeBank.primaryColor }}>
-                  {activeBank.name}
-                </span>
-                <span className="text-xs font-semibold text-neutral-600">
-                  {activeBank.subname}
-                </span>
-              </div>
-              <div className="text-[11px] font-bold text-neutral-700">
-                {activeBank.title}
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-[11px] font-extrabold text-neutral-800 uppercase tracking-wider">
-              {activeBank.annexure}
-            </div>
-            <div className="text-[10px] text-neutral-500 font-medium">
-              {activeBank.subtitle}
-            </div>
-          </div>
+      {/* ── SEARCH & CATEGORY FILTER BAR ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-3 rounded-xl">
+        {/* Category tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <button
+            onClick={() => setActiveCategory('ALL')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              activeCategory === 'ALL'
+                ? 'bg-purple-600 text-white shadow'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            All Payees ({counts.all})
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('SUPPLIER')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              activeCategory === 'SUPPLIER'
+                ? 'bg-blue-600 text-white shadow'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            Suppliers ({counts.suppliers})
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('EMPLOYEE')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              activeCategory === 'EMPLOYEE'
+                ? 'bg-amber-500 text-slate-950 shadow'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            Staff Advances ({counts.employees})
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('OTHER')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              activeCategory === 'OTHER'
+                ? 'bg-emerald-600 text-white shadow'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Other ({counts.other})
+          </button>
         </div>
 
-        {/* Dual Layout: Counterfoil (Left) & Main Form (Right) */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 print:grid-cols-12 print:gap-4">
-          
-          {/* ------------------------------------------------------------- */}
-          {/* COUNTERFOIL / CUSTOMER COPY (Cols 1-4) */}
-          {/* ------------------------------------------------------------- */}
-          <div className="md:col-span-4 print:col-span-4 pr-0 md:pr-4 border-r-0 md:border-r border-dashed border-neutral-400 space-y-2.5">
-            <div className="text-center font-bold text-[11px] bg-neutral-100 py-1 border border-neutral-300 uppercase tracking-wider">
-              {lang === 'hi' ? 'ग्राहक प्रति / COUNTERFOIL' : (lang === 'gu' ? 'ગ્રાહક નકલ / COUNTERFOIL' : 'COUNTERFOIL / CUSTOMER COPY')}
-            </div>
+        {/* Search Input */}
+        <div className="relative min-w-[260px]">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+          <input
+            type="text"
+            placeholder="Search payee, account #, or IFSC..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-700 text-white text-xs pl-9 pr-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-slate-500"
+          />
+        </div>
+      </div>
 
-            <div className="flex items-center justify-between text-xs gap-2">
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1 font-bold text-[11px] cursor-pointer">
-                  <input
-                    type="radio"
-                    name="cf_mode"
-                    checked={form.mode === 'NEFT'}
-                    onChange={() => updateForm('mode', 'NEFT')}
-                    className="accent-sky-700"
-                  />
-                  NEFT
-                </label>
-                <label className="flex items-center gap-1 font-bold text-[11px] cursor-pointer">
-                  <input
-                    type="radio"
-                    name="cf_mode"
-                    checked={form.mode === 'RTGS'}
-                    onChange={() => updateForm('mode', 'RTGS')}
-                    className="accent-sky-700"
-                  />
-                  RTGS
-                </label>
-              </div>
-              <div className="flex items-center gap-1 text-[11px]">
-                <span className="font-bold">Branch:</span>
-                <input
-                  type="text"
-                  value={form.branch}
-                  onChange={(e) => updateForm('branch', e.target.value)}
-                  className="border-b border-neutral-400 font-bold text-[11px] outline-none px-1 w-24"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] gap-2">
-              <div className="flex items-center gap-1">
-                <span className="font-bold">Date:</span>
-                <input
-                  type="text"
-                  value={form.date}
-                  onChange={(e) => updateForm('date', e.target.value)}
-                  className="border-b border-neutral-400 font-bold text-[11px] outline-none px-1 w-20"
-                />
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="font-bold">Time:</span>
-                <input
-                  type="text"
-                  value={form.time}
-                  onChange={(e) => updateForm('time', e.target.value)}
-                  className="border-b border-neutral-400 font-bold text-[11px] outline-none px-1 w-16"
-                />
-              </div>
-            </div>
-
-            {/* Counterfoil Beneficiary Table */}
-            <div className="border border-neutral-400 text-[10.5px]">
-              <div className="p-1 bg-neutral-100 font-bold border-b border-neutral-400 text-[10px] text-neutral-700">
-                Remittance Favouring:
-              </div>
-              <div className="grid grid-cols-3 border-b border-neutral-300">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">Beneficiary:</div>
-                <div className="p-1 col-span-2 font-bold text-neutral-900">{form.beneName || '—'}</div>
-              </div>
-              <div className="grid grid-cols-3 border-b border-neutral-300">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">A/c Number:</div>
-                <div className="p-1 col-span-2 font-mono font-bold">{form.beneAcc || '—'}</div>
-              </div>
-              <div className="grid grid-cols-3 border-b border-neutral-300">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">Bank & Branch:</div>
-                <div className="p-1 col-span-2">{form.beneBank} {form.beneBranch ? `(${form.beneBranch})` : ''}</div>
-              </div>
-              <div className="grid grid-cols-3 border-b border-neutral-300">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">IFS Code:</div>
-                <div className="p-1 col-span-2 font-mono font-bold text-sky-800">{form.beneIfsc || '—'}</div>
-              </div>
-              <div className="grid grid-cols-3 border-b border-neutral-300">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">Amount ₹:</div>
-                <div className="p-1 col-span-2 font-mono font-bold">₹ {form.amount || '0'}</div>
-              </div>
-              <div className="grid grid-cols-3 border-b border-neutral-300">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">Charges ₹:</div>
-                <div className="p-1 col-span-2 font-mono">₹ {form.charges || '0'}</div>
-              </div>
-              <div className="grid grid-cols-3 bg-neutral-100 font-bold">
-                <div className="p-1 border-r border-neutral-300 text-neutral-900">Total ₹:</div>
-                <div className="p-1 col-span-2 font-mono text-neutral-950 font-black">
-                  ₹ {calculatedTotal || '0'}
-                </div>
-              </div>
-            </div>
-
-            {/* Words representation */}
-            <div className="border border-neutral-400 p-1.5 bg-neutral-50 text-[10px]">
-              <div className="font-bold text-neutral-700 mb-0.5">
-                {lang === 'hi' ? 'कुल राशि शब्दों में:' : (lang === 'gu' ? 'કુલ રકમ શબ્દોમાં:' : 'Amount in words:')}
-              </div>
-              <div className="font-bold text-neutral-950 italic">
-                {amountInWords}
-              </div>
-            </div>
-
-            {/* Remitter Summary */}
-            <div className="border border-neutral-400 text-[10.5px]">
-              <div className="grid grid-cols-3 border-b border-neutral-300">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">Remitter:</div>
-                <div className="p-1 col-span-2 font-bold">{form.remitterName || '—'}</div>
-              </div>
-              <div className="grid grid-cols-3 border-b border-neutral-300">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">Debit A/c:</div>
-                <div className="p-1 col-span-2 font-mono">{form.remitterAcc || '—'}</div>
-              </div>
-              <div className="grid grid-cols-3 border-b border-neutral-300">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">Mobile:</div>
-                <div className="p-1 col-span-2 font-mono">{form.remitterMobile || '—'}</div>
-              </div>
-              <div className="grid grid-cols-3">
-                <div className="p-1 bg-neutral-50 font-bold border-r border-neutral-300">PAN:</div>
-                <div className="p-1 col-span-2 font-mono font-bold">{form.remitterPan || '—'}</div>
-              </div>
-            </div>
-
-            {/* Signature Box */}
-            <div className="pt-8 text-center text-[9.5px] font-bold text-neutral-600 border-t border-neutral-300">
-              Seal / Signature of Authorised Bank Official
-            </div>
+      {/* ── PAYEES TABLE ── */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        {isLoading ? (
+          <div className="p-12 text-center text-slate-400 text-sm">
+            Loading suppliers and staff payees...
           </div>
+        ) : filteredPayees.length === 0 ? (
+          <div className="p-12 text-center space-y-2">
+            <p className="text-slate-400 text-sm">No payees found matching your filter.</p>
+            <button
+              onClick={() => openEditModal()}
+              className="text-xs text-purple-400 font-bold underline hover:text-purple-300"
+            >
+              + Add a new RTGS payee now
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950/60 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="px-4 py-3 font-bold">Beneficiary Name</th>
+                  <th className="px-4 py-3 font-bold">Category</th>
+                  <th className="px-4 py-3 font-bold">Bank Name</th>
+                  <th className="px-4 py-3 font-bold">Account Number</th>
+                  <th className="px-4 py-3 font-bold">IFSC Code</th>
+                  <th className="px-4 py-3 font-bold">Status</th>
+                  <th className="px-4 py-3 font-bold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {filteredPayees.map((payee) => {
+                  const hasBankDetails = Boolean(payee.accountNumber && payee.ifscCode);
 
-          {/* ------------------------------------------------------------- */}
-          {/* MAIN APPLICATION FORM (Cols 5-12) */}
-          {/* ------------------------------------------------------------- */}
-          <div className="md:col-span-8 print:col-span-8 space-y-3">
+                  return (
+                    <tr key={payee.id} className="hover:bg-slate-800/40 transition-colors">
+                      {/* Name */}
+                      <td className="px-4 py-3.5 font-bold text-white">
+                        <div className="flex items-center gap-2">
+                          <span>{payee.name}</span>
+                          {payee.designation && (
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              ({payee.designation})
+                            </span>
+                          )}
+                          {payee.gstNumber && (
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              GST: {payee.gstNumber}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Category Badge */}
+                      <td className="px-4 py-3.5">
+                        {payee.category === 'SUPPLIER' && (
+                          <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-bold inline-flex items-center gap-1">
+                            <Building2 className="w-3 h-3" /> Supplier
+                          </span>
+                        )}
+                        {payee.category === 'EMPLOYEE' && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[10px] font-bold inline-flex items-center gap-1">
+                            <Users className="w-3 h-3" /> Staff Advance
+                          </span>
+                        )}
+                        {payee.category === 'OTHER' && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[10px] font-bold inline-flex items-center gap-1">
+                            <FileText className="w-3 h-3" /> Other Payee
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Bank Name */}
+                      <td className="px-4 py-3.5 text-slate-300 font-medium">
+                        {payee.bankName || <span className="text-slate-600 italic">Not set</span>}
+                      </td>
+
+                      {/* Account Number */}
+                      <td className="px-4 py-3.5 font-mono text-slate-200">
+                        {payee.accountNumber ? (
+                          <span className="bg-slate-950 px-2 py-1 rounded border border-slate-800 font-semibold text-sky-400">
+                            {payee.accountNumber}
+                          </span>
+                        ) : (
+                          <span className="text-amber-500/80 italic">Missing account #</span>
+                        )}
+                      </td>
+
+                      {/* IFSC Code */}
+                      <td className="px-4 py-3.5 font-mono font-bold text-emerald-400">
+                        {payee.ifscCode || <span className="text-slate-600 italic font-normal">Missing</span>}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-4 py-3.5">
+                        {hasBankDetails ? (
+                          <span className="text-emerald-400 text-[11px] font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Ready
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => openEditModal(payee)}
+                            className="text-amber-400 hover:text-amber-300 text-[11px] font-semibold flex items-center gap-1 underline"
+                          >
+                            <AlertCircle className="w-3.5 h-3.5" /> Save details
+                          </button>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* RTGS Button */}
+                          <button
+                            type="button"
+                            onClick={() => openRtgsModal(payee)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all shadow-sm"
+                          >
+                            <Landmark className="w-3.5 h-3.5" />
+                            RTGS
+                          </button>
+
+                          {/* Edit Details Button */}
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(payee)}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                            title="Edit Bank Details"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete if custom */}
+                          {payee.id.startsWith('custom_') && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePayee(payee.id, payee.name)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-950/40 text-slate-400 hover:text-red-400 transition-colors"
+                              title="Delete Payee"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── 1. GENERATE RTGS MODAL (AMOUNT & REASON) ── */}
+      {rtgsModalOpen && selectedPayee && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             
-            {/* Top Branch & Date Meta */}
-            <div className="flex flex-wrap items-center justify-between text-xs border-b border-neutral-300 pb-2 gap-2">
-              <div className="flex items-center gap-2">
-                <span className="font-bold">Branch:</span>
-                <input
-                  type="text"
-                  value={form.branch}
-                  onChange={(e) => updateForm('branch', e.target.value)}
-                  placeholder="BRANCH NAME"
-                  className="border-b border-neutral-400 font-bold outline-none px-1 w-32 uppercase"
-                />
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                  <Landmark className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">Generate Axis Bank RTGS</h3>
+                  <p className="text-[11px] text-slate-400">Official Fillable Form (02_AXIS_Real_RTGS)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setRtgsModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 text-xs">
+              
+              {/* Beneficiary summary card */}
+              <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Beneficiary</span>
+                  <button
+                    onClick={() => {
+                      setRtgsModalOpen(false);
+                      openEditModal(selectedPayee);
+                    }}
+                    className="text-[11px] text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1"
+                  >
+                    <Edit2 className="w-3 h-3" /> Edit Credentials
+                  </button>
+                </div>
+                <div className="font-bold text-white text-sm">
+                  {selectedPayee.name}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-slate-300 pt-1 border-t border-slate-800/80">
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">Account No:</span>
+                    <span className="font-mono font-bold text-sky-400">
+                      {selectedPayee.accountNumber || '⚠️ Missing - click Edit above'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">IFSC Code:</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {selectedPayee.ifscCode || '⚠️ Missing'}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Bank: <span className="font-medium text-slate-200">{selectedPayee.bankName || 'AXIS BANK'}</span> • Branch: <span className="font-medium text-slate-200">{selectedPayee.branch || 'NAVSARI'}</span>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1 font-bold cursor-pointer">
-                  <input
-                    type="radio"
-                    name="mf_mode"
-                    checked={form.mode === 'NEFT'}
-                    onChange={() => updateForm('mode', 'NEFT')}
-                    className="accent-sky-700"
-                  />
-                  NEFT
+              {/* Amount Input */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                  Transfer Amount (₹) <span className="text-red-400">*</span>
                 </label>
-                <label className="flex items-center gap-1 font-bold cursor-pointer">
-                  <input
-                    type="radio"
-                    name="mf_mode"
-                    checked={form.mode === 'RTGS'}
-                    onChange={() => updateForm('mode', 'RTGS')}
-                    className="accent-sky-700"
-                  />
-                  RTGS
-                </label>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="font-bold">Date:</span>
-                <input
-                  type="text"
-                  value={form.date}
-                  onChange={(e) => updateForm('date', e.target.value)}
-                  className="border-b border-neutral-400 font-bold outline-none px-1 w-24"
-                />
-                <span className="font-bold ml-2">Time:</span>
-                <input
-                  type="text"
-                  value={form.time}
-                  onChange={(e) => updateForm('time', e.target.value)}
-                  className="border-b border-neutral-400 font-bold outline-none px-1 w-16"
-                />
-              </div>
-            </div>
-
-            {/* Section 1: Beneficiary Details */}
-            <div className="border border-neutral-400 rounded-none overflow-hidden text-xs">
-              <div className="bg-neutral-100 font-bold px-2 py-1 border-b border-neutral-400 flex items-center justify-between">
-                <span>1. BENEFICIARY DETAILS (લાભાર્થીની વિગતો / लाभार्थी का विवरण)</span>
-                <span className="text-[10px] text-neutral-500 font-normal">Fill in BLOCK letters</span>
-              </div>
-
-              <div className="p-2.5 space-y-2">
-                {/* Beneficiary Name Comb */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-700 mb-0.5">
-                    <span>Beneficiary Name:</span>
-                    <span className="text-[10px] text-neutral-400 font-normal">23 Characters</span>
-                  </div>
-                  <CombInput
-                    count={23}
-                    value={form.beneName}
-                    onChange={(val) => updateForm('beneName', val)}
-                    placeholder="ENTER BENEFICIARY NAME"
-                  />
-                </div>
-
-                {/* Account Number Comb */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-700 mb-0.5">
-                    <span>Beneficiary Account Number:</span>
-                    <span className="text-[10px] text-neutral-400 font-normal">23 Characters</span>
-                  </div>
-                  <CombInput
-                    count={23}
-                    value={form.beneAcc}
-                    onChange={(val) => updateForm('beneAcc', val)}
-                    placeholder="ENTER BENEFICIARY ACCOUNT NUMBER"
-                  />
-                </div>
-
-                {/* Confirm Account Number Comb */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-700 mb-0.5">
-                    <span>Confirm Beneficiary Account Number:</span>
-                    <span className="text-[10px] text-neutral-400 font-normal">Re-enter Account No.</span>
-                  </div>
-                  <CombInput
-                    count={23}
-                    value={form.beneAccConfirm}
-                    onChange={(val) => updateForm('beneAccConfirm', val)}
-                    placeholder="CONFIRM BENEFICIARY ACCOUNT NUMBER"
-                  />
-                </div>
-
-                {/* Bank, Branch, IFSC, Type Row */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 pt-1">
-                  <div>
-                    <label className="text-[10.5px] font-bold text-neutral-700 block">Beneficiary Bank:</label>
-                    <input
-                      type="text"
-                      value={form.beneBank}
-                      onChange={(e) => updateForm('beneBank', e.target.value.toUpperCase())}
-                      placeholder="STATE BANK OF INDIA"
-                      className="w-full border border-neutral-400 px-2 py-1 text-xs font-bold uppercase outline-none focus:border-sky-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10.5px] font-bold text-neutral-700 block">Branch Name:</label>
-                    <input
-                      type="text"
-                      value={form.beneBranch}
-                      onChange={(e) => updateForm('beneBranch', e.target.value.toUpperCase())}
-                      placeholder="BRANCH"
-                      className="w-full border border-neutral-400 px-2 py-1 text-xs uppercase outline-none focus:border-sky-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10.5px] font-bold text-neutral-700 block">IFS Code (11 Chars):</label>
-                    <input
-                      type="text"
-                      maxLength={11}
-                      value={form.beneIfsc}
-                      onChange={(e) => updateForm('beneIfsc', e.target.value.toUpperCase())}
-                      placeholder="SBIN0001234"
-                      className="w-full border border-neutral-400 px-2 py-1 text-xs font-mono font-bold uppercase text-sky-800 outline-none focus:border-sky-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10.5px] font-bold text-neutral-700 block">Account Type:</label>
-                    <select
-                      value={form.beneAccType}
-                      onChange={(e) => updateForm('beneAccType', e.target.value)}
-                      className="w-full border border-neutral-400 px-2 py-1 text-xs font-bold outline-none focus:border-sky-600"
-                    >
-                      <option value="CURRENT">CURRENT A/C (11)</option>
-                      <option value="SAVINGS">SAVINGS A/C (10)</option>
-                      <option value="CC/OD">CASH CREDIT / OVERDRAFT</option>
-                      <option value="LOAN">LOAN ACCOUNT</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Amount & Charges Calculation Row */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 border-t border-neutral-200">
-                  <div>
-                    <label className="text-[10.5px] font-bold text-neutral-700 block">Amount to Remit ₹:</label>
-                    <input
-                      type="number"
-                      value={form.amount}
-                      onChange={(e) => updateForm('amount', e.target.value)}
-                      placeholder="100000"
-                      className="w-full border border-neutral-400 px-2 py-1 text-xs font-mono font-bold outline-none focus:border-sky-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10.5px] font-bold text-neutral-700 block">Bank Charges ₹:</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={form.charges}
-                      onChange={(e) => updateForm('charges', e.target.value)}
-                      placeholder="23.50"
-                      className="w-full border border-neutral-400 px-2 py-1 text-xs font-mono outline-none focus:border-sky-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10.5px] font-bold text-neutral-900 block">Total Amount ₹:</label>
-                    <input
-                      type="text"
-                      readOnly
-                      value={calculatedTotal}
-                      className="w-full border border-neutral-400 bg-neutral-100 px-2 py-1 text-xs font-mono font-black text-neutral-950 outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Section 2: Applicant / Remitter Details */}
-            <div className="border border-neutral-400 rounded-none overflow-hidden text-xs">
-              <div className="bg-neutral-100 font-bold px-2 py-1 border-b border-neutral-400 flex items-center justify-between">
-                <span>2. APPLICANT DETAILS / REMITTER (અરજદારની વિગતો / आवेदक का विवरण)</span>
-              </div>
-
-              <div className="p-2.5 space-y-2">
-                {/* Remitter Name Comb */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-700 mb-0.5">
-                    <span>Remitter (Applicant) Name:</span>
-                    <span className="text-[10px] text-neutral-400 font-normal">23 Characters</span>
-                  </div>
-                  <CombInput
-                    count={23}
-                    value={form.remitterName}
-                    onChange={(val) => updateForm('remitterName', val)}
-                    placeholder="ENTER REMITTER COMPANY OR PERSON NAME"
-                  />
-                </div>
-
-                {/* Remitter Account Number (15 Cells) & Sol ID (6 Cells) */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                  <div className="md:col-span-8">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-neutral-700 mb-0.5">
-                      <span>Debit Account Number (15 Chars):</span>
-                    </div>
-                    <CombInput
-                      count={15}
-                      value={form.remitterAcc}
-                      onChange={(val) => updateForm('remitterAcc', val)}
-                      placeholder="ACCOUNT NO."
-                    />
-                  </div>
-
-                  <div className="md:col-span-4">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-neutral-700 mb-0.5">
-                      <span>Sol ID (6 Chars):</span>
-                    </div>
-                    <CombInput
-                      count={6}
-                      value={form.solId}
-                      onChange={(val) => updateForm('solId', val)}
-                      placeholder="SOL ID"
-                    />
-                  </div>
-                </div>
-
-                {/* Mobile (10 Cells) & PAN (10 Cells) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <div className="flex items-center justify-between text-[11px] font-bold text-neutral-700 mb-0.5">
-                      <span>Mobile Number (10 Digits):</span>
-                    </div>
-                    <CombInput
-                      count={10}
-                      value={form.remitterMobile}
-                      onChange={(val) => updateForm('remitterMobile', val)}
-                      placeholder="MOBILE NO."
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between text-[11px] font-bold text-neutral-700 mb-0.5">
-                      <span>PAN Number (10 Chars):</span>
-                    </div>
-                    <CombInput
-                      count={10}
-                      value={form.remitterPan}
-                      onChange={(val) => updateForm('remitterPan', val)}
-                      placeholder="PAN NUMBER"
-                    />
-                  </div>
-                </div>
-
-                {/* Address & Cheque Details */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <div className="md:col-span-2">
-                    <label className="text-[10.5px] font-bold text-neutral-700 block">Remitter Full Address:</label>
-                    <input
-                      type="text"
-                      value={form.remitterAddress}
-                      onChange={(e) => updateForm('remitterAddress', e.target.value.toUpperCase())}
-                      placeholder="OFFICE / RESIDENCE ADDRESS"
-                      className="w-full border border-neutral-400 px-2 py-1 text-xs uppercase outline-none focus:border-sky-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10.5px] font-bold text-neutral-700 block">Enclosed Cheque No:</label>
-                    <input
-                      type="text"
-                      value={form.chequeNo}
-                      onChange={(e) => updateForm('chequeNo', e.target.value)}
-                      placeholder="CHEQUE NO."
-                      className="w-full border border-neutral-400 px-2 py-1 text-xs font-mono font-bold outline-none focus:border-sky-600"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Debit Mandate & Amount in Words */}
-            <div className="p-2 border border-neutral-400 bg-neutral-50 text-[11px] space-y-1">
-              <div className="font-bold text-neutral-900">
-                DEBIT MANDATE: Please debit ₹ <span className="font-mono text-sky-800">{calculatedTotal || '0'}</span> from our Account No. <span className="font-mono">{form.remitterAcc || '__________'}</span> along with applicable charges.
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-bold text-neutral-700 whitespace-nowrap">Amount in Words:</span>
-                <span className="font-bold text-neutral-950 italic">{amountInWords}</span>
-              </div>
-            </div>
-
-            {/* Cash Denomination Table */}
-            <div className="border border-neutral-400 text-xs">
-              <div className="bg-neutral-100 font-bold px-2 py-1 border-b border-neutral-400 flex items-center justify-between text-[11px]">
-                <span>DETAILS OF CASH REMITTED (In case of cash remittance)</span>
-                <span className="font-mono font-black text-sky-900">Cash Total ₹: {cashGrandTotal}</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-1 p-2 text-center text-[10.5px] bg-white">
-                {[2000, 500, 200, 100, 50, 20, 10].map(denom => (
-                  <div key={denom} className="border border-neutral-300 p-1 rounded-sm">
-                    <div className="font-bold text-neutral-600">₹{denom} ×</div>
-                    <input
-                      type="number"
-                      min={0}
-                      value={cash[denom] || ''}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10) || 0;
-                        setCash(prev => ({ ...prev, [denom]: val }));
-                      }}
-                      placeholder="0"
-                      className="w-full text-center border-b border-neutral-400 font-mono font-bold text-xs py-0.5 outline-none"
-                    />
-                    <div className="text-[10px] text-neutral-500 font-mono mt-0.5">
-                      = {(cash[denom] || 0) * denom}
-                    </div>
-                  </div>
-                ))}
-                <div className="border border-neutral-300 p-1 rounded-sm bg-neutral-50">
-                  <div className="font-bold text-neutral-600">Coins ₹</div>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-base font-bold text-purple-400">₹</span>
                   <input
                     type="number"
-                    min={0}
-                    value={coins || ''}
-                    onChange={(e) => setCoins(parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-full text-center border-b border-neutral-400 font-mono font-bold text-xs py-0.5 outline-none"
+                    autoFocus
+                    placeholder="Enter amount (e.g. 50000)"
+                    value={rtgsAmount}
+                    onChange={(e) => setRtgsAmount(e.target.value)}
+                    className="w-full bg-slate-950 border border-purple-500/40 text-purple-300 text-base font-bold pl-8 pr-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
                   />
-                  <div className="text-[10px] text-neutral-500 font-mono mt-0.5">
-                    = {coins || 0}
-                  </div>
+                </div>
+              </div>
+
+              {/* Reason / Narration Input */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                  Reason / Narration (Sender to Receiver) <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Staff Advance / Raw Material Bill / Monthly Salary"
+                  value={rtgsReason}
+                  onChange={(e) => setRtgsReason(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+
+                {/* Quick suggestion chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {selectedPayee.category === 'EMPLOYEE' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setRtgsReason(`STAFF SALARY ADVANCE - ${selectedPayee.name}`)}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded text-[10px] font-semibold border border-amber-500/20"
+                      >
+                        ⚡ Staff Advance
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRtgsReason(`MONTHLY SALARY - ${selectedPayee.name}`)}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded text-[10px] font-semibold border border-emerald-500/20"
+                      >
+                        💼 Monthly Salary
+                      </button>
+                    </>
+                  )}
+                  {selectedPayee.category === 'SUPPLIER' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setRtgsReason(`SUPPLIER PAYMENT: ${selectedPayee.name}`)}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-blue-300 rounded text-[10px] font-semibold border border-blue-500/20"
+                      >
+                        📦 Raw Material Bill
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRtgsReason(`ADVANCE PAYMENT: ${selectedPayee.name}`)}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-purple-300 rounded text-[10px] font-semibold border border-purple-500/20"
+                      >
+                        ⚡ Advance Payment
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setRtgsReason(`BILL PAYMENT - ${selectedPayee.name}`)}
+                    className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-semibold border border-slate-700"
+                  >
+                    📑 Invoice Clearance
+                  </button>
+                </div>
+              </div>
+
+              {/* Date & Cheque No */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={rtgsDate}
+                    onChange={(e) => setRtgsDate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-2.5 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    Cheque No (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 541098"
+                    value={rtgsChequeNo}
+                    onChange={(e) => setRtgsChequeNo(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-2.5 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Signatures Row */}
-            <div className="grid grid-cols-4 gap-4 pt-6 text-center text-[10px] font-bold text-neutral-700">
-              <div className="border-t border-neutral-400 pt-1">
-                Signature of Applicant / Remitter
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setRtgsModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGeneratePdf}
+                disabled={isGenerating || !selectedPayee.accountNumber || !selectedPayee.ifscCode}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-600/25 disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                {isGenerating ? 'Generating...' : 'Download Axis Bank RTGS PDF'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 2. SAVE / EDIT PAYEE BANK DETAILS MODAL ── */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/50">
+              <h3 className="font-bold text-sm text-white">Save RTGS Bank Details</h3>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Beneficiary / Payee Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. FLEXEN SPECIALITY CHEMICALS"
+                  value={editForm.name || ''}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value.toUpperCase() }))}
+                  className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg uppercase"
+                />
               </div>
-              <div className="border-t border-neutral-400 pt-1">
-                Verifying Official
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Category
+                </label>
+                <select
+                  value={editForm.category || 'SUPPLIER'}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, category: e.target.value as any }))}
+                  className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg"
+                >
+                  <option value="SUPPLIER">Supplier / Raw Material Vendor</option>
+                  <option value="EMPLOYEE">Staff Member (Employee Advance)</option>
+                  <option value="OTHER">Other Payee (Utility / Rent / Freight)</option>
+                </select>
               </div>
-              <div className="border-t border-neutral-400 pt-1">
-                Maker Official
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Bank Name (e.g. HDFC Bank, SBI, ICICI, Axis Bank)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. STATE BANK OF INDIA"
+                  value={editForm.bankName || ''}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, bankName: e.target.value.toUpperCase() }))}
+                  className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg uppercase"
+                />
               </div>
-              <div className="border-t border-neutral-400 pt-1">
-                Checker Official
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Bank Account Number <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 123456789012"
+                  value={editForm.accountNumber || ''}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, accountNumber: e.target.value.trim() }))}
+                  className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    IFSC Code <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. SBIN0001234"
+                    value={editForm.ifscCode || ''}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, ifscCode: e.target.value.trim().toUpperCase() }))}
+                    className="w-full bg-slate-950 border border-slate-700 text-emerald-400 font-bold text-xs px-3 py-2 rounded-lg font-mono uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    Branch City
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. NAVSARI"
+                    value={editForm.branch || ''}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, branch: e.target.value.toUpperCase() }))}
+                    className="w-full bg-slate-950 border border-slate-700 text-white text-xs px-3 py-2 rounded-lg uppercase"
+                  />
+                </div>
               </div>
             </div>
 
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePayeeDetails}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Save RTGS Details
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 }
