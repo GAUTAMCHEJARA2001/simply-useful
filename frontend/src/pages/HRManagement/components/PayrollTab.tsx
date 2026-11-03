@@ -6,7 +6,8 @@ import { Download, Search, FileText, Calculator } from 'lucide-react';
 import { SalarySlipPdfModal } from '@/components/PDF/SalarySlipPdfModal';
 import { useToast } from '@/hooks/use-toast';
 import { useSettings } from '@/hooks/inventory/useMasters';
-import { generateRTGSSlip } from '@/utils/pdfGenerator';
+import { generateRTGSSlip, generateCombinedBulkRTGSPdf, RTGSData } from '@/utils/pdfGenerator';
+import { saveRtgsRecord, saveBulkRtgsRecords } from '@/utils/rtgsHistory';
 import { Landmark } from 'lucide-react';
 
 const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -36,7 +37,7 @@ export const PayrollTab: React.FC = () => {
     try {
       const netPay = getNetPay(slip);
       const mStr = slip.month || fetchMonth || '';
-      await generateRTGSSlip({
+      const rtgsPayload: RTGSData = {
         beneficiaryName: slip.labour_name,
         bankName: slip.bank_details?.bank_name || '',
         accountNumber: slip.bank_details?.account_no || '',
@@ -53,8 +54,23 @@ export const PayrollTab: React.FC = () => {
         companyPhone: settings?.company_phone || '8866322700',
         beneficiaryBranch: 'NAVSARI',
         narration: `SALARY ${mStr ? mStr.toUpperCase() : ''}`
+      };
+      await generateRTGSSlip(rtgsPayload);
+      saveRtgsRecord({
+        date: rtgsPayload.date || new Date().toISOString().slice(0, 10),
+        beneficiaryName: slip.labour_name,
+        category: 'SALARY',
+        bankName: slip.bank_details?.bank_name || '',
+        accountNumber: slip.bank_details?.account_no || '',
+        ifscCode: slip.bank_details?.ifsc || '',
+        branch: 'NAVSARI',
+        amount: netPay,
+        narration: rtgsPayload.narration || 'SALARY',
+        source: 'PAYROLL_SINGLE',
+        companyAccount: rtgsPayload.companyAccount,
+        companyBank: rtgsPayload.companyBank,
       });
-      toast({ title: 'RTGS Form Ready', description: `Axis Bank RTGS Form filled & downloaded for ${slip.labour_name}` });
+      toast({ title: 'RTGS Form Ready', description: `Axis Bank RTGS Form filled & recorded for ${slip.labour_name}` });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message || 'Failed to generate RTGS form', variant: 'destructive' });
     }
@@ -62,16 +78,65 @@ export const PayrollTab: React.FC = () => {
 
   const handleBulkRTGS = async () => {
     if (payroll.length === 0) return;
-    toast({ title: 'Generating RTGS Forms', description: `Generating forms for ${payroll.length} employees...` });
-    for (const slip of payroll) {
-      try {
-        await handlePrintRTGS(slip);
-        if (payroll.length > 1) {
-          await new Promise(r => setTimeout(r, 400));
-        }
-      } catch (e) {
-        console.error('RTGS error:', e);
+    const mStr = fetchMonth || selectedMonth || '';
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    const eligibleSlips = payroll.filter((slip: any) => getNetPay(slip) > 0);
+    if (eligibleSlips.length === 0) {
+      toast({ title: 'No Payable Employees', description: 'All employees have ₹0 net payable for this month.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      toast({ title: 'Generating Bulk RTGS', description: `Preparing Axis Bank slips for ${eligibleSlips.length} employees...` });
+
+      const bulkItems: RTGSData[] = eligibleSlips.map((slip: any) => ({
+        beneficiaryName: slip.labour_name,
+        bankName: slip.bank_details?.bank_name || 'AXIS BANK',
+        accountNumber: slip.bank_details?.account_no || '',
+        ifscCode: slip.bank_details?.ifsc || 'UTIB0000047',
+        amount: getNetPay(slip),
+        date: dateStr,
+        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
+        companyAccount: settings?.company_bank_account || '925030009706188',
+        companyBank: settings?.company_bank_name || 'AXIS BANK',
+        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
+        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
+        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
+        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
+        companyPhone: settings?.company_phone || '8866322700',
+        beneficiaryBranch: 'NAVSARI',
+        narration: `SALARY ${mStr.toUpperCase()}`
+      }));
+
+      if (bulkItems.length === 1) {
+        await generateRTGSSlip(bulkItems[0]);
+      } else {
+        await generateCombinedBulkRTGSPdf(bulkItems, `AXIS_BULK_RTGS_SALARY_${mStr || 'PAYROLL'}.pdf`);
       }
+
+      saveBulkRtgsRecords(bulkItems.map(item => ({
+        date: dateStr,
+        beneficiaryName: item.beneficiaryName,
+        category: 'SALARY',
+        bankName: item.bankName,
+        accountNumber: item.accountNumber,
+        ifscCode: item.ifscCode,
+        branch: item.beneficiaryBranch,
+        amount: item.amount,
+        narration: item.narration || `SALARY ${mStr.toUpperCase()}`,
+        source: 'PAYROLL_BULK',
+        companyAccount: item.companyAccount,
+        companyBank: item.companyBank,
+      })));
+
+      toast({
+        title: 'Bulk RTGS Complete!',
+        description: `Combined PDF downloaded for ${bulkItems.length} staff. Records saved to RTGS History.`
+      });
+    } catch (e: any) {
+      console.error('Bulk RTGS generation error:', e);
+      toast({ title: 'Bulk RTGS Error', description: e.message || 'Failed to generate bulk RTGS PDF', variant: 'destructive' });
     }
   };
 

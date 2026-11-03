@@ -19,7 +19,8 @@ import {
 import { amountToWords } from './utils/amountToWords';
 import { useToast } from '@/hooks/use-toast';
 import { useSettings } from '@/hooks/inventory/useMasters';
-import { generateRTGSSlip } from '@/utils/pdfGenerator';
+import { generateRTGSSlip, generateCombinedBulkRTGSPdf, RTGSData } from '@/utils/pdfGenerator';
+import { saveRtgsRecord, saveBulkRtgsRecords } from '@/utils/rtgsHistory';
 
 export interface SalarySlipItem {
   id?: number | string;
@@ -217,30 +218,66 @@ export const SalarySlipPdfModal: React.FC<SalarySlipPdfModalProps> = ({
 
   const handleFillRTGS = async () => {
     if (activeSlips.length === 0) return;
+    const dateStr = new Date().toISOString().slice(0, 10);
     try {
       setIsGenerating(true);
-      for (const s of activeSlips) {
-        await generateRTGSSlip({
-          beneficiaryName: s.labour_name,
-          bankName: s.bank_details?.bank_name || '',
-          accountNumber: s.bank_details?.account_no || '',
-          ifscCode: s.bank_details?.ifsc || '',
-          amount: s.net_pay,
-          companyName: s.company?.name || settings?.company_name || 'Kamla Conchem Pvt Ltd',
-          companyAccount: settings?.company_bank_account || '',
-          companyBank: settings?.company_bank_name || 'Axis Bank',
-          companyIfsc: settings?.company_bank_ifsc || '',
-          companyAddress: s.company?.address || settings?.company_address || '',
-          narration: `Salary ${formatMonthName(s.month)}`
+      const items: RTGSData[] = activeSlips.map(s => ({
+        beneficiaryName: s.labour_name,
+        bankName: s.bank_details?.bank_name || 'AXIS BANK',
+        accountNumber: s.bank_details?.account_no || '',
+        ifscCode: s.bank_details?.ifsc || 'UTIB0000047',
+        amount: s.net_pay,
+        date: dateStr,
+        companyName: s.company?.name || settings?.company_name || 'KAMLA CONCHEM PVT.LTD',
+        companyAccount: settings?.company_bank_account || '925030009706188',
+        companyBank: settings?.company_bank_name || 'AXIS BANK',
+        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
+        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
+        companyAddress: s.company?.address || settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
+        narration: `Salary ${formatMonthName(s.month)}`
+      }));
+
+      if (items.length === 1) {
+        await generateRTGSSlip(items[0]);
+        saveRtgsRecord({
+          date: dateStr,
+          beneficiaryName: items[0].beneficiaryName,
+          category: 'SALARY',
+          bankName: items[0].bankName,
+          accountNumber: items[0].accountNumber,
+          ifscCode: items[0].ifscCode,
+          branch: items[0].beneficiaryBranch,
+          amount: items[0].amount,
+          narration: items[0].narration || 'Salary Slip RTGS',
+          source: 'SLIPS_MODAL',
+          companyAccount: items[0].companyAccount,
+          companyBank: items[0].companyBank,
         });
-        if (activeSlips.length > 1) {
-          await new Promise(r => setTimeout(r, 400));
-        }
+        toast({
+          title: 'RTGS Form Downloaded',
+          description: `Successfully filled Axis Bank RTGS form for ${items[0].beneficiaryName}.`
+        });
+      } else {
+        await generateCombinedBulkRTGSPdf(items, `AXIS_BULK_RTGS_${activeSlips[0]?.month || 'SLIPS'}.pdf`);
+        saveBulkRtgsRecords(items.map(it => ({
+          date: dateStr,
+          beneficiaryName: it.beneficiaryName,
+          category: 'SALARY',
+          bankName: it.bankName,
+          accountNumber: it.accountNumber,
+          ifscCode: it.ifscCode,
+          branch: it.beneficiaryBranch,
+          amount: it.amount,
+          narration: it.narration || 'Salary Slip RTGS',
+          source: 'SLIPS_MODAL',
+          companyAccount: it.companyAccount,
+          companyBank: it.companyBank,
+        })));
+        toast({
+          title: 'Bulk RTGS Form Downloaded',
+          description: `Successfully generated combined 1-file Axis Bank RTGS for all ${items.length} employees.`
+        });
       }
-      toast({
-        title: 'RTGS Form Downloaded',
-        description: `Successfully filled Axis Bank RTGS form for ${activeSlips.length} slip(s).`
-      });
     } catch (err: any) {
       toast({
         title: 'RTGS Error',

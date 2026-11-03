@@ -205,16 +205,16 @@ class Labour(models.Model):
     
     # KYC & Documents
     aadhar_number = models.CharField(max_length=20, blank=True, null=True)
-    aadhar_photo = models.FileField(upload_to='hr/documents/', blank=True, null=True)
+    aadhar_photo = models.FileField(upload_to='hr/documents/', max_length=500, blank=True, null=True)
     pan_number = models.CharField(max_length=20, blank=True, null=True)
-    pan_photo = models.FileField(upload_to='hr/documents/', blank=True, null=True)
-    employee_photo = models.FileField(upload_to='hr/photos/', blank=True, null=True)
+    pan_photo = models.FileField(upload_to='hr/documents/', max_length=500, blank=True, null=True)
+    employee_photo = models.FileField(upload_to='hr/photos/', max_length=500, blank=True, null=True)
     
     # Bank Details
     bank_name = models.CharField(max_length=100, blank=True, null=True)
     bank_account_number = models.CharField(max_length=50, blank=True, null=True)
     bank_ifsc = models.CharField(max_length=20, blank=True, null=True)
-    bank_proof_photo = models.FileField(upload_to='hr/documents/', blank=True, null=True)
+    bank_proof_photo = models.FileField(upload_to='hr/documents/', max_length=500, blank=True, null=True)
     
     # Advanced HR Fields
     employee_type = models.CharField(max_length=20, choices=EMPLOYEE_TYPES, default='VARIABLE')

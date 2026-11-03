@@ -196,8 +196,10 @@ export const EmployeeMasterTab: React.FC = () => {
         } else if (formData[key] === '') {
           submitData.append(key, '');
         }
-      } else if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
-        submitData.append(key, formData[key]);
+      } else if (formData[key] !== null && formData[key] !== undefined) {
+        submitData.append(key, String(formData[key]));
+      } else {
+        submitData.append(key, '');
       }
     });
 

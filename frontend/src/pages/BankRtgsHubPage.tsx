@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { 
   Landmark, Download, Plus, Search, Edit2, Trash2, CheckCircle2, 
   AlertCircle, Building2, Users, FileText, Layers, FileSpreadsheet,
-  CheckSquare, Square
+  CheckSquare, Square, Clock, History, FileCheck, ArrowDownToLine
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Modal } from '@/components/Modal';
 import { useSettings } from '@/hooks/inventory/useMasters';
 import { generateRTGSSlip, generateCombinedBulkRTGSPdf, RTGSData } from '@/utils/pdfGenerator';
+import { 
+  saveRtgsRecord, saveBulkRtgsRecords, getRtgsHistory, 
+  deleteRtgsRecord, clearRtgsHistory, RtgsHistoryRecord 
+} from '@/utils/rtgsHistory';
 import apiClient from '@/api/client';
 
 export interface RtgsPayee {
@@ -32,6 +36,13 @@ const STORAGE_KEY = 'simply_saved_rtgs_payees_v3';
 export default function BankRtgsHubPage() {
   const [searchParams] = useSearchParams();
   const { data: settings } = useSettings();
+
+  // Top level View: Payees Master vs RTGS Records & History
+  const [activeMainTab, setActiveMainTab] = useState<'PAYEES' | 'HISTORY'>('PAYEES');
+  const [historyRecords, setHistoryRecords] = useState<RtgsHistoryRecord[]>(() => getRtgsHistory());
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyCategory, setHistoryCategory] = useState<string>('ALL');
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
 
   // Payees master state
   const [savedPayees, setSavedPayees] = useState<Record<string, Partial<RtgsPayee>>>(() => {
@@ -422,7 +433,23 @@ export default function BankRtgsHubPage() {
     try {
       const payload = buildRtgsPayload(selectedPayee, amt, rtgsReason, rtgsDate);
       await generateRTGSSlip(payload);
-      toast.success(`🎉 Official Axis Bank RTGS PDF generated for ${selectedPayee.name}!`);
+      saveRtgsRecord({
+        date: payload.date || rtgsDate,
+        beneficiaryName: selectedPayee.name,
+        category: selectedPayee.category,
+        bankName: payload.bankName,
+        accountNumber: payload.accountNumber,
+        ifscCode: payload.ifscCode,
+        branch: payload.beneficiaryBranch,
+        amount: amt,
+        narration: payload.narration || rtgsReason,
+        chequeNumber: rtgsChequeNo || undefined,
+        source: 'HUB_SINGLE',
+        companyAccount: payload.companyAccount,
+        companyBank: payload.companyBank,
+      });
+      setHistoryRecords(getRtgsHistory());
+      toast.success(`🎉 Official Axis Bank RTGS PDF generated & recorded for ${selectedPayee.name}!`);
       setRtgsModalOpen(false);
     } catch (e: any) {
       toast.error(e.message || 'Failed to generate Axis Bank RTGS PDF.');
@@ -451,7 +478,22 @@ export default function BankRtgsHubPage() {
     setIsGeneratingBulk(true);
     try {
       await generateCombinedBulkRTGSPdf(validItems);
-      toast.success(`🎉 Generated Combined Multi-Page Axis RTGS PDF for ${validItems.length} payees!`);
+      saveBulkRtgsRecords(validItems.map((item, idx) => ({
+        date: item.date || bulkDate,
+        beneficiaryName: item.beneficiaryName,
+        category: bulkRows[idx]?.payee.category || 'OTHER',
+        bankName: item.bankName,
+        accountNumber: item.accountNumber,
+        ifscCode: item.ifscCode,
+        branch: item.beneficiaryBranch,
+        amount: item.amount,
+        narration: item.narration || '',
+        source: 'HUB_BULK',
+        companyAccount: item.companyAccount,
+        companyBank: item.companyBank,
+      })));
+      setHistoryRecords(getRtgsHistory());
+      toast.success(`🎉 Generated Combined Multi-Page Axis RTGS PDF & saved records for ${validItems.length} payees!`);
       setBulkModalOpen(false);
       setSelectedIds(new Set());
     } catch (e: any) {
@@ -481,7 +523,22 @@ export default function BankRtgsHubPage() {
           await new Promise(res => setTimeout(res, 400));
         }
       }
-      toast.success(`✅ Downloaded ${validRows.length} Axis Bank RTGS PDFs!`);
+      saveBulkRtgsRecords(validRows.map(r => ({
+        date: bulkDate,
+        beneficiaryName: r.payee.name,
+        category: r.payee.category,
+        bankName: r.payee.bankName || 'AXIS BANK',
+        accountNumber: r.payee.accountNumber,
+        ifscCode: r.payee.ifscCode,
+        branch: r.payee.branch || 'NAVSARI',
+        amount: parseFloat(r.amount),
+        narration: r.reason || '',
+        source: 'HUB_BULK',
+        companyAccount: settings?.company_bank_account || '925030009706188',
+        companyBank: settings?.company_bank_name || 'AXIS BANK',
+      })));
+      setHistoryRecords(getRtgsHistory());
+      toast.success(`✅ Downloaded ${validRows.length} Axis Bank RTGS PDFs & saved audit records!`);
       setBulkModalOpen(false);
       setSelectedIds(new Set());
     } catch (e: any) {
@@ -521,6 +578,155 @@ export default function BankRtgsHubPage() {
     toast.success('📊 Exported Axis Bank Corporate Bulk Annexure CSV!');
   };
 
+  // ── RTGS HISTORY HANDLERS ──
+  const filteredHistory = useMemo(() => {
+    return historyRecords.filter(rec => {
+      const q = historySearch.toLowerCase().trim();
+      const matchesSearch = !q || 
+        rec.beneficiaryName?.toLowerCase().includes(q) ||
+        rec.accountNumber?.includes(q) ||
+        rec.ifscCode?.toLowerCase().includes(q) ||
+        (rec.chequeNumber && rec.chequeNumber.includes(q)) ||
+        (rec.narration && rec.narration.toLowerCase().includes(q));
+
+      const matchesCat = historyCategory === 'ALL' || rec.category === historyCategory;
+      return matchesSearch && matchesCat;
+    });
+  }, [historyRecords, historySearch, historyCategory]);
+
+  const historyTotalDisbursed = useMemo(() => {
+    return historyRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
+  }, [historyRecords]);
+
+  const handleRedownloadHistorySlip = async (rec: RtgsHistoryRecord) => {
+    try {
+      toast.info(`Preparing Axis Bank RTGS form for ${rec.beneficiaryName}...`);
+      const payload: RTGSData = {
+        beneficiaryName: rec.beneficiaryName,
+        bankName: rec.bankName || 'AXIS BANK',
+        accountNumber: rec.accountNumber,
+        ifscCode: rec.ifscCode,
+        amount: rec.amount,
+        date: rec.date || new Date().toISOString().slice(0, 10),
+        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
+        companyAccount: rec.companyAccount || settings?.company_bank_account || '925030009706188',
+        companyBank: rec.companyBank || settings?.company_bank_name || 'AXIS BANK',
+        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
+        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
+        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
+        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
+        companyPhone: settings?.company_phone || '8866322700',
+        beneficiaryBranch: rec.branch || 'NAVSARI',
+        narration: rec.narration || `RTGS ${rec.beneficiaryName}`,
+      };
+      await generateRTGSSlip(payload);
+      toast.success(`Downloaded Axis RTGS slip for ${rec.beneficiaryName}!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to re-download RTGS form.');
+    }
+  };
+
+  const handleDeleteHistory = (id: string) => {
+    if (!confirm('Remove this RTGS record from history?')) return;
+    const updated = deleteRtgsRecord(id);
+    setHistoryRecords(updated);
+    setSelectedHistoryIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    toast.success('Record removed.');
+  };
+
+  const handleClearAllHistory = () => {
+    if (!confirm('Are you sure you want to clear all RTGS history records? This cannot be undone.')) return;
+    clearRtgsHistory();
+    setHistoryRecords([]);
+    setSelectedHistoryIds(new Set());
+    toast.success('All RTGS history cleared.');
+  };
+
+  const handleExportHistoryCsv = () => {
+    if (historyRecords.length === 0) {
+      toast.error('No history records to export.');
+      return;
+    }
+    const headers = ['Sr No', 'Date', 'Beneficiary Name', 'Category', 'Bank Name', 'Account Number', 'IFSC Code', 'Amount (INR)', 'Narration', 'Cheque No', 'Source', 'Company Account'];
+    const rows = historyRecords.map((r, i) => [
+      i + 1,
+      `"${r.date}"`,
+      `"${r.beneficiaryName}"`,
+      `"${r.category}"`,
+      `"${r.bankName}"`,
+      `"${r.accountNumber}"`,
+      `"${r.ifscCode}"`,
+      r.amount.toFixed(2),
+      `"${(r.narration || '').replace(/"/g, '""')}"`,
+      `"${r.chequeNumber || ''}"`,
+      `"${r.source}"`,
+      `"${r.companyAccount || ''}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Axis_RTGS_Audit_History_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('📊 Exported RTGS History to CSV!');
+  };
+
+  const handleDownloadSelectedHistoryCombined = async () => {
+    const selected = historyRecords.filter(r => selectedHistoryIds.has(r.id));
+    if (selected.length === 0) {
+      toast.error('Please select at least one record from history.');
+      return;
+    }
+    try {
+      toast.info(`Preparing combined PDF for ${selected.length} slips...`);
+      const items: RTGSData[] = selected.map(rec => ({
+        beneficiaryName: rec.beneficiaryName,
+        bankName: rec.bankName || 'AXIS BANK',
+        accountNumber: rec.accountNumber,
+        ifscCode: rec.ifscCode,
+        amount: rec.amount,
+        date: rec.date || new Date().toISOString().slice(0, 10),
+        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
+        companyAccount: rec.companyAccount || settings?.company_bank_account || '925030009706188',
+        companyBank: rec.companyBank || settings?.company_bank_name || 'AXIS BANK',
+        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
+        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
+        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
+        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
+        companyPhone: settings?.company_phone || '8866322700',
+        beneficiaryBranch: rec.branch || 'NAVSARI',
+        narration: rec.narration || `RTGS ${rec.beneficiaryName}`,
+      }));
+      await generateCombinedBulkRTGSPdf(items, `AXIS_BULK_RTGS_HISTORICAL_${new Date().toISOString().slice(0, 10)}.pdf`);
+      toast.success(`Downloaded combined PDF for ${selected.length} historical slips!`);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to generate combined PDF.');
+    }
+  };
+
+  const handleToggleSelectHistory = (id: string) => {
+    setSelectedHistoryIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAllHistory = () => {
+    if (selectedHistoryIds.size === filteredHistory.length) {
+      setSelectedHistoryIds(new Set());
+    } else {
+      setSelectedHistoryIds(new Set(filteredHistory.map(r => r.id)));
+    }
+  };
+
   return (
     <div className="flex-1 w-full min-w-0 p-4 md:p-6 bg-background text-foreground space-y-5">
       
@@ -547,7 +753,7 @@ export default function BankRtgsHubPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
-          {selectedIds.size > 0 && (
+          {activeMainTab === 'PAYEES' && selectedIds.size > 0 && (
             <Button
               onClick={openBulkModal}
               className="font-semibold shadow-sm"
@@ -558,17 +764,83 @@ export default function BankRtgsHubPage() {
             </Button>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => openEditModal()}
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add / Save Payee
-          </Button>
+          {activeMainTab === 'PAYEES' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openEditModal()}
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              Add / Save Payee
+            </Button>
+          )}
+
+          {activeMainTab === 'HISTORY' && (
+            <div className="flex items-center gap-2">
+              {selectedHistoryIds.size > 0 && (
+                <Button
+                  size="sm"
+                  onClick={handleDownloadSelectedHistoryCombined}
+                  className="gap-1.5 font-semibold text-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Combined PDF ({selectedHistoryIds.size})
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportHistoryCsv}
+                className="gap-1.5 text-xs"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                Export CSV
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* ── MAIN VIEW SWITCHER: PAYEES MASTER VS RTGS RECORDS & HISTORY ── */}
+      <div className="flex items-center gap-2 border-b border-border pb-1">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('PAYEES')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+            activeMainTab === 'PAYEES'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Payees Master</span>
+          <span className="ml-1 text-[11px] px-2 py-0.5 rounded-full bg-primary-foreground/20 text-inherit font-mono font-semibold">
+            {counts.all}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveMainTab('HISTORY');
+            setHistoryRecords(getRtgsHistory());
+          }}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+            activeMainTab === 'HISTORY'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          <span>RTGS Records & History</span>
+          <span className="ml-1 text-[11px] px-2 py-0.5 rounded-full bg-primary-foreground/20 text-inherit font-mono font-semibold">
+            {historyRecords.length}
+          </span>
+        </button>
+      </div>
+
+      {activeMainTab === 'PAYEES' ? (
+        <>
       {/* ── SEARCH & CATEGORY FILTER BAR ── */}
       <div className="bg-card border border-border p-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3">
         {/* Category Filter Pills */}
@@ -838,6 +1110,259 @@ export default function BankRtgsHubPage() {
               Generate Bulk RTGS ({selectedIds.size})
             </Button>
           </div>
+        </div>
+      )}
+        </>
+      ) : (
+        /* ── RTGS RECORDS & AUDIT HISTORY VIEW ── */
+        <div className="space-y-4">
+          {/* History Statistics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-card border border-border p-4 rounded-xl shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total RTGS Slips Generated</p>
+                <p className="text-2xl font-black text-foreground mt-1">{historyRecords.length}</p>
+              </div>
+              <div className="p-3 bg-primary/10 text-primary rounded-xl">
+                <FileCheck className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-card border border-border p-4 rounded-xl shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Amount Remitted</p>
+                <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                  ₹{historyTotalDisbursed.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                <Landmark className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-card border border-border p-4 rounded-xl shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Filtered Records</p>
+                <p className="text-2xl font-black text-foreground mt-1">{filteredHistory.length}</p>
+              </div>
+              <div className="p-3 bg-muted text-muted-foreground rounded-xl">
+                <Search className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Category Filter Bar for History */}
+          <div className="bg-card border border-border p-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {['ALL', 'SUPPLIER', 'EMPLOYEE', 'SALARY', 'OTHER'].map(cat => (
+                <Button
+                  key={cat}
+                  size="sm"
+                  variant={historyCategory === cat ? 'default' : 'outline'}
+                  onClick={() => setHistoryCategory(cat)}
+                  className="h-8 text-xs font-semibold capitalize"
+                >
+                  {cat === 'ALL' ? 'All Records' : cat === 'EMPLOYEE' ? 'Staff Advances' : cat === 'SALARY' ? 'Salary Payroll' : cat.toLowerCase()}
+                </Button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-[240px]">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+                <Input
+                  type="text"
+                  placeholder="Search payee, account #, cheque #..."
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  className="h-9 pl-9 pr-3 text-xs"
+                />
+              </div>
+
+              {historyRecords.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearAllHistory}
+                  className="h-9 text-xs text-destructive hover:bg-destructive/10"
+                  title="Clear All History"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" />
+                  Clear History
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* History Table */}
+          <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+            {filteredHistory.length === 0 ? (
+              <div className="p-12 text-center space-y-2">
+                <History className="w-8 h-8 text-muted-foreground/60 mx-auto" />
+                <p className="text-muted-foreground text-sm font-medium">No RTGS records found in history.</p>
+                <p className="text-xs text-muted-foreground/80">Generate an RTGS slip from the Payees Master or Payroll tab to record entries here.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/50 text-muted-foreground uppercase text-[11px] font-semibold tracking-wider border-b border-border">
+                    <tr>
+                      <th className="p-3 w-10 text-center">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllHistory}
+                          className="text-muted-foreground hover:text-foreground"
+                          title={selectedHistoryIds.size === filteredHistory.length ? 'Deselect All' : 'Select All'}
+                        >
+                          {selectedHistoryIds.size > 0 && selectedHistoryIds.size === filteredHistory.length ? (
+                            <CheckSquare className="w-4 h-4 text-primary" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="px-3 py-3 font-semibold">Date & Time</th>
+                      <th className="px-3 py-3 font-semibold">Beneficiary Name</th>
+                      <th className="px-3 py-3 font-semibold">Category</th>
+                      <th className="px-3 py-3 font-semibold">Bank & Account</th>
+                      <th className="px-3 py-3 font-semibold">IFSC Code</th>
+                      <th className="px-3 py-3 font-semibold">Narration / Reason</th>
+                      <th className="px-3 py-3 font-semibold">Cheque #</th>
+                      <th className="px-3 py-3 font-semibold text-right">Amount (₹)</th>
+                      <th className="px-3 py-3 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredHistory.map((rec) => {
+                      const isSel = selectedHistoryIds.has(rec.id);
+                      return (
+                        <tr 
+                          key={rec.id}
+                          className={`hover:bg-muted/40 transition-colors ${isSel ? 'bg-primary/5' : ''}`}
+                        >
+                          {/* Checkbox */}
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSelectHistory(rec.id)}
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              {isSel ? (
+                                <CheckSquare className="w-4 h-4 text-primary" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </button>
+                          </td>
+
+                          {/* Date */}
+                          <td className="px-3 py-3 text-muted-foreground whitespace-nowrap font-mono text-[11px]">
+                            <div>{rec.date}</div>
+                            <div className="text-[10px] text-muted-foreground/60">{new Date(rec.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                          </td>
+
+                          {/* Beneficiary Name */}
+                          <td className="px-3 py-3 font-semibold text-foreground">
+                            {rec.beneficiaryName}
+                          </td>
+
+                          {/* Category Badge */}
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-semibold">
+                              {rec.category}
+                            </span>
+                          </td>
+
+                          {/* Bank & Account */}
+                          <td className="px-3 py-3 font-mono">
+                            <div className="font-sans text-[11px] font-medium text-foreground">{rec.bankName || 'AXIS BANK'}</div>
+                            <div className="text-[11px] text-muted-foreground">{rec.accountNumber}</div>
+                          </td>
+
+                          {/* IFSC */}
+                          <td className="px-3 py-3 font-mono font-bold text-primary">
+                            {rec.ifscCode}
+                          </td>
+
+                          {/* Narration */}
+                          <td className="px-3 py-3 max-w-[200px] truncate text-muted-foreground" title={rec.narration}>
+                            {rec.narration || '-'}
+                          </td>
+
+                          {/* Cheque # */}
+                          <td className="px-3 py-3 font-mono text-muted-foreground">
+                            {rec.chequeNumber || '-'}
+                          </td>
+
+                          {/* Amount */}
+                          <td className="px-3 py-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            ₹{Number(rec.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-3 py-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRedownloadHistorySlip(rec)}
+                                className="h-7 px-2 text-xs font-semibold gap-1 text-primary hover:bg-primary/10"
+                                title="Re-download Official Axis Bank RTGS Slip"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                Re-download
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleDeleteHistory(rec.id)}
+                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                title="Delete Record"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Floating Action Bar for Selected History Records */}
+          {selectedHistoryIds.size > 0 && (
+            <div className="sticky bottom-4 z-20 bg-card text-card-foreground border border-primary/30 p-3.5 rounded-xl shadow-2xl flex flex-wrap items-center justify-between gap-4 ring-1 ring-primary/20">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-xs font-bold">
+                  {selectedHistoryIds.size} {selectedHistoryIds.size === 1 ? 'record' : 'records'} selected from history
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedHistoryIds(new Set())}
+                  className="text-xs"
+                >
+                  Deselect All
+                </Button>
+
+                <Button
+                  size="sm"
+                  onClick={handleDownloadSelectedHistoryCombined}
+                  className="text-xs font-bold shadow-sm"
+                >
+                  <Download className="w-4 h-4 mr-1.5" />
+                  Download Combined PDF ({selectedHistoryIds.size})
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

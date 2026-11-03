@@ -4,7 +4,8 @@ import collections
 import uuid
 import cloudinary.uploader
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
@@ -106,6 +107,7 @@ def hr_designations_detail(request, pk):
 
 # --- EMPLOYEES ---
 @api_view(['GET', 'POST'])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def hr_employees(request):
     company_id = _get_company_id(request)
     if request.method == 'GET':
@@ -279,14 +281,15 @@ def hr_employees(request):
         except Exception as e:
             return send_error(f'Failed to create employee: {str(e)}', 400)
 
-@api_view(['PUT', 'DELETE'])
+@api_view(['PUT', 'POST', 'DELETE'])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def hr_employees_detail(request, pk):
     try:
         emp = Labour.objects.get(id=pk)
     except Labour.DoesNotExist:
         return send_error('Employee not found', 404)
 
-    if request.method == 'PUT':
+    if request.method in ('PUT', 'POST'):
         data = request.data
         def _to_float(v, default=0.0):
             try:
