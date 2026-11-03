@@ -140,6 +140,71 @@ export const PayrollTab: React.FC = () => {
     }
   };
 
+  const handleBulkRTGSIndividual = async () => {
+    if (payroll.length === 0) return;
+    const mStr = fetchMonth || selectedMonth || '';
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    const eligibleSlips = payroll.filter((slip: any) => getNetPay(slip) > 0);
+    if (eligibleSlips.length === 0) {
+      toast({ title: 'No Payable Employees', description: 'All employees have ₹0 net payable for this month.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      toast({ title: 'Downloading Individual RTGS Slips', description: `Preparing separate Axis Bank RTGS forms for ${eligibleSlips.length} employees...` });
+
+      const bulkItems: RTGSData[] = eligibleSlips.map((slip: any) => ({
+        beneficiaryName: slip.labour_name,
+        bankName: slip.bank_details?.bank_name || 'AXIS BANK',
+        accountNumber: slip.bank_details?.account_no || '',
+        ifscCode: slip.bank_details?.ifsc || 'UTIB0000047',
+        amount: getNetPay(slip),
+        date: dateStr,
+        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
+        companyAccount: settings?.company_bank_account || '925030009706188',
+        companyBank: settings?.company_bank_name || 'AXIS BANK',
+        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
+        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
+        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
+        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
+        companyPhone: settings?.company_phone || '8866322700',
+        beneficiaryBranch: 'NAVSARI',
+        narration: `SALARY ${mStr.toUpperCase()}`
+      }));
+
+      for (let i = 0; i < bulkItems.length; i++) {
+        await generateRTGSSlip(bulkItems[i]);
+        if (bulkItems.length > 1 && i < bulkItems.length - 1) {
+          await new Promise(res => setTimeout(res, 500));
+        }
+      }
+
+      saveBulkRtgsRecords(bulkItems.map(item => ({
+        date: dateStr,
+        beneficiaryName: item.beneficiaryName,
+        category: 'SALARY',
+        bankName: item.bankName,
+        accountNumber: item.accountNumber,
+        ifscCode: item.ifscCode,
+        branch: item.beneficiaryBranch,
+        amount: item.amount,
+        narration: item.narration || `SALARY ${mStr.toUpperCase()}`,
+        source: 'PAYROLL_BULK',
+        companyAccount: item.companyAccount,
+        companyBank: item.companyBank,
+      })));
+
+      toast({
+        title: 'Individual RTGS Downloads Complete!',
+        description: `Downloaded ${bulkItems.length} individual single RTGS PDF files.`
+      });
+    } catch (e: any) {
+      console.error('Individual RTGS generation error:', e);
+      toast({ title: 'Individual RTGS Error', description: e.message || 'Failed to download individual RTGS PDFs', variant: 'destructive' });
+    }
+  };
+
   const handleGenerate = () => {
     setFetchMonth(selectedMonth);
     setOverrides({});
@@ -196,9 +261,19 @@ export const PayrollTab: React.FC = () => {
             variant="outline" 
             disabled={payroll.length === 0} 
             onClick={handleBulkRTGS}
-            className="gap-2 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 cursor-pointer font-medium"
+            className="gap-2 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 cursor-pointer font-medium text-xs"
+            title="Download 1 combined multi-page Axis Bank RTGS PDF containing all staff slips"
           >
-            <Landmark className="w-4 h-4 text-blue-600" /> RTGS Forms ({payroll.length})
+            <Landmark className="w-4 h-4 text-blue-600" /> RTGS Combined ({payroll.length})
+          </Button>
+          <Button 
+            variant="outline" 
+            disabled={payroll.length === 0} 
+            onClick={handleBulkRTGSIndividual}
+            className="gap-2 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 cursor-pointer font-medium text-xs"
+            title="Download separate individual single RTGS PDF file for each employee"
+          >
+            <FileText className="w-4 h-4 text-blue-600" /> All Individual RTGS
           </Button>
           <Button 
             variant="outline" 

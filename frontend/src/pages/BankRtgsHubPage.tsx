@@ -517,24 +517,24 @@ export default function BankRtgsHubPage() {
     }
   };
 
-  // Generate Bulk RTGS (Batch Individual PDFs)
+  // Generate Bulk RTGS (Batch All Individual PDFs)
   const handleGenerateBulkIndividual = async () => {
     const validRows = bulkRows.filter(r => parseIndianAmount(r.amount) > 0 && r.payee.accountNumber && r.payee.ifscCode);
     if (validRows.length === 0) {
-      toast.error('Please enter valid amounts for the selected payees.');
+      toast.error('Please enter valid transfer amounts for payees with complete bank credentials.');
       return;
     }
 
     setIsGeneratingBulk(true);
-    toast.info(`Generating ${validRows.length} individual RTGS forms...`);
+    toast.info(`Starting download of ${validRows.length} individual RTGS files...`);
 
     try {
       for (let i = 0; i < validRows.length; i++) {
         const r = validRows[i];
         const payload = buildRtgsPayload(r.payee, parseIndianAmount(r.amount), r.reason, bulkDate);
         await generateRTGSSlip(payload);
-        if (validRows.length > 1) {
-          await new Promise(res => setTimeout(res, 400));
+        if (validRows.length > 1 && i < validRows.length - 1) {
+          await new Promise(res => setTimeout(res, 500));
         }
       }
       saveBulkRtgsRecords(validRows.map(r => ({
@@ -552,13 +552,49 @@ export default function BankRtgsHubPage() {
         companyBank: settings?.company_bank_name || 'AXIS BANK',
       })));
       setHistoryRecords(getRtgsHistory());
-      toast.success(`✅ Downloaded ${validRows.length} Axis Bank RTGS PDFs & saved audit records!`);
+      toast.success(`🎉 Downloaded all ${validRows.length} individual Axis Bank RTGS PDFs & saved audit records!`);
       setBulkModalOpen(false);
       setSelectedIds(new Set());
     } catch (e: any) {
       toast.error(e.message || 'Failed during batch download.');
     } finally {
       setIsGeneratingBulk(false);
+    }
+  };
+
+  // Download Single RTGS PDF for an individual row directly from the Bulk modal
+  const handleDownloadRowSinglePdf = async (r: typeof bulkRows[0]) => {
+    const amt = parseIndianAmount(r.amount);
+    if (!amt || amt <= 0) {
+      toast.error(`Please enter a valid transfer amount for ${r.payee.name} first.`);
+      return;
+    }
+    if (!r.payee.accountNumber || !r.payee.ifscCode) {
+      toast.error(`Missing Bank credentials for ${r.payee.name}.`);
+      return;
+    }
+
+    try {
+      const payload = buildRtgsPayload(r.payee, amt, r.reason, bulkDate);
+      await generateRTGSSlip(payload);
+      saveRtgsRecord({
+        date: payload.date || bulkDate,
+        beneficiaryName: r.payee.name,
+        category: r.payee.category,
+        bankName: payload.bankName,
+        accountNumber: payload.accountNumber,
+        ifscCode: payload.ifscCode,
+        branch: payload.beneficiaryBranch,
+        amount: amt,
+        narration: payload.narration || r.reason,
+        source: 'HUB_SINGLE',
+        companyAccount: payload.companyAccount,
+        companyBank: payload.companyBank,
+      });
+      setHistoryRecords(getRtgsHistory());
+      toast.success(`🎉 Downloaded Single RTGS PDF for ${r.payee.name}!`);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to download single RTGS PDF.');
     }
   };
 
@@ -1591,7 +1627,7 @@ export default function BankRtgsHubPage() {
         isOpen={bulkModalOpen}
         onClose={() => setBulkModalOpen(false)}
         title={`Bulk Axis Bank RTGS Generator (${bulkRows.length} Payees)`}
-        maxWidth="max-w-3xl"
+        maxWidth="max-w-4xl"
       >
         <div className="space-y-4 text-xs">
           
@@ -1671,7 +1707,8 @@ export default function BankRtgsHubPage() {
                   <th className="px-3 py-2.5">Beneficiary</th>
                   <th className="px-3 py-2.5">Bank & Account</th>
                   <th className="px-3 py-2.5 w-36">Amount (₹) *</th>
-                  <th className="px-3 py-2.5 w-64">Reason / Narration</th>
+                  <th className="px-3 py-2.5">Reason / Narration</th>
+                  <th className="px-3 py-2.5 w-28 text-center">Single RTGS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -1709,6 +1746,19 @@ export default function BankRtgsHubPage() {
                         className="h-8 text-xs"
                       />
                     </td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDownloadRowSinglePdf(r)}
+                        disabled={isGeneratingBulk}
+                        className="h-7 px-2 text-[11px] font-semibold text-primary hover:bg-primary/10 gap-1"
+                        title={`Download single Axis Bank RTGS PDF for ${r.payee.name}`}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Single PDF
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1725,37 +1775,43 @@ export default function BankRtgsHubPage() {
               disabled={isGeneratingBulk}
               className="text-xs"
             >
-              <FileSpreadsheet className="w-4 h-4 mr-1.5" />
+              <FileSpreadsheet className="w-4 h-4 mr-1.5 text-emerald-600 dark:text-emerald-400" />
               Export Axis Bank CSV
             </Button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setBulkModalOpen(false)}
                 disabled={isGeneratingBulk}
+                className="text-xs"
               >
                 Cancel
               </Button>
 
+              {/* Option 1: Download All Individual PDFs */}
               <Button
                 size="sm"
-                variant="secondary"
+                variant="outline"
                 onClick={handleGenerateBulkIndividual}
                 disabled={isGeneratingBulk}
+                className="text-xs font-semibold bg-muted hover:bg-muted/80 text-foreground border-border hover:border-primary/40 gap-1.5"
+                title="Download each payee's RTGS slip as a separate single PDF file"
               >
-                <Download className="w-3.5 h-3.5 mr-1.5" />
-                Batch Downloads
+                <FileText className="w-4 h-4 text-primary" />
+                {isGeneratingBulk ? 'Downloading Individual Files...' : `Download All Individual PDFs (${bulkRows.length})`}
               </Button>
 
+              {/* Option 2: Download Combined Multi-Page PDF */}
               <Button
                 size="sm"
                 onClick={handleGenerateBulkCombined}
                 disabled={isGeneratingBulk}
-                className="font-bold shadow-sm"
+                className="text-xs font-bold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+                title="Combine all payee slips into 1 merged multi-page PDF document"
               >
-                <Layers className="w-4 h-4 mr-1.5" />
+                <Layers className="w-4 h-4" />
                 {isGeneratingBulk ? 'Compiling PDF...' : `Download Combined PDF (${bulkRows.length} Slips)`}
               </Button>
             </div>
