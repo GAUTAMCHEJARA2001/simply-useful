@@ -91,3 +91,4 @@ export const clearRtgsHistory = (): void => {
     console.error('Failed to clear RTGS history:', e);
   }
 };
+

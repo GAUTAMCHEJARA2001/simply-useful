@@ -22,7 +22,7 @@ import {
 const DispatchOrderPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { orders, warehouses, products, refreshAll } = useData();
+  const { orders, warehouses, products, refreshAll, dispatchOrder } = useData();
   const { toast } = useToast();
 
   const [order, setOrder] = useState<Order | null>(null);
@@ -153,7 +153,7 @@ const DispatchOrderPage: React.FC = () => {
         return;
       }
 
-      await orderService.partialDispatch(order.id || order.orderId, {
+      await dispatchOrder(order.id || order.orderId, {
         items: itemsPayload,
         invoiceNumber: invoiceDetails,
         vehicleNumber: vehicleDetails,

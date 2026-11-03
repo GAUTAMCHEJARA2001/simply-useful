@@ -88,7 +88,7 @@ const InventoryDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { activeWarehouseId } = useWarehouse();
   const { data: stocksByWarehouse = {} } = useStocksByWarehouse();
-  const { orders, products, warehouses, updateOrderStatus, updateOrderItems, deleteOrder, dealers, loading: dataLoading, refreshAll } = useData();
+  const { orders, products, warehouses, updateOrderStatus, dispatchOrder, updateOrderItems, deleteOrder, dealers, loading: dataLoading, refreshAll } = useData();
   const { can } = usePermissions();
   const { toast } = useToast();
 
@@ -428,7 +428,7 @@ const InventoryDashboard: React.FC = () => {
     ...(urgentOrdersCount > 0 ? [{ key: 'URGENT' as const, label: '🔥 Urgent', count: urgentOrdersCount }] : []),
     { key: 'APPROVED' as const, label: 'Approved', count: approvedOrdersCount },
     { key: 'UNAPPROVED' as const, label: 'Unapproved', count: unapprovedOrdersCount },
-    { key: 'DISPATCHED' as const, label: 'Dispatched', count: dispatchedOrdersCount },
+    { key: 'DISPATCHED' as const, label: 'Dispatched (In Delivery)', count: dispatchedOrdersCount },
   ];
 
   let filteredQueueOrders = activeOrders;
@@ -660,7 +660,7 @@ const InventoryDashboard: React.FC = () => {
           return;
         }
         
-        await orderService.partialDispatch(confirmOrder.id, {
+        await dispatchOrder(confirmOrder.id, {
           items: itemsPayload,
           invoiceNumber: invoice,
           vehicleNumber: vehicle,
@@ -743,7 +743,7 @@ const InventoryDashboard: React.FC = () => {
     }
 
     if (status === 'Dispatched' || status === 'Partially Returned') {
-      actions.push({ next: 'Completed' as OrderStatus, label: 'Finish Order', icon: CheckCircle, color: 'bg-green-600 hover:bg-green-700 text-white' });
+      actions.push({ next: 'Completed' as OrderStatus, label: 'Confirm Delivery', icon: CheckCircle, color: 'bg-green-600 hover:bg-green-700 text-white' });
     }
 
     return actions.length > 0 ? actions : null;
@@ -1785,7 +1785,7 @@ const InventoryDashboard: React.FC = () => {
                 ? `Are you sure you want to approve order ${confirmOrder?.id}? This will authorize production/dispatch.`
                 : confirmOrder?.action === 'Cancelled'
                 ? `Please enter details to ${confirmOrder.subAction === 'Reject' ? 'reject' : 'cancel'} order ${confirmOrder?.id}:`
-                : `Mark order ${confirmOrder?.id} as COMPLETED? This confirms delivery and updates revenue.`}
+                : `Confirm delivery for order #${confirmOrder?.id}? This marks the shipment as DELIVERED to the customer and finalizes accounting.`}
             </p>
 
             {confirmOrder?.action === 'Dispatched' && (() => {
@@ -2081,7 +2081,7 @@ const InventoryDashboard: React.FC = () => {
                 ? 'Confirm Approval'
                 : confirmOrder?.action === 'Cancelled'
                 ? (confirmOrder.subAction === 'Reject' ? 'Confirm Rejection' : 'Confirm Cancellation')
-                : 'Confirm Completion'}
+                : 'Confirm Delivery'}
             </Button>
           </DialogFooter>
         </DialogContent>

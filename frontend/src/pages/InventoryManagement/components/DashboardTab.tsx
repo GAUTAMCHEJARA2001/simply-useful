@@ -111,7 +111,7 @@ export const DashboardTab: React.FC = () => {
   const { data: stocksByWarehouse = {} } = useStocksByWarehouse();
   
   // Data Source 1: DataContext
-  const { orders = [], products = [], warehouses = [], updateOrderStatus, refreshAll } = useData();
+  const { orders = [], products = [], warehouses = [], updateOrderStatus, dispatchOrder, refreshAll } = useData();
 
   // Data Source 2: React Query calls
   const { data: productions = [], refetch: refetchProductions } = useProductions();
@@ -580,7 +580,7 @@ export const DashboardTab: React.FC = () => {
         return;
       }
 
-      await orderService.partialDispatch(orderId, {
+      await dispatchOrder(orderId, {
         invoiceNumber: invoice,
         warehouseName: warehouse,
         vehicleNumber: vehicle,

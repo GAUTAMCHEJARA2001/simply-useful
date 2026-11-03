@@ -50,6 +50,7 @@ interface DataContextType {
   orders: Order[];
   addOrder: (o: Order) => Promise<void>;
   updateOrderStatus: (id: string, status: OrderStatus, reason?: string, actionDate?: string, extraFields?: any) => Promise<void>;
+  dispatchOrder: (id: string, payload: any) => Promise<any>;
   updateOrderItems: (id: string, updatedOrder: any) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
   visits: Visit[];
@@ -167,9 +168,19 @@ const normalizeOrder = (o: any): Order => ({
   status: o.status || 'Pending',
   date: o.date || o.createdAt,
   assignedWarehouse: o.assignedWarehouse || o.assigned_warehouse || null,
+  invoiceNumber: o.invoiceNumber || o.invoicenumber || null,
+  vehicleNumber: o.vehicleNumber || o.vehiclenumber || null,
+  driverName: o.driverName || o.drivername || null,
+  driverMobile: o.driverMobile || o.drivermobile || null,
+  driverMobileNumber: o.driverMobileNumber || o.drivermobile || o.driverMobile || null,
+  dispatchDate: o.dispatchDate || o.dispatchdate || null,
+  dispatchWarehouse: o.dispatchWarehouse || o.dispatchwarehouse || null,
   items: (o.items || []).map((i: any) => ({
     ...i,
-    productName: i.productName || i.product_name,
+    productId: String(i.productId || i.productid_id || (typeof i.product === 'object' ? i.product?.id : i.product) || ''),
+    sentQty: Number(i.sentQty ?? i.sentqty ?? 0),
+    returnedQty: Number(i.returnedQty ?? i.returnedqty ?? 0),
+    productName: i.productName || i.product_name || (typeof i.product === 'object' ? i.product?.name : undefined),
     itemRemark: i.itemRemark || i.item_remark || i.remark
   }))
 });
@@ -485,6 +496,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [queryClient]);
 
+  const dispatchOrder = useCallback(async (id: string, payload: any) => {
+    const res = await orderService.partialDispatch(id, payload);
+    const updatedOrder = res.data?.data || res.data;
+    if (updatedOrder) {
+      const normalized = normalizeOrder(updatedOrder);
+      queryClient.setQueryData<Order[]>(['orders'], prev =>
+        (prev || []).map(o =>
+          (String(o.id) === String(id) || o.orderId === id || (o as any).order_id === id || String(o.id) === String(normalized.id) || o.orderId === normalized.orderId)
+            ? normalized
+            : o
+        )
+      );
+      queryClient.setQueryData<any>(['order', id], normalized);
+    }
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
+    queryClient.invalidateQueries({ queryKey: ['sales'] });
+    queryClient.invalidateQueries({ queryKey: ['approvals'] });
+    queryClient.invalidateQueries({ queryKey: ['stock'] });
+    queryClient.invalidateQueries({ queryKey: ['products'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+    return res;
+  }, [queryClient]);
+
   const updateOrderItems = useCallback(async (id: string, updatedOrder: any) => {
     const res = await apiService.orders.updateItems(id, updatedOrder);
     if (res.data.success) {
@@ -663,7 +698,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dealers, addDealer, updateDealer, deleteDealer,
       distributors, addDistributor, updateDistributor, deleteDistributor,
       products, addProduct, updateProduct, deleteProduct,
-      orders, addOrder, updateOrderStatus, updateOrderItems, deleteOrder,
+      orders, addOrder, updateOrderStatus, dispatchOrder, updateOrderItems, deleteOrder,
       visits, addVisit, updateVisitStatus,
       expenses, addExpense, updateExpenseStatus, updateExpense,
       users, addUser, updateUser, deleteUser, updateUserPassword, updateUserTarget,

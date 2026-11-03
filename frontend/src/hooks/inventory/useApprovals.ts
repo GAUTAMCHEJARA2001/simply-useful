@@ -24,6 +24,7 @@ export const useApprovalMutations = () => {
   const approveMutation = useMutation({
     mutationFn: (id: string) => api.post(`/transactions/approvals/${id}/approve`),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
@@ -42,6 +43,7 @@ export const useApprovalMutations = () => {
   const dispatchMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: any }) => api.post(`/transactions/approvals/${id}/dispatch`, payload),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
@@ -59,6 +61,7 @@ export const useApprovalMutations = () => {
   const rejectMutation = useMutation({
     mutationFn: (id: string) => api.post(`/transactions/approvals/${id}/reject`),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });

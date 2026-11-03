@@ -462,6 +462,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 instance.narration = _append_order_tags(instance.narration or '', {'DISPATCH DATE': final_dispatch_date_str})
             except Exception:
                 pass
+            instance.updatedat = timezone.now()
             instance.save()
             from api.serializers import OrderSerializer
             return send_success(OrderSerializer(instance).data, f'Order status updated to {instance.status}')
@@ -691,6 +692,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                     instance.dispatchdate = disp_date
             elif reason_val:
                 instance.narration = _append_order_tags(instance.narration, {'REASON': reason_val})
+            from django.utils import timezone
+            instance.updatedat = timezone.now()
             instance.save()
             for item in instance.orderitem_set.all():
                 if item.productid_id:
@@ -1184,8 +1187,10 @@ def transaction_dispatch(request, pk):
             msg = ', '.join([s['product'] + ' (Req: ' + str(s['required']) + ', Avail: ' + str(s['available']) + ')' for s in shortages])
             return send_error(f"Insufficient stock for: {msg}", 400)
 
+    import uuid
     from django.utils import timezone
-    order.status = 'Completed'
+    from api.models import Dispatchlog, Dispatchlogitem, Stocktransaction
+    order.status = 'Dispatched'
     order.invoicenumber = invoice_number
     order.vehiclenumber = vehicle_number
     order.drivername = driver_name
@@ -1194,14 +1199,56 @@ def transaction_dispatch(request, pk):
     order.dispatchdate = dispatch_date
     remarks = data.get('remarks')
     if remarks:
-        order.narration = _append_order_tags(order.narration, {'DISPATCH REMARKS': remarks})
+        order.narration = _append_order_tags(order.narration, {'DISPATCH REMARKS': remarks, 'DISPATCH DATE': dispatch_date or timezone.now().strftime('%Y-%m-%d')})
     elif order.narration:
-        order.narration = _get_clean_narration_helper(order.narration)
+        order.narration = _append_order_tags(_get_clean_narration_helper(order.narration), {'DISPATCH DATE': dispatch_date or timezone.now().strftime('%Y-%m-%d')})
     order.updatedat = timezone.now()
     order.save()
+
+    # Create Dispatchlog and Stocktransaction records
+    dispatch_log_id = 'c' + uuid.uuid4().hex[:23]
+    dispatch_log = Dispatchlog.objects.create(
+        id=dispatch_log_id,
+        orderid=order,
+        dispatchdate=order.updatedat,
+        invoicenumber=invoice_number,
+        vehiclenumber=vehicle_number,
+        drivername=driver_name,
+        drivermobile=driver_mobile,
+        remarks=remarks or ''
+    )
+
     for item in order.orderitem_set.all():
         if item.productid_id:
-            pass
+            pending_qty = max(0, (item.qty or 0) - (item.sentqty or 0))
+            qty_sent = pending_qty if pending_qty > 0 else (item.qty or 0)
+            item.sentqty = item.qty
+            item.save(update_fields=['sentqty'])
+
+            item_log_id = 'c' + uuid.uuid4().hex[:23]
+            Dispatchlogitem.objects.create(
+                id=item_log_id,
+                dispatchlogid=dispatch_log,
+                productid_id=item.productid_id,
+                qty=qty_sent
+            )
+
+            try:
+                assigned_wh = getattr(order, 'warehouseid', None)
+                assigned_wh_id = getattr(order, 'warehouseid_id', None) or (assigned_wh.id if hasattr(assigned_wh, 'id') else None)
+                st_id = 'st_' + uuid.uuid4().hex[:20]
+                Stocktransaction.objects.create(
+                    id=st_id,
+                    productid_id=item.productid_id,
+                    warehouseid_id=assigned_wh_id,
+                    transactiontype='DISPATCH',
+                    quantity=-qty_sent,
+                    referenceid=order.orderid or order.id,
+                    reason=f"Dispatched Order {order.orderid or order.id} (Invoice: {invoice_number or '-'})",
+                    createdat=order.updatedat
+                )
+            except Exception as st_err:
+                print('[TX DISPATCH STOCK ERROR]', st_err)
     serializer = OrderSerializer(order)
     return send_success(serializer.data, 'Order dispatched successfully')
 
