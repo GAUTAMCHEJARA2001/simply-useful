@@ -72,3 +72,35 @@ export const formatIndianWords = (val: any): string => {
   return '';
 };
 
+/**
+ * Formats user input into Indian comma style (1,000, 1,00,000, 10,00,000, 1,00,00,000)
+ * Preserves decimal points and typing fluidity.
+ */
+export const formatIndianAmountInput = (raw: string | number): string => {
+  if (raw === null || raw === undefined || raw === '') return '';
+  const clean = String(raw).replace(/[^0-9.]/g, '');
+  if (!clean) return '';
+
+  const parts = clean.split('.');
+  const intPart = parts[0];
+  const hasDecimal = parts.length > 1;
+  const decPart = hasDecimal ? '.' + parts.slice(1).join('').slice(0, 2) : '';
+
+  if (!intPart && hasDecimal) return '0' + decPart;
+  if (!intPart) return '';
+
+  const formattedInt = Number(intPart).toLocaleString('en-IN');
+  return formattedInt + decPart;
+};
+
+/**
+ * Parses an Indian formatted amount string (e.g. '1,00,000' or '1,00,00,000.50') into a clean number.
+ */
+export const parseIndianAmount = (val: string | number): number => {
+  if (val === null || val === undefined || val === '') return 0;
+  const clean = String(val).replace(/,/g, '').trim();
+  const num = parseFloat(clean);
+  return isNaN(num) ? 0 : num;
+};
+
+

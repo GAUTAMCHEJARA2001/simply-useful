@@ -16,6 +16,8 @@ import {
   saveRtgsRecord, saveBulkRtgsRecords, getRtgsHistory, 
   deleteRtgsRecord, clearRtgsHistory, RtgsHistoryRecord 
 } from '@/utils/rtgsHistory';
+import { formatIndianAmountInput, parseIndianAmount } from '@/utils/format';
+import { amountToWords } from '@/components/PDF/utils/amountToWords';
 import apiClient from '@/api/client';
 
 export interface RtgsPayee {
@@ -85,6 +87,7 @@ export default function BankRtgsHubPage() {
     reason: string;
   }>>([]);
   const [bulkDefaultReason, setBulkDefaultReason] = useState<string>('PAYMENT');
+  const [bulkDefaultAmount, setBulkDefaultAmount] = useState<string>('');
   const [bulkDate, setBulkDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [isGeneratingBulk, setIsGeneratingBulk] = useState(false);
 
@@ -281,6 +284,7 @@ export default function BankRtgsHubPage() {
       : (activeCategory === 'SUPPLIER' ? 'SUPPLIER PAYMENT' : 'REMITTANCE');
 
     setBulkDefaultReason(defaultReason);
+    setBulkDefaultAmount('');
     setBulkDate(new Date().toISOString().slice(0, 10));
     setBulkRows(targets.map(p => ({
       payee: p,
@@ -300,8 +304,18 @@ export default function BankRtgsHubPage() {
     toast.success('Applied reason to all selected payees!');
   };
 
+  const handleApplyDefaultAmountToAll = () => {
+    if (!bulkDefaultAmount.trim()) return;
+    const formatted = formatIndianAmountInput(bulkDefaultAmount);
+    setBulkRows(prev => prev.map(r => ({
+      ...r,
+      amount: formatted,
+    })));
+    toast.success(`Applied ₹${formatted} to all selected payees!`);
+  };
+
   const bulkTotalAmount = useMemo(() => {
-    return bulkRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+    return bulkRows.reduce((sum, r) => sum + parseIndianAmount(r.amount), 0);
   }, [bulkRows]);
 
   // Open Edit Bank Details Modal
@@ -414,7 +428,7 @@ export default function BankRtgsHubPage() {
   const handleGenerateSinglePdf = async () => {
     if (!selectedPayee) return;
 
-    const amt = parseFloat(rtgsAmount);
+    const amt = parseIndianAmount(rtgsAmount);
     if (!amt || isNaN(amt) || amt <= 0) {
       toast.error('Please enter a valid transfer amount.');
       return;
@@ -463,7 +477,7 @@ export default function BankRtgsHubPage() {
     // Validate each row
     const validItems: RTGSData[] = [];
     for (const r of bulkRows) {
-      const amt = parseFloat(r.amount);
+      const amt = parseIndianAmount(r.amount);
       if (!amt || amt <= 0) {
         toast.error(`Please enter a valid amount for ${r.payee.name}`);
         return;
@@ -505,7 +519,7 @@ export default function BankRtgsHubPage() {
 
   // Generate Bulk RTGS (Batch Individual PDFs)
   const handleGenerateBulkIndividual = async () => {
-    const validRows = bulkRows.filter(r => parseFloat(r.amount) > 0 && r.payee.accountNumber && r.payee.ifscCode);
+    const validRows = bulkRows.filter(r => parseIndianAmount(r.amount) > 0 && r.payee.accountNumber && r.payee.ifscCode);
     if (validRows.length === 0) {
       toast.error('Please enter valid amounts for the selected payees.');
       return;
@@ -517,7 +531,7 @@ export default function BankRtgsHubPage() {
     try {
       for (let i = 0; i < validRows.length; i++) {
         const r = validRows[i];
-        const payload = buildRtgsPayload(r.payee, parseFloat(r.amount), r.reason, bulkDate);
+        const payload = buildRtgsPayload(r.payee, parseIndianAmount(r.amount), r.reason, bulkDate);
         await generateRTGSSlip(payload);
         if (validRows.length > 1) {
           await new Promise(res => setTimeout(res, 400));
@@ -531,7 +545,7 @@ export default function BankRtgsHubPage() {
         accountNumber: r.payee.accountNumber,
         ifscCode: r.payee.ifscCode,
         branch: r.payee.branch || 'NAVSARI',
-        amount: parseFloat(r.amount),
+        amount: parseIndianAmount(r.amount),
         narration: r.reason || '',
         source: 'HUB_BULK',
         companyAccount: settings?.company_bank_account || '925030009706188',
@@ -550,7 +564,7 @@ export default function BankRtgsHubPage() {
 
   // Export Axis Bank CSV / Excel Format
   const handleExportBulkCsv = () => {
-    const validRows = bulkRows.filter(r => parseFloat(r.amount) > 0);
+    const validRows = bulkRows.filter(r => parseIndianAmount(r.amount) > 0);
     if (validRows.length === 0) {
       toast.error('Please enter transfer amounts first.');
       return;
@@ -562,7 +576,7 @@ export default function BankRtgsHubPage() {
       `"${r.payee.name}"`,
       `"${r.payee.accountNumber}"`,
       `"${r.payee.ifscCode}"`,
-      parseFloat(r.amount).toFixed(2),
+      parseIndianAmount(r.amount).toFixed(2),
       `"${settings?.company_bank_account || '925030009706188'}"`,
       `"${r.reason.replace(/"/g, '""')}"`
     ]);
@@ -1415,20 +1429,56 @@ export default function BankRtgsHubPage() {
             </div>
 
             {/* Amount Input */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-foreground uppercase tracking-wider block">
-                Transfer Amount (₹) <span className="text-destructive">*</span>
-              </label>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-foreground uppercase tracking-wider">
+                  Transfer Amount (₹) <span className="text-destructive">*</span>
+                </label>
+                {parseIndianAmount(rtgsAmount) > 0 && (
+                  <span className="text-[11px] font-bold text-primary font-mono">
+                    ₹{formatIndianAmountInput(rtgsAmount)}
+                  </span>
+                )}
+              </div>
+
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-base font-bold text-primary">₹</span>
+                <span className="absolute left-3.5 top-2.5 text-base font-bold text-primary select-none">₹</span>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   autoFocus
-                  placeholder="Enter amount (e.g. 50000)"
+                  placeholder="e.g. 1,00,000"
                   value={rtgsAmount}
-                  onChange={(e) => setRtgsAmount(e.target.value)}
-                  className="pl-8 text-base font-bold text-foreground"
+                  onChange={(e) => setRtgsAmount(formatIndianAmountInput(e.target.value))}
+                  className="pl-9 text-base font-bold font-mono tracking-wide text-foreground"
                 />
+              </div>
+
+              {/* Live Indian Number in Words Preview */}
+              {parseIndianAmount(rtgsAmount) > 0 && (
+                <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20 text-xs">
+                  <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-0.5">
+                    Amount in Words (Axis Bank Mandate):
+                  </div>
+                  <div className="font-bold text-primary text-[12px] leading-tight">
+                    {amountToWords(parseIndianAmount(rtgsAmount))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Amount Suggestion Chips */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] text-muted-foreground font-semibold uppercase">Quick Fill:</span>
+                {[10000, 25000, 50000, 100000, 250000, 500000, 1000000].map((quickAmt) => (
+                  <button
+                    key={quickAmt}
+                    type="button"
+                    onClick={() => setRtgsAmount(formatIndianAmountInput(quickAmt))}
+                    className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-muted hover:bg-primary/20 hover:text-primary transition-colors border border-border"
+                  >
+                    ₹{formatIndianAmountInput(quickAmt)}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -1545,31 +1595,55 @@ export default function BankRtgsHubPage() {
       >
         <div className="space-y-4 text-xs">
           
-          {/* Default Reason & Date Banner */}
-          <div className="bg-muted/40 border border-border p-3.5 rounded-xl grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-            <div className="md:col-span-6 space-y-1">
+          {/* Default Reason & Date & Amount Banner */}
+          <div className="bg-muted/40 border border-border p-3 rounded-xl grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+            <div className="md:col-span-4 space-y-1">
               <label className="text-[10px] font-bold text-muted-foreground uppercase">
-                Common Narration / Reason:
+                Common Narration:
               </label>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <Input
                   value={bulkDefaultReason}
                   onChange={(e) => setBulkDefaultReason(e.target.value)}
-                  placeholder="e.g. STAFF SALARY ADVANCE or VENDOR PAYMENT"
+                  placeholder="e.g. STAFF ADVANCE"
                   className="h-8 text-xs"
                 />
                 <Button 
                   size="sm" 
                   variant="outline" 
                   onClick={handleApplyDefaultReasonToAll}
-                  className="h-8 whitespace-nowrap text-xs font-semibold"
+                  className="h-8 whitespace-nowrap text-[11px] font-semibold px-2"
                 >
-                  Apply to All
+                  Apply
                 </Button>
               </div>
             </div>
 
             <div className="md:col-span-3 space-y-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">
+                Common Amount (₹):
+              </label>
+              <div className="flex gap-1.5">
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  value={bulkDefaultAmount}
+                  onChange={(e) => setBulkDefaultAmount(formatIndianAmountInput(e.target.value))}
+                  placeholder="e.g. 50,000"
+                  className="h-8 text-xs font-mono font-bold"
+                />
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={handleApplyDefaultAmountToAll}
+                  className="h-8 whitespace-nowrap text-[11px] font-semibold px-2"
+                >
+                  Apply All
+                </Button>
+              </div>
+            </div>
+
+            <div className="md:col-span-2 space-y-1">
               <label className="text-[10px] font-bold text-muted-foreground uppercase">
                 Transfer Date:
               </label>
@@ -1583,7 +1657,7 @@ export default function BankRtgsHubPage() {
 
             <div className="md:col-span-3 text-right">
               <div className="text-[10px] text-muted-foreground uppercase font-bold">Total Bulk Sum:</div>
-              <div className="text-base font-bold text-primary font-mono">
+              <div className="text-sm font-bold text-primary font-mono whitespace-nowrap">
                 ₹ {bulkTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
             </div>
@@ -1613,14 +1687,15 @@ export default function BankRtgsHubPage() {
                     </td>
                     <td className="px-3 py-2">
                       <Input
-                        type="number"
-                        placeholder="Amount"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="e.g. 50,000"
                         value={r.amount}
                         onChange={(e) => {
-                          const val = e.target.value;
+                          const val = formatIndianAmountInput(e.target.value);
                           setBulkRows(prev => prev.map((row, idx) => idx === i ? { ...row, amount: val } : row));
                         }}
-                        className="h-8 text-xs font-bold text-foreground"
+                        className="h-8 text-xs font-bold font-mono text-foreground"
                       />
                     </td>
                     <td className="px-3 py-2">
