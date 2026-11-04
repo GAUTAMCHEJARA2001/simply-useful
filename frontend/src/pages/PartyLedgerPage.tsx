@@ -49,6 +49,7 @@ import {
   Edit3,
   FileSpreadsheet,
   BookOpen,
+  Save,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -281,6 +282,175 @@ export const PartyLedgerPage: React.FC = () => {
       partyId: pId,
     });
     fetchLiveLedger(pType, pId);
+  };
+
+// Save or update Opening Balance
+  const handleSaveOpeningBalance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPartyId || !partyInfo) {
+      toast({ title: 'Error', description: 'No party selected.', variant: 'destructive' });
+      return;
+    }
+    const amt = parseFloat(openingAmount);
+    if (isNaN(amt) || amt < 0) {
+      toast({ title: 'Invalid Amount', description: 'Please enter a valid opening balance amount.', variant: 'destructive' });
+      return;
+    }
+
+    setSavingOpening(true);
+    try {
+      const res = await api.post('/parties/opening-balance', {
+        party_type: selectedPartyType,
+        party_id: selectedPartyId,
+        opening_balance: amt,
+        balance_type: openingSide,
+        opening_balance_date: openingDate,
+      });
+
+      if (res.data?.success) {
+        toast({ title: 'Opening Balance Updated', description: res.data.message || 'Opening balance updated successfully.' });
+        setShowOpeningModal(false);
+        fetchLiveLedger(selectedPartyType, selectedPartyId);
+        fetchParties();
+      } else {
+        toast({ title: 'Error', description: res.data?.message || 'Failed to update opening balance', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || err.message || 'Failed to save opening balance.', variant: 'destructive' });
+    } finally {
+      setSavingOpening(false);
+    }
+  };
+
+  // Add a manual ledger entry
+  const handleSaveManualEntry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPartyId || !partyInfo) {
+      toast({ title: 'Error', description: 'No party selected.', variant: 'destructive' });
+      return;
+    }
+    const amt = parseFloat(entryAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast({ title: 'Invalid Amount', description: 'Amount must be greater than zero.', variant: 'destructive' });
+      return;
+    }
+
+    setSavingEntry(true);
+    try {
+      const res = await api.post('/parties/ledger-entry', {
+        party_type: selectedPartyType,
+        party_id: selectedPartyId,
+        voucher_type: entryVoucherType,
+        voucher_no: entryVoucherNo,
+        date: entryDate,
+        amount: amt,
+        entry_side: entrySide,
+        narration: entryNarration,
+      });
+
+      if (res.data?.success) {
+        toast({ title: 'Entry Recorded', description: res.data.message || 'Transaction recorded successfully.' });
+        setShowAddEntryModal(false);
+        setEntryAmount('');
+        setEntryVoucherNo('');
+        setEntryNarration('');
+        fetchLiveLedger(selectedPartyType, selectedPartyId);
+        fetchParties();
+      } else {
+        toast({ title: 'Error', description: res.data?.message || 'Failed to record entry', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || err.message || 'Failed to record entry.', variant: 'destructive' });
+    } finally {
+      setSavingEntry(false);
+    }
+  };
+
+  // Delete manual ledger entry
+  const handleDeleteManualEntry = async (entryId: string) => {
+    if (!entryId) return;
+    if (!window.confirm('Are you sure you want to delete this manual transaction entry?')) return;
+    try {
+      const res = await api.delete(`/parties/ledger-entry/${encodeURIComponent(entryId)}`);
+      if (res.data?.success) {
+        toast({ title: 'Entry Deleted', description: 'Manual entry deleted successfully.' });
+        if (selectedPartyId) {
+          fetchLiveLedger(selectedPartyType, selectedPartyId);
+        }
+        fetchParties();
+      } else {
+        toast({ title: 'Error', description: res.data?.message || 'Failed to delete entry.', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || err.message || 'Failed to delete entry.', variant: 'destructive' });
+    }
+  };
+
+  // Import Excel/CSV Busy ledger statement
+  const handleImportExcel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile) {
+      toast({ title: 'No File Selected', description: 'Please select an Excel or CSV file to import.', variant: 'destructive' });
+      return;
+    }
+    if (!selectedPartyId || !partyInfo) {
+      toast({ title: 'Error', description: 'No party selected.', variant: 'destructive' });
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      formData.append('party_type', selectedPartyType);
+      formData.append('party_id', selectedPartyId);
+
+      const res = await api.post('/parties/import-ledger', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (res.data?.success) {
+        toast({ title: 'Import Complete', description: res.data.message || 'Transactions imported successfully.' });
+        setShowImportModal(false);
+        setImportFile(null);
+        fetchLiveLedger(selectedPartyType, selectedPartyId);
+        fetchParties();
+      } else {
+        toast({ title: 'Import Failed', description: res.data?.message || 'Failed to import transactions.', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Import Error', description: err.response?.data?.message || err.message || 'Failed to upload and import file.', variant: 'destructive' });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Export current filtered statement to Excel (.xlsx)
+  const handleExportStatementExcel = () => {
+    if (!partyInfo || filteredStatement.length === 0) {
+      toast({ title: 'No Data', description: 'No transactions to export.', variant: 'destructive' });
+      return;
+    }
+
+    const rows = filteredStatement.map((entry, idx) => ({
+      'Sr. No': idx + 1,
+      'Date': entry.date || '',
+      'Type': entry.type_label || entry.type || '',
+      'Voucher No': entry.voucher_no || '',
+      'Debit (Dr)': entry.debit ? Number(entry.debit).toFixed(2) : '',
+      'Credit (Cr)': entry.credit ? Number(entry.credit).toFixed(2) : '',
+      'Balance (₹)': entry.balance ? Number(entry.balance).toFixed(2) : '',
+      'Narration / Particulars': entry.narration || '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Ledger Statement');
+
+    const cleanName = (partyInfo.name || 'Party').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `${cleanName}_Statement_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    toast({ title: 'Export Successful', description: `Saved ${filename}` });
   };
 
   // Back to Directory View
