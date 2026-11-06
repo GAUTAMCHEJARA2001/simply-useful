@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Navigate, Link, useNavigate } from 'react-router-dom';
+import { Navigate, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useWarehouse } from '@/contexts/WarehouseContext';
 import { useStocksByWarehouse } from '@/hooks/inventory/useStock';
 import { OrderStatus, Order } from '@/types';
@@ -132,7 +132,21 @@ const InventoryDashboard: React.FC = () => {
   const [boms, setBoms] = useState<any[]>([]);
   const [loadingBoms, setLoadingBoms] = useState<boolean>(true);
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
-  const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | 'URGENT' | 'APPROVED' | 'UNAPPROVED' | 'DISPATCHED'>('ALL');
+  const [searchParams] = useSearchParams();
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | 'URGENT' | 'APPROVED' | 'UNAPPROVED' | 'DISPATCHED'>(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['ALL', 'URGENT', 'APPROVED', 'UNAPPROVED', 'DISPATCHED'].includes(tab)) {
+      return tab as any;
+    }
+    return 'ALL';
+  });
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['ALL', 'URGENT', 'APPROVED', 'UNAPPROVED', 'DISPATCHED'].includes(tab)) {
+      setOrderStatusFilter(tab as any);
+    }
+  }, [searchParams]);
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [productDemandFilter, setProductDemandFilter] = useState<'ALL' | 'DEFICIT' | 'READY'>('ALL');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());

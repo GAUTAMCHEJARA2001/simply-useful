@@ -292,7 +292,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             from api.models import Orderitem, Product
             for item_data in items:
                 p_id = item_data.get('productId') or item_data.get('product_id')
-                qty_to_send = int(item_data.get('qty', 0))
+                qty_val = item_data.get('qty') if item_data.get('qty') is not None else item_data.get('quantity')
+                try:
+                    qty_to_send = int(float(qty_val)) if qty_val is not None else 0
+                except (ValueError, TypeError):
+                    qty_to_send = 0
                 if qty_to_send <= 0:
                     continue
                 order_items = list(instance.orderitem_set.filter(productid_id=p_id))
@@ -311,7 +315,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             
             for item_data in items:
                 p_id = item_data.get('productId') or item_data.get('product_id')
-                qty_to_send = int(item_data.get('qty', 0))
+                qty_val = item_data.get('qty') if item_data.get('qty') is not None else item_data.get('quantity')
+                try:
+                    qty_to_send = int(float(qty_val)) if qty_val is not None else 0
+                except (ValueError, TypeError):
+                    qty_to_send = 0
                 if qty_to_send <= 0:
                     continue
                         
@@ -356,7 +364,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                 ).filter(productid_id=p_id).aggregate(total=Sum('quantity'))
                 stock += float(st_aggs['total'] or 0)
                 
-                allow_deficit = bool(data.get('allow_deficit') or data.get('allow_negative') or data.get('force'))
+                raw_allow = data.get('allow_deficit')
+                allow_deficit = (
+                    raw_allow is True or
+                    str(raw_allow).lower() in ('true', '1') or
+                    bool(data.get('allow_negative')) or
+                    bool(data.get('force'))
+                )
                 if stock < qty_to_send and not allow_deficit:
                     return Response({
                         'success': False,
@@ -398,7 +412,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
             for item_data in items:
                 p_id = item_data.get('productId') or item_data.get('product_id')
-                qty_to_send = int(item_data.get('qty', 0))
+                qty_val = item_data.get('qty') if item_data.get('qty') is not None else item_data.get('quantity')
+                try:
+                    qty_to_send = int(float(qty_val)) if qty_val is not None else 0
+                except (ValueError, TypeError):
+                    qty_to_send = 0
                 if qty_to_send <= 0:
                     continue
                 order_items = list(instance.orderitem_set.filter(productid_id=p_id).order_by('id'))

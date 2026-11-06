@@ -163,16 +163,16 @@ const DispatchOrderPage: React.FC = () => {
         remarks: reason,
         actionDate: dispatchDate,
         actionTime: dispatchTime,
-        allow_deficit: allowDeficit
+        allow_deficit: Boolean(allowDeficit)
       });
 
       toast({
         title: 'Dispatch Successful',
-        description: `Order ${order.orderId || order.id} has been dispatched.`,
+        description: `Order ${order.orderId || order.id} has been dispatched! Moved to 'Dispatched (In Delivery)' tab.`,
       });
 
       refreshAll(true);
-      navigate('/inventory');
+      navigate('/inventory?tab=DISPATCHED');
     } catch (err: any) {
       console.error(err);
       const errData = err.response?.data || err.data;
@@ -481,7 +481,7 @@ const DispatchOrderPage: React.FC = () => {
             </Button>
             <Button 
               className="bg-purple-600 hover:bg-purple-700 text-white min-w-[150px]" 
-              onClick={handleConfirmDispatch}
+              onClick={() => handleConfirmDispatch(false)}
               disabled={loading}
             >
               {loading ? 'Processing...' : 'Confirm Dispatch'}
