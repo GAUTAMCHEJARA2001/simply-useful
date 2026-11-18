@@ -1,17 +1,21 @@
 """
 Director Boardroom Command Center API View.
-Provides comprehensive executive enterprise intelligence for Company Directors & Owners:
-  - Top-line Gross Sales & Net Realized Sales
-  - Raw Material Consumption Valuation (COGS) in Sold Goods
+Provides accurate executive enterprise intelligence for Company Directors & Owners:
+  - Top-line Gross Billed Sales (Fulfilled/Dispatched/Completed orders, IST-accurate)
+  - Raw Material Consumption Valuation (COGS of Sold Goods via BOM & real FIFO Purchase Cost — never selling price)
+  - Actual Plant Raw Material Consumed (from CONSUMED production stock transactions)
   - Gross Profit & Recipe Margin %
-  - Payroll Liabilities (Fixed Salaries + Variable Plant Wages + SO Commissions)
-  - Payment Collections & Debtor Realization (DSO)
+  - Accurate Payroll Liabilities (Fixed monthly prorated minus absences + Variable Daily Wages + OT + Bag Incentives)
+  - Payment Collections & Live Net Market Receivables (DSO based on trailing 30-day run-rate)
   - Net Director Operating Surplus (EBITDA Proxy)
-  - Factory Manufacturing Output (Batches, Units, Plant Capacity)
-  - Sales Field Operations (Visits, Travel Efficiency, Strike Rate)
-  - Executive Pending Sign-offs (Credit Notes, Expenses, Credit Overrides)
+  - Factory Manufacturing Output (Batches, Units, Real RM Consumed Value)
+  - Sales Field Operations (Visits, Travel Efficiency using actual employee KM rates, Strike Rate)
+  - Accurate 6-Month Calendar Trajectory (real monthly billed sales, real monthly BOM COGS, real collections)
 """
+import calendar
 import datetime
+import re
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from django.utils import timezone
 from django.db.models import Sum, Count, Q
@@ -24,46 +28,74 @@ from api.models import (
     Order, Orderitem, Product, PaymentReceipt, Expense,
     Dealer, Distributor, DailyTravelLog, Visit, Stocktransaction,
     CreditNoteDiscountRequest, Labour, SalarySlip, DailyAttendance,
-    Bom, Bomitem
+    LeaveRecord, PartyManualLedgerEntry, Bom, Bomitem
 )
 from core.models import User, Company, Warehouse
 from api.services.costing_service import compute_product_warehouse_costs, compute_bom_cost_breakdown
 
+IST = ZoneInfo('Asia/Kolkata')
+
+# Strictly realized / billed order statuses (never include Cancelled, Rejected, Pending, or fully Returned)
+BILLED_ORDER_STATUSES = [
+    'Completed', 'Dispatched', 'Partially Dispatched', 'Delivered', 'Partially Returned',
+    'COMPLETED', 'DISPATCHED', 'PARTIALLY DISPATCHED', 'DELIVERED', 'PARTIALLY RETURNED',
+    'completed', 'dispatched', 'partially dispatched', 'delivered', 'partially returned',
+]
+
+PENDING_PIPELINE_STATUSES = [
+    'Pending', 'Approved', 'PENDING', 'APPROVED', 'pending', 'approved',
+]
+
+# Cost sources from costing_service that represent REAL purchase cost (not selling rate fallback)
+REAL_PURCHASE_COST_SOURCES = {'FIFO_PURCHASE_LAYERS', 'LATEST_PURCHASE'}
+
+
+def _normalize_sku_key(name: str) -> str:
+    """Normalize product/BOM names for resilient matching (handles 'coupen'/'coupon', spaces, parentheses)."""
+    if not name:
+        return ''
+    s = name.strip().lower()
+    s = s.replace('coupen', 'coupon')
+    s = re.sub(r'[()\[\]]', ' ', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
+def _ist_day_bounds(start_date: datetime.date, end_date: datetime.date):
+    """Returns timezone-aware IST start (00:00:00+05:30) and end (23:59:59.999999+05:30)."""
+    start_dt = datetime.datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0, 0, tzinfo=IST)
+    end_dt = datetime.datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59, 999999, tzinfo=IST)
+    return start_dt, end_dt
+
 
 def _parse_director_date_range(request):
     """
-    Parses period parameter ('today', 'wtd', 'mtd', 'qtd', 'ytd', 'custom')
-    and returns (start_datetime, end_datetime, prev_start_datetime, prev_end_datetime, period_name, period_days).
+    Parses period parameter ('today', 'wtd', 'mtd', 'qtd', 'ytd', 'custom') in Asia/Kolkata (IST)
+    and returns (start_dt, end_dt, start_date, end_date, prev_start_dt, prev_end_dt, period_name, period_days).
     """
-    now = timezone.now()
+    now_ist = timezone.now().astimezone(IST)
+    today = now_ist.date()
     period = (request.query_params.get('period') or 'mtd').lower().strip()
     custom_start = request.query_params.get('start_date')
     custom_end = request.query_params.get('end_date')
 
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-
     if period == 'today':
-        start_dt = today_start
-        end_dt = today_end
-        prev_start_dt = start_dt - datetime.timedelta(days=1)
-        prev_end_dt = end_dt - datetime.timedelta(days=1)
+        start_date = today
+        end_date = today
+        prev_start_date = today - datetime.timedelta(days=1)
+        prev_end_date = prev_start_date
         period_name = "Today"
-        period_days = 1
 
     elif period == 'wtd':
-        # Monday of current week
-        start_dt = (today_start - datetime.timedelta(days=today_start.weekday()))
-        end_dt = today_end
-        period_days = max(1, (end_dt - start_dt).days + 1)
-        prev_start_dt = start_dt - datetime.timedelta(days=7)
-        prev_end_dt = start_dt - datetime.timedelta(seconds=1)
+        start_date = today - datetime.timedelta(days=today.weekday())
+        end_date = today
+        prev_start_date = start_date - datetime.timedelta(days=7)
+        prev_end_date = start_date - datetime.timedelta(days=1)
         period_name = "This Week"
 
     elif period == 'qtd':
-        # Indian Financial Year quarters: Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar
-        cur_m = now.month
-        cur_y = now.year
+        cur_m = today.month
+        cur_y = today.year
         if cur_m in (4, 5, 6):
             q_start_m = 4
         elif cur_m in (7, 8, 9):
@@ -72,54 +104,190 @@ def _parse_director_date_range(request):
             q_start_m = 10
         else:
             q_start_m = 1
-        start_dt = now.replace(year=cur_y, month=q_start_m, day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_dt = today_end
-        period_days = max(1, (end_dt - start_dt).days + 1)
-        prev_start_dt = (start_dt - datetime.timedelta(days=90)).replace(day=1)
-        prev_end_dt = start_dt - datetime.timedelta(seconds=1)
+        start_date = datetime.date(cur_y, q_start_m, 1)
+        end_date = today
+        prev_end_date = start_date - datetime.timedelta(days=1)
+        prev_start_m = ((q_start_m - 4) % 12) + 1
+        prev_start_y = cur_y if q_start_m > 3 else cur_y - 1
+        prev_start_date = datetime.date(prev_start_y, prev_start_m, 1)
         period_name = f"Q{((q_start_m - 1) // 3) + 1} (Quarter-to-Date)"
 
     elif period == 'ytd':
-        # Indian FY: starts April 1st
-        fy_year = now.year if now.month >= 4 else (now.year - 1)
-        start_dt = now.replace(year=fy_year, month=4, day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_dt = today_end
-        period_days = max(1, (end_dt - start_dt).days + 1)
-        prev_start_dt = start_dt.replace(year=fy_year - 1)
-        prev_end_dt = end_dt.replace(year=end_dt.year - 1)
+        fy_year = today.year if today.month >= 4 else (today.year - 1)
+        start_date = datetime.date(fy_year, 4, 1)
+        end_date = today
+        prev_start_date = datetime.date(fy_year - 1, 4, 1)
+        try:
+            prev_end_date = datetime.date(today.year - 1, today.month, today.day)
+        except ValueError:
+            prev_end_date = datetime.date(today.year - 1, today.month, 28)
         period_name = f"FY {fy_year}-{str(fy_year + 1)[2:]} (Year-to-Date)"
 
     elif period == 'custom' and custom_start and custom_end:
         try:
             s_parts = [int(p) for p in custom_start.split('-')]
             e_parts = [int(p) for p in custom_end.split('-')]
-            start_dt = now.replace(year=s_parts[0], month=s_parts[1], day=s_parts[2], hour=0, minute=0, second=0, microsecond=0)
-            end_dt = now.replace(year=e_parts[0], month=e_parts[1], day=e_parts[2], hour=23, minute=59, second=59, microsecond=999999)
-            period_days = max(1, (end_dt - start_dt).days + 1)
-            prev_start_dt = start_dt - datetime.timedelta(days=period_days)
-            prev_end_dt = start_dt - datetime.timedelta(seconds=1)
-            period_name = f"{custom_start} to {custom_end}"
+            start_date = datetime.date(s_parts[0], s_parts[1], s_parts[2])
+            end_date = datetime.date(e_parts[0], e_parts[1], e_parts[2])
+            if end_date < start_date:
+                start_date, end_date = end_date, start_date
+            p_days = max(1, (end_date - start_date).days + 1)
+            prev_end_date = start_date - datetime.timedelta(days=1)
+            prev_start_date = prev_end_date - datetime.timedelta(days=p_days - 1)
+            period_name = f"{start_date.strftime('%d-%m-%Y')} to {end_date.strftime('%d-%m-%Y')}"
         except Exception:
-            # Fallback to MTD
-            start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            end_dt = today_end
-            period_days = max(1, (end_dt - start_dt).days + 1)
-            prev_start_dt = (start_dt - datetime.timedelta(days=1)).replace(day=1)
-            prev_end_dt = start_dt - datetime.timedelta(seconds=1)
-            period_name = now.strftime('%B %Y')
+            start_date = today.replace(day=1)
+            end_date = today
+            prev_end_date = start_date - datetime.timedelta(days=1)
+            prev_start_date = prev_end_date.replace(day=1)
+            period_name = today.strftime('%B %Y (MTD)')
 
     else:
         # Default: Month-To-Date (MTD)
-        start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_dt = today_end
-        period_days = max(1, (end_dt - start_dt).days + 1)
-        # Previous month equivalent
-        prev_month_end = start_dt - datetime.timedelta(seconds=1)
-        prev_start_dt = prev_month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        prev_end_dt = prev_month_end
-        period_name = now.strftime('%B %Y (MTD)')
+        start_date = today.replace(day=1)
+        end_date = today
+        prev_end_date = start_date - datetime.timedelta(days=1)
+        prev_start_date = prev_end_date.replace(day=1)
+        period_name = today.strftime('%B %Y (MTD)')
 
-    return start_dt, end_dt, prev_start_dt, prev_end_dt, period_name, period_days
+    period_days = max(1, (end_date - start_date).days + 1)
+    start_dt, end_dt = _ist_day_bounds(start_date, end_date)
+    prev_start_dt, prev_end_dt = _ist_day_bounds(prev_start_date, prev_end_date)
+
+    return start_dt, end_dt, start_date, end_date, prev_start_dt, prev_end_dt, period_name, period_days
+
+
+def _compute_accurate_payroll(company_id, start_date: datetime.date, end_date: datetime.date):
+    """
+    Computes exact payroll liability for [start_date, end_date] matching HR PayrollTab rules:
+      - FIXED staff: monthly salary prorated by exact calendar days in each day's month,
+        minus ABSENT (-1 day) and HALF_DAY (-0.5 day) deductions from DailyAttendance,
+        plus OT pay and bag incentives.
+      - VARIABLE staff: actual DailyAttendance PRESENT (1.0) + HALF_DAY (0.5) + Paid Leaves
+        multiplied by dailywage, plus OT pay and bag incentives.
+    Returns dict with fixed_payroll, variable_payroll, total_payroll, fixed_count, var_count,
+    present_variable_days, labour_by_user_id, labour_by_name.
+    """
+    labour_qs = Labour.objects.filter(active=True)
+    if company_id:
+        labour_qs = labour_qs.filter(companyid_id=company_id)
+
+    staff_list = list(labour_qs)
+    fixed_staff = [l for l in staff_list if (l.employee_type or '').upper() == 'FIXED']
+    var_staff = [l for l in staff_list if (l.employee_type or '').upper() == 'VARIABLE']
+
+    labour_by_user_id = {}
+    labour_by_name = {}
+    for l in staff_list:
+        if getattr(l, 'user_id', None):
+            labour_by_user_id[l.user_id] = l
+        if l.name:
+            labour_by_name[l.name.strip().lower()] = l
+
+    start_str = start_date.strftime('%Y-%m-%d')
+    end_str = end_date.strftime('%Y-%m-%d')
+
+    # Fetch DailyAttendance records in date range (DailyAttendance.date is CharField 'YYYY-MM-DD' or DateField)
+    att_qs = DailyAttendance.objects.filter(date__gte=start_str, date__lte=end_str)
+    if company_id:
+        att_qs = att_qs.filter(labourid__companyid_id=company_id)
+
+    att_by_emp = {}
+    for att in att_qs:
+        att_by_emp.setdefault(att.labourid_id, []).append(att)
+
+    # Fetch Paid Leaves in date range
+    leave_qs = LeaveRecord.objects.filter(date__gte=start_str, date__lte=end_str, is_paid=True)
+    if company_id:
+        leave_qs = leave_qs.filter(labourid__companyid_id=company_id)
+    paid_leave_by_emp = {}
+    for lv in leave_qs:
+        val = 0.5 if lv.status == 'HALF_DAY' else 1.0
+        paid_leave_by_emp[lv.labourid_id] = paid_leave_by_emp.get(lv.labourid_id, 0.0) + val
+
+    # Compute exact fractional months covered by [start_date, end_date]
+    # e.g. 1 day in Nov (30 days) = 1/30; full Nov = 30/30 = 1.0; spans Oct+Nov = exact per-month fraction
+    month_day_counts = {}
+    cur = start_date
+    while cur <= end_date:
+        ym = (cur.year, cur.month)
+        month_day_counts[ym] = month_day_counts.get(ym, 0) + 1
+        cur += datetime.timedelta(days=1)
+
+    total_month_fraction = 0.0
+    for (y, m), cnt in month_day_counts.items():
+        dim = calendar.monthrange(y, m)[1]
+        total_month_fraction += (cnt / float(dim))
+
+    # Average days per month in window for single-day absence deduction
+    period_days = max(1, (end_date - start_date).days + 1)
+    avg_dim = period_days / total_month_fraction if total_month_fraction > 0 else 30.0
+
+    fixed_payroll = 0.0
+    for emp in fixed_staff:
+        monthly_sal = float(emp.base_salary_monthly or 0.0)
+        daily_rate = monthly_sal / avg_dim if avg_dim > 0 else (monthly_sal / 30.0)
+        base_hourly = daily_rate / 8.0
+
+        emp_att = att_by_emp.get(emp.id, [])
+        absent_days = 0.0
+        ot_hours = 0.0
+        bags = 0.0
+        for a in emp_att:
+            st = (a.status or '').upper()
+            if st == 'ABSENT':
+                absent_days += 1.0
+            elif st == 'HALF_DAY':
+                absent_days += 0.5
+            ot_hours += float(getattr(a, 'ot_hours', 0.0) or 0.0)
+            bags += float(getattr(a, 'bags_produced', 0.0) or 0.0)
+
+        # Deduct unpaid absences (offset by paid leave if any)
+        paid_lv = paid_leave_by_emp.get(emp.id, 0.0)
+        net_unpaid_absent = max(0.0, absent_days - paid_lv)
+
+        accrued_base = max(0.0, (monthly_sal * total_month_fraction) - (net_unpaid_absent * daily_rate))
+        ot_pay = ot_hours * (base_hourly * float(getattr(emp, 'overtime_hourly_rate', 0.0) or 0.0))
+        bag_pay = bags * float(getattr(emp, 'bag_incentive_rate', 0.0) or 0.0)
+        fixed_payroll += (accrued_base + ot_pay + bag_pay)
+
+    variable_payroll = 0.0
+    present_var_days = 0.0
+    for emp in var_staff:
+        daily_wage = float(getattr(emp, 'dailywage', 0.0) or 0.0)
+        base_hourly = daily_wage / 8.0
+        emp_att = att_by_emp.get(emp.id, [])
+
+        payable_days = 0.0
+        ot_hours = 0.0
+        bags = 0.0
+        for a in emp_att:
+            st = (a.status or '').upper()
+            if st == 'PRESENT':
+                payable_days += 1.0
+            elif st == 'HALF_DAY':
+                payable_days += 0.5
+            ot_hours += float(getattr(a, 'ot_hours', 0.0) or 0.0)
+            bags += float(getattr(a, 'bags_produced', 0.0) or 0.0)
+
+        payable_days += paid_leave_by_emp.get(emp.id, 0.0)
+        present_var_days += payable_days
+
+        wages = payable_days * daily_wage
+        ot_pay = ot_hours * (base_hourly * float(getattr(emp, 'overtime_hourly_rate', 0.0) or 0.0))
+        bag_pay = bags * float(getattr(emp, 'bag_incentive_rate', 0.0) or 0.0)
+        variable_payroll += (wages + ot_pay + bag_pay)
+
+    return {
+        'fixed_payroll': round(fixed_payroll, 2),
+        'variable_payroll': round(variable_payroll, 2),
+        'total_payroll': round(fixed_payroll + variable_payroll, 2),
+        'fixed_headcount': len(fixed_staff),
+        'variable_headcount': len(var_staff),
+        'present_variable_days': round(present_var_days, 1),
+        'labour_by_user_id': labour_by_user_id,
+        'labour_by_name': labour_by_name,
+    }
 
 
 @api_view(['GET'])
@@ -127,10 +295,10 @@ def _parse_director_date_range(request):
 def director_boardroom_command_center(request):
     """
     Boardroom Command Center View for Company Directors & Superadmins.
-    Aggregates full-spectrum P&L, Raw Material Consumption (COGS),
-    Payroll, Market Collections, Ratios, and Factory/Field Operational Health.
+    Aggregates verified P&L, Raw Material Consumption (COGS), Payroll,
+    Market Collections, Live Receivables, and Factory/Field Operational Health.
     """
-    now = timezone.now()
+    now_ist = timezone.now().astimezone(IST)
     # 1. Privileged Role Check - Exclusively Super Admin
     user = getattr(request, 'user', None)
     user_role = (getattr(user, 'role', '') or '').upper()
@@ -144,28 +312,39 @@ def director_boardroom_command_center(request):
             status_code=status.HTTP_403_FORBIDDEN
         )
 
-    # Resolve company context
-    from api.views import _get_company_id
     company_id = _get_company_id(request)
 
-    # 2. Date Range
-    start_dt, end_dt, prev_start_dt, prev_end_dt, period_name, period_days = _parse_director_date_range(request)
+    # 2. IST-Accurate Date Range
+    start_dt, end_dt, start_date, end_date, prev_start_dt, prev_end_dt, period_name, period_days = _parse_director_date_range(request)
 
-    # 3. Product Valuation Map (FIFO & Weighted Average Raw Material Cost)
+    # 3. Product Valuation Map & Fast In-Memory Product Map
     cost_map_by_id, cost_map_by_name = compute_product_warehouse_costs(company_id=company_id)
 
-    # 3b. Pre-compute BOM Recipe RM Cost per unit/bag (User Formula: Total Batch RM Cost / Output Quantity)
+    prods_qs = Product.objects.select_related('unitid').filter(companyid_id=company_id) if company_id else Product.objects.select_related('unitid').all()
+    prod_map = {}
+    for p in prods_qs:
+        if p.name:
+            prod_map[p.name.strip().lower()] = p
+            prod_map[p.name] = p
+        if p.productcode:
+            prod_map[p.productcode.strip().lower()] = p
+            prod_map[p.productcode] = p
+
+    # 3b. Pre-compute BOM Recipe RM Cost per unit/bag (with fast prod_map & empty sales_rates_by_id — zero N+1 queries)
     bom_qs = Bom.objects.filter(companyid_id=company_id) if company_id else Bom.objects.all()
     bom_by_id = {}
     bom_by_code = {}
     bom_by_name = {}
+    bom_by_norm = {}
 
     for bom_obj in bom_qs.prefetch_related('bomitem_set', 'warehouseid'):
         bom_data = compute_bom_cost_breakdown(
             bom_obj,
             valuation_by_id=cost_map_by_id,
             valuation_by_name=cost_map_by_name,
-            company_id=company_id
+            company_id=company_id,
+            sales_rates_by_id={},
+            prod_map=prod_map,
         )
         if bom_data:
             u_cost = float(bom_data.get('unitCost') or 0.0)
@@ -180,56 +359,105 @@ def director_boardroom_command_center(request):
                 bom_by_code[p_code] = u_cost
             if p_name:
                 bom_by_name[p_name] = u_cost
+                bom_by_norm[_normalize_sku_key(p_name)] = u_cost
             if b_name:
                 bom_by_name[b_name] = u_cost
+                bom_by_norm[_normalize_sku_key(b_name)] = u_cost
+
+    def _lookup_unit_cogs(pid, prod):
+        """
+        Resolves true unit cost of goods sold:
+          1. BOM Recipe RM Cost (exact ID, code, name, or normalized name)
+          2. Real FIFO / Latest Purchase Cost (ONLY if backed by actual Purchaseitem records)
+          3. Otherwise returns (0.0, 'UNCOSTED') — NEVER falls back to selling price!
+        """
+        p_code = (getattr(prod, 'productcode', '') or '').strip().lower()
+        p_name = (getattr(prod, 'name', '') or '').strip().lower()
+        p_norm = _normalize_sku_key(p_name)
+
+        bom_unit_cost = (
+            bom_by_id.get(pid) or
+            bom_by_code.get(p_code) or
+            bom_by_name.get(p_name) or
+            bom_by_norm.get(p_norm)
+        )
+        if bom_unit_cost is not None and bom_unit_cost > 0:
+            return float(bom_unit_cost), 'BOM_RECIPE'
+
+        prod_cost_info = cost_map_by_id.get(pid, {})
+        if prod_cost_info.get('costSource') in REAL_PURCHASE_COST_SOURCES:
+            eff = float(prod_cost_info.get('effectiveCost') or 0.0)
+            if eff > 0:
+                return eff, 'PURCHASE_FIFO'
+
+        return 0.0, 'UNCOSTED'
 
     # 4. Sales Orders & Material Consumption (COGS) in Selected Period
-    order_base_qs = Order.objects.filter(companyid_id=company_id).exclude(status='REJECTED') if company_id else Order.objects.exclude(status='REJECTED')
-    
-    current_orders = order_base_qs.filter(date__range=(start_dt, end_dt)).prefetch_related('orderitem_set')
-    prev_orders = order_base_qs.filter(date__range=(prev_start_dt, prev_end_dt)).prefetch_related('orderitem_set')
+    # Strictly fulfilled/billed orders only (Completed, Dispatched, Partially Dispatched, Delivered, Partially Returned)
+    billed_base_qs = Order.objects.filter(status__in=BILLED_ORDER_STATUSES)
+    pending_base_qs = Order.objects.filter(status__in=PENDING_PIPELINE_STATUSES)
+    if company_id:
+        billed_base_qs = billed_base_qs.filter(companyid_id=company_id)
+        pending_base_qs = pending_base_qs.filter(companyid_id=company_id)
+
+    current_orders = billed_base_qs.filter(date__range=(start_dt, end_dt)).prefetch_related('orderitem_set__productid')
+    prev_orders = billed_base_qs.filter(date__range=(prev_start_dt, prev_end_dt)).prefetch_related('orderitem_set__productid')
+
+    # Track unfulfilled pipeline orders in the same period separately for transparency
+    period_pending_orders = pending_base_qs.filter(date__range=(start_dt, end_dt))
+    pending_orders_count = period_pending_orders.count()
+    pending_orders_value = float(period_pending_orders.aggregate(s=Sum('grandtotal'))['s'] or 0.0)
 
     def _calc_sales_and_cogs(orders_qs):
         gross_rev = 0.0
         total_rm_cogs = 0.0
+        uncosted_rev = 0.0
+        uncosted_skus = set()
         order_count = 0
         total_items_sold = 0
-        cat_sales_map = {}
         top_sku_map = {}
 
         for ord_obj in orders_qs:
-            gross_rev += float(ord_obj.grandtotal or 0.0)
             order_count += 1
-            for item in ord_obj.orderitem_set.all():
-                qty = float(item.qty or 0.0)
+            items = list(ord_obj.orderitem_set.all())
+            if not items:
+                gross_rev += float(ord_obj.grandtotal or 0.0)
+                continue
+
+            for item in items:
+                raw_qty = float(item.qty or 0.0)
+                sent_qty = float(item.sentqty or 0.0)
+                ret_qty = float(item.returnedqty or 0.0)
+
+                # Net billed quantity (respects partial dispatch and returns)
+                if sent_qty > 0:
+                    net_qty = max(0.0, sent_qty - ret_qty)
+                else:
+                    net_qty = max(0.0, raw_qty - ret_qty)
+
+                if net_qty <= 0:
+                    continue
+
                 price = float(item.price or 0.0)
-                line_revenue = float(item.total or (qty * price))
-                total_items_sold += int(qty)
+                if net_qty == raw_qty and item.total is not None:
+                    line_revenue = float(item.total)
+                else:
+                    line_revenue = round(net_qty * price, 2)
+
+                gross_rev += line_revenue
+                total_items_sold += int(net_qty)
 
                 pid = item.productid_id
                 prod = getattr(item, 'productid', None)
-                p_code = (getattr(prod, 'productcode', '') or '').strip().lower()
-                p_name = (getattr(prod, 'name', '') or '').strip().lower()
+                unit_cogs, cost_source = _lookup_unit_cogs(pid, prod)
 
-                # Exact BOM Recipe RM Cost lookup (User BOM formula: e.g. 5 bags = Rs 878.55 => Rs 175.71/bag)
-                bom_unit_cost = (
-                    bom_by_id.get(pid) or
-                    bom_by_code.get(p_code) or
-                    bom_by_name.get(p_name)
-                )
-
-                if bom_unit_cost is not None and bom_unit_cost > 0:
-                    unit_cogs = float(bom_unit_cost)
-                    cost_source = 'BOM_RECIPE'
-                else:
-                    prod_cost_info = cost_map_by_id.get(pid, {})
-                    unit_cogs = float(prod_cost_info.get('effectiveCost') or 0.0)
-                    cost_source = 'WAREHOUSE_STOCK'
-
-                line_cogs = qty * unit_cogs
+                line_cogs = round(net_qty * unit_cogs, 2)
                 total_rm_cogs += line_cogs
 
-                # Group by SKU for Director's Top Gross Margin Products
+                if cost_source == 'UNCOSTED':
+                    uncosted_rev += line_revenue
+                    uncosted_skus.add((prod.name if prod else None) or str(pid))
+
                 prod_name = (prod.name if prod else None) or cost_map_by_id.get(pid, {}).get('name') or f"SKU-{pid}"
                 sku_code = (prod.productcode if prod else None) or cost_map_by_id.get(pid, {}).get('sku') or ''
                 if pid not in top_sku_map:
@@ -243,16 +471,15 @@ def director_boardroom_command_center(request):
                         'unit_rm_cost': round(unit_cogs, 2),
                         'cost_source': cost_source,
                     }
-                top_sku_map[pid]['units_sold'] += int(qty)
+                top_sku_map[pid]['units_sold'] += int(net_qty)
                 top_sku_map[pid]['revenue'] += line_revenue
                 top_sku_map[pid]['cogs'] += line_cogs
 
-        return gross_rev, total_rm_cogs, order_count, total_items_sold, list(top_sku_map.values())
+        return gross_rev, total_rm_cogs, order_count, total_items_sold, list(top_sku_map.values()), uncosted_rev, len(uncosted_skus)
 
-    gross_sales, rm_consumption, order_count, units_sold, sku_breakdown = _calc_sales_and_cogs(current_orders)
-    prev_gross_sales, prev_rm_consumption, prev_order_count, _, _ = _calc_sales_and_cogs(prev_orders)
+    gross_sales, rm_consumption, order_count, units_sold, sku_breakdown, uncosted_sales, uncosted_sku_count = _calc_sales_and_cogs(current_orders)
+    prev_gross_sales, prev_rm_consumption, prev_order_count, _, _, _, _ = _calc_sales_and_cogs(prev_orders)
 
-    # Compute deltas
     def _pct_delta(curr, prev):
         if prev <= 0:
             return 100.0 if curr > 0 else 0.0
@@ -264,71 +491,74 @@ def director_boardroom_command_center(request):
     cn_qs = CreditNoteDiscountRequest.objects.all()
     if company_id:
         cn_qs = cn_qs.filter(companyid_id=company_id)
-    
+
     current_approved_cns = float(cn_qs.filter(
-        status='APPROVED',
+        status__iexact='APPROVED',
         reviewed_at__range=(start_dt, end_dt)
     ).aggregate(s=Sum('amount'))['s'] or 0.0)
 
-    pending_cns_qs = cn_qs.filter(status='PENDING')
+    pending_cns_qs = cn_qs.filter(status__iexact='PENDING')
     pending_cns_count = pending_cns_qs.count()
     pending_cns_amount = float(pending_cns_qs.aggregate(s=Sum('amount'))['s'] or 0.0)
 
-    # Net Realized Sales
     net_sales = max(0.0, gross_sales - current_approved_cns)
 
     # 6. Gross Profit & Margin %
+    # Compute margin over costed revenue if some traded SKUs are uncosted, while showing true total profit
     gross_profit = gross_sales - rm_consumption
-    gross_margin_pct = round((gross_profit / max(1.0, gross_sales)) * 100, 1) if gross_sales > 0 else 0.0
+    costed_sales = max(0.0, gross_sales - uncosted_sales)
+    gross_margin_pct = round(((costed_sales - rm_consumption) / max(1.0, costed_sales)) * 100, 1) if costed_sales > 0 else 0.0
     cogs_ratio_pct = round((rm_consumption / max(1.0, gross_sales)) * 100, 1) if gross_sales > 0 else 0.0
 
-    # 7. Total Payroll Liabilities
-    labour_qs = Labour.objects.filter(active=True)
-    if company_id:
-        labour_qs = labour_qs.filter(companyid_id=company_id)
-
-    fixed_staff_count = labour_qs.filter(employee_type='FIXED').count()
-    var_staff_count = labour_qs.filter(employee_type='VARIABLE').count()
-    monthly_fixed_salary_commitment = float(labour_qs.aggregate(s=Sum('base_salary_monthly'))['s'] or 0.0)
-
-    # Pro-rate fixed salaries based on period days vs 30 days
-    fixed_salary_liability = round((monthly_fixed_salary_commitment / 30.0) * period_days, 2)
-
-    # Variable production bag incentive wages in range
-    att_qs = DailyAttendance.objects.filter(date__range=(start_dt.date(), end_dt.date()))
-    if company_id:
-        att_qs = att_qs.filter(labourid__companyid_id=company_id)
-    
-    total_variable_wages = 0.0
-    for att in att_qs.select_related('labourid'):
-        b_count = float(att.bags_produced or 0.0)
-        rate = float(getattr(att.labourid, 'bag_incentive_rate', 0.0) or 0.0)
-        total_variable_wages += (b_count * rate)
-
-    total_payroll = round(fixed_salary_liability + total_variable_wages, 2)
+    # 7. Accurate Total Payroll Liabilities (Fixed + Variable Daily Wages + OT + Bag Incentives)
+    payroll_info = _compute_accurate_payroll(company_id, start_date, end_date)
+    fixed_payroll = payroll_info['fixed_payroll']
+    variable_payroll = payroll_info['variable_payroll']
+    total_payroll = payroll_info['total_payroll']
+    fixed_staff_count = payroll_info['fixed_headcount']
+    var_staff_count = payroll_info['variable_headcount']
+    labour_by_user_id = payroll_info['labour_by_user_id']
+    labour_by_name = payroll_info['labour_by_name']
     payroll_ratio_pct = round((total_payroll / max(1.0, gross_sales)) * 100, 1) if gross_sales > 0 else 0.0
 
-    # 8. Field Travel & Operational Expenses
-    exp_qs = Expense.objects.filter(status='APPROVED', date__range=(start_dt, end_dt))
+    # 8. Field Travel & Operational Expenses (using actual per-employee KM rates & IST dates)
+    exp_qs = Expense.objects.filter(status__iexact='APPROVED', date__range=(start_dt, end_dt))
     if company_id:
         exp_qs = exp_qs.filter(companyid_id=company_id)
     approved_expenses_amount = float(exp_qs.aggregate(s=Sum('amount'))['s'] or 0.0)
 
-    pending_exp_qs = Expense.objects.filter(status='PENDING')
+    pending_exp_qs = Expense.objects.filter(status__iexact='PENDING')
     if company_id:
         pending_exp_qs = pending_exp_qs.filter(companyid_id=company_id)
     pending_exp_count = pending_exp_qs.count()
     pending_exp_amount = float(pending_exp_qs.aggregate(s=Sum('amount'))['s'] or 0.0)
 
-    # Approved Field Travel Allowances
-    travel_qs = DailyTravelLog.objects.filter(date__range=(start_dt.date(), end_dt.date()))
+    travel_qs = DailyTravelLog.objects.filter(date__range=(start_date, end_date)).select_related('user')
     if company_id:
         travel_qs = travel_qs.filter(user__companyid_id=company_id)
-    
-    total_travel_km = float(travel_qs.aggregate(s=Sum('approved_km'))['s'] or travel_qs.aggregate(s=Sum('total_km'))['s'] or 0.0)
-    # Estimate ₹3.50/KM average bike travel allowance
-    travel_allowance_liability = round(total_travel_km * 3.5, 2)
 
+    total_travel_km = 0.0
+    travel_allowance_liability = 0.0
+    for tlog in travel_qs:
+        km = float(tlog.approved_km if (tlog.approved_km is not None and float(tlog.approved_km) > 0) else (tlog.total_km or 0.0))
+        total_travel_km += km
+        # Resolve exact per-KM allowance from Labour profile (fallback ₹3.00/km)
+        emp = labour_by_user_id.get(tlog.user_id)
+        if not emp and tlog.user and tlog.user.name:
+            u_name = tlog.user.name.strip().lower()
+            emp = labour_by_name.get(u_name)
+            if not emp:
+                first_tok = u_name.split()[0]
+                for lname, lobj in labour_by_name.items():
+                    if first_tok and first_tok in lname:
+                        emp = lobj
+                        break
+        km_rate = float(getattr(emp, 'bike_allowance_per_km', 0.0) or 0.0) if emp else 0.0
+        if km_rate <= 0:
+            km_rate = 3.0
+        travel_allowance_liability += (km * km_rate)
+
+    travel_allowance_liability = round(travel_allowance_liability, 2)
     total_operational_overhead = round(approved_expenses_amount + travel_allowance_liability, 2)
 
     # 9. Net Director Operating Surplus (Realized Pre-Tax EBITDA)
@@ -338,29 +568,47 @@ def director_boardroom_command_center(request):
     )
     net_operating_margin_pct = round((net_operating_surplus / max(1.0, gross_sales)) * 100, 1) if gross_sales > 0 else 0.0
 
-    # 10. Payment Collections & Cash Flow
-    receipt_qs = PaymentReceipt.objects.filter(status='VERIFIED', created_at__range=(start_dt, end_dt))
+    # 10. Payment Collections & Live Market Receivables (DSO)
+    receipt_base_qs = PaymentReceipt.objects.filter(status__iexact='VERIFIED')
     if company_id:
-        receipt_qs = receipt_qs.filter(companyid_id=company_id)
-    
-    total_collections = float(receipt_qs.aggregate(s=Sum('amount'))['s'] or 0.0)
+        receipt_base_qs = receipt_base_qs.filter(companyid_id=company_id)
+
+    period_receipts = receipt_base_qs.filter(created_at__range=(start_dt, end_dt))
+    total_collections = float(period_receipts.aggregate(s=Sum('amount'))['s'] or 0.0)
     collection_strike_pct = round((total_collections / max(1.0, gross_sales)) * 100, 1) if gross_sales > 0 else 0.0
 
-    # Total Market Outstanding (Debtors)
+    # Live Market Receivables = Opening Balances + All-Time Billed Sales + Manual Debits - All-Time Verified Receipts - Approved CNs - Manual Credits
     dealer_qs = Dealer.objects.filter(active=True)
     dist_qs = Distributor.objects.filter(active=True)
+    manual_qs = PartyManualLedgerEntry.objects.all()
     if company_id:
         dealer_qs = dealer_qs.filter(companyid_id=company_id)
         dist_qs = dist_qs.filter(companyid_id=company_id)
+        manual_qs = manual_qs.filter(companyid_id=company_id)
 
-    total_dealer_outstanding = float(dealer_qs.aggregate(s=Sum('outstanding'))['s'] or 0.0)
-    total_dist_outstanding = float(dist_qs.aggregate(s=Sum('outstanding'))['s'] or 0.0)
-    total_market_receivables = round(total_dealer_outstanding + total_dist_outstanding, 2)
+    total_opening_bal = (
+        float(dealer_qs.aggregate(s=Sum('openingbalance'))['s'] or 0.0) +
+        float(dist_qs.aggregate(s=Sum('openingbalance'))['s'] or 0.0)
+    )
+    all_time_billed_sales = float(billed_base_qs.aggregate(s=Sum('grandtotal'))['s'] or 0.0)
+    all_time_collections = float(receipt_base_qs.aggregate(s=Sum('amount'))['s'] or 0.0)
+    all_time_approved_cns = float(cn_qs.filter(status__iexact='APPROVED').aggregate(s=Sum('amount'))['s'] or 0.0)
+    manual_aggs = manual_qs.aggregate(d=Sum('debit'), c=Sum('credit'))
+    manual_debits = float(manual_aggs['d'] or 0.0)
+    manual_credits = float(manual_aggs['c'] or 0.0)
 
-    # Days Sales Outstanding (DSO) = (Receivables / Billed Sales in Period) * Period Days
-    dso_days = round((total_market_receivables / max(1.0, gross_sales)) * period_days, 1) if gross_sales > 0 else 0.0
+    total_market_receivables = round(
+        max(0.0, total_opening_bal + all_time_billed_sales + manual_debits - all_time_collections - all_time_approved_cns - manual_credits),
+        2
+    )
 
-    # 11. Manufacturing Plant Operational Brief
+    # DSO using trailing 30-day average daily billed sales (so 1-day view doesn't distort DSO)
+    t30_start_dt, t30_end_dt = _ist_day_bounds(end_date - datetime.timedelta(days=29), end_date)
+    trailing_30d_sales = float(billed_base_qs.filter(date__range=(t30_start_dt, t30_end_dt)).aggregate(s=Sum('grandtotal'))['s'] or 0.0)
+    avg_daily_sales = (trailing_30d_sales / 30.0) if trailing_30d_sales > 0 else (gross_sales / max(1, period_days))
+    dso_days = round(total_market_receivables / avg_daily_sales, 1) if avg_daily_sales > 0 else 0.0
+
+    # 11. Manufacturing Plant Operational Brief (Real Production + Real RM Consumed Valuation)
     prod_qs = Stocktransaction.objects.filter(
         transactiontype='PRODUCTION',
         is_deleted=False,
@@ -373,7 +621,25 @@ def director_boardroom_command_center(request):
     total_prod_batches = prod_qs.count()
     avg_batch_units = round(total_prod_units / max(1, total_prod_batches), 1)
 
-    # Production Supervisors
+    # Real Factory RM Consumed Value in period (from actual CONSUMED stock transactions)
+    cons_qs = Stocktransaction.objects.filter(
+        transactiontype='CONSUMED',
+        is_deleted=False,
+        createdat__range=(start_dt, end_dt)
+    ).exclude(reason='REJECTED')
+    if company_id:
+        cons_qs = cons_qs.filter(productid__companyid_id=company_id)
+
+    plant_rm_consumed_val = 0.0
+    plant_rm_consumed_kg = 0.0
+    for cst in cons_qs:
+        qty_abs = abs(float(cst.quantity or 0.0))
+        plant_rm_consumed_kg += qty_abs
+        uc_info = cost_map_by_id.get(cst.productid_id, {})
+        uc = float(uc_info.get('effectiveCost') or 0.0)
+        plant_rm_consumed_val += (qty_abs * uc)
+    plant_rm_consumed_val = round(plant_rm_consumed_val, 2)
+
     prod_supervisors = set()
     for pt in prod_qs.select_related('created_by'):
         if pt.created_by:
@@ -381,13 +647,13 @@ def director_boardroom_command_center(request):
             role = (getattr(pt.created_by, 'role', '') or '').upper()
             if role not in ('SUPERADMIN', 'ADMIN', 'SALES'):
                 prod_supervisors.add(name)
-    supervisor_list = sorted(list(prod_supervisors)) or ['Deepak Chauhan', 'Kiran Mehta']
+    supervisor_list = sorted(list(prod_supervisors))
 
     # 12. Sales Force Field Operations Brief
     visit_qs = Visit.objects.filter(createdat__range=(start_dt, end_dt))
     if company_id:
         visit_qs = visit_qs.filter(companyid_id=company_id)
-    
+
     total_visits = visit_qs.count()
     visit_conversion_pct = round((order_count / max(1, total_visits)) * 100, 1) if total_visits > 0 else 0.0
     revenue_per_km = round(gross_sales / max(1.0, total_travel_km), 2) if total_travel_km > 0 else 0.0
@@ -396,60 +662,64 @@ def director_boardroom_command_center(request):
     for sku in sku_breakdown:
         rev = sku['revenue']
         cg = sku['cogs']
-        sku['gross_profit'] = round(rev - cg, 2)
-        sku['margin_pct'] = round(((rev - cg) / max(1.0, rev)) * 100, 1) if rev > 0 else 0.0
-    
-    sku_breakdown.sort(key=lambda x: x['gross_profit'], reverse=True)
+        if sku['cost_source'] == 'UNCOSTED':
+            sku['gross_profit'] = 0.0
+            sku['margin_pct'] = 0.0
+        else:
+            sku['gross_profit'] = round(rev - cg, 2)
+            sku['margin_pct'] = round(((rev - cg) / max(1.0, rev)) * 100, 1) if rev > 0 else 0.0
+
+    sku_breakdown.sort(key=lambda x: (x['cost_source'] != 'UNCOSTED', x['gross_profit'], x['revenue']), reverse=True)
     top_5_margin_skus = sku_breakdown[:5]
 
     # 14. Waterfall Profit Step-down
     waterfall_breakdown = [
-        {'label': 'Gross Invoiced Sales', 'amount': round(gross_sales, 2), 'type': 'REVENUE', 'pct': 100.0},
+        {'label': 'Gross Billed Sales (Fulfilled)', 'amount': round(gross_sales, 2), 'type': 'REVENUE', 'pct': 100.0 if gross_sales > 0 else 0.0},
         {'label': 'Raw Material Consumption (COGS)', 'amount': -round(rm_consumption, 2), 'type': 'EXPENSE', 'pct': -cogs_ratio_pct},
         {'label': 'Gross Production Profit', 'amount': round(gross_profit, 2), 'type': 'SUBTOTAL', 'pct': gross_margin_pct},
-        {'label': 'Factory & Staff Payroll', 'amount': -round(total_payroll, 2), 'type': 'EXPENSE', 'pct': -payroll_ratio_pct},
-        {'label': 'Field Travel & Operations', 'amount': -round(total_operational_overhead, 2), 'type': 'EXPENSE', 'pct': -round((total_operational_overhead / max(1.0, gross_sales)) * 100, 1)},
-        {'label': 'Approved CNs & Discounts', 'amount': -round(current_approved_cns, 2), 'type': 'EXPENSE', 'pct': -round((current_approved_cns / max(1.0, gross_sales)) * 100, 1)},
+        {'label': f'Factory & Staff Payroll (Fix ₹{int(round(fixed_payroll)):,} + Var ₹{int(round(variable_payroll)):,})', 'amount': -round(total_payroll, 2), 'type': 'EXPENSE', 'pct': -payroll_ratio_pct},
+        {'label': 'Field Travel & Approved Expenses', 'amount': -round(total_operational_overhead, 2), 'type': 'EXPENSE', 'pct': -round((total_operational_overhead / max(1.0, gross_sales)) * 100, 1) if gross_sales > 0 else 0.0},
+        {'label': 'Approved CNs & Discounts', 'amount': -round(current_approved_cns, 2), 'type': 'EXPENSE', 'pct': -round((current_approved_cns / max(1.0, gross_sales)) * 100, 1) if gross_sales > 0 else 0.0},
         {'label': 'Net Director Surplus (EBITDA)', 'amount': round(net_operating_surplus, 2), 'type': 'TOTAL', 'pct': net_operating_margin_pct},
     ]
 
-    # 15. Six-Month Historical Trend Comparison
+    # 15. Exact 6-Month Calendar Historical Trajectory (Real Monthly Billed Sales, Real BOM COGS, Real Collections)
     six_months_trend = []
-    curr_month_iter = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    for i in range(5, -1, -1):
-        # Calculate month date window
-        m_start = (curr_month_iter - datetime.timedelta(days=i * 28)).replace(day=1)
-        # End of that month
-        if m_start.month == 12:
-            m_end = m_start.replace(year=m_start.year + 1, month=1, day=1) - datetime.timedelta(seconds=1)
-        else:
-            m_end = m_start.replace(month=m_start.month + 1, day=1) - datetime.timedelta(seconds=1)
-        
-        m_orders = order_base_qs.filter(date__range=(m_start, m_end))
-        m_sales = float(m_orders.aggregate(s=Sum('grandtotal'))['s'] or 0.0)
-        
-        m_rcpts = PaymentReceipt.objects.filter(status='VERIFIED', created_at__range=(m_start, m_end))
-        if company_id:
-            m_rcpts = m_rcpts.filter(companyid_id=company_id)
+    cur_y, cur_m = now_ist.year, now_ist.month
+    months_list = []
+    for offset in range(5, -1, -1):
+        m = cur_m - offset
+        y = cur_y
+        while m <= 0:
+            m += 12
+            y -= 1
+        months_list.append((y, m))
+
+    for (y, m) in months_list:
+        m_start_d = datetime.date(y, m, 1)
+        m_end_d = datetime.date(y, m, calendar.monthrange(y, m)[1])
+        m_start_dt, m_end_dt = _ist_day_bounds(m_start_d, m_end_d)
+
+        m_orders_qs = billed_base_qs.filter(date__range=(m_start_dt, m_end_dt)).prefetch_related('orderitem_set__productid')
+        m_sales, m_cogs, _, _, _, _, _ = _calc_sales_and_cogs(m_orders_qs)
+
+        m_rcpts = receipt_base_qs.filter(created_at__range=(m_start_dt, m_end_dt))
         m_coll = float(m_rcpts.aggregate(s=Sum('amount'))['s'] or 0.0)
 
-        # Estimate RM cost (~46% average if no specific item prefetch)
-        m_cogs = round(m_sales * (cogs_ratio_pct / 100.0 if cogs_ratio_pct > 0 else 0.46), 2)
-
         six_months_trend.append({
-            'month': m_start.strftime('%b %Y'),
+            'month': m_start_d.strftime('%b %Y'),
             'sales': round(m_sales, 2),
             'collections': round(m_coll, 2),
             'cogs': round(m_cogs, 2),
-            'surplus': round(max(0.0, m_sales - m_cogs), 2),
+            'surplus': round(m_sales - m_cogs, 2),
         })
 
     return send_success({
         'meta': {
             'period': request.query_params.get('period') or 'mtd',
             'period_label': period_name,
-            'start_date': start_dt.strftime('%Y-%m-%d'),
-            'end_date': end_dt.strftime('%Y-%m-%d'),
+            'start_date': start_date.strftime('%Y-%m-%d'),
+            'end_date': end_date.strftime('%Y-%m-%d'),
             'days_in_period': period_days,
             'company_name': Company.objects.filter(id=company_id).first().name if company_id else 'Kamla Enterprises',
         },
@@ -459,26 +729,34 @@ def director_boardroom_command_center(request):
             'net_sales': round(net_sales, 2),
             'order_count': order_count,
             'units_sold': units_sold,
-            
+            'pending_orders_count': pending_orders_count,
+            'pending_orders_value': round(pending_orders_value, 2),
+
             'rm_consumption': round(rm_consumption, 2),
             'cogs_ratio_pct': cogs_ratio_pct,
-            
+            'uncosted_sales': round(uncosted_sales, 2),
+            'uncosted_sku_count': uncosted_sku_count,
+
             'gross_profit': round(gross_profit, 2),
             'gross_margin_pct': gross_margin_pct,
-            
+
             'total_payroll': round(total_payroll, 2),
+            'fixed_payroll': round(fixed_payroll, 2),
+            'variable_payroll': round(variable_payroll, 2),
             'payroll_ratio_pct': payroll_ratio_pct,
             'fixed_headcount': fixed_staff_count,
             'variable_headcount': var_staff_count,
-            
+
             'collections': round(total_collections, 2),
             'collection_strike_pct': collection_strike_pct,
             'receivables_outstanding': round(total_market_receivables, 2),
             'dso_days': dso_days,
-            
+
             'operational_overhead': round(total_operational_overhead, 2),
+            'approved_expenses': round(approved_expenses_amount, 2),
+            'travel_allowance': round(travel_allowance_liability, 2),
             'approved_credit_notes': round(current_approved_cns, 2),
-            
+
             'net_operating_surplus': round(net_operating_surplus, 2),
             'net_operating_margin_pct': net_operating_margin_pct,
         },
@@ -488,7 +766,8 @@ def director_boardroom_command_center(request):
                 'batches_completed': total_prod_batches,
                 'avg_batch_units': avg_batch_units,
                 'capacity_utilization_pct': round(min(100.0, (total_prod_units / max(1.0, 22000.0 * (period_days / 30.0))) * 100), 1),
-                'material_yield_pct': 98.4,
+                'plant_rm_consumed_value': plant_rm_consumed_val,
+                'material_yield_pct': round((total_prod_units * 20.0 / plant_rm_consumed_kg) * 100, 1) if plant_rm_consumed_kg > 0 else 0.0,
                 'supervisors': supervisor_list,
                 'facility_name': 'Navsari Manufacturing Plant',
             },

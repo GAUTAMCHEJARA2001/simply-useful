@@ -372,11 +372,16 @@ export const DirectorDashboardPage: React.FC = () => {
               {formatCurrency(ticker?.gross_sales)}
             </div>
             <div className="flex items-center justify-between text-[11px] pt-1 border-t border-blue-100 dark:border-blue-900/40">
-              <span className="text-muted-foreground font-medium">Orders / Items:</span>
+              <span className="text-muted-foreground font-medium">Fulfilled:</span>
               <span className="font-bold text-foreground">
                 {ticker?.order_count || 0} ord / {ticker?.units_sold || 0} units
               </span>
             </div>
+            {(ticker?.pending_orders_count || 0) > 0 && (
+              <div className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                +{ticker?.pending_orders_count} pending ({formatCurrency(ticker?.pending_orders_value)}) excl.
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -397,6 +402,11 @@ export const DirectorDashboardPage: React.FC = () => {
                 {ticker?.cogs_ratio_pct || 0}%
               </Badge>
             </div>
+            {(ticker?.uncosted_sku_count || 0) > 0 && (
+              <div className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                {ticker?.uncosted_sku_count} SKU(s) missing BOM/purchase cost
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -417,6 +427,11 @@ export const DirectorDashboardPage: React.FC = () => {
                 {ticker?.fixed_headcount || 0} Fix / {ticker?.variable_headcount || 0} Var
               </span>
             </div>
+            {(ticker?.fixed_payroll !== undefined || ticker?.variable_payroll !== undefined) && (
+              <div className="text-[10px] text-purple-700 dark:text-purple-300 font-medium">
+                Fix {formatCurrency(ticker?.fixed_payroll)} • Var {formatCurrency(ticker?.variable_payroll)}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -575,12 +590,22 @@ export const DirectorDashboardPage: React.FC = () => {
                         {formatCurrency(sku.revenue)}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(sku.gross_profit)}
+                        {sku.cost_source === 'UNCOSTED' ? (
+                          <span className="text-muted-foreground font-normal">—</span>
+                        ) : (
+                          formatCurrency(sku.gross_profit)
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <Badge className={`${sku.margin_pct >= 40 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950' : 'bg-slate-100 text-slate-800 dark:bg-slate-800'} text-[10px] font-bold`}>
-                          {sku.margin_pct}%
-                        </Badge>
+                        {sku.cost_source === 'UNCOSTED' ? (
+                          <Badge variant="outline" className="text-[10px] font-semibold text-amber-700 border-amber-300">
+                            No BOM
+                          </Badge>
+                        ) : (
+                          <Badge className={`${sku.margin_pct >= 40 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950' : 'bg-slate-100 text-slate-800 dark:bg-slate-800'} text-[10px] font-bold`}>
+                            {sku.margin_pct}%
+                          </Badge>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -652,23 +677,27 @@ export const DirectorDashboardPage: React.FC = () => {
                 <span className="text-[10px] text-muted-foreground block mt-0.5">Rated 22k/mo capacity</span>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
-                <span className="text-[10px] font-bold uppercase text-slate-700 dark:text-slate-300 block">RECIPE YIELD</span>
-                <span className="text-lg font-black text-slate-950 dark:text-white">
-                  {plant?.material_yield_pct || 98.4}%
+              <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
+                <span className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400 block">PLANT RM CONSUMED</span>
+                <span className="text-lg font-black text-amber-950 dark:text-amber-100">
+                  {formatCurrency(plant?.plant_rm_consumed_value || 0)}
                 </span>
-                <span className="text-[10px] text-muted-foreground block mt-0.5">Theoretical vs Actual</span>
+                <span className="text-[10px] text-muted-foreground block mt-0.5">Actual FIFO RM Used</span>
               </div>
             </div>
 
             <div className="flex items-center justify-between text-xs pt-2 border-t border-border">
               <span className="text-muted-foreground">Active Plant Supervisors:</span>
               <div className="flex items-center gap-1.5 flex-wrap">
-                {plant?.supervisors?.map((sup, idx) => (
-                  <Badge key={idx} variant="outline" className="text-[10px] font-semibold bg-purple-50/50 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200">
-                    👷 {sup}
-                  </Badge>
-                ))}
+                {plant?.supervisors && plant.supervisors.length > 0 ? (
+                  plant.supervisors.map((sup, idx) => (
+                    <Badge key={idx} variant="outline" className="text-[10px] font-semibold bg-purple-50/50 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200">
+                      👷 {sup}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-muted-foreground text-[11px]">No batches logged in period</span>
+                )}
               </div>
             </div>
           </CardContent>

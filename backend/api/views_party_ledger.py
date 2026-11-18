@@ -722,7 +722,10 @@ def _recalculate_party_outstanding(p_type: str, party_obj, company_id=None):
     )
     if company_id:
         orders_qs = orders_qs.filter(companyid_id=company_id)
-    billed_statuses = ['DISPATCHED', 'COMPLETED', 'APPROVED', 'PARTIALLY RETURNED', 'RETURNED']
+    billed_statuses = [
+        'DISPATCHED', 'COMPLETED', 'APPROVED', 'PARTIALLY RETURNED', 'RETURNED', 'PARTIALLY DISPATCHED', 'DELIVERED',
+        'Dispatched', 'Completed', 'Approved', 'Partially Returned', 'Returned', 'Partially Dispatched', 'Delivered',
+    ]
     sales_total = orders_qs.filter(status__in=billed_statuses).aggregate(s=models.Sum('grandtotal'))['s'] or 0.0
     sales_total = Decimal(str(round(sales_total, 2)))
 

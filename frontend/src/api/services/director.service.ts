@@ -21,11 +21,17 @@ export interface DirectorDashboardData {
     net_sales: number;
     order_count: number;
     units_sold: number;
+    pending_orders_count?: number;
+    pending_orders_value?: number;
     rm_consumption: number;
     cogs_ratio_pct: number;
+    uncosted_sales?: number;
+    uncosted_sku_count?: number;
     gross_profit: number;
     gross_margin_pct: number;
     total_payroll: number;
+    fixed_payroll?: number;
+    variable_payroll?: number;
     payroll_ratio_pct: number;
     fixed_headcount: number;
     variable_headcount: number;
@@ -34,6 +40,8 @@ export interface DirectorDashboardData {
     receivables_outstanding: number;
     dso_days: number;
     operational_overhead: number;
+    approved_expenses?: number;
+    travel_allowance?: number;
     approved_credit_notes: number;
     net_operating_surplus: number;
     net_operating_margin_pct: number;
@@ -44,6 +52,7 @@ export interface DirectorDashboardData {
       batches_completed: number;
       avg_batch_units: number;
       capacity_utilization_pct: number;
+      plant_rm_consumed_value?: number;
       material_yield_pct: number;
       supervisors: string[];
       facility_name: string;
@@ -72,6 +81,7 @@ export interface DirectorDashboardData {
     cogs: number;
     gross_profit: number;
     margin_pct: number;
+    cost_source?: string;
   }>;
   waterfall: Array<{
     label: string;
