@@ -336,16 +336,22 @@ def travel_add_unplanned_stop(request):
 
     company_id = _get_company_id(request) or getattr(user, 'companyid_id', None) or getattr(user, 'companyId', None)
     user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
-    today = timezone.localdate()
-
     data = request.data or {}
+
+    date_param = data.get('date')
+    if date_param:
+        try:
+            today = datetime.strptime(str(date_param).strip()[:10], '%Y-%m-%d').date()
+        except ValueError:
+            today = timezone.localdate()
+    else:
+        today = timezone.localdate()
+
     dealer_name = (data.get('dealer_name') or '').strip()
     if not dealer_name:
         return send_error('Dealer / Customer name is required for spot visit', 400)
 
     log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
-    highest_order = DailyTourPlanStop.objects.filter(user_id=user_id, date=today).count() + 1
-
     is_unplanned = bool(get_param(data, 'is_unplanned', 'isUnplanned', default=True))
     visited = bool(get_param(data, 'visited', default=(True if is_unplanned else False)))
 
@@ -355,31 +361,50 @@ def travel_add_unplanned_stop(request):
     target_col = safe_float(get_param(data, 'target_collection_value', 'targetCollectionValue'))
     actual_col = safe_float(get_param(data, 'actual_collection_value', 'actualCollectionValue'), default=(target_col if is_unplanned else 0.0))
 
-    stop = DailyTourPlanStop(
-        id=f"STP-{uuid.uuid4().hex[:12].upper()}",
-        user_id=user_id,
-        companyid_id=company_id,
-        date=today,
-        travel_log=log,
-        stop_order=highest_order,
-        is_unplanned=is_unplanned,
-        dealer_id=get_param(data, 'dealer_id', 'dealerId') or None,
-        dealer_name=dealer_name,
-        dealer_location=safe_str(get_param(data, 'dealer_location', 'dealerLocation')),
-        visit_purpose=_clean_visit_purpose(get_param(data, 'visit_purpose', 'visitPurpose')),
-        plan_notes=safe_str(get_param(data, 'plan_notes', 'planNotes')) or ('Spot visit on route' if is_unplanned else ''),
-        target_order_bags=target_bags,
-        target_order_value=safe_float(get_param(data, 'target_order_value', 'targetOrderValue')),
-        target_collection_value=target_col,
-        visited=visited,
-        actual_order_bags=actual_bags,
-        actual_order_value=safe_float(get_param(data, 'actual_order_value', 'actualOrderValue')),
-        actual_collection_value=actual_col,
-        actual_status=(get_param(data, 'actual_status', 'actualStatus') or ('COMPLETED' if visited else 'PENDING')).upper(),
-        shortfall_reason=safe_str(get_param(data, 'shortfall_reason', 'shortfallReason')),
-        actual_notes=safe_str(get_param(data, 'actual_notes', 'actualNotes')),
-        completed_at=timezone.now() if visited else None,
-    )
+    # De-duplicate if already synced or planned
+    stop = DailyTourPlanStop.objects.filter(user_id=user_id, date=today, dealer_name__iexact=dealer_name).first()
+    if not stop:
+        highest_order = DailyTourPlanStop.objects.filter(user_id=user_id, date=today).count() + 1
+        stop = DailyTourPlanStop(
+            id=f"STP-{uuid.uuid4().hex[:12].upper()}",
+            user_id=user_id,
+            companyid_id=company_id,
+            date=today,
+            travel_log=log,
+            stop_order=highest_order,
+            is_unplanned=is_unplanned,
+            dealer_id=get_param(data, 'dealer_id', 'dealerId') or None,
+            dealer_name=dealer_name,
+            dealer_location=safe_str(get_param(data, 'dealer_location', 'dealerLocation')),
+            visit_purpose=_clean_visit_purpose(get_param(data, 'visit_purpose', 'visitPurpose')),
+            plan_notes=safe_str(get_param(data, 'plan_notes', 'planNotes')) or ('Spot visit on route' if is_unplanned else ''),
+            target_order_bags=target_bags,
+            target_order_value=safe_float(get_param(data, 'target_order_value', 'targetOrderValue')),
+            target_collection_value=target_col,
+            visited=visited,
+            actual_order_bags=actual_bags,
+            actual_order_value=safe_float(get_param(data, 'actual_order_value', 'actualOrderValue')),
+            actual_collection_value=actual_col,
+            actual_status=(get_param(data, 'actual_status', 'actualStatus') or ('COMPLETED' if visited else 'PENDING')).upper(),
+            shortfall_reason=safe_str(get_param(data, 'shortfall_reason', 'shortfallReason')),
+            actual_notes=safe_str(get_param(data, 'actual_notes', 'actualNotes')),
+        )
+    else:
+        stop.is_unplanned = is_unplanned
+        stop.visited = visited
+        if actual_bags:
+            stop.actual_order_bags = actual_bags
+        if actual_col:
+            stop.actual_collection_value = actual_col
+        if get_param(data, 'actual_status', 'actualStatus'):
+            stop.actual_status = (get_param(data, 'actual_status', 'actualStatus') or 'COMPLETED').upper()
+        if get_param(data, 'actual_notes', 'actualNotes'):
+            stop.actual_notes = safe_str(get_param(data, 'actual_notes', 'actualNotes'))
+        if visited and not stop.completed_at:
+            stop.completed_at = timezone.now()
+
+    if visited and not stop.completed_at:
+        stop.completed_at = timezone.now()
     stop.save()
 
     if log:
@@ -413,9 +438,17 @@ def travel_punch_stop_visit(request):
 
     company_id = _get_company_id(request) or getattr(user, 'companyid_id', None) or getattr(user, 'companyId', None)
     user_id = getattr(user, 'id', None) or getattr(user, 'userId', None)
-    today = timezone.localdate()
 
     data = request.data or {}
+    date_param = data.get('date')
+    if date_param:
+        try:
+            today = datetime.strptime(str(date_param).strip()[:10], '%Y-%m-%d').date()
+        except ValueError:
+            today = timezone.localdate()
+    else:
+        today = timezone.localdate()
+
     stop_id = data.get('stop_id') or data.get('id')
     stop = None
     if stop_id and not str(stop_id).startswith('temp-'):
@@ -428,20 +461,22 @@ def travel_punch_stop_visit(request):
     log = DailyTravelLog.objects.filter(user_id=user_id, date=today).first()
 
     if not stop:
-        highest_order = DailyTourPlanStop.objects.filter(user_id=user_id, date=today).count() + 1
-        stop = DailyTourPlanStop(
-            id=f"STP-{uuid.uuid4().hex[:12].upper()}",
-            user_id=user_id,
-            companyid_id=company_id,
-            date=today,
-            travel_log=log,
-            stop_order=highest_order,
-            dealer_id=data.get('dealer_id') or None,
-            dealer_name=dealer_name,
-            dealer_location=data.get('dealer_location') or '',
-            visit_purpose=_clean_visit_purpose(data.get('visit_purpose')),
-            is_unplanned=bool(data.get('is_unplanned', False)),
-        )
+        stop = DailyTourPlanStop.objects.filter(user_id=user_id, date=today, dealer_name__iexact=dealer_name).first()
+        if not stop:
+            highest_order = DailyTourPlanStop.objects.filter(user_id=user_id, date=today).count() + 1
+            stop = DailyTourPlanStop(
+                id=f"STP-{uuid.uuid4().hex[:12].upper()}",
+                user_id=user_id,
+                companyid_id=company_id,
+                date=today,
+                travel_log=log,
+                stop_order=highest_order,
+                dealer_id=data.get('dealer_id') or None,
+                dealer_name=dealer_name,
+                dealer_location=data.get('dealer_location') or '',
+                visit_purpose=_clean_visit_purpose(data.get('visit_purpose')),
+                is_unplanned=bool(data.get('is_unplanned', False)),
+            )
 
     status_val = (get_param(data, 'actual_status', 'actualStatus') or 'COMPLETED').upper()
     is_skipped = status_val == 'SKIPPED'

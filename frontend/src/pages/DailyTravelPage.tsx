@@ -46,13 +46,29 @@ import {
   Check,
   RotateCcw,
   Trophy,
-  UserPlus
+  UserPlus,
+  Wifi,
+  WifiOff,
+  CloudOff,
+  Database,
+  UploadCloud
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { formatIndianNumber, formatIndianCurrency, formatIndianWords } from '@/utils/format';
 import { SOScorecardTab } from './travel/components/SOScorecardTab';
 import { ImageViewerModal } from '@/components/ImageViewerModal';
+import {
+  isNetworkOfflineError,
+  getOfflineOutbox,
+  enqueueOfflineAction,
+  cacheTodayTrip,
+  getCachedTodayTrip,
+  cacheOfflineParties,
+  getCachedOfflineParties,
+  syncOfflineOutbox,
+  OfflineTravelAction,
+} from '@/utils/offlineTravelSync';
 
 export const VISIT_PURPOSE_OPTIONS = [
   { id: 'ORDER', label: 'Order Booking', icon: '📦', badgeBg: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300' },
@@ -133,6 +149,12 @@ export const DailyTravelPage: React.FC = () => {
   const [loadingToday, setLoadingToday] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Offline & Rural Network Resilience State
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [outboxItems, setOutboxItems] = useState<OfflineTravelAction[]>(() => getOfflineOutbox());
+  const [isSyncingOutbox, setIsSyncingOutbox] = useState<boolean>(false);
+  const [showOutboxModal, setShowOutboxModal] = useState<boolean>(false);
 
   // Registered Parties (Dealers + Distributors + CRM Leads) master list
   type RegisteredParty = PartyOption;
@@ -349,8 +371,13 @@ export const DailyTravelPage: React.FC = () => {
       // Sort alphabetically by name
       parsedParties.sort((a, b) => a.name.localeCompare(b.name));
       setParties(parsedParties);
+      cacheOfflineParties(parsedParties);
     } catch (err) {
-      console.error('Failed to fetch dealers, distributors, and leads:', err);
+      console.warn('Failed to fetch online parties, checking offline device cache:', err);
+      const cached = getCachedOfflineParties();
+      if (cached && cached.length > 0) {
+        setParties(cached);
+      }
     }
   };
 
@@ -365,6 +392,7 @@ export const DailyTravelPage: React.FC = () => {
           // No travel log created yet, but user planned stops for today
           setTodayLog(null);
           setReconcilingStops(data.stops || []);
+          cacheTodayTrip(user?.id || 'anon', todayStr, null, data.stops || []);
         } else {
           setTodayLog(data);
           if (data.start_km !== undefined) setStartKm(String(data.start_km));
@@ -379,11 +407,13 @@ export const DailyTravelPage: React.FC = () => {
           // Populate reconciling stops with existing stops
           if (data.stops && Array.isArray(data.stops) && data.stops.length > 0) {
             setReconcilingStops(data.stops);
+            cacheTodayTrip(user?.id || 'anon', todayStr, data, data.stops);
           } else {
             try {
               const planRes = await travelService.getPlan(todayStr);
               if (planRes.data?.data && planRes.data.data.length > 0) {
                 setReconcilingStops(planRes.data.data);
+                cacheTodayTrip(user?.id || 'anon', todayStr, data, planRes.data.data);
               }
             } catch (e) {
               console.error('Failed to load today plan fallback:', e);
@@ -396,6 +426,7 @@ export const DailyTravelPage: React.FC = () => {
           const planRes = await travelService.getPlan(todayStr);
           if (planRes.data?.data && planRes.data.data.length > 0) {
             setReconcilingStops(planRes.data.data);
+            cacheTodayTrip(user?.id || 'anon', todayStr, null, planRes.data.data);
           } else {
             setReconcilingStops([]);
           }
@@ -403,12 +434,107 @@ export const DailyTravelPage: React.FC = () => {
           setReconcilingStops([]);
         }
       }
-    } catch (err) {
-      console.error('Failed to load today travel log:', err);
+    } catch (err: any) {
+      console.warn('Network issue fetching today travel log, retrieving from local cache:', err);
+      const cached = getCachedTodayTrip(user?.id || 'anon', todayStr);
+      if (cached) {
+        if (cached.log) {
+          setTodayLog(cached.log);
+          if (cached.log.start_km !== undefined) setStartKm(String(cached.log.start_km));
+          if (cached.log.vehicle_type) setVehicleType(cached.log.vehicle_type);
+          if (cached.log.start_photo) setStartPhoto(cached.log.start_photo);
+          if (cached.log.end_km !== null && cached.log.end_km !== undefined) setEndKm(String(cached.log.end_km));
+          if (cached.log.visit_summary) setVisitSummary(cached.log.visit_summary);
+          if (cached.log.collection_summary) setCollectionSummary(cached.log.collection_summary);
+          if (cached.log.order_summary) setOrderSummary(cached.log.order_summary);
+        }
+        if (cached.stops && Array.isArray(cached.stops)) {
+          setReconcilingStops(cached.stops);
+        }
+      }
     } finally {
       setLoadingToday(false);
     }
   };
+
+  // Synchronize Outbox actions to ERP
+  const handleSyncOutbox = async () => {
+    if (isSyncingOutbox) return;
+    const currentOutbox = getOfflineOutbox();
+    if (currentOutbox.length === 0) {
+      toast({ title: 'Outbox Up to Date', description: 'All field logs are already synced with the server.' });
+      return;
+    }
+
+    try {
+      setIsSyncingOutbox(true);
+      const res = await syncOfflineOutbox();
+      setOutboxItems(getOfflineOutbox());
+      if (res.syncedCount > 0) {
+        toast({
+          title: '✅ Outbox Synced to ERP!',
+          description: `Successfully uploaded ${res.syncedCount} offline field record(s) to company servers.`,
+        });
+        await loadTodayLog();
+        await loadHistory();
+      }
+      if (res.errors.length > 0) {
+        toast({
+          title: 'Sync Warning',
+          description: res.errors[0],
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      console.error('Manual outbox sync failed:', err);
+      toast({
+        title: 'Sync Paused',
+        description: 'Network is still unstable. Your records remain safe in device outbox.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSyncingOutbox(false);
+    }
+  };
+
+  // Network listener & auto sync
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast({
+        title: '📶 Network Restored',
+        description: 'Internet connection is back. Attempting to sync offline outbox...',
+      });
+      handleSyncOutbox();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast({
+        title: '📡 Rural / Offline Mode Active',
+        description: 'No cellular network. All trip actions & visit punches will be safely saved in local Outbox.',
+      });
+    };
+
+    const handleOutboxUpdated = () => {
+      setOutboxItems(getOfflineOutbox());
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('offline-outbox-updated', handleOutboxUpdated);
+
+    // Initial check
+    if (typeof navigator !== 'undefined' && navigator.onLine && getOfflineOutbox().length > 0) {
+      handleSyncOutbox();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('offline-outbox-updated', handleOutboxUpdated);
+    };
+  }, []);
 
   // Load Tour Plan for Planner Tab
   const loadPlanForDate = async (date: string) => {
@@ -600,16 +726,18 @@ export const DailyTravelPage: React.FC = () => {
       return;
     }
 
+    const payload = {
+      start_km: Number(startKm),
+      vehicle_type: vehicleType,
+      start_photo: startPhoto,
+      start_location: gpsLocation || gpsStatus,
+      stops: reconcilingStops,
+      date: todayStr,
+    };
+
     try {
       setSubmitting(true);
-      const res = await travelService.startTrip({
-        start_km: Number(startKm),
-        vehicle_type: vehicleType,
-        start_photo: startPhoto,
-        start_location: gpsLocation || gpsStatus,
-        stops: reconcilingStops,
-        date: todayStr,
-      });
+      const res = await travelService.startTrip(payload);
       toast({ title: 'Trip Started! 🚀', description: `Recorded starting at ${startKm} KM (${vehicleType})` });
       const logData = res.data?.data || null;
       setTodayLog(logData);
@@ -618,9 +746,36 @@ export const DailyTravelPage: React.FC = () => {
       } else if (reconcilingStops.length > 0) {
         setReconcilingStops(reconcilingStops);
       }
+      cacheTodayTrip(user?.id || 'anon', todayStr, logData, logData?.stops || reconcilingStops);
       loadHistory();
     } catch (err: any) {
-      toast({ title: 'Failed to start trip', description: err.response?.data?.message || 'Server error', variant: 'destructive' });
+      if (isNetworkOfflineError(err)) {
+        enqueueOfflineAction('START_TRIP', payload, `Start Trip (${startKm} KM - ${vehicleType})`, todayStr);
+        const offlineLog: DailyTravelLogItem = {
+          id: `offline-trv-${Date.now()}`,
+          date: todayStr,
+          vehicle_type: vehicleType,
+          start_km: Number(startKm),
+          end_km: null,
+          total_km: 0,
+          start_photo: startPhoto,
+          start_location: gpsLocation || gpsStatus,
+          status: 'PENDING',
+          user_id: user?.id || '',
+          user_name: user?.name || '',
+          user_email: user?.email || '',
+          stops: reconcilingStops,
+        };
+        setTodayLog(offlineLog);
+        cacheTodayTrip(user?.id || 'anon', todayStr, offlineLog, reconcilingStops);
+        setOutboxItems(getOfflineOutbox());
+        toast({
+          title: '💾 Trip Started Offline (Outbox)',
+          description: `Starting KM (${startKm}) saved locally on device. You can punch dealer visits freely; will auto-sync when signal returns!`,
+        });
+      } else {
+        toast({ title: 'Failed to start trip', description: err.response?.data?.message || 'Server error', variant: 'destructive' });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -694,19 +849,21 @@ export const DailyTravelPage: React.FC = () => {
       return;
     }
 
+    const payload = {
+      end_km: Number(endKm),
+      end_photo: endPhoto,
+      end_location: gpsLocation || gpsStatus,
+      visit_summary: visitSummary.trim(),
+      collection_summary: collectionSummary.trim(),
+      order_summary: orderSummary.trim(),
+      so_notes: routeNotes.trim(),
+      stops: reconcilingStops,
+      date: todayStr,
+    };
+
     try {
       setSubmitting(true);
-      const res = await travelService.endTrip({
-        end_km: Number(endKm),
-        end_photo: endPhoto,
-        end_location: gpsLocation || gpsStatus,
-        visit_summary: visitSummary.trim(),
-        collection_summary: collectionSummary.trim(),
-        order_summary: orderSummary.trim(),
-        so_notes: routeNotes.trim(),
-        stops: reconcilingStops,
-        date: todayStr,
-      });
+      const res = await travelService.endTrip(payload);
 
       const data = res.data?.data;
       toast({ 
@@ -714,9 +871,35 @@ export const DailyTravelPage: React.FC = () => {
         description: `Logged ${data?.total_km} KM. Performance Score: ${data?.target_achievement_pct}% (${data?.performance_rating})` 
       });
       setTodayLog(data);
+      cacheTodayTrip(user?.id || 'anon', todayStr, data, reconcilingStops);
       loadHistory();
     } catch (err: any) {
-      toast({ title: 'Failed to end trip', description: err.response?.data?.message || 'Server error', variant: 'destructive' });
+      if (isNetworkOfflineError(err)) {
+        enqueueOfflineAction('END_TRIP', payload, `End Trip (${endKm} KM)`, todayStr);
+        const totalKmVal = Math.max(0, Number(endKm) - (todayLog?.start_km || 0));
+        const offlineLog: DailyTravelLogItem = {
+          ...(todayLog || ({} as any)),
+          end_km: Number(endKm),
+          total_km: totalKmVal,
+          end_photo: endPhoto,
+          end_location: gpsLocation || gpsStatus,
+          visit_summary: visitSummary.trim(),
+          collection_summary: collectionSummary.trim(),
+          order_summary: orderSummary.trim(),
+          so_notes: routeNotes.trim(),
+          status: 'PENDING',
+          stops: reconcilingStops,
+        };
+        setTodayLog(offlineLog);
+        cacheTodayTrip(user?.id || 'anon', todayStr, offlineLog, reconcilingStops);
+        setOutboxItems(getOfflineOutbox());
+        toast({
+          title: '🏁 Day Trip Completed Offline! 💾',
+          description: `Ending odometer (${endKm} KM) saved locally in device outbox. It will sync automatically when network is restored.`,
+        });
+      } else {
+        toast({ title: 'Failed to end trip', description: err.response?.data?.message || 'Server error', variant: 'destructive' });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -786,20 +969,31 @@ export const DailyTravelPage: React.FC = () => {
       toast({ title: 'Spot Visit Added! 📍', description: `Added ${newStop.dealer_name} to today's route.` });
       // Call backend to persist if trip active
       if (todayLog?.id) {
+        const payload = {
+          ...newStop,
+          date: todayStr,
+          is_unplanned: true,
+          visited: true,
+          actual_order_bags: Number(cleanBags) || 0,
+          actual_collection_value: Number(cleanCollection) || 0,
+        };
         try {
-          const resp = await travelService.addUnplannedStop({
-            ...newStop,
-            is_unplanned: true,
-            visited: true,
-            actual_order_bags: Number(cleanBags) || 0,
-            actual_collection_value: Number(cleanCollection) || 0,
-          });
+          const resp = await travelService.addUnplannedStop(payload);
           if (resp.data?.data?.id) {
             const savedStop = resp.data.data;
             setReconcilingStops(prev => prev.map(s => s.id === newStop.id ? savedStop : s));
           }
-        } catch (e) {
-          console.error('Failed to sync spot visit to backend:', e);
+        } catch (e: any) {
+          if (isNetworkOfflineError(e)) {
+            enqueueOfflineAction('ADD_STOP', payload, `Spot Visit: ${newStop.dealer_name}`, todayStr);
+            setOutboxItems(getOfflineOutbox());
+            toast({
+              title: '💾 Saved Offline (Outbox)',
+              description: `Spot visit for ${newStop.dealer_name} queued. Will sync when network is back.`,
+            });
+          } else {
+            console.error('Failed to sync spot visit to backend:', e);
+          }
         }
       }
     } else if (activeTab === 'PLANNER') {
@@ -812,19 +1006,30 @@ export const DailyTravelPage: React.FC = () => {
       toast({ title: 'Stop Added to Today Agenda', description: `${newStop.dealer_name} added.` });
       // If trip is active, persist to DB attached to travel_log
       if (todayLog?.id) {
+        const payload = {
+          ...newStop,
+          date: todayStr,
+          is_unplanned: false,
+          visited: false,
+          actual_status: 'PENDING',
+        };
         try {
-          const resp = await travelService.addUnplannedStop({
-            ...newStop,
-            is_unplanned: false,
-            visited: false,
-            actual_status: 'PENDING',
-          });
+          const resp = await travelService.addUnplannedStop(payload);
           if (resp.data?.data?.id) {
             const savedStop = resp.data.data;
             setReconcilingStops(prev => prev.map(s => s.id === newStop.id ? savedStop : s));
           }
-        } catch (e) {
-          console.error('Failed to sync planned stop to active trip:', e);
+        } catch (e: any) {
+          if (isNetworkOfflineError(e)) {
+            enqueueOfflineAction('ADD_STOP', payload, `Planned Stop: ${newStop.dealer_name}`, todayStr);
+            setOutboxItems(getOfflineOutbox());
+            toast({
+              title: '💾 Saved Offline (Outbox)',
+              description: `Stop for ${newStop.dealer_name} queued. Will sync when network is back.`,
+            });
+          } else {
+            console.error('Failed to sync planned stop to active trip:', e);
+          }
         }
       }
     }
@@ -853,18 +1058,29 @@ export const DailyTravelPage: React.FC = () => {
       return;
     }
 
+    const payload = {
+      date: plannerDate,
+      stops: plannerStops,
+    };
+
     try {
       setSavingPlan(true);
-      await travelService.savePlan({
-        date: plannerDate,
-        stops: plannerStops,
-      });
+      await travelService.savePlan(payload);
       toast({ title: 'Tour Plan Saved! 💾', description: `Saved ${plannerStops.length} stops for ${plannerDate}.` });
       if (plannerDate === todayStr) {
         loadTodayLog();
       }
     } catch (err: any) {
-      toast({ title: 'Failed to save plan', description: err.response?.data?.message || 'Server error', variant: 'destructive' });
+      if (isNetworkOfflineError(err)) {
+        enqueueOfflineAction('SAVE_PLAN', payload, `Tour Plan (${plannerDate} - ${plannerStops.length} stops)`, plannerDate);
+        setOutboxItems(getOfflineOutbox());
+        toast({
+          title: '💾 Saved Offline (Outbox)',
+          description: `Tour plan for ${plannerDate} saved on device. Will auto-sync when network returns.`,
+        });
+      } else {
+        toast({ title: 'Failed to save plan', description: err.response?.data?.message || 'Server error', variant: 'destructive' });
+      }
     } finally {
       setSavingPlan(false);
     }
@@ -1044,10 +1260,29 @@ export const DailyTravelPage: React.FC = () => {
         next_visit_date: punchForm.next_visit_date || null,
         visit_photo: punchForm.visit_photo,
         gps_location: punchForm.gps_location || gpsLocation || '',
+        date: todayStr,
       };
 
-      const res = await travelService.punchStopVisit(payload);
-      const savedStop = res.data?.data;
+      let savedStop: any = null;
+      try {
+        const res = await travelService.punchStopVisit(payload);
+        savedStop = res.data?.data;
+        toast({ 
+          title: 'Visit Outcome Punched! 🎯', 
+          description: `Recorded outcome for ${punchingStop.dealer_name}. Synced to company visit tracking.` 
+        });
+      } catch (apiErr: any) {
+        if (isNetworkOfflineError(apiErr)) {
+          enqueueOfflineAction('PUNCH_VISIT', payload, `Visit Punch: ${punchingStop.dealer_name} (${cleanBags} bags, ₹${cleanCollection})`, todayStr);
+          setOutboxItems(getOfflineOutbox());
+          toast({
+            title: '💾 Saved Offline (Outbox)!',
+            description: `Recorded outcome for ${punchingStop.dealer_name} locally on your device. Will auto-sync when network returns.`,
+          });
+        } else {
+          throw apiErr;
+        }
+      }
 
       // Update local reconciling stops list
       setReconcilingStops(prev => {
@@ -1065,6 +1300,7 @@ export const DailyTravelPage: React.FC = () => {
           gps_location: punchForm.gps_location,
           ...(savedStop || {}),
         };
+        cacheTodayTrip(user?.id || 'anon', todayStr, todayLog, next);
         return next;
       });
 
@@ -1079,11 +1315,6 @@ export const DailyTravelPage: React.FC = () => {
         if (visitedCount > 0) setVisitSummary(`${visitedCount} of ${updatedStops.length} counters visited`);
 
         return updatedStops;
-      });
-
-      toast({ 
-        title: 'Visit Outcome Punched! 🎯', 
-        description: `Recorded outcome for ${punchingStop.dealer_name}. Synced to company visit tracking.` 
       });
 
       setPunchingStop(null);
@@ -1126,9 +1357,29 @@ export const DailyTravelPage: React.FC = () => {
               <Compass className="w-5 h-5 sm:w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
-                Daily Field Travel &amp; Tour Plan
-              </h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
+                  Daily Field Travel &amp; Tour Plan
+                </h1>
+                {isOnline ? (
+                  <Badge className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-semibold flex items-center gap-1">
+                    <Wifi className="w-2.5 h-2.5" /> Online
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[10px] font-semibold flex items-center gap-1 animate-pulse">
+                    <WifiOff className="w-2.5 h-2.5" /> Rural Offline
+                  </Badge>
+                )}
+                {outboxItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowOutboxModal(true)}
+                    className="cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/30 transition-colors"
+                  >
+                    <Database className="w-2.5 h-2.5" /> {outboxItems.length} Saved in Outbox
+                  </button>
+                )}
+              </div>
               <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-none">
                 Plan stops &amp; targets, record odometer readings, reconcile dealer execution, and push to payroll
               </p>
@@ -1195,6 +1446,70 @@ export const DailyTravelPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* RURAL / OFFLINE OUTBOX RESILIENCE BANNER */}
+      {(!isOnline || outboxItems.length > 0) && (
+        <div className={cn(
+          "p-3.5 sm:p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm transition-all",
+          !isOnline 
+            ? "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200"
+            : "bg-blue-500/10 border-blue-500/30 text-blue-900 dark:text-blue-200"
+        )}>
+          <div className="flex items-start gap-3">
+            <div className={cn(
+              "p-2 rounded-lg shrink-0",
+              !isOnline ? "bg-amber-500/20 text-amber-700 dark:text-amber-300" : "bg-blue-500/20 text-blue-700 dark:text-blue-300"
+            )}>
+              {!isOnline ? <WifiOff className="w-5 h-5 animate-pulse" /> : <UploadCloud className="w-5 h-5" />}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm">
+                  {!isOnline ? "Rural Offline Mode Active (Zero Signal)" : "Offline Device Outbox Has Pending Logs"}
+                </span>
+                <Badge variant="outline" className={cn(
+                  "text-[10px] font-black uppercase px-1.5 py-0",
+                  !isOnline ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300" : "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300"
+                )}>
+                  {outboxItems.length} Pending
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {!isOnline 
+                  ? "You can start trips, punch dealer visit outcomes, and take photos without network interruption. Everything is preserved safely on your phone."
+                  : "Field visits and odometer records saved offline on this phone are ready to be uploaded into company ERP."
+                }
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            {outboxItems.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowOutboxModal(true)}
+                className="text-xs h-8 border-border bg-background"
+              >
+                <Eye className="w-3.5 h-3.5 mr-1" />
+                View Queue ({outboxItems.length})
+              </Button>
+            )}
+            <Button
+              size="sm"
+              disabled={isSyncingOutbox || !isOnline || outboxItems.length === 0}
+              onClick={handleSyncOutbox}
+              className={cn(
+                "text-xs h-8 font-bold text-white shadow-sm",
+                !isOnline ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary hover:bg-primary/90"
+              )}
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5 mr-1.5", isSyncingOutbox && "animate-spin")} />
+              {isSyncingOutbox ? "Syncing..." : "Sync Outbox Now"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: TODAY'S ACTIVE TRIP WORKFLOW */}
       {activeTab === 'TRIP' && (
@@ -3411,6 +3726,78 @@ export const DailyTravelPage: React.FC = () => {
               <Camera className="w-4 h-4" />
               <span>📸 Snap &amp; Stamp Photo</span>
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* OUTBOX QUEUE MODAL */}
+      <Dialog open={showOutboxModal} onOpenChange={setShowOutboxModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Database className="w-5 h-5 text-primary" />
+              Device Outbox Queue ({outboxItems.length})
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Actions saved in local storage while visiting rural or low-connectivity counters.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+            {outboxItems.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-xs">
+                <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500 mb-2 opacity-80" />
+                Device outbox is empty. All field logs are synced to company ERP.
+              </div>
+            ) : (
+              outboxItems.map((act) => (
+                <div key={act.id} className="p-2.5 rounded-lg border bg-muted/30 text-xs flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="font-semibold text-foreground truncate">{act.label}</div>
+                    <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                      <span>{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>•</span>
+                      <span className="font-mono uppercase text-[9px]">{act.type}</span>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[9px] bg-background text-amber-600 border-amber-300 shrink-0">
+                    Queued
+                  </Badge>
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter className="flex-row sm:justify-between items-center gap-2 border-t pt-3">
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+              {isOnline ? (
+                <>
+                  <Wifi className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Online</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Rural Offline</span>
+                </>
+              )}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowOutboxModal(false)}>
+                Close
+              </Button>
+              <Button
+                size="sm"
+                disabled={isSyncingOutbox || !isOnline || outboxItems.length === 0}
+                onClick={async () => {
+                  await handleSyncOutbox();
+                  setShowOutboxModal(false);
+                }}
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5 mr-1.5", isSyncingOutbox && "animate-spin")} />
+                Sync Outbox
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

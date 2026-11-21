@@ -37,13 +37,13 @@ def generate_tokens(user_id, email, role, company_id=None, schema_name='public')
         'role': role,
         'companyId': company_id,
         'schemaName': schema_name or 'public',
-        'exp': now + 7 * 24 * 60 * 60
+        'exp': now + 30 * 24 * 60 * 60  # 30 days session for field resilience
     }
     
     refresh_payload = {
         'userId': user_id,
         'schemaName': schema_name or 'public',
-        'exp': now + 7 * 24 * 60 * 60
+        'exp': now + 90 * 24 * 60 * 60  # 90 days refresh window
     }
     
     access_token = jwt.encode(access_payload, JWT_SECRET, algorithm='HS256')

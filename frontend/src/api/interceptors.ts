@@ -257,9 +257,16 @@ export function setupInterceptors(client: AxiosInstance) {
           }
           originalRequest.__isRetryAfterRefresh = true;
           return client.request(originalRequest);
-        } catch (refreshError) {
+        } catch (refreshError: any) {
           processQueue(refreshError, null);
-          forceLogout();
+          // Only force logout if the server explicitly rejected the token with 401 or 403
+          // NEVER force logout on network drop, timeout, or server downtime in rural areas
+          const refreshStatus = refreshError.response?.status;
+          if (refreshStatus === 401 || refreshStatus === 403) {
+            forceLogout();
+          } else {
+            console.warn('[AUTH] Token refresh paused due to network/connectivity interruption. Retaining user session on device.');
+          }
           return Promise.reject(normalizeApiError(error));
         } finally {
           isRefreshing = false;
