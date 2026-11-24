@@ -6,7 +6,7 @@ export const useHREmployees = () => {
   return useQuery({
     queryKey: ['hr_employees'],
     queryFn: async () => {
-      const res = await api.get('/hr/employees');
+      const res = await api.get('/hr/employees?all=true');
       return (res.data?.data || res.data || []) as any[];
     },
   });
@@ -60,7 +60,8 @@ export const useHREmployeeMutations = () => {
       toast({ title: 'Success', description: 'Employee saved successfully' });
     },
     onError: (error: any) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      const msg = error.response?.data?.message || error.message || 'Failed to save employee';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   });
 
@@ -83,10 +84,30 @@ export const useHREmployeeMutations = () => {
     }
   });
 
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: string | number, active?: boolean }) => {
+      const res = await api.post(`/hr/employees/${id}/toggle-active`, { active });
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['hr_employees'] });
+      toast({ 
+        title: 'Status Updated', 
+        description: variables.active === false 
+          ? 'Employee marked as Inactive (Relieved / Left Company).' 
+          : 'Employee marked as Active (Working in company).' 
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Error', description: err.response?.data?.message || err.message, variant: 'destructive' });
+    }
+  });
+
   return {
     saveEmployee: saveMutation.mutateAsync,
     deleteEmployee: deleteMutation.mutateAsync,
     changeStatus: changeStatusMutation.mutateAsync,
+    toggleActive: toggleActiveMutation.mutateAsync,
   };
 };
 

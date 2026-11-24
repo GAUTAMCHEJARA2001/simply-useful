@@ -28,7 +28,8 @@ from api.models import (
     Order, Orderitem, Product, PaymentReceipt, Expense,
     Dealer, Distributor, DailyTravelLog, Visit, Stocktransaction,
     CreditNoteDiscountRequest, Labour, SalarySlip, DailyAttendance,
-    LeaveRecord, PartyManualLedgerEntry, Bom, Bomitem
+    LeaveRecord, PartyManualLedgerEntry, Bom, Bomitem,
+    Purchase, Purchaseitem
 )
 from core.models import User, Company, Warehouse
 from api.services.costing_service import compute_product_warehouse_costs, compute_bom_cost_breakdown
@@ -714,6 +715,197 @@ def director_boardroom_command_center(request):
             'surplus': round(m_sales - m_cogs, 2),
         })
 
+    # 16. Today's Live Plant & Operations Pulse (Production, Consumption, Purchases, Other Expenses)
+    today_start_dt, today_end_dt = _ist_day_bounds(today, today)
+
+    # 16a. Today Production
+    today_prod_qs = Stocktransaction.objects.filter(
+        transactiontype='PRODUCTION',
+        is_deleted=False,
+        createdat__range=(today_start_dt, today_end_dt)
+    ).exclude(reason='REJECTED')
+    if company_id:
+        today_prod_qs = today_prod_qs.filter(productid__companyid_id=company_id)
+
+    today_prod_units = float(today_prod_qs.aggregate(s=Sum('quantity'))['s'] or 0.0)
+    today_prod_batches = today_prod_qs.count()
+
+    today_prod_by_prod = {}
+    for st in today_prod_qs.select_related('productid'):
+        p_id = st.productid_id
+        if p_id not in today_prod_by_prod:
+            today_prod_by_prod[p_id] = {
+                'product_id': str(p_id),
+                'name': st.productid.name if st.productid else 'Finished Product',
+                'code': st.productid.productcode if (st.productid and st.productid.productcode) else '',
+                'units': 0.0,
+                'batches': 0.0,
+            }
+        today_prod_by_prod[p_id]['units'] += float(st.quantity or 0.0)
+        today_prod_by_prod[p_id]['batches'] += float(st.batches or 1.0)
+
+    today_prod_items = sorted(list(today_prod_by_prod.values()), key=lambda x: x['units'], reverse=True)
+
+    # 16b. Today Consumption in Production
+    today_cons_qs = Stocktransaction.objects.filter(
+        transactiontype='CONSUMED',
+        is_deleted=False,
+        createdat__range=(today_start_dt, today_end_dt)
+    ).exclude(reason='REJECTED')
+    if company_id:
+        today_cons_qs = today_cons_qs.filter(productid__companyid_id=company_id)
+
+    today_cons_kg = 0.0
+    today_cons_val = 0.0
+    today_cons_by_prod = {}
+    for cst in today_cons_qs.select_related('productid', 'productid__unitid'):
+        p_id = cst.productid_id
+        qty_abs = abs(float(cst.quantity or 0.0))
+        today_cons_kg += qty_abs
+        uc_info = cost_map_by_id.get(p_id, {})
+        uc = float(uc_info.get('effectiveCost') or 0.0)
+        item_val = qty_abs * uc
+        today_cons_val += item_val
+
+        if p_id not in today_cons_by_prod:
+            unit_name = cst.productid.unitid.name if (cst.productid and getattr(cst.productid, 'unitid', None)) else 'KG'
+            today_cons_by_prod[p_id] = {
+                'product_id': str(p_id),
+                'name': cst.productid.name if cst.productid else (uc_info.get('name') or 'Raw Material'),
+                'code': cst.productid.productcode if (cst.productid and cst.productid.productcode) else '',
+                'qty': 0.0,
+                'unit': unit_name,
+                'rate': round(uc, 2),
+                'total_val': 0.0,
+            }
+        today_cons_by_prod[p_id]['qty'] += qty_abs
+        today_cons_by_prod[p_id]['total_val'] += item_val
+
+    today_cons_items = sorted(list(today_cons_by_prod.values()), key=lambda x: x['total_val'], reverse=True)
+    for item in today_cons_items:
+        item['qty'] = round(item['qty'], 2)
+        item['total_val'] = round(item['total_val'], 2)
+
+    # 16c. Today Purchases (Inward Goods & Raw Materials)
+    today_purch_qs = Purchase.objects.filter(
+        Q(date__range=(today_start_dt, today_end_dt)) | Q(createdat__range=(today_start_dt, today_end_dt))
+    )
+    if company_id:
+        today_purch_qs = today_purch_qs.filter(companyid_id=company_id)
+
+    today_purch_total = float(today_purch_qs.aggregate(s=Sum('grandtotal'))['s'] or 0.0)
+    today_purch_count = today_purch_qs.count()
+
+    today_purch_ids = list(today_purch_qs.values_list('id', flat=True))
+    today_pitems = list(Purchaseitem.objects.filter(purchaseid_id__in=today_purch_ids).select_related('productid'))
+
+    pitems_by_purch = {}
+    top_purch_items = []
+    for pi in today_pitems:
+        pitems_by_purch.setdefault(pi.purchaseid_id, []).append(pi)
+        top_purch_items.append({
+            'product_name': pi.productname or (pi.productid.name if pi.productid else 'Material'),
+            'qty': pi.qty,
+            'rate': round(float(pi.rate or 0.0), 2),
+            'total': round(float(pi.total or 0.0), 2),
+        })
+
+    today_purch_bills = []
+    for p in today_purch_qs.select_related('supplierid')[:30]:
+        items_list = pitems_by_purch.get(p.id, [])
+        preview_parts = [f"{it.productname} ({it.qty})" for it in items_list[:3]]
+        if len(items_list) > 3:
+            preview_parts.append(f"+{len(items_list)-3} more")
+        preview_str = ", ".join(preview_parts) if preview_parts else 'Inward Goods'
+
+        today_purch_bills.append({
+            'id': str(p.id),
+            'purchase_id': p.purchaseid or p.challannumber or str(p.id)[:8],
+            'vendor_name': p.vendorname or (p.supplierid.name if p.supplierid else 'Direct Supplier'),
+            'challan_number': p.challannumber or '',
+            'vehicle_number': p.vehiclenumber or '',
+            'total': round(float(p.grandtotal or 0.0), 2),
+            'status': p.status or 'RECEIVED',
+            'items_count': len(items_list),
+            'items_preview': preview_str,
+        })
+
+    top_purch_items = sorted(top_purch_items, key=lambda x: x['total'], reverse=True)
+
+    # 16d. Today Other Expenses (Travel, Factory, Utilities, Miscellaneous)
+    today_exp_qs = Expense.objects.filter(
+        Q(date__range=(today_start_dt, today_end_dt)) | Q(createdat__range=(today_start_dt, today_end_dt))
+    )
+    if company_id:
+        today_exp_qs = today_exp_qs.filter(companyid_id=company_id)
+
+    today_exp_total = float(today_exp_qs.aggregate(s=Sum('amount'))['s'] or 0.0)
+    today_exp_approved = float(today_exp_qs.filter(status__iexact='APPROVED').aggregate(s=Sum('amount'))['s'] or 0.0)
+    today_exp_pending = float(today_exp_qs.filter(status__iexact='PENDING').aggregate(s=Sum('amount'))['s'] or 0.0)
+    today_exp_count = today_exp_qs.count()
+
+    today_exp_by_cat = {}
+    for exp in today_exp_qs:
+        raw_cat = (exp.category or 'General / Other').strip()
+        cat_label = raw_cat.title() if not raw_cat.isupper() else raw_cat
+        amt = float(exp.amount or 0.0)
+        if cat_label not in today_exp_by_cat:
+            today_exp_by_cat[cat_label] = {'category': cat_label, 'amount': 0.0, 'count': 0}
+        today_exp_by_cat[cat_label]['amount'] += amt
+        today_exp_by_cat[cat_label]['count'] += 1
+
+    today_exp_categories = sorted(list(today_exp_by_cat.values()), key=lambda x: x['amount'], reverse=True)
+    for cat in today_exp_categories:
+        cat['amount'] = round(cat['amount'], 2)
+
+    recent_expenses = []
+    for exp in today_exp_qs.select_related('soemail')[:30]:
+        user_display = (
+            exp.soemail.name if exp.soemail and getattr(exp.soemail, 'name', None)
+            else (exp.soemail.email.split('@')[0].upper() if exp.soemail and getattr(exp.soemail, 'email', None)
+            else (str(exp.soemail_id) if exp.soemail_id else 'Staff'))
+        )
+        recent_expenses.append({
+            'id': str(exp.id),
+            'category': exp.category or 'General',
+            'amount': round(float(exp.amount or 0.0), 2),
+            'status': (exp.status or 'PENDING').upper(),
+            'user_name': user_display,
+            'remarks': exp.remarks or '',
+        })
+
+    today_pulse_data = {
+        'date': today.strftime('%Y-%m-%d'),
+        'date_display': today.strftime('%d %b %Y'),
+        'production': {
+            'units': round(today_prod_units, 1),
+            'batches': today_prod_batches,
+            'product_count': len(today_prod_by_prod),
+            'items': today_prod_items[:15],
+        },
+        'consumption': {
+            'total_kg': round(today_cons_kg, 1),
+            'total_val': round(today_cons_val, 2),
+            'materials_count': len(today_cons_by_prod),
+            'items': today_cons_items[:15],
+        },
+        'purchases': {
+            'total_val': round(today_purch_total, 2),
+            'bills_count': today_purch_count,
+            'items_count': len(top_purch_items),
+            'bills': today_purch_bills,
+            'top_items': top_purch_items[:15],
+        },
+        'other_expenses': {
+            'total_val': round(today_exp_total, 2),
+            'approved_val': round(today_exp_approved, 2),
+            'pending_val': round(today_exp_pending, 2),
+            'count': today_exp_count,
+            'categories': today_exp_categories,
+            'recent_expenses': recent_expenses,
+        }
+    }
+
     return send_success({
         'meta': {
             'period': request.query_params.get('period') or 'mtd',
@@ -789,4 +981,5 @@ def director_boardroom_command_center(request):
         'top_margin_products': top_5_margin_skus,
         'waterfall': waterfall_breakdown,
         'trend': six_months_trend,
+        'today_pulse': today_pulse_data,
     }, 'Director boardroom intelligence computed successfully')

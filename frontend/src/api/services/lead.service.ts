@@ -39,4 +39,13 @@ export const leadService = {
 
   getDashboardMetrics: (params?: { start?: string; end?: string }) =>
     api.get(`${API_ENDPOINTS.LEADS}/dashboard`, { params }),
+
+  getUnifiedHub: (params?: { so_id?: string; month?: number; year?: number }) =>
+    api.get(`${API_ENDPOINTS.LEADS}/unified-hub`, { params }),
+
+  syncInquiries: (inquiries: any[]) =>
+    api.post(`${API_ENDPOINTS.LEADS}/sync-inquiries`, { inquiries }),
+
+  quickDealerLookup: (q: string) =>
+    api.get(`${API_ENDPOINTS.LEADS}/dealer-quick-lookup`, { params: { q } }),
 };

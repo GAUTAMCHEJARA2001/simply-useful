@@ -32,8 +32,18 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         data = request.data.copy()
         company_id = get_company_id(request)
 
+        photo_file = request.FILES.get('photo') or request.FILES.get('receipt')
         photo_data = data.get('photo')
-        if photo_data and str(photo_data).startswith('data:image'):
+
+        if photo_file:
+            import cloudinary.uploader
+            try:
+                photo_file.seek(0)
+                upload_res = cloudinary.uploader.upload(photo_file, folder='expense-receipts')
+                data['photo'] = upload_res.get('secure_url')
+            except Exception as e:
+                print('[EXPENSE FILE UPLOAD] Cloudinary upload warning:', e)
+        elif photo_data and str(photo_data).startswith('data:image'):
             import cloudinary.uploader
             try:
                 upload_res = cloudinary.uploader.upload(photo_data, folder='expense-receipts')

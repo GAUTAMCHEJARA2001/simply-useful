@@ -228,7 +228,12 @@ def list_sales_targets(request):
         category_targets = st.category_targets if st else []
         
         raw_custom_targets = st.custom_targets if (st and st.custom_targets) else []
-        incentive_slabs = st.incentive_slabs if (st and st.incentive_slabs) else []
+        DEFAULT_INCENTIVE_SLABS = [
+            {'label': 'Base Tier (80-99%)', 'min_pct': 80, 'max_pct': 99.9, 'rate_per_bag': 3.0},
+            {'label': 'Target Achiever (100-119%)', 'min_pct': 100, 'max_pct': 119.9, 'rate_per_bag': 6.0},
+            {'label': 'Super Achiever (120%+)', 'min_pct': 120, 'max_pct': 9999.0, 'rate_per_bag': 10.0}
+        ]
+        incentive_slabs = st.incentive_slabs if (st and st.incentive_slabs and len(st.incentive_slabs) > 0) else DEFAULT_INCENTIVE_SLABS
         new_dealer_bounty = float(st.new_dealer_bounty if st else 500.0)
         min_collection_pct = float(st.min_collection_pct_for_incentive if st else 70.0)
 

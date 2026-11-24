@@ -665,3 +665,354 @@ def report_stock_integrity_audit(request):
         'message': '100% Stock Integrity Verified across all products' if is_healthy else f'Discrepancies detected in {len(discrepancies)} products'
     }, 'Stock audit complete')
 
+
+@api_view(['GET'])
+def report_inventory_suggestions(request):
+    """
+    Dynamic Inventory Intelligence & Suggestion Engine.
+    Computes real, live database-driven recommendations:
+      1. Sales Velocity & Days-of-Stock Run Rate (rolling 30-day demand from Orderitem)
+      2. Pending Unfulfilled Demand & Deficit Analysis (from Approved/Partially Dispatched/Pending orders)
+      3. Dynamic Production Recommendations with BOM Recipe Validation (checks raw material bottlenecks)
+      4. Material Requirements Planning (MRP) Reorder Recommendations for Raw Materials & Procured Goods
+      5. Capital Optimization: Identifies Slow-Moving / Dead Stock with capital locked in INR
+      6. Dispatch Delivery Urgency & Logistics Bottlenecks
+      7. Real Quality / Negative Stock Anomalies & Pending Production Batches
+    """
+    from api.models import Bom, Bomitem
+    company_id = _get_company_id(request)
+    now = timezone.now()
+    d30 = now - datetime.timedelta(days=30)
+    d60 = now - datetime.timedelta(days=60)
+
+    # 1. Fetch live stock for all products
+    all_stocks = _compute_all_product_stocks(company_id, request=request)
+    stock_by_id = {s['id']: s for s in all_stocks}
+    stock_by_name = {s['productName'].strip().lower(): s for s in all_stocks if s.get('productName')}
+
+    # 2. Compute 30-day sales volume & velocity per product
+    sales_30d_qs = Orderitem.objects.filter(
+        orderid__companyid_id=company_id,
+        orderid__status__in=['Approved', 'Partially Dispatched', 'Dispatched', 'Completed'],
+        orderid__createdat__gte=d30
+    ).values('productid_id').annotate(total_sold=Sum('qty'))
+    sales_30d = {row['productid_id']: float(row['total_sold'] or 0.0) for row in sales_30d_qs}
+
+    # 3. Compute 60-day sales for dead stock detection
+    sales_60d_pids = set(Orderitem.objects.filter(
+        orderid__companyid_id=company_id,
+        orderid__status__in=['Approved', 'Partially Dispatched', 'Dispatched', 'Completed'],
+        orderid__createdat__gte=d60
+    ).values_list('productid_id', flat=True))
+
+    # 4. Aggregate active unfulfilled demand from orders
+    pending_orders_qs = Order.objects.filter(
+        companyid_id=company_id,
+        status__in=['Approved', 'Partially Dispatched', 'Pending']
+    ).prefetch_related('orderitem_set')
+
+    pending_demand_by_pid = {}
+    pending_order_list = []
+
+    for o in pending_orders_qs:
+        o_items = list(o.orderitem_set.all())
+        all_ready = True
+        has_items = False
+        for it in o_items:
+            has_items = True
+            pid = it.productid_id
+            needed = max(0.0, float(it.qty or 0) - float(it.sentqty or 0))
+            if needed > 0 and pid:
+                pending_demand_by_pid[pid] = pending_demand_by_pid.get(pid, 0.0) + needed
+                p_stock = stock_by_id.get(pid, {}).get('currentStock', 0.0)
+                if p_stock < needed:
+                    all_ready = False
+
+        exp_date = getattr(o, 'expecteddeliverydate', None) or getattr(o, 'dispatchdate', None) or getattr(o, 'date', None)
+        urgency_label = 'NORMAL'
+        diff_days = None
+        if exp_date:
+            today_date = datetime.date.today()
+            if isinstance(exp_date, datetime.datetime):
+                exp_date = exp_date.date()
+            diff_days = (exp_date - today_date).days
+            if diff_days < 0:
+                urgency_label = 'OVERDUE'
+            elif diff_days == 0:
+                urgency_label = 'DUE_TODAY'
+            elif diff_days <= 3:
+                urgency_label = 'URGENT'
+
+        party_name = o.partyname or (o.dealerid.name if getattr(o, 'dealerid', None) else 'Customer')
+        pending_order_list.append({
+            'id': o.id,
+            'orderId': o.orderid,
+            'partyName': party_name,
+            'grandTotal': float(o.grandtotal or 0.0),
+            'status': o.status,
+            'expectedDeliveryDate': exp_date.isoformat() if exp_date else None,
+            'urgency': urgency_label,
+            'daysDiff': diff_days,
+            'allStockReady': all_ready and has_items,
+            'itemsCount': len(o_items)
+        })
+
+    # 5. Load BOMs and BOM items
+    boms = Bom.objects.filter(companyid_id=company_id)
+    bom_by_sku = {b.productcode: b for b in boms if b.productcode}
+    bom_items_by_bomid = {}
+    for bi in Bomitem.objects.filter(bomid__in=boms):
+        bom_items_by_bomid.setdefault(bi.bomid_id, []).append(bi)
+
+    # 6. Dynamic Production Suggestions
+    production_suggestions = []
+    # 7. Dynamic Reorder Suggestions
+    reorder_suggestions = []
+    # 8. Dead / Slow Moving Stock
+    slow_moving_stock = []
+
+    for s in all_stocks:
+        pid = s['id']
+        sku = s.get('sku') or ''
+        name = s.get('productName') or ''
+        curr_stock = float(s.get('currentStock') or 0.0)
+        min_stock = float(s.get('minimumStock') or s.get('minStock') or 0.0)
+        rate = float(s.get('rate') or 0.0)
+        cat_name = s.get('categoryName') or ''
+        cat_lower = cat_name.lower()
+
+        sold_30d = sales_30d.get(pid, 0.0)
+        daily_velocity = round(sold_30d / 30.0, 2)
+        days_of_stock = round(curr_stock / daily_velocity, 1) if daily_velocity > 0 else (999.0 if curr_stock > 0 else 0.0)
+        demand = pending_demand_by_pid.get(pid, 0.0)
+
+        has_bom = sku in bom_by_sku
+        bom = bom_by_sku.get(sku)
+
+        is_raw_or_packing = (
+            'row' in cat_lower or 'raw' in cat_lower or 'packing' in cat_lower or
+            'chemical' in cat_lower or 'polymer' in cat_lower or 'pigment' in cat_lower or
+            'material' in cat_lower or 'powder' in cat_lower
+        )
+
+        # Production suggestion check
+        if has_bom or (not is_raw_or_packing and (curr_stock < min_stock or demand > curr_stock)):
+            if curr_stock < min_stock or demand > curr_stock or (daily_velocity > 0 and days_of_stock <= 7):
+                deficit = max(0.0, demand - curr_stock)
+                buffer = max(0.0, min_stock - curr_stock)
+                rec_batch = max(deficit + (min_stock * 0.25), buffer, 25.0)
+                if rec_batch > 50:
+                    rec_batch = round(rec_batch / 10.0) * 10.0
+                else:
+                    rec_batch = round(rec_batch / 5.0) * 5.0
+
+                ready_to_produce = True
+                bottlenecks = []
+                if bom:
+                    b_items = bom_items_by_bomid.get(bom.id, [])
+                    out_qty = float(bom.outputquantity or 1.0) or 1.0
+                    multiplier = rec_batch / out_qty
+                    for bi in b_items:
+                        req_amt = float(bi.qty or 0.0) * multiplier
+                        m_stock_info = stock_by_name.get(bi.materialname.strip().lower())
+                        m_stock = float(m_stock_info.get('currentStock', 0.0)) if m_stock_info else 0.0
+                        if m_stock < req_amt:
+                            ready_to_produce = False
+                            bottlenecks.append({
+                                'materialName': bi.materialname,
+                                'required': round(req_amt, 1),
+                                'available': round(m_stock, 1),
+                                'shortage': round(req_amt - m_stock, 1),
+                                'unit': bi.unit
+                            })
+
+                urgency = 'CRITICAL' if (demand > curr_stock or curr_stock <= 0) else ('HIGH' if days_of_stock <= 5 else 'MEDIUM')
+                production_suggestions.append({
+                    'productId': pid,
+                    'productCode': sku,
+                    'productName': name,
+                    'categoryName': cat_name,
+                    'currentStock': curr_stock,
+                    'minimumStock': min_stock,
+                    'pendingDemand': demand,
+                    'dailyVelocity': daily_velocity,
+                    'daysOfStock': days_of_stock if days_of_stock < 900 else None,
+                    'suggestedBatchQty': rec_batch,
+                    'hasBom': has_bom,
+                    'readyToProduce': ready_to_produce,
+                    'bottlenecks': bottlenecks,
+                    'urgency': urgency
+                })
+
+        # Purchase reorder suggestion check
+        elif is_raw_or_packing or curr_stock < min_stock:
+            if curr_stock < min_stock:
+                rec_reorder = max(min_stock * 1.5 - curr_stock, daily_velocity * 15, 20.0)
+                rec_reorder = round(rec_reorder / 5.0) * 5.0
+                est_cost = round(rec_reorder * rate, 2)
+                urgency = 'CRITICAL' if curr_stock <= 0 else 'HIGH'
+                reorder_suggestions.append({
+                    'productId': pid,
+                    'productCode': sku,
+                    'productName': name,
+                    'categoryName': cat_name,
+                    'currentStock': curr_stock,
+                    'minimumStock': min_stock,
+                    'unit': s.get('unit', 'Bags'),
+                    'rate': rate,
+                    'suggestedReorderQty': rec_reorder,
+                    'estimatedCost': est_cost,
+                    'dailyVelocity': daily_velocity,
+                    'urgency': urgency
+                })
+
+        # Dead / slow moving stock check
+        if curr_stock > 10 and rate > 0 and pid not in sales_60d_pids:
+            cap_locked = round(curr_stock * rate, 2)
+            if cap_locked >= 10000:
+                slow_moving_stock.append({
+                    'productId': pid,
+                    'productCode': sku,
+                    'productName': name,
+                    'categoryName': cat_name,
+                    'currentStock': curr_stock,
+                    'rate': rate,
+                    'capitalLocked': cap_locked,
+                    'action': 'PROMO_DISCOUNT' if curr_stock > 500 else 'DEALER_BUNDLE'
+                })
+
+    # Sort suggestions
+    production_suggestions.sort(
+        key=lambda x: (0 if x['urgency'] == 'CRITICAL' else 1 if x['urgency'] == 'HIGH' else 2, -x['pendingDemand'])
+    )
+    reorder_suggestions.sort(
+        key=lambda x: (0 if x['urgency'] == 'CRITICAL' else 1, -x['estimatedCost'])
+    )
+    slow_moving_stock.sort(key=lambda x: -x['capitalLocked'])
+
+    # 9. Real Quality Checks & Negative Stocks
+    real_negative_stocks = [
+        {
+            'productId': s['id'],
+            'productCode': s.get('sku'),
+            'productName': s['productName'],
+            'currentStock': s['currentStock'],
+            'type': 'NEGATIVE_STOCK'
+        }
+        for s in all_stocks if float(s.get('currentStock') or 0.0) < 0
+    ]
+
+    pending_qa_productions = list(Stocktransaction.objects.filter(
+        transactiontype='PRODUCTION',
+        reason='PENDING_APPROVAL'
+    ).select_related('productid', 'warehouseid').values(
+        'id', 'productid__id', 'productid__name', 'productid__productcode',
+        'quantity', 'warehouseid__name', 'createdat'
+    ))
+
+    # 10. Synthesize Top Decision Support Recommendations (Dynamic Executive Cards)
+    recommendations = []
+
+    # Rec 1: Top Production Shortages
+    for ps in production_suggestions[:2]:
+        bottleneck_note = (
+            f" (⚠️ Material bottleneck: {ps['bottlenecks'][0]['materialName']} short by {ps['bottlenecks'][0]['shortage']})"
+            if not ps['readyToProduce'] and ps['bottlenecks'] else " (🟢 Raw materials in stock)"
+        )
+        recommendations.append({
+            'id': f"rec-prod-{ps['productId']}",
+            'type': 'produce',
+            'category': 'Production Scaling' if ps['pendingDemand'] == 0 else 'Demand Deficit',
+            'title': f"Scale {ps['productName']}: {int(ps['suggestedBatchQty'])} bags",
+            'description': f"Stock is {ps['currentStock']} vs min {ps['minimumStock']} bags. Pending customer demand: {ps['pendingDemand']} bags.{bottleneck_note}",
+            'urgency': ps['urgency'],
+            'actionText': f"Produce {int(ps['suggestedBatchQty'])} Bags",
+            'suggestedQty': ps['suggestedBatchQty'],
+            'target': {
+                'id': ps['productId'],
+                'name': ps['productName'],
+                'productCode': ps['productCode'],
+                'availableStock': ps['currentStock'],
+                'minimumStock': ps['minimumStock']
+            }
+        })
+
+    # Rec 2: Top Purchase Reorder
+    for rs in reorder_suggestions[:2]:
+        recommendations.append({
+            'id': f"rec-pur-{rs['productId']}",
+            'type': 'purchase',
+            'category': 'Material Reorder (MRP)',
+            'title': f"Procure {rs['productName']}: {int(rs['suggestedReorderQty'])} {rs['unit']}",
+            'description': f"Stock depleted to {rs['currentStock']} {rs['unit']} (Reserve: {rs['minimumStock']}). Estimated replenishment cost: ₹{rs['estimatedCost']:,.0f}.",
+            'urgency': rs['urgency'],
+            'actionText': f"Order {int(rs['suggestedReorderQty'])} {rs['unit']}",
+            'suggestedQty': rs['suggestedReorderQty'],
+            'target': {
+                'id': rs['productId'],
+                'name': rs['productName'],
+                'productCode': rs['productCode'],
+                'availableStock': rs['currentStock'],
+                'minimumStock': rs['minimumStock'],
+                'rate': rs['rate'],
+                'unit': rs['unit']
+            }
+        })
+
+    # Rec 3: Top Urgent Dispatch
+    urgent_orders = [o for o in pending_order_list if o['urgency'] in ['OVERDUE', 'DUE_TODAY'] or (o['allStockReady'] and o['grandTotal'] > 30000)]
+    urgent_orders.sort(key=lambda x: (0 if x['urgency'] == 'OVERDUE' else 1 if x['urgency'] == 'DUE_TODAY' else 2, -x['grandTotal']))
+    if urgent_orders:
+        top_o = urgent_orders[0]
+        status_txt = "🔥 Delivery Overdue" if top_o['urgency'] == 'OVERDUE' else ("⚡ Due Today" if top_o['urgency'] == 'DUE_TODAY' else "📦 Stock 100% Ready")
+        recommendations.append({
+            'id': f"rec-disp-{top_o['id']}",
+            'type': 'dispatch',
+            'category': 'Logistics Priority',
+            'title': f"Urgent Dispatch: {top_o['partyName']}",
+            'description': f"Order #{top_o['orderId']} (₹{top_o['grandTotal']:,.0f}) is {status_txt}. {'Warehouse inventory is ready for immediate truck loading.' if top_o['allStockReady'] else 'Allocate stock and assign driver vehicle.'}",
+            'urgency': 'CRITICAL' if top_o['urgency'] == 'OVERDUE' else 'HIGH',
+            'actionText': "Dispatch Order Now",
+            'suggestedQty': 0,
+            'target': top_o
+        })
+
+    # Rec 4: Capital Optimization (Dead Stock)
+    if slow_moving_stock:
+        top_dead = slow_moving_stock[0]
+        recommendations.append({
+            'id': f"rec-dead-{top_dead['productId']}",
+            'type': 'discount',
+            'category': 'Capital Optimization',
+            'title': f"Liquidate {top_dead['productName']}",
+            'description': f"₹{top_dead['capitalLocked']:,.0f} locked in {int(top_dead['currentStock'])} units with zero sales in 60+ days. Run dealer clearance incentive to free working capital.",
+            'urgency': 'MEDIUM',
+            'actionText': "Create Dealer Incentive",
+            'suggestedQty': top_dead['currentStock'],
+            'target': top_dead
+        })
+
+    total_capital_locked = sum(x['capitalLocked'] for x in slow_moving_stock)
+
+    return send_success({
+        'summary': {
+            'totalRecommendations': len(recommendations),
+            'productionShortagesCount': len(production_suggestions),
+            'reorderItemsCount': len(reorder_suggestions),
+            'slowMovingCount': len(slow_moving_stock),
+            'capitalLockedTotal': total_capital_locked,
+            'urgentDispatchesCount': len(urgent_orders) if urgent_orders else 0,
+            'qaPendingCount': len(pending_qa_productions) + len(real_negative_stocks)
+        },
+        'recommendations': recommendations[:4],
+        'productionSuggestions': production_suggestions[:10],
+        'reorderSuggestions': reorder_suggestions[:10],
+        'slowMovingStock': slow_moving_stock[:10],
+        'pendingOrders': pending_order_list[:15],
+        'qualityAnomalies': {
+            'negativeStocks': real_negative_stocks,
+            'pendingQaProductions': pending_qa_productions
+        }
+    }, 'Dynamic inventory suggestions computed')
+
+

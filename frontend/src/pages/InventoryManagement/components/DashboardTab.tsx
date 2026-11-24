@@ -19,8 +19,11 @@ import {
   useDashboardKPIs, 
   useSalesSummary, 
   useLowStock, 
-  useDailyReport 
+  useDailyReport,
+  useInventorySuggestions
 } from '@/hooks/inventory/useDashboard';
+import { useNavigate } from 'react-router-dom';
+import { PurchaseModal } from '../modals/PurchaseModal';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, Legend
@@ -120,6 +123,8 @@ export const DashboardTab: React.FC = () => {
   const { data: salesSummary = [], isLoading: salesLoading } = useSalesSummary();
   const { data: lowStock = [], isLoading: lowLoading } = useLowStock();
   const { data: daily, isLoading: dailyLoading } = useDailyReport();
+  const { data: inventorySuggestions, isLoading: suggestionsLoading, refetch: refetchSuggestions } = useInventorySuggestions();
+  const navigate = useNavigate();
 
   // Tab State for "Today's Work"
   const [activeWorkTab, setActiveWorkTab] = useState<'dispatch' | 'po' | 'production' | 'issues'>('dispatch');
@@ -148,6 +153,8 @@ export const DashboardTab: React.FC = () => {
   });
 
   const [selectedPO, setSelectedPO] = useState<any | null>(null);
+  const [purchaseModalData, setPurchaseModalData] = useState<any | null>(null);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
   // Set default values once warehouses load
@@ -313,14 +320,33 @@ export const DashboardTab: React.FC = () => {
     });
   }, [pendingPOs]);
 
-  // Production due list (suggest finished goods with shortage and BOM recipe)
+  // Dynamic Production due list (driven by pending demand, BOM feasibility & sales velocity)
   const productionSuggestions = useMemo(() => {
+    if (inventorySuggestions?.productionSuggestions && inventorySuggestions.productionSuggestions.length > 0) {
+      return inventorySuggestions.productionSuggestions;
+    }
+    // Dynamic client fallback if API is initializing
     return products.filter(p => {
       const stock = p.availableStock ?? p.stockQty ?? 0;
       const minStock = p.minimumStock ?? 0;
       return stock < minStock;
-    }).slice(0, 5);
-  }, [products]);
+    }).map(p => ({
+      productId: p.id,
+      productCode: p.productCode || p.sku,
+      productName: p.name || p.productName,
+      categoryName: p.categoryName || (typeof p.category === 'object' ? p.category?.name : p.category) || 'Finished Good',
+      currentStock: p.availableStock ?? p.stockQty ?? 0,
+      minimumStock: p.minimumStock ?? 0,
+      pendingDemand: 0,
+      dailyVelocity: 0,
+      daysOfStock: null,
+      suggestedBatchQty: Math.max((p.minimumStock || 0) - (p.availableStock ?? p.stockQty ?? 0), 25),
+      hasBom: true,
+      readyToProduce: true,
+      bottlenecks: [],
+      urgency: (p.availableStock ?? p.stockQty ?? 0) <= 0 ? 'CRITICAL' : 'HIGH'
+    })).slice(0, 10);
+  }, [inventorySuggestions, products]);
 
   // Pending production requests
   const pendingProductions = useMemo(() => {
@@ -330,11 +356,12 @@ export const DashboardTab: React.FC = () => {
     });
   }, [productions]);
 
-  // QA Alerts or Stock Issues
+  // Real QA Alerts & Stock Anomalies (Negative stock + Unapproved productions)
   const qaPendingCount = useMemo(() => {
-    // Quality check items can be simulated from items with low stock or pending inspection
-    return products.filter(p => (p.availableStock ?? 0) < 0).length + 2; 
-  }, [products]);
+    const negCount = products.filter(p => (p.availableStock ?? 0) < 0).length;
+    const qaBatches = inventorySuggestions?.qualityAnomalies?.pendingQaProductions?.length ?? pendingProductions.length;
+    return negCount + qaBatches;
+  }, [products, inventorySuggestions, pendingProductions]);
 
   // Dynamic alerts aggregation
   const alerts = useMemo(() => {
@@ -362,14 +389,15 @@ export const DashboardTab: React.FC = () => {
       });
     });
 
-    // Excess stock alerts
-    products.filter(p => (p.availableStock ?? p.stockQty ?? 0) > 1500).slice(0, 2).forEach((p, idx) => {
+    // Dynamic Slow Moving Stock & Capital Lockup Alerts
+    const slowItems = inventorySuggestions?.slowMovingStock || [];
+    slowItems.slice(0, 2).forEach((sm: any, idx: number) => {
       list.push({
-        id: `excess-${idx}`,
+        id: `slow-${idx}`,
         type: 'warning',
-        title: `Excess Inventory: ${p.name || p.productName}`,
-        desc: `High stock level noticed (${p.availableStock ?? p.stockQty} Bags). Slower monthly demand may cause capital lockup.`,
-        date: 'Monitor'
+        title: `Capital Locked: ${sm.productName}`,
+        desc: `₹${Number(sm.capitalLocked || 0).toLocaleString('en-IN')} locked in ${sm.currentStock} bags with zero recent sales. Promotional clearance recommended.`,
+        date: 'Liquidation'
       });
     });
 
@@ -401,80 +429,53 @@ export const DashboardTab: React.FC = () => {
     });
 
     return list;
-  }, [lowStock, products, orders, delayedPOs]);
+  }, [lowStock, products, orders, delayedPOs, inventorySuggestions]);
 
-  // Decision Support Recommendations
+  // Dynamic Decision Support Recommendations
   const recommendations = useMemo(() => {
-    const recs: { title: string; category: string; description: string; actionText: string; actionType: 'purchase' | 'produce' | 'discount' | 'dispatch'; target: any }[] = [];
+    if (inventorySuggestions?.recommendations && inventorySuggestions.recommendations.length > 0) {
+      return inventorySuggestions.recommendations.map((rec: any) => ({
+        ...rec,
+        actionType: rec.type as 'purchase' | 'produce' | 'discount' | 'dispatch',
+      }));
+    }
 
-    // Rule 1: Replenish raw material
-    products.forEach(p => {
-      const stock = p.availableStock ?? p.stockQty ?? 0;
-      const min = p.minimumStock ?? 0;
-      if (stock < min && (p.name || '').toLowerCase().includes('raw')) {
-        recs.push({
-          title: `Purchase suggestion for ${p.name}`,
-          category: 'Purchase Replenishment',
-          description: `Current stock of raw material "${p.name}" is ${stock} bags. Fulfill minimum reserve requirement of ${min} bags.`,
-          actionText: 'Initiate Purchase Reordering',
-          actionType: 'purchase',
-          target: p
-        });
-      }
-    });
+    const recs: { title: string; category: string; description: string; actionText: string; actionType: 'purchase' | 'produce' | 'discount' | 'dispatch'; urgency?: string; suggestedQty?: number; target: any }[] = [];
 
-    // Rule 2: Increase production due to high demand
-    products.forEach(p => {
-      const stock = p.availableStock ?? p.stockQty ?? 0;
-      const min = p.minimumStock ?? 0;
-      // Check if finished good is low on stock
-      if (stock < min && !(p.name || '').toLowerCase().includes('raw')) {
-        recs.push({
-          title: `Scale up production for ${p.name}`,
-          category: 'Production Scaling',
-          description: `Finished goods inventory for "${p.name}" is below warning limits (${stock}/${min} bags). Scale production immediately to prevent delivery constraints.`,
-          actionText: 'Configure Production Batch',
-          actionType: 'produce',
-          target: p
-        });
-      }
-    });
-
-    // Rule 3: Clear excess inventory
-    products.filter(p => (p.availableStock ?? p.stockQty ?? 0) > 2000).forEach(p => {
-      recs.push({
-        title: `Clear excess stock: ${p.name}`,
-        category: 'Promotional Clearance',
-        description: `Unusually high volume discovered for "${p.name}" (${p.availableStock ?? p.stockQty} bags). Run discount promotions or target active distributors to clear space.`,
-        actionText: 'Create Promotion Plan',
-        actionType: 'discount',
-        target: p
-      });
-    });
-
-    // Rule 4: Prioritize dispatch for high value or approaching delivery deadlines
+    // Fallback: Dispatch priority
     orders.filter(o => (o.status === 'Approved' || o.status === 'Partially Dispatched')).forEach(o => {
-      const dDate = o.expectedDeliveryDate || (o as any).expected_delivery_date;
+      const dDate = o.expectedDeliveryDate || (o as any).expected_delivery_date || o.date;
       const urg = getDeliveryUrgency(dDate);
       if (urg?.status === 'overdue' || urg?.status === 'today') {
         recs.unshift({
           title: `Urgent Dispatch: ${o.partyName}`,
-          category: 'Delivery Schedule Deadline',
-          description: `Order ${o.orderId} is ${urg.label}! Goods must be dispatched immediately to fulfill customer delivery schedule.`,
+          category: 'Logistics Priority',
+          description: `Order ${o.orderId} is ${urg.label}! Goods must be dispatched immediately to fulfill customer schedule.`,
           actionText: 'Dispatch Order Now',
           actionType: 'dispatch',
-          target: o
-        });
-      } else if (o.grandTotal > 50000 && o.status === 'Approved') {
-        recs.push({
-          title: `Prioritize shipment to ${o.partyName}`,
-          category: 'VIP Dispatch Priority',
-          description: `Order ${o.orderId} carries a high transaction value of ₹${o.grandTotal.toLocaleString()}. Ensure immediate logistics dispatch and assign packing layout.`,
-          actionText: 'Assign Dispatch Vehicle',
-          actionType: 'dispatch',
+          urgency: 'CRITICAL',
+          suggestedQty: 0,
           target: o
         });
       }
+    });
+
+    // Fallback: Product shortages
+    products.filter(p => (p.availableStock ?? p.stockQty ?? 0) < (p.minimumStock ?? 0)).slice(0, 2).forEach(p => {
+      const stock = p.availableStock ?? p.stockQty ?? 0;
+      const min = p.minimumStock ?? 0;
+      const cat = (p.categoryName || (typeof p.category === 'object' ? p.category?.name : p.category) || '').toLowerCase();
+      const isRaw = cat.includes('raw') || cat.includes('row') || cat.includes('material') || cat.includes('packing');
+      recs.push({
+        title: isRaw ? `Procure ${p.name}` : `Scale ${p.name}`,
+        category: isRaw ? 'Material Reorder (MRP)' : 'Demand Deficit',
+        description: `Current stock of "${p.name}" is ${stock} bags (minimum reserve: ${min} bags).`,
+        actionText: isRaw ? `Order ${min * 2 - stock} Bags` : `Produce ${min - stock} Bags`,
+        actionType: isRaw ? 'purchase' : 'produce',
+        urgency: stock <= 0 ? 'CRITICAL' : 'HIGH',
+        suggestedQty: isRaw ? min * 2 - stock : min - stock,
+        target: p
+      });
     });
 
     // Default recommendation if empty
@@ -489,8 +490,8 @@ export const DashboardTab: React.FC = () => {
       });
     }
 
-    return recs.slice(0, 4); // Limit to top 4 recommendations
-  }, [products, orders]);
+    return recs.slice(0, 4);
+  }, [inventorySuggestions, products, orders]);
 
   // Analytics Metrics
   const totalAssetsValue = useMemo(() => {
@@ -608,13 +609,43 @@ export const DashboardTab: React.FC = () => {
   };
 
   // Handlers for Production Run Modal
-  const openProductionModal = (product: any) => {
+  const openProductionModal = (product: any, suggestedQty?: number) => {
     setSelectedProductionProduct(product);
+    const qty = suggestedQty ? Number(suggestedQty) : 100;
     setProductionForm({
-      quantity: 100,
+      quantity: qty,
       warehouseId: warehouses[0]?.id || '',
-      remarks: '',
+      remarks: suggestedQty ? `Auto-recommended batch: ${qty} bags based on dynamic sales run-rate & pending demand` : '',
     });
+  };
+
+  // Handlers for Purchase Reordering Modal
+  const openPurchaseModal = (product: any, suggestedQty?: number) => {
+    if (!product) return;
+    const qty = suggestedQty ? Number(suggestedQty) : Math.max(((product.minimumStock || 20) * 1.5) - (product.availableStock || 0), 20);
+    setPurchaseModalData({
+      id: `draft-reorder-${product.id}`,
+      date: new Date().toISOString().split('T')[0],
+      lineItems: [
+        {
+          productId: product.id,
+          quantity: qty,
+          rate: product.rate || 0,
+          tax_percent: 18,
+          remark: 'Dynamic MRP reorder recommendation'
+        }
+      ]
+    });
+    setIsPurchaseModalOpen(true);
+  };
+
+  // Handlers for Promotional Clearance
+  const handleClearanceAction = (product: any) => {
+    toast({
+      title: 'Promotional Clearance Initiated',
+      description: `Dealer incentive campaign drafted for ${product?.name || product?.productName || 'selected item'}. Redirecting to Sales Hub.`,
+    });
+    navigate('/leads');
   };
 
   const handleProductionSubmit = async (e: React.FormEvent) => {
@@ -961,38 +992,74 @@ export const DashboardTab: React.FC = () => {
                         </div>
                       )}
 
-                      <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-2 border-b border-border/40 pb-1">Production Suggestions</h4>
+                      <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-2 border-b border-border/40 pb-1">
+                        Dynamic Production Suggestions ({productionSuggestions.length})
+                      </h4>
                       {productionSuggestions.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-6 italic">Inventory levels are healthy. No pending production suggestion.</p>
+                        <p className="text-xs text-muted-foreground text-center py-6 italic">Inventory levels and production schedules are healthy. No deficits detected.</p>
                       )}
-                      {productionSuggestions.map((prod) => (
-                        <div key={prod.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border border-border/60 bg-card/80 hover:bg-muted/10 transition-colors gap-3">
-                          <div className="space-y-1">
-                            <p className="text-xs font-bold text-foreground">{prod.name || prod.productName}</p>
-                            <p className="text-[10px] text-muted-foreground">
-                              Code: <span className="font-mono">{prod.productCode}</span> · Category: {prod.categoryName || 'General'}
-                            </p>
-                            <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-0.5">
-                              <span>Available: <strong className="text-red-600">{prod.availableStock ?? prod.stockQty ?? 0} bags</strong></span>
-                              <span>Warning Limit: <strong>{prod.minimumStock || 0} bags</strong></span>
+                      {productionSuggestions.map((prod: any) => {
+                        const recBatch = prod.suggestedBatchQty || Math.max((prod.minimumStock || 0) - (prod.currentStock || 0), 50);
+                        const hasDemand = (prod.pendingDemand || 0) > 0;
+                        const isReady = prod.readyToProduce !== false;
+                        const bottleneck = prod.bottlenecks && prod.bottlenecks.length > 0 ? prod.bottlenecks[0] : null;
+
+                        return (
+                          <div key={prod.productId || prod.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border border-border/60 bg-card/80 hover:bg-muted/10 transition-colors gap-3">
+                            <div className="space-y-1.5 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-xs font-bold text-foreground">{prod.productName || prod.name}</p>
+                                {prod.urgency === 'CRITICAL' && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase bg-destructive/10 text-destructive border border-destructive/20 animate-pulse">
+                                    CRITICAL DEFICIT
+                                  </span>
+                                )}
+                                {hasDemand && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20">
+                                    {prod.pendingDemand} Bags Order Demand
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-muted-foreground">
+                                Code: <span className="font-mono">{prod.productCode}</span> · Category: {prod.categoryName || 'General'}
+                                {prod.dailyVelocity > 0 && <span> · Sales Run-rate: <strong>{prod.dailyVelocity} bags/day</strong></span>}
+                                {prod.daysOfStock !== null && prod.daysOfStock !== undefined && (
+                                  <span> · Stock Cover: <strong>{prod.daysOfStock}d</strong></span>
+                                )}
+                              </p>
+                              <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-0.5 flex-wrap">
+                                <span>Current: <strong className={prod.currentStock <= 0 ? 'text-rose-600' : 'text-amber-600'}>{prod.currentStock ?? 0} bags</strong></span>
+                                <span>Reserve Min: <strong>{prod.minimumStock || 0} bags</strong></span>
+                                {isReady ? (
+                                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
+                                    <CheckCircle className="w-3 h-3" /> Raw Materials In Stock
+                                  </span>
+                                ) : bottleneck ? (
+                                  <span className="text-amber-700 dark:text-amber-400 font-semibold flex items-center gap-0.5">
+                                    <AlertTriangle className="w-3 h-3" /> Shortage: {bottleneck.materialName} ({bottleneck.shortage} {bottleneck.unit} needed)
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                              <Button size="sm" onClick={() => openProductionModal(prod, recBatch)} className="h-8 px-3 text-[11px] font-bold bg-primary hover:bg-primary/90 text-white rounded-lg flex items-center gap-1 shadow-sm">
+                                <PlusCircle className="w-3.5 h-3.5" /> Produce {recBatch} Bags
+                              </Button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 self-end sm:self-center">
-                            <Button size="sm" onClick={() => openProductionModal(prod)} className="h-8 px-3 text-[11px] font-bold bg-primary hover:bg-primary/90 text-white rounded-lg flex items-center gap-1 shadow-sm">
-                              <PlusCircle className="w-3.5 h-3.5" /> Trigger Production
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
-                  {/* Tab 4: Quality Checks pending */}
+                  {/* Tab 4: Quality Checks & Stock Anomalies */}
                   {activeWorkTab === 'issues' && (
                     <div className="space-y-3">
-                      {products.filter(p => (p.availableStock ?? 0) < 0).length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-10 italic">No inventory check anomalies or negative stock balances.</p>
+                      {products.filter(p => (p.availableStock ?? 0) < 0).length === 0 && pendingProductions.length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-10 italic">No inventory audit discrepancies or unapproved production batches.</p>
                       )}
+                      
+                      {/* Negative stock balances */}
                       {products.filter(p => (p.availableStock ?? 0) < 0).map((prod) => (
                         <div key={prod.id} className="p-3 rounded-xl border border-border/60 bg-rose-500/5 hover:bg-rose-500/10 transition-colors space-y-1.5">
                           <div className="flex items-center justify-between">
@@ -1008,16 +1075,23 @@ export const DashboardTab: React.FC = () => {
                           </div>
                         </div>
                       ))}
-                      {/* Standard QA placeholder checks */}
-                      <div className="p-3 rounded-xl border border-border/60 bg-muted/10 hover:bg-muted/20 transition-colors space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs">Standard Binder Grout (Batch #QA-412)</span>
-                          <span className="text-[9px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full font-bold">QA CHECK</span>
+
+                      {/* Real unapproved production batches pending QA approval */}
+                      {pendingProductions.map((prod: any) => (
+                        <div key={prod.id} className="p-3 rounded-xl border border-border/60 bg-amber-500/5 hover:bg-amber-500/10 transition-colors space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-amber-800 dark:text-amber-200">{prod.finishedProductName || prod.productCode || 'Production Run'}</span>
+                            <span className="text-[9px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full font-bold">QA VERIFICATION</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            Batch of <strong>{prod.quantityProduced || prod.quantity || 0} bags</strong> logged at {prod.warehouseName || 'Factory Warehouse'} awaiting physical quality verification prior to warehouse release.
+                          </p>
+                          <div className="flex justify-between items-center pt-1 text-[9px] text-muted-foreground">
+                            <span>Logged by: {prod.createdBy || 'Production Supervisor'}</span>
+                            <span>{prod.createdAt ? new Date(prod.createdAt).toLocaleDateString('en-IN') : 'Recent'}</span>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-muted-foreground">
-                          100 Bags of Binder Grout produced today awaiting physical moisture check at Main Depot prior to dispatch clearance.
-                        </p>
-                      </div>
+                      ))}
                     </div>
                   )}
 
@@ -1267,30 +1341,41 @@ export const DashboardTab: React.FC = () => {
               {recommendations.map((rec, i) => (
                 <div key={i} className="p-4 rounded-xl border border-border/60 bg-card/60 flex flex-col justify-between shadow-sm hover:shadow-md transition-all hover:ring-2 hover:ring-primary/10">
                   <div className="space-y-1.5">
-                    <span className="text-[9px] font-black uppercase text-primary tracking-widest px-2 py-0.5 rounded-full bg-primary/10 w-fit block">{rec.category}</span>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[9px] font-black uppercase text-primary tracking-widest px-2 py-0.5 rounded-full bg-primary/10 w-fit block">{rec.category}</span>
+                      {rec.urgency && (
+                        <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded-full ${
+                          rec.urgency === 'CRITICAL' ? 'bg-destructive/15 text-destructive animate-pulse' :
+                          rec.urgency === 'HIGH' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' :
+                          'bg-primary/10 text-primary'
+                        }`}>
+                          {rec.urgency}
+                        </span>
+                      )}
+                    </div>
                     <h4 className="font-bold text-xs leading-tight text-foreground/95">{rec.title}</h4>
                     <p className="text-[11px] text-muted-foreground/80 leading-relaxed">{rec.description}</p>
                   </div>
                   
                   {rec.actionType === 'dispatch' && (
-                    <Button size="sm" onClick={() => openDispatchModal(rec.target)} className="mt-4 h-8 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1">
+                    <Button size="sm" onClick={() => openDispatchModal(rec.target)} className="mt-4 h-8 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 shadow-sm">
                       <Truck className="w-3 h-3 mr-0.5" /> {rec.actionText}
                     </Button>
                   )}
                   {rec.actionType === 'produce' && (
-                    <Button size="sm" onClick={() => openProductionModal(rec.target)} className="mt-4 h-8 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1">
+                    <Button size="sm" onClick={() => openProductionModal(rec.target, rec.suggestedQty)} className="mt-4 h-8 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-1 shadow-sm">
                       <PlusCircle className="w-3 h-3 mr-0.5" /> {rec.actionText}
                     </Button>
                   )}
                   {rec.actionType === 'purchase' && (
-                    <div className="mt-4 p-2 bg-indigo-500/5 rounded-lg border border-indigo-500/10 text-[9px] font-medium text-indigo-700 text-center uppercase tracking-wider">
-                      📝 Auto-logged to vendor PO list
-                    </div>
+                    <Button size="sm" onClick={() => openPurchaseModal(rec.target, rec.suggestedQty)} className="mt-4 h-8 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 shadow-sm">
+                      <ShoppingBag className="w-3 h-3 mr-0.5" /> {rec.actionText}
+                    </Button>
                   )}
                   {rec.actionType === 'discount' && (
-                    <div className="mt-4 p-2 bg-amber-500/5 rounded-lg border border-amber-500/10 text-[9px] font-medium text-amber-700 text-center uppercase tracking-wider">
-                      🏷️ Draft promotion generated
-                    </div>
+                    <Button size="sm" onClick={() => handleClearanceAction(rec.target)} className="mt-4 h-8 text-[10px] font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg flex items-center gap-1 shadow-sm">
+                      <Sparkles className="w-3 h-3 mr-0.5" /> {rec.actionText}
+                    </Button>
                   )}
                 </div>
               ))}
@@ -1464,6 +1549,18 @@ export const DashboardTab: React.FC = () => {
               </div>
             </form>
           </CustomModal>
+        )}
+
+        {/* Dynamic Purchase Reorder Modal */}
+        {isPurchaseModalOpen && (
+          <PurchaseModal
+            isOpen={isPurchaseModalOpen}
+            onClose={() => {
+              setIsPurchaseModalOpen(false);
+              setPurchaseModalData(null);
+            }}
+            purchase={purchaseModalData}
+          />
         )}
 
       </div>

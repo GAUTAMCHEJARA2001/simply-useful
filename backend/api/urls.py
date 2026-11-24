@@ -11,7 +11,7 @@ from api.views_logs import (
 from api.views_reports import (
     report_dashboard_kpis, report_sales_summary, report_low_stock, report_daily,
     report_current_stock, report_aggregate_stock, report_stock_ledger, report_global_inventory,
-    report_stocks_by_warehouse, report_stock_integrity_audit
+    report_stocks_by_warehouse, report_stock_integrity_audit, report_inventory_suggestions
 )
 from api.views_analytics import (
     trigger_analytics_etl, get_analytics_kpis, get_analytics_predictions,
@@ -73,6 +73,8 @@ from api.views_travel import (
 from api.views_sales_target import (
     list_sales_targets, upsert_sales_target, copy_previous_targets, get_target_masters
 )
+from api.views_rtgs import RtgsPaymentRequestViewSet
+
 
 
 router = DefaultRouter(trailing_slash=False)
@@ -98,9 +100,10 @@ router.register('onboarding', PartyOnboardingViewSet, basename='onboarding')
 router.register('broadcasts', BroadcastViewSet, basename='broadcasts')
 router.register('payments', PaymentReceiptViewSet, basename='payments')
 router.register('estimates', EstimateViewSet, basename='estimates')
+router.register('rtgs/requests', RtgsPaymentRequestViewSet, basename='rtgs-requests')
 
 from api.views_hr import (
-    hr_employees, hr_employees_detail,
+    hr_employees, hr_employees_detail, hr_employee_toggle_active,
     hr_attendance, hr_generate_payroll, hr_finalize_payroll, hr_mark_slip_paid, hr_employee_ledger, hr_ledger_payment, hr_employee_change_status,
     hr_loans, hr_loan_set_off, hr_salary_slips,
     hr_departments, hr_departments_detail,
@@ -153,6 +156,7 @@ urlpatterns = [
     path('reports/global-inventory', report_global_inventory, name='report-global-inventory'),
     path('reports/stocks-by-warehouse', report_stocks_by_warehouse, name='report-stocks-by-warehouse'),
     path('reports/stock-integrity-audit', report_stock_integrity_audit, name='report-stock-integrity-audit'),
+    path('reports/inventory-suggestions', report_inventory_suggestions, name='report-inventory-suggestions'),
 
     
     # Analytics & Decision Intelligence
@@ -189,6 +193,7 @@ urlpatterns = [
     path('hr/employees', hr_employees, name='hr-employees'),
     path('hr/employees/<str:pk>', hr_employees_detail, name='hr-employee-detail'),
     path('hr/employees/<str:pk>/change-status', hr_employee_change_status, name='hr-employee-change-status'),
+    path('hr/employees/<str:pk>/toggle-active', hr_employee_toggle_active, name='hr-employee-toggle-active'),
     path('hr/attendance', hr_attendance, name='hr-attendance'),
     path('hr/payroll/generate', hr_generate_payroll, name='hr-payroll-generate'),
     path('hr/payroll/finalize', hr_finalize_payroll, name='hr-payroll-finalize'),
@@ -268,6 +273,13 @@ urlpatterns = [
     # Director / Owner Executive Boardroom Command Center
     path('director/dashboard', director_boardroom_command_center, name='director-boardroom-command-center'),
     re_path(r'^director/dashboard/?$', director_boardroom_command_center, name='director-boardroom-command-center-slash'),
+
+    # CRM Unified Hub & Sync Shortcuts
+    path('crm/unified-hub', LeadViewSet.as_view({'get': 'unified_hub'}), name='crm-unified-hub'),
+    re_path(r'^crm/unified-hub/?$', LeadViewSet.as_view({'get': 'unified_hub'}), name='crm-unified-hub-slash'),
+    path('crm/sync-inquiries', LeadViewSet.as_view({'post': 'sync_inquiries'}), name='crm-sync-inquiries'),
+    re_path(r'^crm/sync-inquiries/?$', LeadViewSet.as_view({'post': 'sync_inquiries'}), name='crm-sync-inquiries-slash'),
+    path('crm/dealer-quick-lookup', LeadViewSet.as_view({'get': 'dealer_quick_lookup'}), name='crm-dealer-quick-lookup'),
 
     # Trailing slash compatibility
     path('expenses/', ExpenseViewSet.as_view({'get': 'list', 'post': 'create'}), name='expenses-slash'),

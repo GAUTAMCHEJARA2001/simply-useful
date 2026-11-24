@@ -1378,3 +1378,91 @@ class SalesTarget(models.Model):
         super().save(*args, **kwargs)
 
 
+class RtgsPaymentRequest(models.Model):
+    PAYMENT_MODES = [
+        ('RTGS', 'Axis Bank RTGS / NEFT'),
+        ('AUTO_DEBIT', 'Direct Bank / Auto-Debit / Portal'),
+        ('EXCEPTIONAL_CASH', 'Exceptional Cash Voucher')
+    ]
+
+    EXPENSE_HEADS = [
+        ('FREIGHT_OUTWARD', 'Outward Freight / Tempo / Transport'),
+        ('FREIGHT_INWARD', 'Inward Freight (RM Transport)'),
+        ('ELECTRICITY_POWER', 'Electricity & Power (DGVCL)'),
+        ('PLANT_MAINTENANCE', 'Machinery Repair, Maintenance & Spares'),
+        ('FACTORY_RENT', 'Factory / Godown Rent'),
+        ('DIESEL_FUEL', 'Diesel / Generator / Forklift Fuel'),
+        ('HAMALI_CONTRACT', 'Loading / Unloading (Hamali) & Contract Labour'),
+        ('FACTORY_CONSUMABLES', 'Factory Consumables, Safety & Lab'),
+        ('COUPONS_SCHEMES', 'Coupons, Mason Tokens & Dealer Schemes'),
+        ('ADMIN_OFFICE', 'Admin, Office, Stationery & Utilities'),
+        ('PROFESSIONAL_FEES', 'CA, GST, Legal & Audit Fees'),
+        ('INSURANCE_COMPLIANCE', 'Insurance, Licenses & Statutory'),
+        ('BANK_INTEREST', 'Bank Charges, CC/OD & Loan Interest'),
+        ('RAW_MATERIAL', 'Raw Material / Supplier Payment (Non-P&L)'),
+        ('STAFF_SALARY', 'Staff Salary / Advance (Non-P&L)'),
+        ('CAPEX_ASSET', 'Capital Asset / Machinery Purchase (CapEx)'),
+        ('DEPOSIT_TRANSFER', 'Deposit / Self Transfer / Director Drawing'),
+    ]
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending Director Approval'),
+        ('APPROVED', 'Approved (Ready for Payment / PDF Unlocked)'),
+        ('PAID', 'Paid (UTR Confirmed)'),
+        ('REJECTED', 'Rejected'),
+        ('CANCELLED', 'Cancelled / Bounced')
+    ]
+
+    id = models.TextField(primary_key=True)
+    approval_code = models.CharField(max_length=40, unique=True)
+    payment_mode = models.CharField(max_length=30, default='RTGS', choices=PAYMENT_MODES)
+    payee_category = models.CharField(max_length=30, default='SUPPLIER')
+    beneficiary_name = models.CharField(max_length=255)
+    bank_name = models.CharField(max_length=255, blank=True, default='')
+    account_number = models.CharField(max_length=100, blank=True, default='')
+    ifsc_code = models.CharField(max_length=50, blank=True, default='')
+    branch = models.CharField(max_length=255, blank=True, default='NAVSARI')
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    expense_head = models.CharField(max_length=60, default='RAW_MATERIAL', choices=EXPENSE_HEADS)
+    split_lines = models.JSONField(blank=True, default=list)
+    bill_date = models.DateField(default=timezone.now)
+    payment_date = models.DateField(default=timezone.now)
+    bill_number = models.CharField(max_length=120, blank=True, null=True)
+    cheque_number = models.CharField(max_length=100, blank=True, null=True)
+    narration = models.TextField(blank=True, default='')
+    is_emergency_post_approval = models.BooleanField(default=False)
+    exception_reason = models.TextField(blank=True, null=True)
+    bill_photo_url = models.URLField(max_length=500, blank=True, null=True)
+    status = models.CharField(max_length=20, default='PENDING', choices=STATUS_CHOICES)
+    utr_number = models.CharField(max_length=120, blank=True, null=True)
+    busy_voucher_no = models.CharField(max_length=100, blank=True, null=True)
+    source = models.CharField(max_length=40, default='HUB_SINGLE')
+    company_account = models.CharField(max_length=100, blank=True, default='')
+    company_bank = models.CharField(max_length=100, blank=True, default='AXIS BANK')
+    requested_at = models.DateTimeField(default=timezone.now)
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+    review_notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    companyid = models.ForeignKey('core.Company', on_delete=models.DO_NOTHING, db_column='companyId', db_constraint=False)
+    requested_by = models.ForeignKey('core.User', on_delete=models.DO_NOTHING, db_column='requestedById', related_name='requested_rtgs', db_constraint=False)
+    reviewed_by = models.ForeignKey('core.User', on_delete=models.DO_NOTHING, db_column='reviewedById', blank=True, null=True, related_name='reviewed_rtgs', db_constraint=False)
+
+    class Meta:
+        db_table = 'RtgsPaymentRequest'
+        indexes = [
+            models.Index(fields=['companyid', 'status'], name='idx_rtgs_comp_stat'),
+            models.Index(fields=['companyid', 'bill_date'], name='idx_rtgs_comp_bdate'),
+            models.Index(fields=['expense_head', 'status'], name='idx_rtgs_head_stat'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.id = str(uuid.uuid4())
+        if not self.approval_code:
+            today_str = timezone.now().strftime('%Y%m%d')
+            self.approval_code = f"RTGS-{today_str}-{uuid.uuid4().hex[:6].upper()}"
+        super().save(*args, **kwargs)
+
+
+

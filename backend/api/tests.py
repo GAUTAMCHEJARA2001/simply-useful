@@ -569,6 +569,271 @@ class CompanyCreationTests(TenantAwareTestCase):
         self.assertTrue(data['isSubscriptionActive'])
 
 
+class CRMUnifiedHubTests(TestCase):
+    def setUp(self):
+        from core.models import User, Company
+        from api.models import Dealer, Lead
+        from decimal import Decimal
+
+        self.company = Company.objects.create(
+            id='cmp_crm_test',
+            name='Kamla Conchem Test',
+            active=True
+        )
+        self.sales_officer = User.objects.create(
+            id='usr_crm_so',
+            email='so_test@kamla.com',
+            name='Sales Officer Test',
+            role='SALES',
+            active=True,
+            companyid=self.company,
+            territory='Surat Zone',
+            monthlytarget=600000.0
+        )
+        self.dealer = Dealer.objects.create(
+            id='dlr_crm_test_1',
+            dealercode='DLR-TEST-001',
+            dealername='Test Prime Hardware',
+            city='Surat',
+            phone='9876500001',
+            creditlimit=Decimal('100000.00'),
+            outstanding=Decimal('45000.00'),
+            active=True,
+            assignedsoemails=['so_test@kamla.com'],
+            companyid=self.company
+        )
+        self.lead = Lead.objects.create(
+            id='lead_crm_test_1',
+            name='Project Contractor',
+            company_name='Shreeji Builders',
+            phone='9876500002',
+            email='shreeji@test.com',
+            status='NEW',
+            priority='HIGH',
+            value=Decimal('150000.00'),
+            companyid=self.company,
+            assigned_to=self.sales_officer,
+            created_by=self.sales_officer
+        )
+
+    def test_crm_unified_hub_returns_complete_intelligence(self):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        client.force_authenticate(user=self.sales_officer)
+
+        res = client.get('/api/v1/crm/unified-hub', HTTP_HOST='127.0.0.1')
+        self.assertEqual(res.status_code, 200)
+        data = res.json()['data']
+
+        # Officer & territory verification
+        self.assertEqual(data['target_officer']['id'], 'usr_crm_so')
+        self.assertEqual(data['target_officer']['territory'], 'Surat Zone')
+
+        # Dealers & Credit Clearance verification
+        self.assertEqual(len(data['dealers']['list']), 1)
+        dealer_res = data['dealers']['list'][0]
+        self.assertEqual(dealer_res['name'], 'Test Prime Hardware')
+        self.assertEqual(dealer_res['credit_limit'], 100000.0)
+        self.assertEqual(dealer_res['outstanding'], 45000.0)
+        self.assertEqual(dealer_res['available_credit'], 55000.0)
+        self.assertEqual(dealer_res['credit_status'], 'SAFE')
+        self.assertEqual(dealer_res['payment_clearance'], 'CLEARED')
+
+        # Daily SOP priorities & Target Tracker
+        self.assertIn('priorities', data['daily_sop'])
+        self.assertIn('guidelines', data['daily_sop'])
+        self.assertIn('target_tracker', data)
+        self.assertIn('revenue', data['target_tracker'])
+        self.assertIn('daily_run_rate_needed', data['target_tracker']['revenue'])
+
+        # Algorithmic Target Recommendations
+        self.assertIn('target_recommendations', data)
+        self.assertIn('plans', data['target_recommendations'])
+        self.assertIn('balanced', data['target_recommendations']['plans'])
+
+    def test_crm_sync_inquiries_and_deduplication(self):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        client.force_authenticate(user=self.sales_officer)
+
+        payload = {
+            'inquiries': [
+                {
+                    'name': 'New Inbound Builder',
+                    'companyName': 'Sunrise Towers',
+                    'phone': '9998887771',
+                    'email': 'sunrise@test.com',
+                    'city': 'Surat',
+                    'value': 200000,
+                    'source': 'Web Lead'
+                }
+            ]
+        }
+
+        # First sync: create
+        res1 = client.post('/api/v1/crm/sync-inquiries', payload, format='json', HTTP_HOST='127.0.0.1')
+        self.assertEqual(res1.status_code, 201)
+        self.assertEqual(res1.json()['data']['created_count'], 1)
+        self.assertEqual(res1.json()['data']['skipped_count'], 0)
+
+        # Second sync: duplicate skipped
+        res2 = client.post('/api/v1/crm/sync-inquiries', payload, format='json', HTTP_HOST='127.0.0.1')
+        self.assertEqual(res2.status_code, 201)
+        self.assertEqual(res2.json()['data']['created_count'], 0)
+        self.assertEqual(res2.json()['data']['skipped_count'], 1)
+
+    def test_crm_dealer_quick_lookup(self):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        client.force_authenticate(user=self.sales_officer)
+
+        res = client.get('/api/v1/crm/dealer-quick-lookup?q=Prime', HTTP_HOST='127.0.0.1')
+        self.assertEqual(res.status_code, 200)
+        dealers = res.json()['data']
+        self.assertEqual(len(dealers), 1)
+        self.assertEqual(dealers[0]['name'], 'Test Prime Hardware')
+        self.assertEqual(dealers[0]['payment_clearance'], 'CLEARED')
+
+
+class InventorySuggestionsTests(TestCase):
+    def setUp(self):
+        self.company = Company.objects.create(
+            id='cmp_inv_test',
+            name='Test Inventory Chemical Industries',
+            active=True
+        )
+        self.user = User.objects.create(
+            id='usr_inv_test',
+            name='Inventory Controller',
+            email='controller@test.com',
+            role='INVENTORY',
+            active=True,
+            companyid=self.company
+        )
+        self.category = Category.objects.create(name='FINISHED GOOD', active=True, companyid=self.company)
+        self.raw_category = Category.objects.create(name='ROW MATERIAL', active=True, companyid=self.company)
+        
+        # Product 1: Finished good with low stock
+        self.fg = Product.objects.create(
+            id='p_fg_test_1',
+            productcode='TEST-FG-001',
+            name='Test Finished Putty',
+            bagsize='20 KG',
+            rate=450.0,
+            gst=18.0,
+            active=True,
+            openingstock=10,
+            minimumstock=100,
+            companyid=self.company,
+            categoryid=self.category
+        )
+        # Product 2: Raw material
+        self.rm = Product.objects.create(
+            id='p_rm_test_1',
+            productcode='TEST-RM-001',
+            name='Test Polymer Binder',
+            bagsize='25 KG',
+            rate=120.0,
+            gst=18.0,
+            active=True,
+            openingstock=5,
+            minimumstock=50,
+            companyid=self.company,
+            categoryid=self.raw_category
+        )
+
+    def test_dynamic_inventory_suggestions_response(self):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+
+        res = client.get('/api/v1/reports/inventory-suggestions', HTTP_HOST='127.0.0.1')
+        self.assertEqual(res.status_code, 200)
+        data = res.json()['data']
+
+        # Verify structured outputs
+        self.assertIn('summary', data)
+        self.assertIn('recommendations', data)
+        self.assertIn('productionSuggestions', data)
+        self.assertIn('reorderSuggestions', data)
+        self.assertIn('slowMovingStock', data)
+        self.assertIn('qualityAnomalies', data)
+        
+        # Summary structure
+        summary = data['summary']
+        self.assertIn('totalRecommendations', summary)
+        self.assertIn('productionShortagesCount', summary)
+        self.assertIn('reorderItemsCount', summary)
+        self.assertIn('capitalLockedTotal', summary)
+
+
+class OfflineTravelSyncTests(TenantAwareTestCase):
+    def setUp(self):
+        super().setUp()
+        self.company = Company.objects.get(id="test-company")
+        self.user = User.objects.create(
+            id="usr_travel_so",
+            email="so_rural@kamla.com",
+            name="Rural Sales Officer",
+            role="SALES",
+            active=True,
+            companyid=self.company
+        )
+
+    def test_offline_travel_lifecycle_and_deduplication(self):
+        from rest_framework.test import APIClient
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+
+        # 1. Start trip offline sync
+        start_res = client.post('/api/v1/travel/start', {
+            'start_km': 12450.0,
+            'vehicle_type': 'BIKE',
+            'start_location': '19.9975, 73.7898',
+            'date': '2026-11-20'
+        }, format='json', HTTP_HOST='127.0.0.1')
+        self.assertEqual(start_res.status_code, 200)
+
+        # 2. Add spot visit offline sync with date
+        spot_res = client.post('/api/v1/travel/stops/unplanned', {
+            'dealer_name': 'Gramin Hardware',
+            'dealer_location': 'Rural Taluka',
+            'visit_purpose': 'ORDER',
+            'target_order_bags': 50,
+            'actual_order_bags': 50,
+            'actual_collection_value': 15000,
+            'date': '2026-11-20'
+        }, format='json', HTTP_HOST='127.0.0.1')
+        self.assertEqual(spot_res.status_code, 200)
+        stop_id = spot_res.json()['data']['id']
+
+        # 3. Punch visit outcome (deduplication check)
+        punch_res = client.post('/api/v1/travel/stops/punch-visit', {
+            'stop_id': stop_id,
+            'dealer_name': 'Gramin Hardware',
+            'actual_status': 'COMPLETED',
+            'actual_order_bags': 50,
+            'actual_collection_value': 15000,
+            'actual_notes': 'Order booked in rural village',
+            'date': '2026-11-20'
+        }, format='json', HTTP_HOST='127.0.0.1')
+        self.assertEqual(punch_res.status_code, 200)
+
+        # 4. End trip offline sync
+        end_res = client.post('/api/v1/travel/end', {
+            'end_km': 12510.0,
+            'visit_summary': 'Visited Gramin Hardware in rural sector',
+            'collection_summary': 'Collected 15000',
+            'order_summary': '50 bags',
+            'date': '2026-11-20'
+        }, format='json', HTTP_HOST='127.0.0.1')
+        self.assertEqual(end_res.status_code, 200)
+        self.assertEqual(end_res.json()['data']['total_km'], 60.0)
+
+
+
+
+
 
 
 

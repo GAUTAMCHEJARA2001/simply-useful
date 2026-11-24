@@ -37,6 +37,8 @@ import {
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { SalarySlipPdfModal } from '@/components/PDF/SalarySlipPdfModal';
+import { rtgsService } from '@/api/services/rtgs.service';
+import { Send } from 'lucide-react';
 
 const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -112,7 +114,8 @@ export const EmployeeLedgerTab: React.FC = () => {
     date_issued: new Date().toISOString().split('T')[0],
     payment_mode: 'BANK_TRANSFER',
     payment_reference: '',
-    reason: 'Personal Advance / Loan'
+    reason: 'Personal Advance / Loan',
+    submit_rtgs: false,
   });
 
   const [setOffForm, setSetOffForm] = useState({
@@ -225,15 +228,40 @@ export const EmployeeLedgerTab: React.FC = () => {
 
     try {
       setIsSubmitting(true);
-      await issueLoan({
-        labour_id: selectedEmp.id,
-        amount: amt,
-        deduction_per_month: emi,
-        date_issued: loanForm.date_issued,
-        payment_mode: loanForm.payment_mode,
-        payment_reference: loanForm.payment_reference,
-        reason: loanForm.reason || 'Personal Advance / Loan'
-      });
+      if (loanForm.submit_rtgs) {
+        // Create RTGS payment request for Maker-Checker SuperAdmin approval
+        await rtgsService.createRequest({
+          payment_mode: 'RTGS',
+          payee_category: 'ADVANCE',
+          expense_head: 'SALARY_ADVANCE',
+          beneficiary_name: selectedEmp.name || 'Staff Member',
+          account_number: selectedEmp.bank_account_number || '',
+          ifsc_code: selectedEmp.bank_ifsc || '',
+          bank_name: selectedEmp.bank_name || 'Axis Bank',
+          amount: amt,
+          bill_number: `ADV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${selectedEmp.id}`,
+          narration: `Salary Advance for ${selectedEmp.name} - ${loanForm.reason || 'Personal Advance'} (EMI: ₹${emi}/mo)`,
+        });
+
+        toast({
+          title: 'RTGS Advance Request Submitted to SuperAdmin',
+          description: `✓ Advance request of ₹${amt.toLocaleString('en-IN')} for ${selectedEmp.name} has been sent to Bank RTGS Hub for maker-checker approval. Once SuperAdmin pays it with UTR, it will automatically debit ${selectedEmp.name}'s ledger and deduct EMI in upcoming payroll runs.`,
+        });
+      } else {
+        await issueLoan({
+          labour_id: selectedEmp.id,
+          amount: amt,
+          deduction_per_month: emi,
+          date_issued: loanForm.date_issued,
+          payment_mode: loanForm.payment_mode,
+          payment_reference: loanForm.payment_reference,
+          reason: loanForm.reason || 'Personal Advance / Loan'
+        });
+        toast({
+          title: 'Advance Recorded',
+          description: `Direct loan/advance of ₹${amt.toLocaleString('en-IN')} successfully issued to ${selectedEmp.name}.`,
+        });
+      }
       setLoanModalOpen(false);
       setLoanForm({
         amount: '',
@@ -241,10 +269,15 @@ export const EmployeeLedgerTab: React.FC = () => {
         date_issued: new Date().toISOString().split('T')[0],
         payment_mode: 'BANK_TRANSFER',
         payment_reference: '',
-        reason: 'Personal Advance / Loan'
+        reason: 'Personal Advance / Loan',
+        submit_rtgs: false,
       });
     } catch (err: any) {
-      console.error(err);
+      toast({
+        title: 'Failed to Process Advance',
+        description: err?.response?.data?.message || err?.message || 'Error creating advance record',
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -946,12 +979,52 @@ export const EmployeeLedgerTab: React.FC = () => {
               />
             </div>
 
+            {/* RTGS SuperAdmin Maker-Checker Option */}
+            <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/70 dark:bg-blue-950/20 space-y-2">
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={loanForm.submit_rtgs}
+                  onChange={e => setLoanForm(p => ({ ...p, submit_rtgs: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                    <Send className="w-3.5 h-3.5 text-blue-600" />
+                    Submit RTGS Request to SuperAdmin for Bank Payout
+                  </span>
+                  <p className="text-[11px] text-blue-700/90 dark:text-blue-400 leading-tight">
+                    Sends advance to Bank RTGS Hub. When SuperAdmin approves and clears it with a UTR, it auto-debits {selectedEmp?.name}'s ledger and schedules EMI deductions in payroll.
+                  </p>
+                </div>
+              </label>
+
+              {loanForm.submit_rtgs && (
+                <div className="pl-6 pt-1 text-[11px] text-muted-foreground border-t border-blue-200/60 font-mono space-y-0.5">
+                  <div>Beneficiary: <strong className="text-foreground">{selectedEmp?.name}</strong></div>
+                  <div>Bank A/C: <strong className="text-foreground">{selectedEmp?.bank_account_number || '(Missing in profile)'}</strong></div>
+                  <div>IFSC: <strong className="text-foreground">{selectedEmp?.bank_ifsc || '(Missing in profile)'}</strong></div>
+                </div>
+              )}
+            </div>
+
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setLoanModalOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting} className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5">
-                {isSubmitting ? 'Issuing...' : 'Issue Loan & Post to Ledger'}
+              <Button 
+                type="submit" 
+                disabled={isSubmitting} 
+                className={cn(
+                  "text-white gap-1.5 font-semibold",
+                  loanForm.submit_rtgs ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"
+                )}
+              >
+                {isSubmitting 
+                  ? 'Processing...' 
+                  : loanForm.submit_rtgs 
+                    ? 'Submit RTGS to SuperAdmin' 
+                    : 'Issue Loan & Post to Ledger'}
               </Button>
             </DialogFooter>
           </form>

@@ -3,14 +3,18 @@ import { useSearchParams } from 'react-router-dom';
 import { 
   Landmark, Download, Plus, Search, Edit2, Trash2, CheckCircle2, 
   AlertCircle, Building2, Users, FileText, Layers, FileSpreadsheet,
-  CheckSquare, Square, Clock, History, FileCheck, ArrowDownToLine
+  CheckSquare, Square, Clock, History, FileCheck, ArrowDownToLine,
+  ShieldCheck, Lock, Unlock, Check, X, RefreshCw, Zap, DollarSign,
+  Truck, Flame
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/Modal';
 import { useSettings } from '@/hooks/inventory/useMasters';
+import { useAuth } from '@/contexts/AuthContext';
 import { generateRTGSSlip, generateCombinedBulkRTGSPdf, RTGSData } from '@/utils/pdfGenerator';
 import { 
   saveRtgsRecord, saveBulkRtgsRecords, getRtgsHistory, 
@@ -18,7 +22,9 @@ import {
 } from '@/utils/rtgsHistory';
 import { formatIndianAmountInput, parseIndianAmount } from '@/utils/format';
 import { amountToWords } from '@/components/PDF/utils/amountToWords';
+import { rtgsService, RtgsRequestItem, RtgsStatus, RtgsPayeeCategory } from '@/api/services/rtgs.service';
 import apiClient from '@/api/client';
+import { cn } from '@/lib/utils';
 
 export interface RtgsPayee {
   id: string;
@@ -35,18 +41,322 @@ export interface RtgsPayee {
 
 const STORAGE_KEY = 'simply_saved_rtgs_payees_v3';
 
+const EXPENSE_HEAD_OPTIONS = [
+  { value: 'STAFF_SALARY', label: 'Staff Salary / Advance (Salary)', category: 'SALARY' },
+  { value: 'RAW_MATERIAL', label: 'Raw Material / Vendor Payment (Supplier)', category: 'SUPPLIER' },
+  { value: 'FREIGHT_OUTWARD', label: 'Outward Freight / Transporter (Transport)', category: 'TRANSPORTATION' },
+  { value: 'FREIGHT_INWARD', label: 'Inward Freight (RM Transport)', category: 'TRANSPORTATION' },
+  { value: 'ELECTRICITY_POWER', label: 'Electricity & Power Bill (DGVCL)', category: 'ELECTRICITY' },
+  { value: 'PLANT_MAINTENANCE', label: 'Machinery Repair & Spares', category: 'OTHER' },
+  { value: 'FACTORY_RENT', label: 'Factory / Godown Rent', category: 'OTHER' },
+  { value: 'DIESEL_FUEL', label: 'Diesel / Fuel (Forklift/Gen)', category: 'OTHER' },
+  { value: 'HAMALI_CONTRACT', label: 'Hamali & Loading Labour', category: 'OTHER' },
+  { value: 'ADMIN_OFFICE', label: 'Admin, Office & Utilities', category: 'OTHER' },
+  { value: 'PROFESSIONAL_FEES', label: 'CA, GST & Legal Fees', category: 'OTHER' },
+  { value: 'INSURANCE_COMPLIANCE', label: 'Insurance & Statutory', category: 'OTHER' },
+  { value: 'CAPEX_ASSET', label: 'Capital Asset Purchase', category: 'OTHER' },
+];
+
 export default function BankRtgsHubPage() {
   const [searchParams] = useSearchParams();
   const { data: settings } = useSettings();
+  const { user } = useAuth();
 
-  // Top level View: Payees Master vs RTGS Records & History
-  const [activeMainTab, setActiveMainTab] = useState<'PAYEES' | 'HISTORY'>('PAYEES');
+  // SuperAdmin / Director check for Maker-Checker workflow (strictly SuperAdmin/Director only, NOT standard Admin)
+  const isSuperAdminOrDirector = useMemo(() => {
+    const role = (user?.role || '').toUpperCase();
+    return ['SUPERADMIN', 'SUPER_ADMIN', 'DIRECTOR'].includes(role) || user?.is_superuser === true;
+  }, [user]);
+
+  // Top level View: SuperAdmin defaults to APPROVALS desk; Maker/Admin defaults to PAYEES master
+  const [activeMainTab, setActiveMainTab] = useState<'APPROVALS' | 'PAYEES' | 'HISTORY'>(() => {
+    const role = (user?.role || '').toUpperCase();
+    const isSuper = ['SUPERADMIN', 'SUPER_ADMIN', 'DIRECTOR'].includes(role) || user?.is_superuser === true;
+    return isSuper ? 'APPROVALS' : 'PAYEES';
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // 1. APPROVAL QUEUE STATE
+  // ──────────────────────────────────────────────────────────
+  const [requests, setRequests] = useState<RtgsRequestItem[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [approvalStatusFilter, setApprovalStatusFilter] = useState<string>('ALL');
+  const [approvalCategoryFilter, setApprovalCategoryFilter] = useState<string>('ALL');
+  const [approvalSearch, setApprovalSearch] = useState<string>('');
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
+  const [isBulkApproving, setIsBulkApproving] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+
+  // UTR Entry Modal State
+  const [utrModalOpen, setUtrModalOpen] = useState(false);
+  const [selectedRequestForUtr, setSelectedRequestForUtr] = useState<RtgsRequestItem | null>(null);
+  const [utrNumberInput, setUtrNumberInput] = useState('');
+  const [isSubmittingUtr, setIsSubmittingUtr] = useState(false);
+
+  // Fetch approval requests from backend
+  const fetchRequests = async () => {
+    setRequestsLoading(true);
+    try {
+      const res = await rtgsService.getRequests({
+        status: approvalStatusFilter !== 'ALL' ? approvalStatusFilter : undefined,
+        category: approvalCategoryFilter !== 'ALL' ? approvalCategoryFilter : undefined,
+        search: approvalSearch.trim() || undefined,
+      });
+      const data = (res as any)?.data?.data || (res as any)?.data || [];
+      setRequests(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Failed to fetch RTGS requests:', err);
+      toast.error('Failed to load RTGS payment requests');
+      setRequests([]);
+    } finally {
+      setRequestsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeMainTab === 'APPROVALS') {
+      fetchRequests();
+    }
+  }, [activeMainTab, approvalStatusFilter, approvalCategoryFilter]);
+
+  // Filter requests locally for quick search
+  const filteredRequests = useMemo(() => {
+    if (!approvalSearch.trim()) return requests;
+    const q = approvalSearch.toLowerCase().trim();
+    return requests.filter(r =>
+      r.beneficiary_name.toLowerCase().includes(q) ||
+      r.approval_code.toLowerCase().includes(q) ||
+      r.account_number.toLowerCase().includes(q) ||
+      (r.ifsc_code && r.ifsc_code.toLowerCase().includes(q)) ||
+      (r.narration && r.narration.toLowerCase().includes(q)) ||
+      (r.bill_number && r.bill_number.toLowerCase().includes(q))
+    );
+  }, [requests, approvalSearch]);
+
+  // Request KPI Counts
+  const requestMetrics = useMemo(() => {
+    const pendingList = requests.filter(r => r.status === 'PENDING');
+    const approvedList = requests.filter(r => r.status === 'APPROVED');
+    const paidList = requests.filter(r => r.status === 'PAID');
+
+    return {
+      totalCount: requests.length,
+      pendingCount: pendingList.length,
+      pendingAmount: pendingList.reduce((acc, r) => acc + (Number(r.amount) || 0), 0),
+      approvedCount: approvedList.length,
+      approvedAmount: approvedList.reduce((acc, r) => acc + (Number(r.amount) || 0), 0),
+      paidCount: paidList.length,
+      paidAmount: paidList.reduce((acc, r) => acc + (Number(r.amount) || 0), 0),
+    };
+  }, [requests]);
+
+  // Single Approve handler
+  const handleApproveSingle = async (req: RtgsRequestItem) => {
+    try {
+      await rtgsService.approveRequest(req.id);
+      toast.success(`✓ RTGS Request #${req.approval_code} approved! PDF download is now UNLOCKED.`);
+      fetchRequests();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to approve RTGS request');
+    }
+  };
+
+  // Single Reject handler
+  const handleRejectSingle = async (req: RtgsRequestItem) => {
+    const reason = prompt(`Enter rejection reason for request #${req.approval_code}:`);
+    if (reason === null) return;
+    try {
+      await rtgsService.rejectRequest(req.id, reason || 'Rejected by administrator');
+      toast.info(`Request #${req.approval_code} marked as rejected.`);
+      fetchRequests();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to reject request');
+    }
+  };
+
+  // Bulk Approve handler
+  const handleBulkApprove = async () => {
+    const ids = Array.from(selectedRequestIds);
+    if (ids.length === 0) {
+      toast.error('Please select requests to approve');
+      return;
+    }
+    const pendingTargets = requests.filter(r => ids.includes(r.id) && r.status === 'PENDING');
+    if (pendingTargets.length === 0) {
+      toast.info('No pending requests found among selected items to approve');
+      return;
+    }
+
+    setIsBulkApproving(true);
+    try {
+      await rtgsService.bulkApproveRequests(pendingTargets.map(t => t.id));
+      toast.success(`🎉 Approved ${pendingTargets.length} RTGS requests! PDFs are now UNLOCKED.`);
+      setSelectedRequestIds(new Set());
+      fetchRequests();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to bulk approve');
+    } finally {
+      setIsBulkApproving(false);
+    }
+  };
+
+  // Mark Paid & UTR Handler
+  const handleOpenUtrModal = (req: RtgsRequestItem) => {
+    setSelectedRequestForUtr(req);
+    setUtrNumberInput(req.utr_number || '');
+    setUtrModalOpen(true);
+  };
+
+  const handleConfirmUtrPaid = async () => {
+    if (!selectedRequestForUtr) return;
+    if (!utrNumberInput.trim()) {
+      toast.error('Please enter the Bank UTR number to confirm payment.');
+      return;
+    }
+
+    setIsSubmittingUtr(true);
+    try {
+      await rtgsService.markPaid(selectedRequestForUtr.id, utrNumberInput.trim());
+      toast.success(`✓ Marked #${selectedRequestForUtr.approval_code} as PAID with UTR ${utrNumberInput.trim()}`);
+      setUtrModalOpen(false);
+      fetchRequests();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to record UTR');
+    } finally {
+      setIsSubmittingUtr(false);
+    }
+  };
+
+  // Strict PDF Download Gate: Locks if not approved!
+  const handleDownloadRequestPdf = async (req: RtgsRequestItem) => {
+    if (req.status === 'PENDING') {
+      toast.error('🔒 Locked: SuperAdmin approval is required before downloading this Axis Bank RTGS PDF!');
+      return;
+    }
+    if (req.status === 'REJECTED') {
+      toast.error('❌ Cannot download: This payment request was rejected.');
+      return;
+    }
+
+    try {
+      const payload: RTGSData = {
+        beneficiaryName: req.beneficiary_name,
+        bankName: req.bank_name || 'AXIS BANK',
+        accountNumber: req.account_number,
+        ifscCode: req.ifsc_code,
+        amount: Number(req.amount),
+        date: req.payment_date || req.bill_date || new Date().toISOString().slice(0, 10),
+        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
+        companyAccount: req.company_account || settings?.company_bank_account || '925030009706188',
+        companyBank: req.company_bank || settings?.company_bank_name || 'AXIS BANK',
+        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
+        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
+        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
+        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
+        companyPhone: settings?.company_phone || '8866322700',
+        beneficiaryBranch: req.branch || 'NAVSARI',
+        narration: (req.narration || `RTGS ${req.beneficiary_name}`).toUpperCase(),
+      };
+
+      await generateRTGSSlip(payload);
+
+      saveRtgsRecord({
+        date: payload.date || new Date().toISOString().slice(0, 10),
+        beneficiaryName: req.beneficiary_name,
+        category: req.payee_category === 'SALARY' ? 'EMPLOYEE' : (req.payee_category === 'SUPPLIER' ? 'SUPPLIER' : 'OTHER'),
+        bankName: payload.bankName,
+        accountNumber: payload.accountNumber,
+        ifscCode: payload.ifscCode,
+        branch: payload.beneficiaryBranch,
+        amount: Number(req.amount),
+        narration: payload.narration || req.narration,
+        chequeNumber: req.cheque_number || undefined,
+        source: 'APPROVAL_GATE',
+        companyAccount: payload.companyAccount,
+        companyBank: payload.companyBank,
+      });
+
+      setHistoryRecords(getRtgsHistory());
+      toast.success(`🎉 Official Axis Bank RTGS PDF generated for ${req.beneficiary_name}!`);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to generate Axis Bank RTGS PDF.');
+    }
+  };
+
+  // Bulk Download Approved Combined PDF
+  const handleDownloadBulkApprovedPdf = async () => {
+    const ids = Array.from(selectedRequestIds);
+    if (ids.length === 0) {
+      toast.error('Please select requests to download');
+      return;
+    }
+    const selectedList = requests.filter(r => ids.includes(r.id));
+    const pendingList = selectedList.filter(r => r.status === 'PENDING');
+    if (pendingList.length > 0) {
+      toast.error(`🔒 Cannot download: ${pendingList.length} of the selected requests are still PENDING SuperAdmin approval! Only approved requests can be downloaded.`);
+      return;
+    }
+    const eligibleList = selectedList.filter(r => r.status === 'APPROVED' || r.status === 'PAID');
+    if (eligibleList.length === 0) {
+      toast.error('No approved requests found in selection.');
+      return;
+    }
+
+    setIsBulkDownloading(true);
+    try {
+      const items: RTGSData[] = eligibleList.map(req => ({
+        beneficiaryName: req.beneficiary_name,
+        bankName: req.bank_name || 'AXIS BANK',
+        accountNumber: req.account_number,
+        ifscCode: req.ifsc_code,
+        amount: Number(req.amount),
+        date: req.payment_date || req.bill_date || new Date().toISOString().slice(0, 10),
+        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
+        companyAccount: req.company_account || settings?.company_bank_account || '925030009706188',
+        companyBank: req.company_bank || settings?.company_bank_name || 'AXIS BANK',
+        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
+        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
+        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
+        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
+        companyPhone: settings?.company_phone || '8866322700',
+        beneficiaryBranch: req.branch || 'NAVSARI',
+        narration: (req.narration || `RTGS ${req.beneficiary_name}`).toUpperCase(),
+      }));
+
+      await generateCombinedBulkRTGSPdf(items);
+
+      saveBulkRtgsRecords(items.map(it => ({
+        date: it.date || new Date().toISOString().slice(0, 10),
+        beneficiaryName: it.beneficiaryName,
+        category: 'OTHER',
+        bankName: it.bankName,
+        accountNumber: it.accountNumber,
+        ifscCode: it.ifscCode,
+        branch: it.beneficiaryBranch,
+        amount: it.amount,
+        narration: it.narration || '',
+        source: 'APPROVAL_BULK',
+        companyAccount: it.companyAccount,
+        companyBank: it.companyBank,
+      })));
+
+      setHistoryRecords(getRtgsHistory());
+      toast.success(`🎉 Downloaded combined multi-page Axis Bank RTGS PDF for ${items.length} approved payments!`);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to generate combined bulk PDF');
+    } finally {
+      setIsBulkDownloading(false);
+    }
+  };
+
+  // ──────────────────────────────────────────────────────────
+  // 2. PAYEES MASTER & OFFLINE ARCHIVE STATE
+  // ──────────────────────────────────────────────────────────
   const [historyRecords, setHistoryRecords] = useState<RtgsHistoryRecord[]>(() => getRtgsHistory());
   const [historySearch, setHistorySearch] = useState('');
   const [historyCategory, setHistoryCategory] = useState<string>('ALL');
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
 
-  // Payees master state
   const [savedPayees, setSavedPayees] = useState<Record<string, Partial<RtgsPayee>>>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -60,36 +370,39 @@ export default function BankRtgsHubPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const initialTab = (searchParams.get('tab') || 'ALL').toUpperCase();
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'SUPPLIER' | 'EMPLOYEE' | 'OTHER'>(
     initialTab === 'SUPPLIER' || initialTab === 'EMPLOYEE' || initialTab === 'OTHER' ? initialTab : 'ALL'
   );
 
-  // Bulk Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Single RTGS Generation Modal state
+  // Single Maker Modal state
   const [rtgsModalOpen, setRtgsModalOpen] = useState(false);
   const [selectedPayee, setSelectedPayee] = useState<RtgsPayee | null>(null);
+  const [rtgsCategory, setRtgsCategory] = useState<RtgsPayeeCategory>('SUPPLIER');
+  const [rtgsExpenseHead, setRtgsExpenseHead] = useState<string>('RAW_MATERIAL');
   const [rtgsAmount, setRtgsAmount] = useState<string>('');
   const [rtgsReason, setRtgsReason] = useState<string>('');
   const [rtgsDate, setRtgsDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [rtgsBillNo, setRtgsBillNo] = useState<string>('');
   const [rtgsChequeNo, setRtgsChequeNo] = useState<string>('');
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSubmittingSingle, setIsSubmittingSingle] = useState(false);
 
-  // Bulk RTGS Modal state
+  // Bulk Maker Modal state
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkRows, setBulkRows] = useState<Array<{
     payee: RtgsPayee;
     amount: string;
     reason: string;
+    category: RtgsPayeeCategory;
+    expenseHead: string;
   }>>([]);
   const [bulkDefaultReason, setBulkDefaultReason] = useState<string>('PAYMENT');
   const [bulkDefaultAmount, setBulkDefaultAmount] = useState<string>('');
   const [bulkDate, setBulkDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [isGeneratingBulk, setIsGeneratingBulk] = useState(false);
+  const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
 
   // Edit / Add Payee Modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -114,42 +427,6 @@ export default function BankRtgsHubPage() {
       setSuppliers(suppList);
       setEmployees(empList);
       setIsLoading(false);
-
-      // Auto-open RTGS for specific supplier or employee if query param passed
-      const targetSupplierId = searchParams.get('supplierId');
-      const targetEmpId = searchParams.get('empId');
-
-      if (targetSupplierId && suppList.length > 0) {
-        const s = suppList.find((x: any) => String(x.id) === String(targetSupplierId));
-        if (s) {
-          const cached = savedPayees[`supp_${s.id}`] || {};
-          openSingleRtgsModal({
-            id: `supp_${s.id}`,
-            name: s.name,
-            category: 'SUPPLIER',
-            bankName: cached.bankName || '',
-            accountNumber: cached.accountNumber || '',
-            ifscCode: cached.ifscCode || '',
-            branch: cached.branch || s.address || 'NAVSARI',
-            gstNumber: s.gstnumber,
-          });
-        }
-      } else if (targetEmpId && empList.length > 0) {
-        const e = empList.find((x: any) => String(x.id) === String(targetEmpId));
-        if (e) {
-          const cached = savedPayees[`emp_${e.id}`] || {};
-          openSingleRtgsModal({
-            id: `emp_${e.id}`,
-            name: e.name,
-            category: 'EMPLOYEE',
-            bankName: cached.bankName || e.bank_name || '',
-            accountNumber: cached.accountNumber || e.bank_account_number || '',
-            ifscCode: cached.ifscCode || e.bank_ifsc || '',
-            branch: cached.branch || e.bank_branch || 'NAVSARI',
-            designation: e.designation,
-          });
-        }
-      }
     });
   }, []);
 
@@ -157,7 +434,6 @@ export default function BankRtgsHubPage() {
   const allPayees = useMemo<RtgsPayee[]>(() => {
     const list: RtgsPayee[] = [];
 
-    // 1. Suppliers
     suppliers.forEach(s => {
       const cached = savedPayees[`supp_${s.id}`] || {};
       list.push({
@@ -173,7 +449,6 @@ export default function BankRtgsHubPage() {
       });
     });
 
-    // 2. Employees (Staff)
     employees.forEach(e => {
       const cached = savedPayees[`emp_${e.id}`] || {};
       list.push({
@@ -188,7 +463,6 @@ export default function BankRtgsHubPage() {
       });
     });
 
-    // 3. Custom / Other Payees saved in localStorage
     Object.entries(savedPayees).forEach(([key, val]) => {
       if (key.startsWith('custom_') && val.name) {
         list.push({
@@ -235,7 +509,7 @@ export default function BankRtgsHubPage() {
     };
   }, [allPayees]);
 
-  // Selection handlers
+  // Payees selection
   const handleToggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -258,13 +532,20 @@ export default function BankRtgsHubPage() {
     setSelectedPayee(payee);
     setRtgsAmount('');
     setRtgsDate(new Date().toISOString().slice(0, 10));
+    setRtgsBillNo('');
     setRtgsChequeNo('');
 
     if (payee.category === 'EMPLOYEE') {
+      setRtgsCategory('SALARY');
+      setRtgsExpenseHead('STAFF_SALARY');
       setRtgsReason(`STAFF SALARY ADVANCE - ${payee.name}`);
     } else if (payee.category === 'SUPPLIER') {
+      setRtgsCategory('SUPPLIER');
+      setRtgsExpenseHead('RAW_MATERIAL');
       setRtgsReason(`SUPPLIER PAYMENT - ${payee.name}`);
     } else {
+      setRtgsCategory('OTHER');
+      setRtgsExpenseHead('ADMIN_OFFICE');
       setRtgsReason(`PAYMENT - ${payee.name}`);
     }
 
@@ -279,9 +560,9 @@ export default function BankRtgsHubPage() {
       return;
     }
 
-    const defaultReason = activeCategory === 'EMPLOYEE'
-      ? 'STAFF SALARY ADVANCE'
-      : (activeCategory === 'SUPPLIER' ? 'SUPPLIER PAYMENT' : 'REMITTANCE');
+    const defaultCat: RtgsPayeeCategory = activeCategory === 'EMPLOYEE' ? 'SALARY' : (activeCategory === 'SUPPLIER' ? 'SUPPLIER' : 'OTHER');
+    const defaultHead = defaultCat === 'SALARY' ? 'STAFF_SALARY' : (defaultCat === 'SUPPLIER' ? 'RAW_MATERIAL' : 'ADMIN_OFFICE');
+    const defaultReason = defaultCat === 'SALARY' ? 'STAFF SALARY' : (defaultCat === 'SUPPLIER' ? 'SUPPLIER PAYMENT' : 'REMITTANCE');
 
     setBulkDefaultReason(defaultReason);
     setBulkDefaultAmount('');
@@ -290,11 +571,14 @@ export default function BankRtgsHubPage() {
       payee: p,
       amount: '',
       reason: `${defaultReason} - ${p.name}`,
+      category: p.category === 'EMPLOYEE' ? 'SALARY' : (p.category === 'SUPPLIER' ? 'SUPPLIER' : 'OTHER'),
+      expenseHead: p.category === 'EMPLOYEE' ? 'STAFF_SALARY' : (p.category === 'SUPPLIER' ? 'RAW_MATERIAL' : 'ADMIN_OFFICE'),
     })));
 
     setBulkModalOpen(true);
   };
 
+  // Apply default reason to bulk
   const handleApplyDefaultReasonToAll = () => {
     if (!bulkDefaultReason.trim()) return;
     setBulkRows(prev => prev.map(r => ({
@@ -304,6 +588,7 @@ export default function BankRtgsHubPage() {
     toast.success('Applied reason to all selected payees!');
   };
 
+  // Apply default amount to bulk
   const handleApplyDefaultAmountToAll = () => {
     if (!bulkDefaultAmount.trim()) return;
     const formatted = formatIndianAmountInput(bulkDefaultAmount);
@@ -314,11 +599,107 @@ export default function BankRtgsHubPage() {
     toast.success(`Applied ₹${formatted} to all selected payees!`);
   };
 
-  const bulkTotalAmount = useMemo(() => {
-    return bulkRows.reduce((sum, r) => sum + parseIndianAmount(r.amount), 0);
-  }, [bulkRows]);
+  // Submit Single RTGS Request for SuperAdmin Approval (Maker Flow)
+  const handleSubmitSingleRtgs = async (directApprove: boolean = false) => {
+    if (!selectedPayee) return;
 
-  // Open Edit Bank Details Modal
+    const amt = parseIndianAmount(rtgsAmount);
+    if (!amt || isNaN(amt) || amt <= 0) {
+      toast.error('Please enter a valid transfer amount.');
+      return;
+    }
+    if (!selectedPayee.accountNumber) {
+      toast.error('Bank Account Number is missing. Please edit and save it first.');
+      return;
+    }
+    if (!selectedPayee.ifscCode) {
+      toast.error('IFSC Code is missing. Please edit and save it first.');
+      return;
+    }
+
+    setIsSubmittingSingle(true);
+    try {
+      const payload = {
+        payee_category: rtgsCategory,
+        expense_head: rtgsExpenseHead,
+        beneficiary_name: selectedPayee.name,
+        bank_name: selectedPayee.bankName || 'AXIS BANK',
+        account_number: selectedPayee.accountNumber,
+        ifsc_code: selectedPayee.ifscCode,
+        branch: selectedPayee.branch || 'NAVSARI',
+        amount: amt,
+        bill_date: rtgsDate,
+        payment_date: rtgsDate,
+        bill_number: rtgsBillNo || undefined,
+        cheque_number: rtgsChequeNo || undefined,
+        narration: (rtgsReason || `RTGS ${selectedPayee.name}`).toUpperCase(),
+        company_account: settings?.company_bank_account || '925030009706188',
+        company_bank: settings?.company_bank_name || 'AXIS BANK',
+      };
+
+      const res = await rtgsService.createRequest(payload);
+      const createdItem = (res as any)?.data?.data || (res as any)?.data;
+
+      if (directApprove && isSuperAdminOrDirector && createdItem?.id) {
+        // Direct SuperAdmin execution
+        await rtgsService.approveRequest(createdItem.id, 'Directly approved by SuperAdmin');
+        toast.success(`✓ RTGS Request approved and queued! Generating PDF...`);
+        await handleDownloadRequestPdf({ ...createdItem, status: 'APPROVED' });
+      } else {
+        toast.success(`🔒 RTGS Payment Request queued for SuperAdmin approval! Status: PENDING.`);
+      }
+
+      setRtgsModalOpen(false);
+      setActiveMainTab('APPROVALS');
+      fetchRequests();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to submit RTGS request');
+    } finally {
+      setIsSubmittingSingle(false);
+    }
+  };
+
+  // Submit Bulk RTGS for SuperAdmin Approval (Maker Flow)
+  const handleSubmitBulkRtgs = async () => {
+    const validRows = bulkRows.filter(r => parseIndianAmount(r.amount) > 0 && r.payee.accountNumber && r.payee.ifscCode);
+    if (validRows.length === 0) {
+      toast.error('Please enter valid transfer amounts for payees with complete bank credentials.');
+      return;
+    }
+
+    setIsSubmittingBulk(true);
+    try {
+      const batchPayload = validRows.map(r => ({
+        payee_category: r.category,
+        expense_head: r.expenseHead,
+        beneficiary_name: r.payee.name,
+        bank_name: r.payee.bankName || 'AXIS BANK',
+        account_number: r.payee.accountNumber,
+        ifsc_code: r.payee.ifscCode,
+        branch: r.payee.branch || 'NAVSARI',
+        amount: parseIndianAmount(r.amount),
+        bill_date: bulkDate,
+        payment_date: bulkDate,
+        narration: (r.reason || `RTGS ${r.payee.name}`).toUpperCase(),
+        company_account: settings?.company_bank_account || '925030009706188',
+        company_bank: settings?.company_bank_name || 'AXIS BANK',
+        source: 'HUB_BULK',
+      }));
+
+      await rtgsService.createRequest(batchPayload);
+      toast.success(`🎉 Queued ${batchPayload.length} RTGS requests for SuperAdmin approval! Status: PENDING.`);
+      setBulkModalOpen(false);
+      setSelectedIds(new Set());
+      setActiveMainTab('APPROVALS');
+      fetchRequests();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to submit bulk RTGS requests');
+    } finally {
+      setIsSubmittingBulk(false);
+    }
+  };
+
+  // Edit / Save Payee
   const openEditModal = (payee?: RtgsPayee) => {
     if (payee) {
       setEditForm({
@@ -344,7 +725,6 @@ export default function BankRtgsHubPage() {
     setEditModalOpen(true);
   };
 
-  // Save Payee Bank Details
   const handleSavePayeeDetails = () => {
     if (!editForm.name?.trim()) {
       toast.error('Please enter the Beneficiary Name.');
@@ -387,7 +767,6 @@ export default function BankRtgsHubPage() {
     setEditModalOpen(false);
   };
 
-  // Delete Custom Payee
   const handleDeletePayee = (id: string, name: string) => {
     if (!confirm(`Delete saved payee "${name}"?`)) return;
     const updated = { ...savedPayees };
@@ -402,414 +781,98 @@ export default function BankRtgsHubPage() {
     toast.success(`Removed ${name}.`);
   };
 
-  // Helper to compile RTGS item
-  const buildRtgsPayload = (payee: RtgsPayee, amount: number, narration: string, date: string): RTGSData => {
-    return {
-      beneficiaryName: payee.name,
-      bankName: payee.bankName || 'AXIS BANK',
-      accountNumber: payee.accountNumber,
-      ifscCode: payee.ifscCode,
-      amount,
-      date,
-      companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
-      companyAccount: settings?.company_bank_account || '925030009706188',
-      companyBank: settings?.company_bank_name || 'AXIS BANK',
-      companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
-      companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
-      companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
-      companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
-      companyPhone: settings?.company_phone || '8866322700',
-      beneficiaryBranch: payee.branch || 'NAVSARI',
-      narration: (narration || `RTGS ${payee.name}`).toUpperCase(),
-    };
-  };
-
-  // Generate Single Axis Bank RTGS PDF
-  const handleGenerateSinglePdf = async () => {
-    if (!selectedPayee) return;
-
-    const amt = parseIndianAmount(rtgsAmount);
-    if (!amt || isNaN(amt) || amt <= 0) {
-      toast.error('Please enter a valid transfer amount.');
-      return;
+  // Helper category badge renderer
+  const renderCategoryBadge = (cat?: string) => {
+    const c = (cat || '').toUpperCase();
+    if (c === 'SALARY') {
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold inline-flex items-center gap-1">
+          <Users className="w-3 h-3 text-amber-600" /> Salary
+        </span>
+      );
     }
-
-    if (!selectedPayee.accountNumber) {
-      toast.error('Bank Account Number is missing. Please save it first.');
-      return;
+    if (c === 'SUPPLIER') {
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold inline-flex items-center gap-1">
+          <Building2 className="w-3 h-3 text-blue-600" /> Supplier
+        </span>
+      );
     }
-    if (!selectedPayee.ifscCode) {
-      toast.error('IFSC Code is missing. Please save it first.');
-      return;
+    if (c === 'TRANSPORTATION') {
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold inline-flex items-center gap-1">
+          <Truck className="w-3 h-3 text-purple-600" /> Transport
+        </span>
+      );
     }
-
-    setIsGenerating(true);
-    try {
-      const payload = buildRtgsPayload(selectedPayee, amt, rtgsReason, rtgsDate);
-      await generateRTGSSlip(payload);
-      saveRtgsRecord({
-        date: payload.date || rtgsDate,
-        beneficiaryName: selectedPayee.name,
-        category: selectedPayee.category,
-        bankName: payload.bankName,
-        accountNumber: payload.accountNumber,
-        ifscCode: payload.ifscCode,
-        branch: payload.beneficiaryBranch,
-        amount: amt,
-        narration: payload.narration || rtgsReason,
-        chequeNumber: rtgsChequeNo || undefined,
-        source: 'HUB_SINGLE',
-        companyAccount: payload.companyAccount,
-        companyBank: payload.companyBank,
-      });
-      setHistoryRecords(getRtgsHistory());
-      toast.success(`🎉 Official Axis Bank RTGS PDF generated & recorded for ${selectedPayee.name}!`);
-      setRtgsModalOpen(false);
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to generate Axis Bank RTGS PDF.');
-    } finally {
-      setIsGenerating(false);
+    if (c === 'ELECTRICITY') {
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold inline-flex items-center gap-1">
+          <Zap className="w-3 h-3 text-emerald-600" /> Electricity
+        </span>
+      );
     }
-  };
-
-  // Generate Bulk RTGS (Combined PDF)
-  const handleGenerateBulkCombined = async () => {
-    // Validate each row
-    const validItems: RTGSData[] = [];
-    for (const r of bulkRows) {
-      const amt = parseIndianAmount(r.amount);
-      if (!amt || amt <= 0) {
-        toast.error(`Please enter a valid amount for ${r.payee.name}`);
-        return;
-      }
-      if (!r.payee.accountNumber || !r.payee.ifscCode) {
-        toast.error(`Missing Bank credentials for ${r.payee.name}`);
-        return;
-      }
-      validItems.push(buildRtgsPayload(r.payee, amt, r.reason, bulkDate));
-    }
-
-    setIsGeneratingBulk(true);
-    try {
-      await generateCombinedBulkRTGSPdf(validItems);
-      saveBulkRtgsRecords(validItems.map((item, idx) => ({
-        date: item.date || bulkDate,
-        beneficiaryName: item.beneficiaryName,
-        category: bulkRows[idx]?.payee.category || 'OTHER',
-        bankName: item.bankName,
-        accountNumber: item.accountNumber,
-        ifscCode: item.ifscCode,
-        branch: item.beneficiaryBranch,
-        amount: item.amount,
-        narration: item.narration || '',
-        source: 'HUB_BULK',
-        companyAccount: item.companyAccount,
-        companyBank: item.companyBank,
-      })));
-      setHistoryRecords(getRtgsHistory());
-      toast.success(`🎉 Generated Combined Multi-Page Axis RTGS PDF & saved records for ${validItems.length} payees!`);
-      setBulkModalOpen(false);
-      setSelectedIds(new Set());
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to generate Combined Bulk RTGS PDF.');
-    } finally {
-      setIsGeneratingBulk(false);
-    }
-  };
-
-  // Generate Bulk RTGS (Batch All Individual PDFs)
-  const handleGenerateBulkIndividual = async () => {
-    const validRows = bulkRows.filter(r => parseIndianAmount(r.amount) > 0 && r.payee.accountNumber && r.payee.ifscCode);
-    if (validRows.length === 0) {
-      toast.error('Please enter valid transfer amounts for payees with complete bank credentials.');
-      return;
-    }
-
-    setIsGeneratingBulk(true);
-    toast.info(`Starting download of ${validRows.length} individual RTGS files...`);
-
-    try {
-      for (let i = 0; i < validRows.length; i++) {
-        const r = validRows[i];
-        const payload = buildRtgsPayload(r.payee, parseIndianAmount(r.amount), r.reason, bulkDate);
-        await generateRTGSSlip(payload);
-        if (validRows.length > 1 && i < validRows.length - 1) {
-          await new Promise(res => setTimeout(res, 500));
-        }
-      }
-      saveBulkRtgsRecords(validRows.map(r => ({
-        date: bulkDate,
-        beneficiaryName: r.payee.name,
-        category: r.payee.category,
-        bankName: r.payee.bankName || 'AXIS BANK',
-        accountNumber: r.payee.accountNumber,
-        ifscCode: r.payee.ifscCode,
-        branch: r.payee.branch || 'NAVSARI',
-        amount: parseIndianAmount(r.amount),
-        narration: r.reason || '',
-        source: 'HUB_BULK',
-        companyAccount: settings?.company_bank_account || '925030009706188',
-        companyBank: settings?.company_bank_name || 'AXIS BANK',
-      })));
-      setHistoryRecords(getRtgsHistory());
-      toast.success(`🎉 Downloaded all ${validRows.length} individual Axis Bank RTGS PDFs & saved audit records!`);
-      setBulkModalOpen(false);
-      setSelectedIds(new Set());
-    } catch (e: any) {
-      toast.error(e.message || 'Failed during batch download.');
-    } finally {
-      setIsGeneratingBulk(false);
-    }
-  };
-
-  // Download Single RTGS PDF for an individual row directly from the Bulk modal
-  const handleDownloadRowSinglePdf = async (r: typeof bulkRows[0]) => {
-    const amt = parseIndianAmount(r.amount);
-    if (!amt || amt <= 0) {
-      toast.error(`Please enter a valid transfer amount for ${r.payee.name} first.`);
-      return;
-    }
-    if (!r.payee.accountNumber || !r.payee.ifscCode) {
-      toast.error(`Missing Bank credentials for ${r.payee.name}.`);
-      return;
-    }
-
-    try {
-      const payload = buildRtgsPayload(r.payee, amt, r.reason, bulkDate);
-      await generateRTGSSlip(payload);
-      saveRtgsRecord({
-        date: payload.date || bulkDate,
-        beneficiaryName: r.payee.name,
-        category: r.payee.category,
-        bankName: payload.bankName,
-        accountNumber: payload.accountNumber,
-        ifscCode: payload.ifscCode,
-        branch: payload.beneficiaryBranch,
-        amount: amt,
-        narration: payload.narration || r.reason,
-        source: 'HUB_SINGLE',
-        companyAccount: payload.companyAccount,
-        companyBank: payload.companyBank,
-      });
-      setHistoryRecords(getRtgsHistory());
-      toast.success(`🎉 Downloaded Single RTGS PDF for ${r.payee.name}!`);
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to download single RTGS PDF.');
-    }
-  };
-
-  // Export Axis Bank CSV / Excel Format
-  const handleExportBulkCsv = () => {
-    const validRows = bulkRows.filter(r => parseIndianAmount(r.amount) > 0);
-    if (validRows.length === 0) {
-      toast.error('Please enter transfer amounts first.');
-      return;
-    }
-
-    const headers = ['Sr No', 'Beneficiary Name', 'Beneficiary Account No', 'Beneficiary IFSC', 'Amount (INR)', 'Debit Account No', 'Narration / Purpose'];
-    const rows = validRows.map((r, i) => [
-      i + 1,
-      `"${r.payee.name}"`,
-      `"${r.payee.accountNumber}"`,
-      `"${r.payee.ifscCode}"`,
-      parseIndianAmount(r.amount).toFixed(2),
-      `"${settings?.company_bank_account || '925030009706188'}"`,
-      `"${r.reason.replace(/"/g, '""')}"`
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Axis_Bank_Bulk_RTGS_Annexure_${bulkDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('📊 Exported Axis Bank Corporate Bulk Annexure CSV!');
-  };
-
-  // ── RTGS HISTORY HANDLERS ──
-  const filteredHistory = useMemo(() => {
-    return historyRecords.filter(rec => {
-      const q = historySearch.toLowerCase().trim();
-      const matchesSearch = !q || 
-        rec.beneficiaryName?.toLowerCase().includes(q) ||
-        rec.accountNumber?.includes(q) ||
-        rec.ifscCode?.toLowerCase().includes(q) ||
-        (rec.chequeNumber && rec.chequeNumber.includes(q)) ||
-        (rec.narration && rec.narration.toLowerCase().includes(q));
-
-      const matchesCat = historyCategory === 'ALL' || rec.category === historyCategory;
-      return matchesSearch && matchesCat;
-    });
-  }, [historyRecords, historySearch, historyCategory]);
-
-  const historyTotalDisbursed = useMemo(() => {
-    return historyRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
-  }, [historyRecords]);
-
-  const handleRedownloadHistorySlip = async (rec: RtgsHistoryRecord) => {
-    try {
-      toast.info(`Preparing Axis Bank RTGS form for ${rec.beneficiaryName}...`);
-      const payload: RTGSData = {
-        beneficiaryName: rec.beneficiaryName,
-        bankName: rec.bankName || 'AXIS BANK',
-        accountNumber: rec.accountNumber,
-        ifscCode: rec.ifscCode,
-        amount: rec.amount,
-        date: rec.date || new Date().toISOString().slice(0, 10),
-        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
-        companyAccount: rec.companyAccount || settings?.company_bank_account || '925030009706188',
-        companyBank: rec.companyBank || settings?.company_bank_name || 'AXIS BANK',
-        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
-        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
-        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
-        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
-        companyPhone: settings?.company_phone || '8866322700',
-        beneficiaryBranch: rec.branch || 'NAVSARI',
-        narration: rec.narration || `RTGS ${rec.beneficiaryName}`,
-      };
-      await generateRTGSSlip(payload);
-      toast.success(`Downloaded Axis RTGS slip for ${rec.beneficiaryName}!`);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to re-download RTGS form.');
-    }
-  };
-
-  const handleDeleteHistory = (id: string) => {
-    if (!confirm('Remove this RTGS record from history?')) return;
-    const updated = deleteRtgsRecord(id);
-    setHistoryRecords(updated);
-    setSelectedHistoryIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    toast.success('Record removed.');
-  };
-
-  const handleClearAllHistory = () => {
-    if (!confirm('Are you sure you want to clear all RTGS history records? This cannot be undone.')) return;
-    clearRtgsHistory();
-    setHistoryRecords([]);
-    setSelectedHistoryIds(new Set());
-    toast.success('All RTGS history cleared.');
-  };
-
-  const handleExportHistoryCsv = () => {
-    if (historyRecords.length === 0) {
-      toast.error('No history records to export.');
-      return;
-    }
-    const headers = ['Sr No', 'Date', 'Beneficiary Name', 'Category', 'Bank Name', 'Account Number', 'IFSC Code', 'Amount (INR)', 'Narration', 'Cheque No', 'Source', 'Company Account'];
-    const rows = historyRecords.map((r, i) => [
-      i + 1,
-      `"${r.date}"`,
-      `"${r.beneficiaryName}"`,
-      `"${r.category}"`,
-      `"${r.bankName}"`,
-      `"${r.accountNumber}"`,
-      `"${r.ifscCode}"`,
-      r.amount.toFixed(2),
-      `"${(r.narration || '').replace(/"/g, '""')}"`,
-      `"${r.chequeNumber || ''}"`,
-      `"${r.source}"`,
-      `"${r.companyAccount || ''}"`
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Axis_RTGS_Audit_History_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('📊 Exported RTGS History to CSV!');
-  };
-
-  const handleDownloadSelectedHistoryCombined = async () => {
-    const selected = historyRecords.filter(r => selectedHistoryIds.has(r.id));
-    if (selected.length === 0) {
-      toast.error('Please select at least one record from history.');
-      return;
-    }
-    try {
-      toast.info(`Preparing combined PDF for ${selected.length} slips...`);
-      const items: RTGSData[] = selected.map(rec => ({
-        beneficiaryName: rec.beneficiaryName,
-        bankName: rec.bankName || 'AXIS BANK',
-        accountNumber: rec.accountNumber,
-        ifscCode: rec.ifscCode,
-        amount: rec.amount,
-        date: rec.date || new Date().toISOString().slice(0, 10),
-        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
-        companyAccount: rec.companyAccount || settings?.company_bank_account || '925030009706188',
-        companyBank: rec.companyBank || settings?.company_bank_name || 'AXIS BANK',
-        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
-        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
-        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
-        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
-        companyPhone: settings?.company_phone || '8866322700',
-        beneficiaryBranch: rec.branch || 'NAVSARI',
-        narration: rec.narration || `RTGS ${rec.beneficiaryName}`,
-      }));
-      await generateCombinedBulkRTGSPdf(items, `AXIS_BULK_RTGS_HISTORICAL_${new Date().toISOString().slice(0, 10)}.pdf`);
-      toast.success(`Downloaded combined PDF for ${selected.length} historical slips!`);
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to generate combined PDF.');
-    }
-  };
-
-  const handleToggleSelectHistory = (id: string) => {
-    setSelectedHistoryIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSelectAllHistory = () => {
-    if (selectedHistoryIds.size === filteredHistory.length) {
-      setSelectedHistoryIds(new Set());
-    } else {
-      setSelectedHistoryIds(new Set(filteredHistory.map(r => r.id)));
-    }
+    return (
+      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold inline-flex items-center gap-1">
+        <FileText className="w-3 h-3 text-slate-500" /> Other
+      </span>
+    );
   };
 
   return (
     <div className="flex-1 w-full min-w-0 p-4 md:p-6 bg-background text-foreground space-y-5">
-      
-      {/* ── TOP HEADER (MATCHED WITH SYSTEM CARD & UI DESIGN) ── */}
+      {/* ── TOP HEADER ── */}
       <div className="bg-card text-card-foreground border border-border p-4 md:p-5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="p-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+          <div className="p-2.5 rounded-xl bg-blue-600 text-white shadow-md">
             <Landmark className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold tracking-tight">
-                Axis Bank RTGS & NEFT Center
+                Bank RTGS & Approval Center
               </h1>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                Official Form (02_AXIS)
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                Maker-Checker Gate
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Save beneficiary credentials, enter amount & reason, and generate single or bulk Axis Bank RTGS forms.
+              Submit RTGS for Salary, Suppliers, Transporters or Electricity bills. SuperAdmin approves before PDF download unlocks.
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          {activeMainTab === 'APPROVALS' && isSuperAdminOrDirector && selectedRequestIds.size > 0 && (
+            <Button
+              onClick={handleBulkApprove}
+              disabled={isBulkApproving}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 cursor-pointer shadow-sm"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+              Approve Selected ({selectedRequestIds.size})
+            </Button>
+          )}
+
+          {activeMainTab === 'APPROVALS' && selectedRequestIds.size > 0 && (
+            <Button
+              onClick={handleDownloadBulkApprovedPdf}
+              disabled={isBulkDownloading}
+              variant="outline"
+              className="border-blue-500/40 text-blue-700 dark:text-blue-400 font-bold text-xs h-8 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 mr-1" />
+              Download Approved Combined PDF
+            </Button>
+          )}
+
           {activeMainTab === 'PAYEES' && selectedIds.size > 0 && (
             <Button
               onClick={openBulkModal}
-              className="font-semibold shadow-sm"
-              size="sm"
+              className="font-bold text-xs h-8 cursor-pointer shadow-sm"
             >
-              <Layers className="w-4 h-4 mr-1.5" />
+              <Layers className="w-3.5 h-3.5 mr-1" />
               Bulk RTGS ({selectedIds.size})
             </Button>
           )}
@@ -819,52 +882,52 @@ export default function BankRtgsHubPage() {
               variant="outline"
               size="sm"
               onClick={() => openEditModal()}
+              className="text-xs h-8 cursor-pointer"
             >
-              <Plus className="w-4 h-4 mr-1.5" />
-              Add / Save Payee
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              Add Payee
             </Button>
-          )}
-
-          {activeMainTab === 'HISTORY' && (
-            <div className="flex items-center gap-2">
-              {selectedHistoryIds.size > 0 && (
-                <Button
-                  size="sm"
-                  onClick={handleDownloadSelectedHistoryCombined}
-                  className="gap-1.5 font-semibold text-xs"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Combined PDF ({selectedHistoryIds.size})
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportHistoryCsv}
-                className="gap-1.5 text-xs"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                Export CSV
-              </Button>
-            </div>
           )}
         </div>
       </div>
 
-      {/* ── MAIN VIEW SWITCHER: PAYEES MASTER VS RTGS RECORDS & HISTORY ── */}
+      {/* ── MAIN TAB SWITCHER: APPROVALS VS PAYEES MASTER VS OFFLINE ARCHIVE ── */}
       <div className="flex items-center gap-2 border-b border-border pb-1">
         <button
           type="button"
-          onClick={() => setActiveMainTab('PAYEES')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
-            activeMainTab === 'PAYEES'
-              ? 'bg-primary text-primary-foreground shadow-sm'
+          onClick={() => {
+            setActiveMainTab('APPROVALS');
+            fetchRequests();
+          }}
+          className={cn(
+            "px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer",
+            activeMainTab === 'APPROVALS'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
+          )}
+        >
+          <ShieldCheck className="w-4 h-4" />
+          <span>{isSuperAdminOrDirector ? 'SuperAdmin Approval Queue' : 'Submitted Requests & Status'}</span>
+          {requestMetrics.pendingCount > 0 && (
+            <span className="ml-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-500 text-white font-mono font-bold animate-pulse">
+              {requestMetrics.pendingCount} Pending
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('PAYEES')}
+          className={cn(
+            "px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer",
+            activeMainTab === 'PAYEES'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          )}
         >
           <Users className="w-4 h-4" />
           <span>Payees Master</span>
-          <span className="ml-1 text-[11px] px-2 py-0.5 rounded-full bg-primary-foreground/20 text-inherit font-mono font-semibold">
+          <span className="ml-1 text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 font-mono font-semibold">
             {counts.all}
           </span>
         </button>
@@ -875,429 +938,214 @@ export default function BankRtgsHubPage() {
             setActiveMainTab('HISTORY');
             setHistoryRecords(getRtgsHistory());
           }}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+          className={cn(
+            "px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer",
             activeMainTab === 'HISTORY'
-              ? 'bg-primary text-primary-foreground shadow-sm'
+              ? 'bg-blue-600 text-white shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
+          )}
         >
           <Clock className="w-4 h-4" />
-          <span>RTGS Records & History</span>
-          <span className="ml-1 text-[11px] px-2 py-0.5 rounded-full bg-primary-foreground/20 text-inherit font-mono font-semibold">
+          <span>Downloaded Slips Archive</span>
+          <span className="ml-1 text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 font-mono font-semibold">
             {historyRecords.length}
           </span>
         </button>
       </div>
 
-      {activeMainTab === 'PAYEES' ? (
-        <>
-      {/* ── SEARCH & CATEGORY FILTER BAR ── */}
-      <div className="bg-card border border-border p-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3">
-        {/* Category Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          <Button
-            size="sm"
-            variant={activeCategory === 'ALL' ? 'default' : 'outline'}
-            onClick={() => setActiveCategory('ALL')}
-            className="h-8 text-xs font-semibold"
-          >
-            All Payees ({counts.all})
-          </Button>
-
-          <Button
-            size="sm"
-            variant={activeCategory === 'SUPPLIER' ? 'default' : 'outline'}
-            onClick={() => setActiveCategory('SUPPLIER')}
-            className="h-8 text-xs font-semibold"
-          >
-            <Building2 className="w-3.5 h-3.5 mr-1" />
-            Suppliers ({counts.suppliers})
-          </Button>
-
-          <Button
-            size="sm"
-            variant={activeCategory === 'EMPLOYEE' ? 'default' : 'outline'}
-            onClick={() => setActiveCategory('EMPLOYEE')}
-            className="h-8 text-xs font-semibold"
-          >
-            <Users className="w-3.5 h-3.5 mr-1" />
-            Staff Advances ({counts.employees})
-          </Button>
-
-          <Button
-            size="sm"
-            variant={activeCategory === 'OTHER' ? 'default' : 'outline'}
-            onClick={() => setActiveCategory('OTHER')}
-            className="h-8 text-xs font-semibold"
-          >
-            <FileText className="w-3.5 h-3.5 mr-1" />
-            Other ({counts.other})
-          </Button>
-        </div>
-
-        {/* Search Input */}
-        <div className="relative min-w-[260px]">
-          <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
-          <Input
-            type="text"
-            placeholder="Search payee, account #, or IFSC..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-9 pl-9 pr-3 text-xs"
-          />
-        </div>
-      </div>
-
-      {/* ── PAYEES TABLE ── */}
-      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-        {isLoading ? (
-          <div className="p-12 text-center text-muted-foreground text-sm">
-            Loading suppliers and staff payees...
-          </div>
-        ) : filteredPayees.length === 0 ? (
-          <div className="p-12 text-center space-y-2">
-            <p className="text-muted-foreground text-sm">No payees found matching your filter.</p>
-            <Button variant="link" size="sm" onClick={() => openEditModal()}>
-              + Add a new RTGS payee now
-            </Button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/50 text-muted-foreground uppercase text-[11px] font-semibold tracking-wider border-b border-border">
-                <tr>
-                  <th className="p-3 w-10 text-center">
-                    <button
-                      type="button"
-                      onClick={handleSelectAll}
-                      className="text-muted-foreground hover:text-foreground"
-                      title={selectedIds.size === filteredPayees.length ? 'Deselect All' : 'Select All'}
-                    >
-                      {selectedIds.size > 0 && selectedIds.size === filteredPayees.length ? (
-                        <CheckSquare className="w-4 h-4 text-primary" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="px-3 py-3 font-semibold">Beneficiary Name</th>
-                  <th className="px-3 py-3 font-semibold">Category</th>
-                  <th className="px-3 py-3 font-semibold">Bank Name</th>
-                  <th className="px-3 py-3 font-semibold">Account Number</th>
-                  <th className="px-3 py-3 font-semibold">IFSC Code</th>
-                  <th className="px-3 py-3 font-semibold">Status</th>
-                  <th className="px-3 py-3 font-semibold text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredPayees.map((payee) => {
-                  const isSelected = selectedIds.has(payee.id);
-                  const hasBankDetails = Boolean(payee.accountNumber && payee.ifscCode);
-
-                  return (
-                    <tr 
-                      key={payee.id} 
-                      className={`hover:bg-muted/40 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
-                    >
-                      {/* Checkbox */}
-                      <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleSelect(payee.id)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-primary" />
-                          ) : (
-                            <Square className="w-4 h-4" />
-                          )}
-                        </button>
-                      </td>
-
-                      {/* Name */}
-                      <td className="px-3 py-3 font-semibold text-foreground">
-                        <div className="flex items-center gap-2">
-                          <span>{payee.name}</span>
-                          {payee.designation && (
-                            <span className="text-[10px] text-muted-foreground font-normal">
-                              ({payee.designation})
-                            </span>
-                          )}
-                          {payee.gstNumber && (
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              GST: {payee.gstNumber}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Category Badge */}
-                      <td className="px-3 py-3">
-                        {payee.category === 'SUPPLIER' && (
-                          <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
-                            <Building2 className="w-3 h-3" /> Supplier
-                          </span>
-                        )}
-                        {payee.category === 'EMPLOYEE' && (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
-                            <Users className="w-3 h-3" /> Staff Advance
-                          </span>
-                        )}
-                        {payee.category === 'OTHER' && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
-                            <FileText className="w-3 h-3" /> Other
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Bank Name */}
-                      <td className="px-3 py-3 text-muted-foreground font-medium">
-                        {payee.bankName || <span className="text-muted-foreground/60 italic">Not set</span>}
-                      </td>
-
-                      {/* Account Number */}
-                      <td className="px-3 py-3 font-mono">
-                        {payee.accountNumber ? (
-                          <span className="bg-muted/70 px-2 py-0.5 rounded text-foreground font-semibold">
-                            {payee.accountNumber}
-                          </span>
-                        ) : (
-                          <span className="text-amber-500/80 italic">Missing</span>
-                        )}
-                      </td>
-
-                      {/* IFSC Code */}
-                      <td className="px-3 py-3 font-mono font-semibold text-primary">
-                        {payee.ifscCode || <span className="text-muted-foreground/60 italic font-normal">Missing</span>}
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-3 py-3">
-                        {hasBankDetails ? (
-                          <span className="text-emerald-600 dark:text-emerald-400 text-[11px] font-medium flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Ready
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => openEditModal(payee)}
-                            className="text-amber-600 dark:text-amber-400 hover:underline text-[11px] font-medium flex items-center gap-1"
-                          >
-                            <AlertCircle className="w-3.5 h-3.5" /> Set details
-                          </button>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-3 py-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            size="sm"
-                            onClick={() => openSingleRtgsModal(payee)}
-                            className="h-7 px-2.5 text-xs font-semibold"
-                          >
-                            <Landmark className="w-3.5 h-3.5 mr-1" />
-                            RTGS
-                          </Button>
-
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => openEditModal(payee)}
-                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                            title="Edit Bank Details"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
-
-                          {payee.id.startsWith('custom_') && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleDeletePayee(payee.id, payee.name)}
-                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                              title="Delete Payee"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ── FLOATING BULK BAR (WHEN PAYEES ARE SELECTED) ── */}
-      {selectedIds.size > 0 && (
-        <div className="sticky bottom-4 z-20 bg-card text-card-foreground border border-primary/30 p-3.5 rounded-xl shadow-2xl flex flex-wrap items-center justify-between gap-4 ring-1 ring-primary/20">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-xs font-bold">
-              {selectedIds.size} {selectedIds.size === 1 ? 'payee' : 'payees'} selected for Bulk RTGS
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setSelectedIds(new Set())}
-              className="text-xs"
-            >
-              Deselect All
-            </Button>
-
-            <Button
-              size="sm"
-              onClick={openBulkModal}
-              className="text-xs font-bold shadow-sm"
-            >
-              <Layers className="w-4 h-4 mr-1.5" />
-              Generate Bulk RTGS ({selectedIds.size})
-            </Button>
-          </div>
-        </div>
-      )}
-        </>
-      ) : (
-        /* ── RTGS RECORDS & AUDIT HISTORY VIEW ── */
+      {/* ──────────────────────────────────────────────────────────
+          TAB 1: APPROVAL & PAYMENT QUEUE (THE MAKER-CHECKER HUB)
+      ────────────────────────────────────────────────────────── */}
+      {activeMainTab === 'APPROVALS' && (
         <div className="space-y-4">
-          {/* History Statistics Cards */}
+          {/* KPI Strip */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-card border border-border p-4 rounded-xl shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total RTGS Slips Generated</p>
-                <p className="text-2xl font-black text-foreground mt-1">{historyRecords.length}</p>
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3.5 shadow-xs">
+              <div className="flex items-center justify-between text-amber-800">
+                <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5" /> Pending SuperAdmin Approval
+                </span>
+                <span className="text-xs font-mono font-bold">{requestMetrics.pendingCount} requests</span>
               </div>
-              <div className="p-3 bg-primary/10 text-primary rounded-xl">
-                <FileCheck className="w-5 h-5" />
+              <div className="text-2xl font-black text-amber-950 mt-1">
+                ₹{requestMetrics.pendingAmount.toLocaleString('en-IN')}
+              </div>
+              <div className="text-[11px] text-amber-700/80 mt-0.5">
+                🔒 PDF download is locked until approved
               </div>
             </div>
 
-            <div className="bg-card border border-border p-4 rounded-xl shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Amount Remitted</p>
-                <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                  ₹{historyTotalDisbursed.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3.5 shadow-xs">
+              <div className="flex items-center justify-between text-emerald-800">
+                <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Approved / Ready for PDF
+                </span>
+                <span className="text-xs font-mono font-bold">{requestMetrics.approvedCount} ready</span>
+              </div>
+              <div className="text-2xl font-black text-emerald-950 mt-1">
+                ₹{requestMetrics.approvedAmount.toLocaleString('en-IN')}
+              </div>
+              <div className="text-[11px] text-emerald-700/80 mt-0.5">
+                ✓ PDF download unlocked & verified
+              </div>
+            </div>
+
+            <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3.5 shadow-xs">
+              <div className="flex items-center justify-between text-blue-800">
+                <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <FileCheck className="w-3.5 h-3.5" /> Paid & UTR Confirmed
+                </span>
+                <span className="text-xs font-mono font-bold">{requestMetrics.paidCount} completed</span>
+              </div>
+              <div className="text-2xl font-black text-blue-950 mt-1">
+                ₹{requestMetrics.paidAmount.toLocaleString('en-IN')}
+              </div>
+              <div className="text-[11px] text-blue-700/80 mt-0.5">
+                Bank transaction cleared
+              </div>
+            </div>
+          </div>
+
+          {/* Filters & Search Toolbar */}
+          <div className="bg-card border border-border p-3 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Status Filter */}
+              <select
+                value={approvalStatusFilter}
+                onChange={(e) => setApprovalStatusFilter(e.target.value)}
+                className="text-xs h-8 px-2.5 rounded-lg border border-border bg-background font-semibold"
+              >
+                <option value="ALL">All Statuses ({requests.length})</option>
+                <option value="PENDING">Pending Approval ({requestMetrics.pendingCount})</option>
+                <option value="APPROVED">Approved / Unlocked ({requestMetrics.approvedCount})</option>
+                <option value="PAID">Paid / Completed ({requestMetrics.paidCount})</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+
+              {/* Category Filter */}
+              <select
+                value={approvalCategoryFilter}
+                onChange={(e) => setApprovalCategoryFilter(e.target.value)}
+                className="text-xs h-8 px-2.5 rounded-lg border border-border bg-background font-semibold"
+              >
+                <option value="ALL">All Categories</option>
+                <option value="SALARY">Salary / Staff Advances</option>
+                <option value="SUPPLIER">Supplier Payments</option>
+                <option value="TRANSPORTATION">Transporter / Freight</option>
+                <option value="ELECTRICITY">Electricity Bill (DGVCL)</option>
+                <option value="OTHER">Other Operational</option>
+              </select>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchRequests}
+                className="h-8 text-xs font-semibold"
+              >
+                <RefreshCw className={cn("w-3 h-3 mr-1", requestsLoading && "animate-spin")} />
+                Refresh
+              </Button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative min-w-[240px]">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+              <Input
+                placeholder="Search beneficiary, approval code, a/c #..."
+                value={approvalSearch}
+                onChange={(e) => setApprovalSearch(e.target.value)}
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Requests Queue Table */}
+          <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden">
+            {requestsLoading ? (
+              <div className="py-16 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
+                <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+                <span>Loading RTGS approval queue...</span>
+              </div>
+            ) : filteredRequests.length === 0 ? (
+              <div className="py-16 text-center space-y-2">
+                <ShieldCheck className="w-10 h-10 text-muted-foreground/40 mx-auto" />
+                <h3 className="text-sm font-bold text-foreground">No RTGS Requests Found</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  No payment requests match the current filters. When Accounts creates an RTGS request, it will appear here for SuperAdmin review.
                 </p>
-              </div>
-              <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
-                <Landmark className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div className="bg-card border border-border p-4 rounded-xl shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Filtered Records</p>
-                <p className="text-2xl font-black text-foreground mt-1">{filteredHistory.length}</p>
-              </div>
-              <div className="p-3 bg-muted text-muted-foreground rounded-xl">
-                <Search className="w-5 h-5" />
-              </div>
-            </div>
-          </div>
-
-          {/* Search & Category Filter Bar for History */}
-          <div className="bg-card border border-border p-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto">
-              {['ALL', 'SUPPLIER', 'EMPLOYEE', 'SALARY', 'OTHER'].map(cat => (
                 <Button
-                  key={cat}
+                  variant="outline"
                   size="sm"
-                  variant={historyCategory === cat ? 'default' : 'outline'}
-                  onClick={() => setHistoryCategory(cat)}
-                  className="h-8 text-xs font-semibold capitalize"
+                  onClick={() => setActiveMainTab('PAYEES')}
+                  className="mt-2 text-xs font-semibold cursor-pointer"
                 >
-                  {cat === 'ALL' ? 'All Records' : cat === 'EMPLOYEE' ? 'Staff Advances' : cat === 'SALARY' ? 'Salary Payroll' : cat.toLowerCase()}
+                  Go to Payees Master to create RTGS →
                 </Button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="relative min-w-[240px]">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
-                <Input
-                  type="text"
-                  placeholder="Search payee, account #, cheque #..."
-                  value={historySearch}
-                  onChange={(e) => setHistorySearch(e.target.value)}
-                  className="h-9 pl-9 pr-3 text-xs"
-                />
-              </div>
-
-              {historyRecords.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearAllHistory}
-                  className="h-9 text-xs text-destructive hover:bg-destructive/10"
-                  title="Clear All History"
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-1" />
-                  Clear History
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* History Table */}
-          <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-            {filteredHistory.length === 0 ? (
-              <div className="p-12 text-center space-y-2">
-                <History className="w-8 h-8 text-muted-foreground/60 mx-auto" />
-                <p className="text-muted-foreground text-sm font-medium">No RTGS records found in history.</p>
-                <p className="text-xs text-muted-foreground/80">Generate an RTGS slip from the Payees Master or Payroll tab to record entries here.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/50 text-muted-foreground uppercase text-[11px] font-semibold tracking-wider border-b border-border">
+                  <thead className="bg-muted/60 text-muted-foreground uppercase text-[10px] font-black tracking-wider border-b border-border">
                     <tr>
                       <th className="p-3 w-10 text-center">
                         <button
                           type="button"
-                          onClick={handleSelectAllHistory}
-                          className="text-muted-foreground hover:text-foreground"
-                          title={selectedHistoryIds.size === filteredHistory.length ? 'Deselect All' : 'Select All'}
+                          onClick={() => {
+                            if (selectedRequestIds.size === filteredRequests.length) {
+                              setSelectedRequestIds(new Set());
+                            } else {
+                              setSelectedRequestIds(new Set(filteredRequests.map(r => r.id)));
+                            }
+                          }}
+                          className="text-muted-foreground hover:text-foreground cursor-pointer"
                         >
-                          {selectedHistoryIds.size > 0 && selectedHistoryIds.size === filteredHistory.length ? (
+                          {selectedRequestIds.size > 0 && selectedRequestIds.size === filteredRequests.length ? (
                             <CheckSquare className="w-4 h-4 text-primary" />
                           ) : (
                             <Square className="w-4 h-4" />
                           )}
                         </button>
                       </th>
-                      <th className="px-3 py-3 font-semibold">Date & Time</th>
-                      <th className="px-3 py-3 font-semibold">Beneficiary Name</th>
-                      <th className="px-3 py-3 font-semibold">Category</th>
-                      <th className="px-3 py-3 font-semibold">Bank & Account</th>
-                      <th className="px-3 py-3 font-semibold">IFSC Code</th>
-                      <th className="px-3 py-3 font-semibold">Narration / Reason</th>
-                      <th className="px-3 py-3 font-semibold">Cheque #</th>
-                      <th className="px-3 py-3 font-semibold text-right">Amount (₹)</th>
-                      <th className="px-3 py-3 font-semibold text-right">Actions</th>
+                      <th className="px-3 py-2.5 font-bold">Approval Code & Date</th>
+                      <th className="px-3 py-2.5 font-bold">Beneficiary / Bank</th>
+                      <th className="px-3 py-2.5 font-bold">Category & Expense Head</th>
+                      <th className="px-3 py-2.5 font-bold text-right">Amount (₹)</th>
+                      <th className="px-3 py-2.5 font-bold">Requested / Reviewed</th>
+                      <th className="px-3 py-2.5 font-bold text-center">Status</th>
+                      <th className="px-3 py-2.5 font-bold text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {filteredHistory.map((rec) => {
-                      const isSel = selectedHistoryIds.has(rec.id);
+                    {filteredRequests.map((req) => {
+                      const isSelected = selectedRequestIds.has(req.id);
+                      const isPending = req.status === 'PENDING';
+                      const isApproved = req.status === 'APPROVED';
+                      const isPaid = req.status === 'PAID';
+
                       return (
-                        <tr 
-                          key={rec.id}
-                          className={`hover:bg-muted/40 transition-colors ${isSel ? 'bg-primary/5' : ''}`}
+                        <tr
+                          key={req.id}
+                          className={cn(
+                            "hover:bg-muted/40 transition-colors",
+                            isSelected && "bg-primary/5",
+                            isPending && "bg-amber-50/20"
+                          )}
                         >
                           {/* Checkbox */}
                           <td className="p-3 text-center">
                             <button
                               type="button"
-                              onClick={() => handleToggleSelectHistory(rec.id)}
-                              className="text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                setSelectedRequestIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(req.id)) next.delete(req.id);
+                                  else next.add(req.id);
+                                  return next;
+                                });
+                              }}
+                              className="text-muted-foreground hover:text-foreground cursor-pointer"
                             >
-                              {isSel ? (
+                              {isSelected ? (
                                 <CheckSquare className="w-4 h-4 text-primary" />
                               ) : (
                                 <Square className="w-4 h-4" />
@@ -1305,72 +1153,141 @@ export default function BankRtgsHubPage() {
                             </button>
                           </td>
 
-                          {/* Date */}
-                          <td className="px-3 py-3 text-muted-foreground whitespace-nowrap font-mono text-[11px]">
-                            <div>{rec.date}</div>
-                            <div className="text-[10px] text-muted-foreground/60">{new Date(rec.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                          {/* Approval Code & Date */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <div className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                              {req.approval_code}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {req.payment_date || req.bill_date || req.requested_at?.slice(0, 10)}
+                            </div>
                           </td>
 
-                          {/* Beneficiary Name */}
-                          <td className="px-3 py-3 font-semibold text-foreground">
-                            {rec.beneficiaryName}
+                          {/* Beneficiary & Bank */}
+                          <td className="px-3 py-2.5">
+                            <div className="font-bold text-foreground">{req.beneficiary_name}</div>
+                            <div className="text-[10px] text-muted-foreground font-mono">
+                              {req.bank_name} • A/C: {req.account_number} • IFSC: {req.ifsc_code}
+                            </div>
                           </td>
 
-                          {/* Category Badge */}
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-semibold">
-                              {rec.category}
-                            </span>
-                          </td>
-
-                          {/* Bank & Account */}
-                          <td className="px-3 py-3 font-mono">
-                            <div className="font-sans text-[11px] font-medium text-foreground">{rec.bankName || 'AXIS BANK'}</div>
-                            <div className="text-[11px] text-muted-foreground">{rec.accountNumber}</div>
-                          </td>
-
-                          {/* IFSC */}
-                          <td className="px-3 py-3 font-mono font-bold text-primary">
-                            {rec.ifscCode}
-                          </td>
-
-                          {/* Narration */}
-                          <td className="px-3 py-3 max-w-[200px] truncate text-muted-foreground" title={rec.narration}>
-                            {rec.narration || '-'}
-                          </td>
-
-                          {/* Cheque # */}
-                          <td className="px-3 py-3 font-mono text-muted-foreground">
-                            {rec.chequeNumber || '-'}
+                          {/* Category & Head */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              {renderCategoryBadge(req.payee_category)}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-medium mt-0.5">
+                              {req.expense_head.replace(/_/g, ' ')}
+                            </div>
                           </td>
 
                           {/* Amount */}
-                          <td className="px-3 py-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            ₹{Number(rec.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap font-mono font-bold text-sm text-foreground">
+                            ₹{Number(req.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+
+                          {/* Requested / Reviewed By */}
+                          <td className="px-3 py-2.5 whitespace-nowrap text-[11px]">
+                            <div className="text-foreground">
+                              Req: <span className="font-semibold">{req.requested_by_name || 'Accounts'}</span>
+                            </div>
+                            {req.reviewed_by_name && (
+                              <div className="text-emerald-700 text-[10px]">
+                                Apprv: <span className="font-semibold">{req.reviewed_by_name}</span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Status Badge */}
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                            {isPending && (
+                              <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black inline-flex items-center gap-1 shadow-xs">
+                                <Lock className="w-3 h-3 text-amber-600" /> Pending Approval
+                              </span>
+                            )}
+                            {isApproved && (
+                              <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black inline-flex items-center gap-1 shadow-xs">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Approved
+                              </span>
+                            )}
+                            {isPaid && (
+                              <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-300 text-[10px] font-black inline-flex items-center gap-1 shadow-xs">
+                                <FileCheck className="w-3 h-3 text-blue-600" /> Paid
+                              </span>
+                            )}
+                            {req.status === 'REJECTED' && (
+                              <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black inline-flex items-center gap-1 shadow-xs">
+                                <X className="w-3 h-3 text-rose-600" /> Rejected
+                              </span>
+                            )}
                           </td>
 
                           {/* Actions */}
-                          <td className="px-3 py-3 text-right whitespace-nowrap">
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleRedownloadHistorySlip(rec)}
-                                className="h-7 px-2 text-xs font-semibold gap-1 text-primary hover:bg-primary/10"
-                                title="Re-download Official Axis Bank RTGS Slip"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                Re-download
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handleDeleteHistory(rec.id)}
-                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                title="Delete Record"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                              {/* SuperAdmin Approve Button */}
+                              {isPending && isSuperAdminOrDirector && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleApproveSingle(req)}
+                                    className="h-7 px-2.5 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs gap-1"
+                                    title="Approve this RTGS payment request"
+                                  >
+                                    <Check className="w-3 h-3" /> Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleRejectSingle(req)}
+                                    className="h-7 px-2 text-[11px] font-bold text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer"
+                                    title="Reject request"
+                                  >
+                                    <X className="w-3 h-3" /> Reject
+                                  </Button>
+                                </>
+                              )}
+
+                              {/* Download PDF button (Locked if pending!) */}
+                              {isPending ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled
+                                  className="h-7 px-2 text-[10px] font-bold opacity-60 bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed gap-1"
+                                  title="Locked: Cannot download Axis RTGS form until approved by SuperAdmin"
+                                >
+                                  <Lock className="w-3 h-3 text-slate-400" /> PDF Locked
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleDownloadRequestPdf(req)}
+                                  className="h-7 px-2.5 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer gap-1 shadow-xs"
+                                  title="Download Official Axis Bank RTGS Slip"
+                                >
+                                  <Download className="w-3 h-3" /> RTGS PDF
+                                </Button>
+                              )}
+
+                              {/* Mark Paid / UTR */}
+                              {isApproved && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenUtrModal(req)}
+                                  className="h-7 px-2 text-[10px] font-bold text-emerald-700 border-emerald-300 hover:bg-emerald-50 cursor-pointer"
+                                  title="Confirm payment & enter Bank UTR number"
+                                >
+                                  Enter UTR
+                                </Button>
+                              )}
+
+                              {isPaid && req.utr_number && (
+                                <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border" title={`UTR: ${req.utr_number}`}>
+                                  UTR: {req.utr_number}
+                                </span>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1381,46 +1298,317 @@ export default function BankRtgsHubPage() {
               </div>
             )}
           </div>
-
-          {/* Floating Action Bar for Selected History Records */}
-          {selectedHistoryIds.size > 0 && (
-            <div className="sticky bottom-4 z-20 bg-card text-card-foreground border border-primary/30 p-3.5 rounded-xl shadow-2xl flex flex-wrap items-center justify-between gap-4 ring-1 ring-primary/20">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-                <span className="text-xs font-bold">
-                  {selectedHistoryIds.size} {selectedHistoryIds.size === 1 ? 'record' : 'records'} selected from history
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSelectedHistoryIds(new Set())}
-                  className="text-xs"
-                >
-                  Deselect All
-                </Button>
-
-                <Button
-                  size="sm"
-                  onClick={handleDownloadSelectedHistoryCombined}
-                  className="text-xs font-bold shadow-sm"
-                >
-                  <Download className="w-4 h-4 mr-1.5" />
-                  Download Combined PDF ({selectedHistoryIds.size})
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* ── 1. SINGLE RTGS MODAL ── */}
+      {/* ──────────────────────────────────────────────────────────
+          TAB 2: PAYEES MASTER (SUPPLIERS, EMPLOYEES & OTHER)
+      ────────────────────────────────────────────────────────── */}
+      {activeMainTab === 'PAYEES' && (
+        <div className="space-y-4">
+          {/* Search & Category Filter Bar */}
+          <div className="bg-card border border-border p-3 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              <Button
+                size="sm"
+                variant={activeCategory === 'ALL' ? 'default' : 'outline'}
+                onClick={() => setActiveCategory('ALL')}
+                className="h-8 text-xs font-semibold"
+              >
+                All Payees ({counts.all})
+              </Button>
+              <Button
+                size="sm"
+                variant={activeCategory === 'SUPPLIER' ? 'default' : 'outline'}
+                onClick={() => setActiveCategory('SUPPLIER')}
+                className="h-8 text-xs font-semibold"
+              >
+                <Building2 className="w-3.5 h-3.5 mr-1" />
+                Suppliers ({counts.suppliers})
+              </Button>
+              <Button
+                size="sm"
+                variant={activeCategory === 'EMPLOYEE' ? 'default' : 'outline'}
+                onClick={() => setActiveCategory('EMPLOYEE')}
+                className="h-8 text-xs font-semibold"
+              >
+                <Users className="w-3.5 h-3.5 mr-1" />
+                Staff Advances ({counts.employees})
+              </Button>
+              <Button
+                size="sm"
+                variant={activeCategory === 'OTHER' ? 'default' : 'outline'}
+                onClick={() => setActiveCategory('OTHER')}
+                className="h-8 text-xs font-semibold"
+              >
+                <FileText className="w-3.5 h-3.5 mr-1" />
+                Other ({counts.other})
+              </Button>
+            </div>
+
+            <div className="relative min-w-[260px]">
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+              <Input
+                type="text"
+                placeholder="Search payee, account #, or IFSC..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 pl-9 pr-3 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Payees Table */}
+          <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden">
+            {isLoading ? (
+              <div className="p-12 text-center text-muted-foreground text-sm">
+                Loading suppliers and staff payees...
+              </div>
+            ) : filteredPayees.length === 0 ? (
+              <div className="p-12 text-center space-y-2">
+                <p className="text-muted-foreground text-sm">No payees found matching your filter.</p>
+                <Button variant="link" size="sm" onClick={() => openEditModal()}>
+                  + Add a new RTGS payee now
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/50 text-muted-foreground uppercase text-[11px] font-semibold tracking-wider border-b border-border">
+                    <tr>
+                      <th className="p-3 w-10 text-center">
+                        <button
+                          type="button"
+                          onClick={handleSelectAll}
+                          className="text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          {selectedIds.size > 0 && selectedIds.size === filteredPayees.length ? (
+                            <CheckSquare className="w-4 h-4 text-primary" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="px-3 py-3 font-semibold">Beneficiary Name</th>
+                      <th className="px-3 py-3 font-semibold">Category</th>
+                      <th className="px-3 py-3 font-semibold">Bank Name</th>
+                      <th className="px-3 py-3 font-semibold">Account Number</th>
+                      <th className="px-3 py-3 font-semibold">IFSC Code</th>
+                      <th className="px-3 py-3 font-semibold">Status</th>
+                      <th className="px-3 py-3 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredPayees.map((payee) => {
+                      const isSelected = selectedIds.has(payee.id);
+                      const hasBankDetails = Boolean(payee.accountNumber && payee.ifscCode);
+
+                      return (
+                        <tr 
+                          key={payee.id} 
+                          className={`hover:bg-muted/40 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
+                        >
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSelect(payee.id)}
+                              className="text-muted-foreground hover:text-foreground cursor-pointer"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-primary" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </button>
+                          </td>
+
+                          <td className="px-3 py-3 font-semibold text-foreground">
+                            <div className="flex items-center gap-2">
+                              <span>{payee.name}</span>
+                              {payee.designation && (
+                                <span className="text-[10px] text-muted-foreground font-normal">
+                                  ({payee.designation})
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="px-3 py-3">
+                            {payee.category === 'SUPPLIER' && (
+                              <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
+                                <Building2 className="w-3 h-3" /> Supplier
+                              </span>
+                            )}
+                            {payee.category === 'EMPLOYEE' && (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
+                                <Users className="w-3 h-3" /> Staff Advance
+                              </span>
+                            )}
+                            {payee.category === 'OTHER' && (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
+                                <FileText className="w-3 h-3" /> Other
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-3 text-muted-foreground font-medium">
+                            {payee.bankName || <span className="text-muted-foreground/60 italic">Not set</span>}
+                          </td>
+
+                          <td className="px-3 py-3 font-mono">
+                            {payee.accountNumber ? (
+                              <span className="bg-muted/70 px-2 py-0.5 rounded text-foreground font-semibold">
+                                {payee.accountNumber}
+                              </span>
+                            ) : (
+                              <span className="text-amber-500/80 italic">Missing</span>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-3 font-mono font-semibold text-primary">
+                            {payee.ifscCode || <span className="text-muted-foreground/60 italic font-normal">Missing</span>}
+                          </td>
+
+                          <td className="px-3 py-3">
+                            {hasBankDetails ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 text-[11px] font-medium flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Ready
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => openEditModal(payee)}
+                                className="text-amber-600 dark:text-amber-400 hover:underline text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                              >
+                                <AlertCircle className="w-3.5 h-3.5" /> Set details
+                              </button>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                onClick={() => openSingleRtgsModal(payee)}
+                                className="h-7 px-2.5 text-xs font-semibold cursor-pointer"
+                              >
+                                <Landmark className="w-3.5 h-3.5 mr-1" />
+                                Create RTGS
+                              </Button>
+
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => openEditModal(payee)}
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                                title="Edit Bank Details"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </Button>
+
+                              {payee.id.startsWith('custom_') && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handleDeletePayee(payee.id, payee.name)}
+                                  className="h-7 w-7 text-destructive hover:bg-destructive/10 cursor-pointer"
+                                  title="Delete Payee"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────
+          TAB 3: DOWNLOADED SLIPS OFFLINE ARCHIVE
+      ────────────────────────────────────────────────────────── */}
+      {activeMainTab === 'HISTORY' && (
+        <div className="space-y-4">
+          <div className="bg-card border border-border p-3 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs font-bold text-foreground">
+              Downloaded RTGS Slips History ({historyRecords.length} records)
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (historyRecords.length === 0) return;
+                const rows = historyRecords.map((r, i) => [
+                  i + 1, r.date, r.beneficiaryName, r.category, r.bankName, r.accountNumber, r.ifscCode, r.amount, r.narration
+                ]);
+                const csv = ['Index,Date,Beneficiary,Category,Bank,Account,IFSC,Amount,Narration', ...rows.map(row => row.map(cell => `"${cell || ''}"`).join(','))].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `RTGS_History_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+              }}
+              className="h-8 text-xs font-semibold"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+              Export History CSV
+            </Button>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden">
+            {historyRecords.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground text-xs">
+                No downloaded RTGS slips recorded yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/60 text-muted-foreground uppercase text-[10px] font-black border-b border-border">
+                    <tr>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Beneficiary</th>
+                      <th className="p-3">Category</th>
+                      <th className="p-3">Bank Details</th>
+                      <th className="p-3 text-right">Amount (₹)</th>
+                      <th className="p-3">Narration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {historyRecords.map((rec) => (
+                      <tr key={rec.id} className="hover:bg-muted/40">
+                        <td className="p-3 whitespace-nowrap font-medium text-foreground">{rec.date}</td>
+                        <td className="p-3 font-bold text-foreground">{rec.beneficiaryName}</td>
+                        <td className="p-3">{renderCategoryBadge(rec.category)}</td>
+                        <td className="p-3 font-mono text-[11px] text-muted-foreground">
+                          {rec.bankName} • {rec.accountNumber} • {rec.ifscCode}
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-foreground">
+                          ₹{Number(rec.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-muted-foreground truncate max-w-xs">{rec.narration || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────
+          MODAL 1: CREATE / QUEUE SINGLE RTGS REQUEST (MAKER FLOW)
+      ────────────────────────────────────────────────────────── */}
       <Modal 
         isOpen={rtgsModalOpen && !!selectedPayee} 
         onClose={() => setRtgsModalOpen(false)}
-        title="Generate Axis Bank RTGS Form"
+        title="Create RTGS Payment Request"
         maxWidth="max-w-lg"
       >
         {selectedPayee && (
@@ -1434,7 +1622,7 @@ export default function BankRtgsHubPage() {
                     setRtgsModalOpen(false);
                     openEditModal(selectedPayee);
                   }}
-                  className="text-primary hover:underline text-[11px] font-semibold flex items-center gap-1"
+                  className="text-primary hover:underline text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
                 >
                   <Edit2 className="w-3 h-3" /> Edit
                 </button>
@@ -1464,6 +1652,49 @@ export default function BankRtgsHubPage() {
               </div>
             </div>
 
+            {/* Category & Expense Head Selector */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-foreground uppercase tracking-wider block">
+                  Category <span className="text-destructive">*</span>
+                </label>
+                <select
+                  value={rtgsCategory}
+                  onChange={(e) => {
+                    const cat = e.target.value as RtgsPayeeCategory;
+                    setRtgsCategory(cat);
+                    if (cat === 'SALARY') setRtgsExpenseHead('STAFF_SALARY');
+                    else if (cat === 'SUPPLIER') setRtgsExpenseHead('RAW_MATERIAL');
+                    else if (cat === 'TRANSPORTATION') setRtgsExpenseHead('FREIGHT_OUTWARD');
+                    else if (cat === 'ELECTRICITY') setRtgsExpenseHead('ELECTRICITY_POWER');
+                    else setRtgsExpenseHead('ADMIN_OFFICE');
+                  }}
+                  className="w-full text-xs h-8 px-2 rounded-lg border border-border bg-background font-semibold"
+                >
+                  <option value="SALARY">Salary / Staff Advance</option>
+                  <option value="SUPPLIER">Supplier / Raw Material</option>
+                  <option value="TRANSPORTATION">Transporter / Freight</option>
+                  <option value="ELECTRICITY">Electricity Bill (DGVCL)</option>
+                  <option value="OTHER">Other Operational Head</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-foreground uppercase tracking-wider block">
+                  Expense Head
+                </label>
+                <select
+                  value={rtgsExpenseHead}
+                  onChange={(e) => setRtgsExpenseHead(e.target.value)}
+                  className="w-full text-xs h-8 px-2 rounded-lg border border-border bg-background font-medium"
+                >
+                  {EXPENSE_HEAD_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {/* Amount Input */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -1478,19 +1709,17 @@ export default function BankRtgsHubPage() {
               </div>
 
               <div className="relative">
-                <span className="absolute left-3.5 top-2.5 text-base font-bold text-primary select-none">₹</span>
+                <span className="absolute left-3.5 top-2 text-base font-bold text-primary select-none">₹</span>
                 <Input
                   type="text"
                   inputMode="numeric"
-                  autoFocus
                   placeholder="e.g. 1,00,000"
                   value={rtgsAmount}
                   onChange={(e) => setRtgsAmount(formatIndianAmountInput(e.target.value))}
-                  className="pl-9 text-base font-bold font-mono tracking-wide text-foreground"
+                  className="pl-9 text-base font-bold font-mono tracking-wide text-foreground h-9"
                 />
               </div>
 
-              {/* Live Indian Number in Words Preview */}
               {parseIndianAmount(rtgsAmount) > 0 && (
                 <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20 text-xs">
                   <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-0.5">
@@ -1501,100 +1730,38 @@ export default function BankRtgsHubPage() {
                   </div>
                 </div>
               )}
-
-              {/* Quick Amount Suggestion Chips */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <span className="text-[10px] text-muted-foreground font-semibold uppercase">Quick Fill:</span>
-                {[10000, 25000, 50000, 100000, 250000, 500000, 1000000].map((quickAmt) => (
-                  <button
-                    key={quickAmt}
-                    type="button"
-                    onClick={() => setRtgsAmount(formatIndianAmountInput(quickAmt))}
-                    className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-muted hover:bg-primary/20 hover:text-primary transition-colors border border-border"
-                  >
-                    ₹{formatIndianAmountInput(quickAmt)}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Reason Input */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-foreground uppercase tracking-wider block">
-                Reason / Narration <span className="text-destructive">*</span>
+                Narration / Purpose <span className="text-destructive">*</span>
               </label>
               <Input
                 type="text"
-                placeholder="e.g. Staff Advance / Raw Material Bill / Monthly Salary"
+                placeholder="e.g. Staff Salary / Raw Material Bill / Electricity Power Bill"
                 value={rtgsReason}
                 onChange={(e) => setRtgsReason(e.target.value)}
-                className="text-xs"
+                className="text-xs h-8"
               />
-
-              {/* Quick suggestion chips */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {selectedPayee.category === 'EMPLOYEE' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setRtgsReason(`STAFF SALARY ADVANCE - ${selectedPayee.name}`)}
-                      className="px-2 py-0.5 bg-muted hover:bg-muted/80 rounded text-[10px] font-semibold text-foreground border border-border"
-                    >
-                      ⚡ Staff Advance
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRtgsReason(`MONTHLY SALARY - ${selectedPayee.name}`)}
-                      className="px-2 py-0.5 bg-muted hover:bg-muted/80 rounded text-[10px] font-semibold text-foreground border border-border"
-                    >
-                      💼 Monthly Salary
-                    </button>
-                  </>
-                )}
-                {selectedPayee.category === 'SUPPLIER' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setRtgsReason(`SUPPLIER PAYMENT: ${selectedPayee.name}`)}
-                      className="px-2 py-0.5 bg-muted hover:bg-muted/80 rounded text-[10px] font-semibold text-foreground border border-border"
-                    >
-                      📦 Raw Material Bill
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRtgsReason(`ADVANCE PAYMENT: ${selectedPayee.name}`)}
-                      className="px-2 py-0.5 bg-muted hover:bg-muted/80 rounded text-[10px] font-semibold text-foreground border border-border"
-                    >
-                      ⚡ Advance Payment
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setRtgsReason(`BILL PAYMENT - ${selectedPayee.name}`)}
-                  className="px-2 py-0.5 bg-muted hover:bg-muted/80 rounded text-[10px] font-semibold text-foreground border border-border"
-                >
-                  📑 Invoice Clearance
-                </button>
-              </div>
             </div>
 
             {/* Date & Cheque */}
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
-                  Date
+                  Payment Date
                 </label>
                 <Input
                   type="date"
                   value={rtgsDate}
-                  onChange={(e) => setRtgsDate(e.target.value)}
+                  onChange={(e) => setReqDate(e.target.value)}
                   className="text-xs h-8"
                 />
               </div>
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
-                  Cheque No (Optional)
+                  Bill / Cheque No (Optional)
                 </label>
                 <Input
                   type="text"
@@ -1606,31 +1773,51 @@ export default function BankRtgsHubPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-border">
-              <Button variant="outline" onClick={() => setRtgsModalOpen(false)}>
+            {/* Approval Workflow Warning Notice */}
+            <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-lg text-amber-900 text-[11px]">
+              <span className="font-bold">🔒 Approval Gate: </span>
+              This request will be created in <span className="font-bold text-amber-800">PENDING</span> status. The Axis Bank RTGS PDF will remain locked until SuperAdmin reviews and approves it.
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-border">
+              <Button variant="outline" size="sm" onClick={() => setRtgsModalOpen(false)}>
                 Cancel
               </Button>
               <Button 
-                onClick={handleGenerateSinglePdf}
-                disabled={isGenerating || !selectedPayee.accountNumber || !selectedPayee.ifscCode}
+                onClick={() => handleSubmitSingleRtgs(false)}
+                disabled={isSubmittingSingle || !selectedPayee.accountNumber || !selectedPayee.ifscCode}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-8 cursor-pointer"
               >
-                <Download className="w-4 h-4 mr-1.5" />
-                {isGenerating ? 'Generating...' : 'Download Axis Bank RTGS PDF'}
+                <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                {isSubmittingSingle ? 'Submitting...' : 'Queue for SuperAdmin Approval'}
               </Button>
+
+              {isSuperAdminOrDirector && (
+                <Button 
+                  onClick={() => handleSubmitSingleRtgs(true)}
+                  disabled={isSubmittingSingle || !selectedPayee.accountNumber || !selectedPayee.ifscCode}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 mr-1" />
+                  Approve & Download PDF
+                </Button>
+              )}
             </div>
           </div>
         )}
       </Modal>
 
-      {/* ── 2. BULK RTGS GENERATOR MODAL ── */}
+      {/* ──────────────────────────────────────────────────────────
+          MODAL 2: BULK RTGS QUEUE MODAL (MAKER FLOW)
+      ────────────────────────────────────────────────────────── */}
       <Modal
         isOpen={bulkModalOpen}
         onClose={() => setBulkModalOpen(false)}
-        title={`Bulk Axis Bank RTGS Generator (${bulkRows.length} Payees)`}
+        title={`Queue Bulk RTGS for SuperAdmin Approval (${bulkRows.length} Payees)`}
         maxWidth="max-w-4xl"
       >
         <div className="space-y-4 text-xs">
-          
           {/* Default Reason & Date & Amount Banner */}
           <div className="bg-muted/40 border border-border p-3 rounded-xl grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
             <div className="md:col-span-4 space-y-1">
@@ -1648,7 +1835,7 @@ export default function BankRtgsHubPage() {
                   size="sm" 
                   variant="outline" 
                   onClick={handleApplyDefaultReasonToAll}
-                  className="h-8 whitespace-nowrap text-[11px] font-semibold px-2"
+                  className="h-8 whitespace-nowrap text-[11px] font-semibold px-2 cursor-pointer"
                 >
                   Apply
                 </Button>
@@ -1672,16 +1859,16 @@ export default function BankRtgsHubPage() {
                   size="sm" 
                   variant="outline" 
                   onClick={handleApplyDefaultAmountToAll}
-                  className="h-8 whitespace-nowrap text-[11px] font-semibold px-2"
+                  className="h-8 whitespace-nowrap text-[11px] font-semibold px-2 cursor-pointer"
                 >
                   Apply All
                 </Button>
               </div>
             </div>
 
-            <div className="md:col-span-2 space-y-1">
+            <div className="md:col-span-3 space-y-1">
               <label className="text-[10px] font-bold text-muted-foreground uppercase">
-                Transfer Date:
+                Date:
               </label>
               <Input
                 type="date"
@@ -1691,73 +1878,78 @@ export default function BankRtgsHubPage() {
               />
             </div>
 
-            <div className="md:col-span-3 text-right">
-              <div className="text-[10px] text-muted-foreground uppercase font-bold">Total Bulk Sum:</div>
-              <div className="text-sm font-bold text-primary font-mono whitespace-nowrap">
-                ₹ {bulkTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            <div className="md:col-span-2 text-right">
+              <div className="text-[10px] text-muted-foreground uppercase font-bold">Total Batch</div>
+              <div className="text-sm font-black text-primary font-mono">
+                ₹{bulkRows.reduce((sum, r) => sum + parseIndianAmount(r.amount), 0).toLocaleString('en-IN')}
               </div>
             </div>
           </div>
 
-          {/* Payee Rows Table */}
-          <div className="border border-border rounded-xl overflow-hidden max-h-[45vh] overflow-y-auto">
+          {/* Bulk Payees Table */}
+          <div className="border border-border rounded-xl max-h-[350px] overflow-y-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/60 text-muted-foreground uppercase text-[10px] font-semibold sticky top-0 border-b border-border z-10">
+              <thead className="bg-muted/70 text-muted-foreground sticky top-0 uppercase text-[10px] font-bold border-b border-border">
                 <tr>
-                  <th className="px-3 py-2.5">Beneficiary</th>
-                  <th className="px-3 py-2.5">Bank & Account</th>
-                  <th className="px-3 py-2.5 w-36">Amount (₹) *</th>
-                  <th className="px-3 py-2.5">Reason / Narration</th>
-                  <th className="px-3 py-2.5 w-28 text-center">Single RTGS</th>
+                  <th className="p-2.5">Beneficiary</th>
+                  <th className="p-2.5">Category & Head</th>
+                  <th className="p-2.5">Account / IFSC</th>
+                  <th className="p-2.5 w-32">Amount (₹)</th>
+                  <th className="p-2.5">Narration</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {bulkRows.map((r, i) => (
-                  <tr key={r.payee.id} className="hover:bg-muted/30">
-                    <td className="px-3 py-2 font-semibold">
-                      <div>{r.payee.name}</div>
-                      <span className="text-[10px] text-muted-foreground">{r.payee.category}</span>
+                {bulkRows.map((row, idx) => (
+                  <tr key={row.payee.id} className="hover:bg-muted/40">
+                    <td className="p-2.5 font-bold text-foreground">
+                      {row.payee.name}
                     </td>
-                    <td className="px-3 py-2 font-mono text-[11px]">
-                      <div>{r.payee.accountNumber || <span className="text-destructive font-sans">Missing Acc #</span>}</div>
-                      <span className="text-primary font-semibold">{r.payee.ifscCode}</span>
+                    <td className="p-2.5">
+                      <select
+                        value={row.category}
+                        onChange={(e) => {
+                          const cat = e.target.value as RtgsPayeeCategory;
+                          setBulkRows(prev => prev.map((r, i) => i === idx ? {
+                            ...r,
+                            category: cat,
+                            expenseHead: cat === 'SALARY' ? 'STAFF_SALARY' : (cat === 'SUPPLIER' ? 'RAW_MATERIAL' : (cat === 'TRANSPORTATION' ? 'FREIGHT_OUTWARD' : (cat === 'ELECTRICITY' ? 'ELECTRICITY_POWER' : 'ADMIN_OFFICE')))
+                          } : r));
+                        }}
+                        className="text-[11px] h-7 px-1.5 rounded border border-border bg-background"
+                      >
+                        <option value="SALARY">Salary</option>
+                        <option value="SUPPLIER">Supplier</option>
+                        <option value="TRANSPORTATION">Transport</option>
+                        <option value="ELECTRICITY">Electricity</option>
+                        <option value="OTHER">Other</option>
+                      </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="p-2.5 font-mono text-[11px]">
+                      {row.payee.accountNumber} • {row.payee.ifscCode}
+                    </td>
+                    <td className="p-2.5">
                       <Input
                         type="text"
                         inputMode="numeric"
-                        placeholder="e.g. 50,000"
-                        value={r.amount}
+                        value={row.amount}
                         onChange={(e) => {
                           const val = formatIndianAmountInput(e.target.value);
-                          setBulkRows(prev => prev.map((row, idx) => idx === i ? { ...row, amount: val } : row));
+                          setBulkRows(prev => prev.map((r, i) => i === idx ? { ...r, amount: val } : r));
                         }}
-                        className="h-8 text-xs font-bold font-mono text-foreground"
+                        placeholder="₹ Amount"
+                        className="h-7 text-xs font-mono font-bold"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="p-2.5">
                       <Input
                         type="text"
-                        value={r.reason}
+                        value={row.reason}
                         onChange={(e) => {
                           const val = e.target.value;
-                          setBulkRows(prev => prev.map((row, idx) => idx === i ? { ...row, reason: val } : row));
+                          setBulkRows(prev => prev.map((r, i) => i === idx ? { ...r, reason: val } : r));
                         }}
-                        className="h-8 text-xs"
+                        className="h-7 text-xs"
                       />
-                    </td>
-                    <td className="px-3 py-2 text-center whitespace-nowrap">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDownloadRowSinglePdf(r)}
-                        disabled={isGeneratingBulk}
-                        className="h-7 px-2 text-[11px] font-semibold text-primary hover:bg-primary/10 gap-1"
-                        title={`Download single Axis Bank RTGS PDF for ${r.payee.name}`}
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Single PDF
-                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -1765,140 +1957,165 @@ export default function BankRtgsHubPage() {
             </table>
           </div>
 
-          {/* Modal Actions */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border">
-            {/* Export CSV */}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleExportBulkCsv}
-              disabled={isGeneratingBulk}
-              className="text-xs"
-            >
-              <FileSpreadsheet className="w-4 h-4 mr-1.5 text-emerald-600 dark:text-emerald-400" />
-              Export Axis Bank CSV
+          {/* Action buttons */}
+          <div className="flex justify-end gap-2 pt-3 border-t border-border">
+            <Button variant="outline" size="sm" onClick={() => setBulkModalOpen(false)}>
+              Cancel
             </Button>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setBulkModalOpen(false)}
-                disabled={isGeneratingBulk}
-                className="text-xs"
-              >
-                Cancel
-              </Button>
-
-              {/* Option 1: Download All Individual PDFs */}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleGenerateBulkIndividual}
-                disabled={isGeneratingBulk}
-                className="text-xs font-semibold bg-muted hover:bg-muted/80 text-foreground border-border hover:border-primary/40 gap-1.5"
-                title="Download each payee's RTGS slip as a separate single PDF file"
-              >
-                <FileText className="w-4 h-4 text-primary" />
-                {isGeneratingBulk ? 'Downloading Individual Files...' : `Download All Individual PDFs (${bulkRows.length})`}
-              </Button>
-
-              {/* Option 2: Download Combined Multi-Page PDF */}
-              <Button
-                size="sm"
-                onClick={handleGenerateBulkCombined}
-                disabled={isGeneratingBulk}
-                className="text-xs font-bold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
-                title="Combine all payee slips into 1 merged multi-page PDF document"
-              >
-                <Layers className="w-4 h-4" />
-                {isGeneratingBulk ? 'Compiling PDF...' : `Download Combined PDF (${bulkRows.length} Slips)`}
-              </Button>
-            </div>
+            <Button
+              onClick={handleSubmitBulkRtgs}
+              disabled={isSubmittingBulk}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-8 cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+              {isSubmittingBulk ? 'Submitting...' : `Queue All ${bulkRows.length} Requests for SuperAdmin Approval`}
+            </Button>
           </div>
         </div>
       </Modal>
 
-      {/* ── 3. SAVE / EDIT PAYEE BANK DETAILS MODAL ── */}
+      {/* ──────────────────────────────────────────────────────────
+          MODAL 3: UTR CONFIRMATION MODAL
+      ────────────────────────────────────────────────────────── */}
+      <Modal
+        isOpen={utrModalOpen && !!selectedRequestForUtr}
+        onClose={() => setUtrModalOpen(false)}
+        title="Confirm Bank Payment & Enter UTR Number"
+        maxWidth="max-w-md"
+      >
+        {selectedRequestForUtr && (
+          <div className="space-y-3.5 text-xs">
+            <div className="bg-muted/40 p-3 rounded-xl space-y-1.5 border border-border">
+              <div className="flex justify-between text-muted-foreground text-[11px]">
+                <span>Approval Code:</span>
+                <span className="font-mono font-bold text-foreground">{selectedRequestForUtr.approval_code}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground text-[11px]">
+                <span>Beneficiary:</span>
+                <span className="font-bold text-foreground">{selectedRequestForUtr.beneficiary_name}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground text-[11px]">
+                <span>Amount:</span>
+                <span className="font-bold text-primary font-mono text-sm">₹{Number(selectedRequestForUtr.amount).toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-foreground uppercase tracking-wider block">
+                Bank UTR / Transaction Reference Number <span className="text-destructive">*</span>
+              </label>
+              <Input
+                type="text"
+                placeholder="e.g. UTIB261122001928"
+                value={utrNumberInput}
+                onChange={(e) => setUtrNumberInput(e.target.value)}
+                className="text-xs h-9 font-mono font-bold"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Enter the official Axis Bank transaction reference number to complete the audit trail.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border">
+              <Button variant="outline" size="sm" onClick={() => setUtrModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmUtrPaid}
+                disabled={isSubmittingUtr || !utrNumberInput.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5 mr-1" />
+                {isSubmittingUtr ? 'Saving...' : 'Confirm Payment as PAID'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ──────────────────────────────────────────────────────────
+          MODAL 4: EDIT / ADD PAYEE MODAL
+      ────────────────────────────────────────────────────────── */}
       <Modal
         isOpen={editModalOpen}
         onClose={() => setEditModalOpen(false)}
-        title="Save RTGS Bank Details"
+        title={editForm.id?.startsWith('custom_') ? 'Add New RTGS Payee' : `Edit Bank Details — ${editForm.name}`}
         maxWidth="max-w-md"
       >
-        <div className="space-y-3.5 text-xs">
+        <div className="space-y-3 text-xs">
           <div>
-            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
-              Beneficiary / Payee Name <span className="text-destructive">*</span>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
+              Beneficiary Name <span className="text-destructive">*</span>
             </label>
             <Input
-              placeholder="e.g. FLEXEN SPECIALITY CHEMICALS"
               value={editForm.name || ''}
-              onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value.toUpperCase() }))}
-              className="uppercase text-xs"
+              onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Full Account Holder Name"
+              className="text-xs h-8"
             />
           </div>
 
           <div>
-            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
               Category
             </label>
             <select
               value={editForm.category || 'SUPPLIER'}
               onChange={(e) => setEditForm(prev => ({ ...prev, category: e.target.value as any }))}
-              className="w-full bg-background border border-input rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full text-xs h-8 px-2 rounded-lg border border-border bg-background"
             >
-              <option value="SUPPLIER">Supplier / Raw Material Vendor</option>
-              <option value="EMPLOYEE">Staff Member (Employee Advance)</option>
-              <option value="OTHER">Other Payee (Utility / Rent / Freight)</option>
+              <option value="SUPPLIER">Supplier</option>
+              <option value="EMPLOYEE">Staff Advance</option>
+              <option value="OTHER">Other Payee</option>
             </select>
           </div>
 
-          <div>
-            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
-              Bank Name (e.g. HDFC Bank, SBI, ICICI, Axis Bank)
-            </label>
-            <Input
-              placeholder="e.g. STATE BANK OF INDIA"
-              value={editForm.bankName || ''}
-              onChange={(e) => setEditForm(prev => ({ ...prev, bankName: e.target.value.toUpperCase() }))}
-              className="uppercase text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
-              Bank Account Number <span className="text-destructive">*</span>
-            </label>
-            <Input
-              placeholder="e.g. 123456789012"
-              value={editForm.accountNumber || ''}
-              onChange={(e) => setEditForm(prev => ({ ...prev, accountNumber: e.target.value.trim() }))}
-              className="font-mono text-xs"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
-                IFSC Code <span className="text-destructive">*</span>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
+                Bank Name
               </label>
               <Input
-                placeholder="e.g. SBIN0001234"
-                value={editForm.ifscCode || ''}
-                onChange={(e) => setEditForm(prev => ({ ...prev, ifscCode: e.target.value.trim().toUpperCase() }))}
-                className="font-mono font-bold text-primary uppercase text-xs"
+                value={editForm.bankName || ''}
+                onChange={(e) => setEditForm(prev => ({ ...prev, bankName: e.target.value }))}
+                placeholder="e.g. AXIS BANK"
+                className="text-xs h-8"
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
-                Branch City
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
+                Branch
               </label>
               <Input
-                placeholder="e.g. NAVSARI"
                 value={editForm.branch || ''}
-                onChange={(e) => setEditForm(prev => ({ ...prev, branch: e.target.value.toUpperCase() }))}
-                className="uppercase text-xs"
+                onChange={(e) => setEditForm(prev => ({ ...prev, branch: e.target.value }))}
+                placeholder="e.g. NAVSARI"
+                className="text-xs h-8"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
+                Account Number <span className="text-destructive">*</span>
+              </label>
+              <Input
+                value={editForm.accountNumber || ''}
+                onChange={(e) => setEditForm(prev => ({ ...prev, accountNumber: e.target.value }))}
+                placeholder="Account No"
+                className="text-xs h-8 font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
+                IFSC Code <span className="text-destructive">*</span>
+              </label>
+              <Input
+                value={editForm.ifscCode || ''}
+                onChange={(e) => setEditForm(prev => ({ ...prev, ifscCode: e.target.value.toUpperCase() }))}
+                placeholder="UTIB0000047"
+                className="text-xs h-8 font-mono"
               />
             </div>
           </div>
@@ -1907,13 +2124,12 @@ export default function BankRtgsHubPage() {
             <Button variant="outline" size="sm" onClick={() => setEditModalOpen(false)}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSavePayeeDetails}>
-              Save RTGS Details
+            <Button size="sm" onClick={handleSavePayeeDetails} className="cursor-pointer">
+              Save Payee Bank Details
             </Button>
           </div>
         </div>
       </Modal>
-
     </div>
   );
 }

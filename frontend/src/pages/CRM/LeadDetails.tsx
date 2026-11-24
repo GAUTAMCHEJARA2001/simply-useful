@@ -308,17 +308,49 @@ const LeadDetails: React.FC<LeadDetailsProps> = ({ lead, open, onClose, onRefres
                 <div className="flex gap-2.5 items-start">
                   <UserCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="font-bold text-sm text-foreground">Onboard Party</h4>
+                    <h4 className="font-bold text-sm text-foreground">Won Deal Actions</h4>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      This lead has been won. Start the formal onboarding process for Dealer or Distributor.
+                      This lead has been successfully won! Book an order, collect advance payment, or complete KYC onboarding.
                     </p>
                   </div>
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                  <Button
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 text-xs rounded-lg shadow-sm flex items-center justify-center transition-all"
+                    onClick={() => {
+                      onClose();
+                      navigate('/sales/order', {
+                        state: {
+                          partyName: lead.companyName || lead.name,
+                          partyType: 'Dealer',
+                        }
+                      });
+                    }}
+                  >
+                    🛒 Book First Order
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full font-bold h-9 text-xs rounded-lg shadow-sm flex items-center justify-center transition-all border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                    onClick={() => {
+                      onClose();
+                      navigate('/sales/payments/new', {
+                        state: {
+                          partyName: lead.companyName || lead.name,
+                          partyType: 'Dealer',
+                        }
+                      });
+                    }}
+                  >
+                    💳 Record Payment
+                  </Button>
+                </div>
                 <Button
-                  className="w-full mt-1 bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 text-xs rounded-lg shadow-sm flex items-center justify-center transition-all"
+                  variant="outline"
+                  className="w-full bg-blue-600/10 hover:bg-blue-600/20 text-blue-600 font-bold h-8 text-xs rounded-lg shadow-2xs flex items-center justify-center transition-all border-blue-500/20"
                   onClick={() => navigate('/sales/onboarding', { state: { prefillLead: lead } })}
                 >
-                  Create Dealer / Distributor Request
+                  Create Formal Onboarding Request &rarr;
                 </Button>
               </CardContent>
             </Card>

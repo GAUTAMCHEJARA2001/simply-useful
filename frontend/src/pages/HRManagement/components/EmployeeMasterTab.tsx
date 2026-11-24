@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Plus, Edit2, Trash2, Check, ChevronsUpDown, Upload, Search, Filter, 
   Eye, FileText, Image as ImageIcon, ExternalLink, X, User, Phone, 
-  Calendar, CreditCard, ShieldCheck, Download, CheckCircle2, Building, AlertCircle
+  Calendar, CreditCard, ShieldCheck, Download, CheckCircle2, Building, AlertCircle,
+  UserCheck, UserX
 } from 'lucide-react';
 import { useHREmployees, useHREmployeeMutations, useHRDepartments, useHRDesignations, useHRUsers } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
@@ -75,7 +76,7 @@ export const EmployeeMasterTab: React.FC = () => {
   const { data: departments = [] } = useHRDepartments();
   const { data: designations = [] } = useHRDesignations();
   const { data: users = [] } = useHRUsers();
-  const { saveEmployee, deleteEmployee, changeStatus } = useHREmployeeMutations();
+  const { saveEmployee, deleteEmployee, changeStatus, toggleActive } = useHREmployeeMutations();
   const { toast } = useToast();
   const { settings } = useData();
   const { user, updateCurrentUser } = useAuth();
@@ -85,6 +86,7 @@ export const EmployeeMasterTab: React.FC = () => {
   const [filePreviews, setFilePreviews] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'INACTIVE' | 'ALL'>('ACTIVE');
   const [promoModalOpen, setPromoModalOpen] = useState(false);
   const [promoEmployee, setPromoEmployee] = useState<any>(null);
 
@@ -613,7 +615,10 @@ export const EmployeeMasterTab: React.FC = () => {
     );
   }
 
-  const columns = ['Employee', 'Department', 'Post', 'Type', 'Base Pay', 'OT Rate', 'KM Rate'];
+  const activeCount = useMemo(() => employees.filter((emp: any) => emp.active !== false).length, [employees]);
+  const inactiveCount = useMemo(() => employees.filter((emp: any) => emp.active === false).length, [employees]);
+
+  const columns = ['Employee', 'Department', 'Post', 'Type', 'Status', 'Base Pay', 'OT Rate', 'KM Rate'];
   
   const filteredEmployees = employees.filter((emp: any) => {
     const matchesSearch = emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -621,7 +626,10 @@ export const EmployeeMasterTab: React.FC = () => {
                           emp.designation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (emp.employee_id && emp.employee_id.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesFilter = filterType === 'ALL' || emp.employee_type === filterType;
-    return matchesSearch && matchesFilter;
+    const matchesStatus = statusFilter === 'ALL' || 
+                          (statusFilter === 'ACTIVE' && emp.active !== false) ||
+                          (statusFilter === 'INACTIVE' && emp.active === false);
+    return matchesSearch && matchesFilter && matchesStatus;
   });
 
   const rows = filteredEmployees.map((emp: any) => [
@@ -667,6 +675,14 @@ export const EmployeeMasterTab: React.FC = () => {
     }`}>
       {emp.employee_type === 'NONE' ? 'Org Only' : emp.employee_type === 'FIXED' ? 'Fixed (Monthly)' : 'Variable (Daily)'}
     </span>,
+    <span key="status" className={`text-xs px-2.5 py-0.5 rounded-full font-semibold inline-flex items-center gap-1.5 ${
+      emp.active !== false 
+        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' 
+        : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
+    }`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${emp.active !== false ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+      {emp.active !== false ? 'Active' : 'Inactive / Left'}
+    </span>,
     <span key="pay" className="font-semibold text-xs text-foreground">
       {emp.employee_type === 'NONE' ? 'N/A' : emp.employee_type === 'FIXED' ? `₹${Number(emp.base_salary_monthly || 0).toLocaleString('en-IN')}/mo` : `₹${Number(emp.dailywage || 0).toLocaleString('en-IN')}/day`}
     </span>,
@@ -682,6 +698,48 @@ export const EmployeeMasterTab: React.FC = () => {
           <p className="text-xs text-muted-foreground">Manage workforce profiles, salary rules, and employee documentation.</p>
         </div>
         <Button onClick={handleAddNew} className="gap-2"><Plus className="w-4 h-4" /> Add Employee</Button>
+      </div>
+
+      {/* Status Filter Tabs (Active / Inactive / All) */}
+      <div className="flex items-center gap-2 border-b border-border pb-2">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('ACTIVE')}
+          className={cn(
+            "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border",
+            statusFilter === 'ACTIVE' 
+              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm" 
+              : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <UserCheck className="w-3.5 h-3.5" />
+          Active Working ({activeCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusFilter('INACTIVE')}
+          className={cn(
+            "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border",
+            statusFilter === 'INACTIVE' 
+              ? "bg-rose-600 text-white border-rose-600 shadow-sm" 
+              : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <UserX className="w-3.5 h-3.5" />
+          Inactive / Left ({inactiveCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusFilter('ALL')}
+          className={cn(
+            "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border",
+            statusFilter === 'ALL' 
+              ? "bg-primary text-primary-foreground border-primary shadow-sm" 
+              : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+          )}
+        >
+          All Profiles ({employees.length})
+        </button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -717,30 +775,57 @@ export const EmployeeMasterTab: React.FC = () => {
           onView={(idx) => setViewEmployee(filteredEmployees[idx])}
           onRowClick={(idx) => setViewEmployee(filteredEmployees[idx])}
           onEdit={(idx) => handleEdit(filteredEmployees[idx])}
-          onDelete={(idx) => {
-            if(confirm(`Deactivate employee "${filteredEmployees[idx].name}"?`)) deleteEmployee(filteredEmployees[idx].id);
+          customActions={(idx) => {
+            const emp = filteredEmployees[idx];
+            const isActive = emp.active !== false;
+            return (
+              <div className="flex items-center gap-1.5">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8 text-xs text-emerald-600 hover:text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 border-emerald-200"
+                  onClick={(e) => { e.stopPropagation(); setViewEmployee(emp); }}
+                  title="View Full Profile & Uploaded Documents"
+                >
+                  <Eye className="w-3.5 h-3.5 mr-1" /> View Docs
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8 text-xs text-blue-600 hover:text-blue-700 bg-blue-50/50 hover:bg-blue-50 border-blue-200"
+                  onClick={(e) => { e.stopPropagation(); handlePromoteDemote(emp); }}
+                >
+                  Promote / Demote
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "h-8 text-xs font-semibold px-2.5",
+                    isActive
+                      ? "text-rose-600 hover:text-rose-700 bg-rose-50/60 hover:bg-rose-100/80 border-rose-200"
+                      : "text-emerald-600 hover:text-emerald-700 bg-emerald-50/60 hover:bg-emerald-100/80 border-emerald-200"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const promptMsg = isActive
+                      ? `Deactivate employee "${emp.name}"?\n\n• Marked as Left / Inactive.\n• Excluded from future daily attendance and monthly payroll calculations.\n• All past salary slips, ledgers, and documents remain preserved.`
+                      : `Reactivate employee "${emp.name}"?\n\n• Marked as Active.\n• Included in daily attendance and monthly payroll runs.`;
+                    if (window.confirm(promptMsg)) {
+                      toggleActive({ id: emp.id, active: !isActive });
+                    }
+                  }}
+                  title={isActive ? "Mark employee as Left / Inactive (Excludes from future payroll)" : "Reactivate employee as Working"}
+                >
+                  {isActive ? (
+                    <span className="flex items-center gap-1"><UserX className="w-3 h-3 text-rose-500" /> Deactivate</span>
+                  ) : (
+                    <span className="flex items-center gap-1"><UserCheck className="w-3 h-3 text-emerald-500" /> Reactivate</span>
+                  )}
+                </Button>
+              </div>
+            );
           }}
-          customActions={(idx) => (
-            <div className="flex items-center gap-1">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-8 text-xs text-emerald-600 hover:text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 border-emerald-200"
-                onClick={(e) => { e.stopPropagation(); setViewEmployee(filteredEmployees[idx]); }}
-                title="View Full Profile & Uploaded Documents"
-              >
-                <Eye className="w-3.5 h-3.5 mr-1" /> View Docs
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-8 text-xs text-blue-600 hover:text-blue-700 bg-blue-50/50 hover:bg-blue-50 border-blue-200"
-                onClick={(e) => { e.stopPropagation(); handlePromoteDemote(filteredEmployees[idx]); }}
-              >
-                Promote / Demote
-              </Button>
-            </div>
-          )}
         />
       </SafeDataView>
 

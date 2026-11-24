@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { SafeDataView } from '@/components/SafeDataView';
 import { Modal } from '@/components/Modal';
-import { CheckCircle, AlertTriangle, FileText, Download, Printer } from 'lucide-react';
+import { CheckCircle, AlertTriangle, FileText, Download, Printer, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { generateRTGSSlip } from '@/utils/pdfGenerator';
+import { rtgsService } from '@/api/services/rtgs.service';
 import { useData } from '@/contexts/DataContext';
 import { SalarySlipPdfModal } from '@/components/PDF/SalarySlipPdfModal';
 
@@ -95,24 +95,45 @@ export const MonthlyAttendanceTab = () => {
     }
   };
 
-    const handlePrintRTGS = async (emp: any) => {
-      try {
-        await generateRTGSSlip({
-          beneficiaryName: emp.labour_name,
-          bankName: emp.bank_details?.bank_name || '',
-          accountNumber: emp.bank_details?.account_no || '',
-          ifscCode: emp.bank_details?.ifsc || '',
-          amount: emp.net_pay,
-          companyName: settings.company_name || 'Simply Useful',
-          companyAccount: settings.company_bank_account || '',
-          companyBank: settings.company_bank_name || '',
-          companyIfsc: settings.company_bank_ifsc || ''
-        });
-        toast({ title: 'Success', description: 'RTGS slip generated' });
-      } catch (e: any) {
-        toast({ title: 'Error', description: e.message, variant: 'destructive' });
-      }
-    };
+  const [isSubmittingRtgs, setIsSubmittingRtgs] = useState(false);
+
+  const handleRequestRtgsApproval = async (emp: any) => {
+    if (!emp.net_pay || emp.net_pay <= 0) {
+      toast({
+        title: 'Invalid Salary Amount',
+        description: 'Net payable salary must be greater than ₹0 to submit an RTGS request.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      setIsSubmittingRtgs(true);
+      await rtgsService.createRequest({
+        payment_mode: 'RTGS',
+        payee_category: 'SALARY',
+        expense_head: 'SALARY',
+        beneficiary_name: emp.labour_name || 'Staff Member',
+        account_number: emp.bank_details?.account_no || '',
+        ifsc_code: emp.bank_details?.ifsc || '',
+        bank_name: emp.bank_details?.bank_name || 'Axis Bank',
+        amount: Number(emp.net_pay),
+        bill_number: `SAL-${month}-${emp.labour_id}`,
+        narration: `Salary Payout for ${month} - ${emp.labour_name}`,
+      });
+      toast({
+        title: 'RTGS Request Submitted to SuperAdmin',
+        description: `✓ RTGS transfer of ₹${Number(emp.net_pay).toLocaleString('en-IN')} for ${emp.labour_name} has been sent to SuperAdmin in Bank RTGS Hub for maker-checker approval.`,
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Submission Failed',
+        description: e?.response?.data?.message || e?.message || 'Could not submit RTGS payment request',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmittingRtgs(false);
+    }
+  };
 
   const handleOpenPayment = (emp: any) => {
     setPaymentModalEmp(emp);
@@ -379,26 +400,31 @@ export const MonthlyAttendanceTab = () => {
                           
                           {emp.is_finalized && (
                             <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700"
-                                title="Download RTGS Slip"
-                                onClick={() => handlePrintRTGS(emp)}
-                              >
-                                <Download className="w-4 h-4" />
-                              </Button>
                               {emp.is_paid ? (
-                                <span className="inline-flex items-center justify-center px-2 h-7 text-xs font-semibold text-green-700 bg-green-100 rounded-md border border-green-200">Paid</span>
+                                <span className="inline-flex items-center justify-center px-2.5 h-7 text-xs font-bold text-green-700 bg-green-100 rounded-md border border-green-200">
+                                  Paid
+                                </span>
                               ) : (
-                                <Button 
-                                  size="sm" 
-                                  variant="default" 
-                                  className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white px-2" 
-                                  onClick={() => handleOpenPayment(emp)}
-                                >
-                                  Pay Now
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isSubmittingRtgs}
+                                    className="h-7 px-2 text-[11px] font-semibold text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer gap-1"
+                                    title="Submit RTGS salary transfer request to SuperAdmin for approval"
+                                    onClick={() => handleRequestRtgsApproval(emp)}
+                                  >
+                                    <Send className="w-3 h-3 text-blue-600" /> Req RTGS
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="default" 
+                                    className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white px-2 font-medium" 
+                                    onClick={() => handleOpenPayment(emp)}
+                                  >
+                                    Pay Now
+                                  </Button>
+                                </>
                               )}
                             </>
                           )}

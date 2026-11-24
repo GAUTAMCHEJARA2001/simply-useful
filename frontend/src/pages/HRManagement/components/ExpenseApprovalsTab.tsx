@@ -20,11 +20,17 @@ import {
   AlertTriangle,
   User as UserIcon,
   Calendar,
-  CheckCheck
+  CheckCheck,
+  Plus,
+  Upload,
+  Image as ImageIcon,
+  Send
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ImageViewerModal } from '@/components/ImageViewerModal';
 import { Expense } from '@/types';
+import { api } from '@/api/client';
+import { useHREmployees } from '@/hooks/hr/useHR';
 
 export const ExpenseApprovalsTab: React.FC = () => {
   const { expenses = [], users = [], updateExpenseStatus, refreshAll } = useData();
@@ -44,9 +50,90 @@ export const ExpenseApprovalsTab: React.FC = () => {
   const [rejectModal, setRejectModal] = useState<{ id: string; employee: string; amount: number } | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
   
-  // Single/batch processing loaders
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [batchLoading, setBatchLoading] = useState(false);
+  // Admin Add Spend Bill (on behalf of older/field staff)
+  const { data: hrEmployees = [] } = useHREmployees();
+  const [addSpendModalOpen, setAddSpendModalOpen] = useState(false);
+  const [isSubmittingSpend, setIsSubmittingSpend] = useState(false);
+  const [spendReceiptFile, setSpendReceiptFile] = useState<File | null>(null);
+  const [spendReceiptPreview, setSpendReceiptPreview] = useState<string | null>(null);
+  const [spendForm, setSpendForm] = useState({
+    employee_id: '',
+    category: 'Travel',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    bill_number: '',
+    remarks: '',
+    km_travelled: '',
+    auto_approve: true,
+  });
+
+  const handleAdminAddSpend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(spendForm.amount);
+    if (!amt || amt <= 0) {
+      toast({ title: 'Validation Error', description: 'Please enter a valid expense amount greater than ₹0', variant: 'destructive' });
+      return;
+    }
+    if (!spendForm.employee_id) {
+      toast({ title: 'Validation Error', description: 'Please select an employee/sales officer', variant: 'destructive' });
+      return;
+    }
+
+    const selectedEmp = hrEmployees.find((emp: any) => String(emp.id) === String(spendForm.employee_id));
+    const targetEmail = selectedEmp?.user_email || 
+                        (selectedEmp?.contactinfo && selectedEmp.contactinfo.includes('@') ? selectedEmp.contactinfo : '') || 
+                        selectedEmp?.employee_id || 
+                        selectedEmp?.name || 
+                        'staff@simply-useful.internal';
+
+    try {
+      setIsSubmittingSpend(true);
+      const formData = new FormData();
+      formData.append('soEmail', targetEmail);
+      formData.append('category', spendForm.category);
+      formData.append('amount', String(amt));
+      formData.append('date', spendForm.date);
+      if (spendForm.bill_number) formData.append('bill_number', spendForm.bill_number);
+      if (spendForm.remarks) formData.append('remarks', spendForm.remarks);
+      if (spendForm.km_travelled) formData.append('km_travelled', spendForm.km_travelled);
+      formData.append('auto_approve', String(spendForm.auto_approve));
+      if (spendReceiptFile) {
+        formData.append('photo', spendReceiptFile);
+      }
+
+      await api.post('/expenses/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      toast({
+        title: 'Spend Bill Recorded',
+        description: `✓ Spend bill of ₹${amt.toLocaleString('en-IN')} for ${selectedEmp?.name || targetEmail} has been recorded${spendForm.auto_approve ? ' and auto-approved for payroll' : ''}.`,
+      });
+
+      setAddSpendModalOpen(false);
+      setSpendForm({
+        employee_id: '',
+        category: 'Travel',
+        amount: '',
+        date: new Date().toISOString().split('T')[0],
+        bill_number: '',
+        remarks: '',
+        km_travelled: '',
+        auto_approve: true,
+      });
+      setSpendReceiptFile(null);
+      setSpendReceiptPreview(null);
+      refreshAll(true);
+    } catch (err: any) {
+      toast({
+        title: 'Failed to Record Spend Bill',
+        description: err?.response?.data?.message || err?.message || 'Error creating expense record',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmittingSpend(false);
+    }
+  };
 
   // Lightbox for bill/receipt image
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -269,6 +356,14 @@ export const ExpenseApprovalsTab: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => setAddSpendModalOpen(true)}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs h-9 flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> Add Spend Bill (On Behalf of Staff)
+          </Button>
+
           {pendingFilteredCount > 1 && (
             <Button
               size="sm"
@@ -626,6 +721,190 @@ export const ExpenseApprovalsTab: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Add Spend Bill (On Behalf of Staff) Modal */}
+      <Dialog open={addSpendModalOpen} onOpenChange={setAddSpendModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-primary" />
+              Add Staff Spend Bill / Expense Claim
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Record travel, fuel, or food expenses on behalf of staff or sales officers who cannot use the mobile app.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleAdminAddSpend} className="space-y-3.5 py-1 text-xs">
+            {/* Employee Selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Select Employee / Sales Officer *</Label>
+              <select
+                required
+                value={spendForm.employee_id}
+                onChange={e => setSpendForm(p => ({ ...p, employee_id: e.target.value }))}
+                className="w-full h-9 rounded-md border border-border bg-background px-3 text-xs"
+              >
+                <option value="">-- Choose Employee --</option>
+                {hrEmployees
+                  .filter((emp: any) => emp.active !== false)
+                  .map((emp: any) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.designation || 'Staff'} · {emp.department || 'General'}) {emp.employee_id ? `[${emp.employee_id}]` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Category & Date */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Expense Category *</Label>
+                <select
+                  required
+                  value={spendForm.category}
+                  onChange={e => setSpendForm(p => ({ ...p, category: e.target.value }))}
+                  className="w-full h-9 rounded-md border border-border bg-background px-3 text-xs"
+                >
+                  <option value="Travel">Travel &amp; Transit</option>
+                  <option value="Fuel">Fuel / Petrol</option>
+                  <option value="Food">Meals &amp; Daily Food (DA)</option>
+                  <option value="Accommodation">Hotel &amp; Accommodation</option>
+                  <option value="Phone">Mobile Recharge &amp; Internet</option>
+                  <option value="Vehicle Maintenance">Vehicle Maintenance</option>
+                  <option value="Toll / Parking">Toll &amp; Parking</option>
+                  <option value="Stationery">Stationery &amp; Print</option>
+                  <option value="Client Entertainment">Client Meeting / Tea</option>
+                  <option value="Other">Other Expenses</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Bill Date *</Label>
+                <Input
+                  type="date"
+                  required
+                  value={spendForm.date}
+                  onChange={e => setSpendForm(p => ({ ...p, date: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Amount & Bill Number */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Amount (₹) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  placeholder="e.g. 850"
+                  value={spendForm.amount}
+                  onChange={e => setSpendForm(p => ({ ...p, amount: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Bill / Voucher No. (Optional)</Label>
+                <Input
+                  placeholder="e.g. BILL-9821"
+                  value={spendForm.bill_number}
+                  onChange={e => setSpendForm(p => ({ ...p, bill_number: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Remarks / Purpose */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Description / Purpose</Label>
+              <Input
+                placeholder="e.g. Client visit to Surat dealer, petrol reimbursement"
+                value={spendForm.remarks}
+                onChange={e => setSpendForm(p => ({ ...p, remarks: e.target.value }))}
+              />
+            </div>
+
+            {/* Receipt Photo Upload */}
+            <div className="space-y-2 p-3 bg-muted/20 border border-border/70 rounded-xl">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                <Upload className="w-3.5 h-3.5 text-primary" />
+                Receipt Photo (Image Only: JPG, PNG, WebP)
+              </Label>
+              
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/jpg"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    if (!file.type.startsWith('image/')) {
+                      toast({
+                        title: 'Images Only',
+                        description: 'Please upload an image receipt (JPG, PNG, WebP).',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    setSpendReceiptFile(file);
+                    setSpendReceiptPreview(URL.createObjectURL(file));
+                  } else {
+                    setSpendReceiptFile(null);
+                    setSpendReceiptPreview(null);
+                  }
+                }}
+                className="w-full text-xs text-muted-foreground file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+              />
+
+              {spendReceiptPreview && (
+                <div className="flex items-center gap-3 pt-2">
+                  <img
+                    src={spendReceiptPreview}
+                    alt="Receipt preview"
+                    className="w-14 h-14 object-cover rounded-lg border shadow-xs cursor-pointer hover:opacity-85"
+                    onClick={() => {
+                      setPreviewImage(spendReceiptPreview);
+                      setPreviewTitle('New Receipt Preview');
+                    }}
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    <p className="font-semibold text-foreground truncate max-w-[220px]">{spendReceiptFile?.name}</p>
+                    <p>{(spendReceiptFile!.size / 1024).toFixed(1)} KB · Ready to upload to Cloudinary</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Auto-Approve Checkbox */}
+            <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/20">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={spendForm.auto_approve}
+                  onChange={e => setSpendForm(p => ({ ...p, auto_approve: e.target.checked }))}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300"
+                />
+                <span className="text-xs font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Auto-Approve &amp; Include in Employee's Monthly Salary
+                </span>
+              </label>
+              <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400 pl-6 mt-1">
+                Since Admin is recording this on behalf of the employee, this expense will be marked approved immediately and reimbursed in their salary slip.
+              </p>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setAddSpendModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmittingSpend} className="bg-primary text-primary-foreground gap-1.5 font-semibold">
+                {isSubmittingSpend ? 'Saving...' : 'Record Spend Bill'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Reject Reason Modal Dialog */}
       <Dialog open={!!rejectModal} onOpenChange={open => { if (!open) setRejectModal(null); }}>

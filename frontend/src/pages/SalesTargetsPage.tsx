@@ -145,10 +145,15 @@ export const SalesTargetsPage: React.FC = () => {
   }, [currentRecord]);
 
   // Simulator calculation (User can provide / test their own target)
+  const DEFAULT_INCENTIVE_SLABS = [
+    { label: 'Base Tier (80-99%)', min_pct: 80, max_pct: 99.99, rate_per_bag: 3 },
+    { label: 'Target Achiever (100-119%)', min_pct: 100, max_pct: 119.99, rate_per_bag: 6 },
+    { label: 'Super Achiever (120%+)', min_pct: 120, max_pct: 99999, rate_per_bag: 10 },
+  ];
   const effectiveTargetBags = simTargetBags > 0 ? simTargetBags : (t?.target_bags || 1);
   const simAchievementPct = Math.round((simBags / (effectiveTargetBags || 1)) * 100);
-  const slabs = t?.incentive_slabs && t.incentive_slabs.length > 0 ? t.incentive_slabs : [];
-  const simActiveSlab = slabs.find(s => simAchievementPct >= s.min_pct && simAchievementPct <= s.max_pct);
+  const slabs = t?.incentive_slabs && t.incentive_slabs.length > 0 ? t.incentive_slabs : DEFAULT_INCENTIVE_SLABS;
+  const simActiveSlab = slabs.find(s => simAchievementPct >= s.min_pct && (s.max_pct ? simAchievementPct <= s.max_pct : true));
   const simRatePerBag = simActiveSlab ? simActiveSlab.rate_per_bag : 0;
   const simBaseIncentive = simBags * simRatePerBag;
   const simBountyRate = t?.new_dealer_bounty || 500;
@@ -995,6 +1000,60 @@ export const SalesTargetsPage: React.FC = () => {
                       className="text-sm font-bold"
                       placeholder="Enter Projected Sales..."
                     />
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(5000, Math.round(effectiveTargetBags * 1.5))}
+                      step={10}
+                      value={simBags}
+                      onChange={(e) => setSimBags(Number(e.target.value) || 0)}
+                      className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                    />
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[10px] text-muted-foreground mr-0.5">Presets:</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSimBags(Math.round(effectiveTargetBags * 0.8))}
+                        className={cn(
+                          "h-6 px-2 text-[10px] rounded-md font-semibold transition-colors",
+                          simAchievementPct >= 80 && simAchievementPct < 100
+                            ? "bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-300 font-bold"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        80% Base ({formatIndianNumber(Math.round(effectiveTargetBags * 0.8))})
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSimBags(effectiveTargetBags)}
+                        className={cn(
+                          "h-6 px-2 text-[10px] rounded-md font-semibold transition-colors",
+                          simAchievementPct >= 100 && simAchievementPct < 120
+                            ? "bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-300 font-bold"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        100% Target ({formatIndianNumber(effectiveTargetBags)})
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSimBags(Math.round(effectiveTargetBags * 1.25))}
+                        className={cn(
+                          "h-6 px-2 text-[10px] rounded-md font-semibold transition-colors",
+                          simAchievementPct >= 120
+                            ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 font-bold"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        125% Super ({formatIndianNumber(Math.round(effectiveTargetBags * 1.25))})
+                      </Button>
+                    </div>
                     <div className="text-[11px] text-muted-foreground flex justify-between items-center pt-0.5">
                       <span>Target Baseline: <strong className="text-foreground">{formatIndianNumber(effectiveTargetBags)} units</strong></span>
                       <Badge variant="outline" className={cn("text-[10px] font-bold px-1.5 py-0", simAchievementPct >= 100 ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-muted")}>
@@ -1032,9 +1091,23 @@ export const SalesTargetsPage: React.FC = () => {
                     <div className="text-3xl font-black text-primary tracking-tight mt-1">
                       {formatIndianCurrency(simTotalIncentive)}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Projected Tier: <strong className="text-foreground">{simActiveSlab?.label || 'Below Threshold (<80%)'}</strong> (₹{simRatePerBag}/unit)
+                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
+                      <span>Projected Tier:</span>
+                      {simActiveSlab ? (
+                        <Badge className="bg-emerald-600 text-white text-[11px] font-bold">
+                          {simActiveSlab.label} (₹{simRatePerBag}/unit)
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-[11px]">
+                          Below Threshold (&lt;80%)
+                        </Badge>
+                      )}
                     </div>
+                    {simAchievementPct < 80 && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5">
+                        Reach 80% ({formatIndianNumber(Math.max(0, Math.round(effectiveTargetBags * 0.8) - simBags))} more units) to unlock Base Tier payout of ₹{formatIndianCurrency(Math.round(effectiveTargetBags * 0.8) * 3)}!
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 border-t border-primary/20 pt-3 text-xs">

@@ -45,7 +45,7 @@ const navItems: NavItem[] = [
   { label: 'New Order', path: '/sales/order', icon: ShoppingCart, feature: 'create_order', domain: 'SALES', description: 'Create and book a new sales order' },
   { label: 'Saved Estimates', path: '/sales/estimates', icon: FileText, feature: 'create_order', domain: 'SALES', description: 'View and convert price estimates' },
   { label: 'Order List', path: '/sales/orders', icon: ClipboardList, feature: 'view_own_orders', domain: 'SALES', description: 'Track all submitted orders and dispatches' },
-  { label: 'CRM Leads', path: '/sales/crm', icon: Users, feature: 'track_visits', domain: 'SALES', description: 'Lead pipeline and follow-up tracker' },
+  { label: 'CRM & Sales Hub', path: '/sales/crm', icon: Users, feature: 'track_visits', domain: 'SALES', description: 'Daily cockpit, territory accounts, payment clearances & target run-rate' },
   { label: 'My Territory', path: '/sales/territory', icon: Store, feature: 'track_visits', domain: 'SALES', description: 'Dealers and distributors in assigned area' },
   { label: 'Party Onboarding', path: '/sales/onboarding', icon: UserCheck, feature: 'view_sales_dashboard', domain: 'SALES', description: 'KYC and onboarding for new parties' },
 
@@ -59,10 +59,7 @@ const navItems: NavItem[] = [
   { label: 'CN & Discounts', path: '/finance/cn-requests', icon: Percent, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Credit Notes, special discounts & SuperAdmin approvals queue' },
   { label: 'Spending & Bills', path: '/sales/expenses', icon: Receipt, feature: 'manage_expenses', domain: 'FINANCE', description: 'Submit and review travel & field expenses' },
   { label: 'Payment Receipts', path: '/sales/payments/new', icon: CreditCard, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Record party cheque, RTGS or cash payments' },
-  { label: 'Bank RTGS & Remittances', path: '/finance/rtgs-hub', icon: Landmark, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Supplier RTGS, Employee Advances, Salary & Custom Bank Slips' },
-  { label: 'Payment Approvals', path: '/admin/payments', icon: Receipt, feature: 'view_admin_dashboard', domain: 'FINANCE', description: 'Verify and approve party payment collections' },
   { label: 'My Ledger Requests', path: '/sales/ledger-requests', icon: FileText, feature: 'view_sales_dashboard', domain: 'FINANCE', description: 'Request statement of accounts for dealers' },
-  { label: 'Ledger Fulfillment', path: '/admin/ledger-requests', icon: FileText, feature: 'view_admin_dashboard', domain: 'FINANCE', description: 'Process and upload party financial ledgers' },
 
   // 4. Supply Chain & Inventory
   // Overview
@@ -114,14 +111,15 @@ const navItems: NavItem[] = [
   { label: 'Leave Management', path: '/hr/manage?tab=leaves', icon: CalendarCheck, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Attendance & Operations', description: 'Leave approvals & holiday tracker' },
   { label: 'Employee Ledger', path: '/hr/manage?tab=ledger', icon: Wallet, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Staff advance salary & running balances' },
   { label: 'Payroll & Slips', path: '/hr/manage?tab=payroll', icon: FileBarChart, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Salary calculations & payslip generation' },
-  { label: 'Bank RTGS / Staff Advances', path: '/hr/rtgs-hub?tab=advance', icon: Landmark, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'Staff salary advances & monthly salary bank RTGS slips' },
   { label: 'HR Config', path: '/hr/manage?tab=config', icon: FileText, feature: 'view_inventory_dashboard', domain: 'HR', subgroup: 'Payroll & Statutory', description: 'HR policy settings & compliance parameters' },
 
   // 6. Administration
   { label: 'Admin Panels', path: '/admin', icon: ShieldCheck, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Master control dashboard' },
+  { label: 'Payment Approvals', path: '/admin/payments', icon: Receipt, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Verify and approve party payment collections' },
   { label: 'Party Ledgers', path: '/finance/ledger', icon: Wallet, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Live statements, sales billing, returns, and transaction ledger' },
   { label: 'Bank RTGS / NEFT Hub', path: '/finance/rtgs-hub', icon: Landmark, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Official 10-Bank fillable RTGS & NEFT remittances' },
   { label: 'CN & Discount Approvals', path: '/finance/cn-requests', icon: Percent, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Examine & approve credit notes, special discounts & ledger write-offs' },
+  { label: 'Ledger Fulfillment', path: '/admin/ledger-requests', icon: FileText, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Process and upload party financial ledgers' },
   { label: 'Manage Staff', path: '/admin/users', icon: Users, feature: 'view_admin_dashboard', domain: 'ADMIN', description: 'Staff logins, roles & warehouse permissions' },
   { label: 'Dealers', path: '/admin/dealers', icon: Store, feature: 'manage_customers', domain: 'ADMIN', description: 'Manage retail shops, dealers and credit limits' },
   { label: 'Distributors', path: '/admin/distributors', icon: Users, feature: 'manage_customers', domain: 'ADMIN', description: 'Manage wholesale distributor networks' },
@@ -737,6 +735,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const filteredNav = navItems.filter(item => {
     if (item.path === '/finance/ledger' || item.path === '/finance/cn-requests') {
       return ['SUPERADMIN', 'ADMIN', 'SALES', 'ACCOUNTANT', 'MANAGER'].includes(user.role) || can(item.feature);
+    }
+    if (item.path.startsWith('/finance/rtgs-hub') || item.path.startsWith('/hr/rtgs-hub')) {
+      const roleUpper = (user.role || '').toUpperCase();
+      return ['SUPERADMIN', 'ADMIN', 'SUPER_ADMIN', 'DIRECTOR'].includes(roleUpper);
     }
     if (item.path === '/admin/global-inventory') return user.role === 'SUPERADMIN';
     if (item.path === '/admin/activity-logs') return user.role === 'SUPERADMIN' || user.role === 'ADMIN';

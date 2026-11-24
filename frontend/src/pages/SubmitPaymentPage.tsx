@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { paymentService } from '@/api/services/payment.service';
@@ -21,6 +22,7 @@ const SubmitPaymentPage: React.FC = () => {
   const { user } = useAuth();
   const { dealers, distributors } = useData();
   const { toast } = useToast();
+  const location = useLocation();
 
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
 
@@ -37,6 +39,22 @@ const SubmitPaymentPage: React.FC = () => {
   const [photo, setPhoto] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openPartyCombobox, setOpenPartyCombobox] = useState(false);
+
+  useEffect(() => {
+    if (location.state) {
+      const state = location.state as any;
+      if (state.partyName) {
+        setSelectedParty(state.partyName);
+      }
+      if (state.partyType) {
+        setPartyType(state.partyType);
+      }
+      if (state.amount) {
+        setAmount(String(state.amount));
+      }
+      setIsDialogOpen(true);
+    }
+  }, [location.state]);
 
   const parties = useMemo(() => {
     const rawList = partyType === 'Dealer' 

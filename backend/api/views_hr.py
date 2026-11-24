@@ -2,8 +2,14 @@ import datetime
 import calendar
 import collections
 import uuid
+import os
+import logging
 import cloudinary.uploader
 from django.utils import timezone
+from django.db import transaction
+from django.conf import settings
+from django.core.files.storage import default_storage, FileSystemStorage
+from django.core.files.base import ContentFile
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import AllowAny
@@ -20,30 +26,36 @@ from api.models import (
 from core.models import User
 from api.views import send_success, send_error, _get_company_id, load_settings
 
-def _upload_employee_photo_to_cloudinary(file_obj, emp_id, field_name):
+logger = logging.getLogger(__name__)
+
+def _upload_employee_photo(file_obj, emp_id, field_name):
     """
-    Validates that the file is strictly an image/photo (rejects PDF and documents)
-    and uploads directly to Cloudinary under 'employee_docs' folder.
+    Validates that the file is strictly an image/photo (JPG, PNG, WebP) - rejecting PDFs and other docs.
+    Uploads directly to Cloudinary as the single cloud storage engine.
     Returns the secure HTTPS Cloudinary URL.
     """
     if not file_obj:
         return None
 
-    file_name = getattr(file_obj, 'name', '').lower()
+    clean_field_name = field_name.replace('_', ' ').title()
+    file_name = getattr(file_obj, 'name', '') or 'photo.jpg'
+    file_name_lower = file_name.lower()
     content_type = getattr(file_obj, 'content_type', '').lower()
 
-    # Reject PDFs and non-images
-    if file_name.endswith('.pdf') or 'pdf' in content_type:
-        clean_field_name = field_name.replace('_', ' ').title()
-        raise ValueError(f"Only photo uploads (JPG, PNG, WebP) are allowed for {clean_field_name}. PDF files are not allowed.")
+    # Reject PDFs and non-images strictly
+    if file_name_lower.endswith('.pdf') or 'pdf' in content_type:
+        raise ValueError(f"Only photo uploads (JPG, PNG, WebP) are allowed for {clean_field_name}. PDF documents are not allowed.")
 
     allowed_extensions = ('.jpg', '.jpeg', '.png', '.webp', '.heic', '.bmp')
-    is_valid_ext = any(file_name.endswith(ext) for ext in allowed_extensions)
+    is_valid_ext = any(file_name_lower.endswith(ext) for ext in allowed_extensions)
     is_valid_mime = content_type.startswith('image/')
 
     if not is_valid_ext and not is_valid_mime:
-        clean_field_name = field_name.replace('_', ' ').title()
-        raise ValueError(f"Only photo uploads (JPG, PNG, WebP) are allowed for {clean_field_name}. Documents and PDFs are not allowed.")
+        raise ValueError(f"Only photo uploads (JPG, PNG, WebP) are allowed for {clean_field_name}. Other file formats are not allowed.")
+
+    # Rewind file stream before Cloudinary upload
+    if hasattr(file_obj, 'seek') and callable(file_obj.seek):
+        file_obj.seek(0)
 
     try:
         upload_result = cloudinary.uploader.upload(
@@ -53,9 +65,88 @@ def _upload_employee_photo_to_cloudinary(file_obj, emp_id, field_name):
             public_id=f"emp_{emp_id}_{field_name}_{uuid.uuid4().hex[:6]}",
             overwrite=True
         )
-        return upload_result.get('secure_url') or upload_result.get('url')
+        url = upload_result.get('secure_url') or upload_result.get('url')
+        if not url:
+            raise RuntimeError("Cloudinary upload did not return a valid URL.")
+        return url
     except Exception as e:
-        raise RuntimeError(f"Cloudinary upload failed for {field_name}: {str(e)}")
+        logger.error(f"Cloudinary upload failed for {clean_field_name}: {str(e)}")
+        raise ValueError(f"Cloudinary upload failed for {clean_field_name}: {str(e)}")
+
+# Backward compatibility alias
+_upload_employee_photo_to_cloudinary = _upload_employee_photo
+
+def _format_media_url(file_field, request=None):
+    if not file_field:
+        return None
+    val_str = str(file_field).strip()
+    if not val_str:
+        return None
+    
+    is_ssl = False
+    if request:
+        is_ssl = request.is_secure() or request.headers.get('x-forwarded-proto') == 'https'
+
+    if val_str.startswith('http://') or val_str.startswith('https://'):
+        if is_ssl and val_str.startswith('http://') and not ('localhost' in val_str or '127.0.0.1' in val_str):
+            return val_str.replace('http://', 'https://', 1)
+        return val_str
+
+    clean_path = val_str.replace('\\', '/')
+    if clean_path.startswith('/media/'):
+        path_under_media = clean_path
+    elif clean_path.startswith('media/'):
+        path_under_media = f"/{clean_path}"
+    else:
+        path_under_media = f"/media/{clean_path.lstrip('/')}"
+
+    if request:
+        try:
+            abs_url = request.build_absolute_uri(path_under_media)
+            if is_ssl and abs_url.startswith('http://') and not ('localhost' in abs_url or '127.0.0.1' in abs_url):
+                abs_url = abs_url.replace('http://', 'https://', 1)
+            return abs_url
+        except Exception:
+            pass
+    return path_under_media
+
+def _serialize_employee(l, request=None):
+    return {
+        'id': l.id,
+        'name': l.name,
+        'employee_type': l.employee_type,
+        'base_salary_monthly': l.base_salary_monthly,
+        'dailywage': l.dailywage,
+        'overtime_hourly_rate': l.overtime_hourly_rate,
+        'late_deduction_rate': l.late_deduction_rate,
+        'bike_allowance_per_km': l.bike_allowance_per_km,
+        'car_allowance_per_km': l.car_allowance_per_km,
+        'sales_incentive_pct': l.sales_incentive_pct,
+        'bag_incentive_rate': l.bag_incentive_rate,
+        'contactinfo': l.contactinfo,
+        'warehouseid': l.warehouseid_id,
+        'department': l.department,
+        'designation': l.designation,
+        'reports_to': l.reports_to_id,
+        'is_ot_eligible': l.is_ot_eligible,
+        'is_late_deduction_eligible': l.is_late_deduction_eligible,
+        'is_km_eligible': l.is_km_eligible,
+        'is_bag_eligible': l.is_bag_eligible,
+        'user_id': l.user_id,
+        'user_email': getattr(User.objects.filter(id=l.user_id).first(), 'email', None) if l.user_id else None,
+        'employee_id': l.employee_id,
+        'active': bool(l.active),
+        'doj': l.doj.isoformat() if l.doj else None,
+        'aadhar_number': l.aadhar_number,
+        'pan_number': l.pan_number,
+        'bank_name': l.bank_name,
+        'bank_account_number': l.bank_account_number,
+        'bank_ifsc': l.bank_ifsc,
+        'employee_photo': _format_media_url(l.employee_photo, request),
+        'aadhar_photo': _format_media_url(l.aadhar_photo, request),
+        'pan_photo': _format_media_url(l.pan_photo, request),
+        'bank_proof_photo': _format_media_url(l.bank_proof_photo, request)
+    }
 
 # --- MASTERS ---
 @api_view(['GET', 'POST'])
@@ -111,72 +202,26 @@ def hr_designations_detail(request, pk):
 def hr_employees(request):
     company_id = _get_company_id(request)
     if request.method == 'GET':
-        qs = Labour.objects.filter(active=True)
+        include_all = (
+            request.query_params.get('all') == 'true' or
+            request.query_params.get('status') == 'all' or
+            request.query_params.get('include_inactive') == 'true'
+        )
+        status_param = request.query_params.get('status')
+
+        qs = Labour.objects.all()
         if company_id:
             qs = qs.filter(companyid_id=company_id)
-        
-        employees = []
-        def _get_full_url(file_field):
-            if not file_field:
-                return None
-            val_str = str(file_field)
-            is_ssl = request.is_secure() or request.headers.get('x-forwarded-proto') == 'https'
-            if val_str.startswith('http://') or val_str.startswith('https://'):
-                if is_ssl and val_str.startswith('http://') and not ('localhost' in val_str or '127.0.0.1' in val_str):
-                    return val_str.replace('http://', 'https://', 1)
-                return val_str
-            try:
-                url = file_field.url if hasattr(file_field, 'url') else val_str
-                if url.startswith('http://') or url.startswith('https://'):
-                    if is_ssl and url.startswith('http://') and not ('localhost' in url or '127.0.0.1' in url):
-                        return url.replace('http://', 'https://', 1)
-                    return url
-                abs_url = request.build_absolute_uri(url)
-                if is_ssl and abs_url.startswith('http://') and not ('localhost' in abs_url or '127.0.0.1' in abs_url):
-                    abs_url = abs_url.replace('http://', 'https://', 1)
-                return abs_url
-            except Exception:
-                if val_str.startswith('http://') or val_str.startswith('https://'):
-                    if is_ssl and val_str.startswith('http://') and not ('localhost' in val_str or '127.0.0.1' in val_str):
-                        return val_str.replace('http://', 'https://', 1)
-                    return val_str
-                return None
 
-        for l in qs:
-            employees.append({
-                'id': l.id,
-                'name': l.name,
-                'employee_type': l.employee_type,
-                'base_salary_monthly': l.base_salary_monthly,
-                'dailywage': l.dailywage,
-                'overtime_hourly_rate': l.overtime_hourly_rate,
-                'late_deduction_rate': l.late_deduction_rate,
-                'bike_allowance_per_km': l.bike_allowance_per_km,
-                'car_allowance_per_km': l.car_allowance_per_km,
-                'sales_incentive_pct': l.sales_incentive_pct,
-                'bag_incentive_rate': l.bag_incentive_rate,
-                'contactinfo': l.contactinfo,
-                'warehouseid': l.warehouseid_id,
-                'department': l.department,
-                'designation': l.designation,
-                'reports_to': l.reports_to_id,
-                'is_ot_eligible': l.is_ot_eligible,
-                'is_late_deduction_eligible': l.is_late_deduction_eligible,
-                'is_km_eligible': l.is_km_eligible,
-                'is_bag_eligible': l.is_bag_eligible,
-                'user_id': l.user_id,
-                'employee_id': l.employee_id,
-                'doj': l.doj.isoformat() if l.doj else None,
-                'aadhar_number': l.aadhar_number,
-                'pan_number': l.pan_number,
-                'bank_name': l.bank_name,
-                'bank_account_number': l.bank_account_number,
-                'bank_ifsc': l.bank_ifsc,
-                'employee_photo': _get_full_url(l.employee_photo),
-                'aadhar_photo': _get_full_url(l.aadhar_photo),
-                'pan_photo': _get_full_url(l.pan_photo),
-                'bank_proof_photo': _get_full_url(l.bank_proof_photo)
-            })
+        if status_param == 'inactive':
+            qs = qs.filter(active=False)
+        elif status_param == 'active':
+            qs = qs.filter(active=True)
+        elif not include_all:
+            # Default to active unless explicitly requesting all
+            qs = qs.filter(active=True)
+        
+        employees = [_serialize_employee(l, request) for l in qs]
         return send_success(employees, 'Employees fetched')
 
     elif request.method == 'POST':
@@ -230,55 +275,61 @@ def hr_employees(request):
             except ValueError:
                 doj_val = None
 
+        req_emp_id = str(data.get('employee_id', '')).strip()
+        if req_emp_id and Labour.objects.filter(employee_id=req_emp_id).exists():
+            return send_error(f'Employee ID "{req_emp_id}" is already in use', 400)
+
         try:
-            emp = Labour.objects.create(
-                name=name,
-                employee_type=data.get('employee_type', 'VARIABLE'),
-                companyid_id=company_id,
-                base_salary_monthly=_to_float(data.get('base_salary_monthly')),
-                dailywage=_to_float(data.get('dailywage')),
-                overtime_hourly_rate=_to_float(data.get('overtime_hourly_rate')),
-                late_deduction_rate=_to_float(data.get('late_deduction_rate')),
-                bike_allowance_per_km=_to_float(data.get('bike_allowance_per_km')),
-                car_allowance_per_km=_to_float(data.get('car_allowance_per_km')),
-                sales_incentive_pct=_to_float(data.get('sales_incentive_pct')),
-                bag_incentive_rate=_to_float(data.get('bag_incentive_rate')),
-                contactinfo=data.get('contactinfo', ''),
-                warehouseid_id=warehouse_id,
-                department=data.get('department') or None,
-                designation=data.get('designation') or None,
-                reports_to_id=reports_to_id,
-                is_ot_eligible=str(data.get('is_ot_eligible')).lower() == 'true' or data.get('is_ot_eligible') is True,
-                is_late_deduction_eligible=str(data.get('is_late_deduction_eligible')).lower() == 'true' or data.get('is_late_deduction_eligible') is True,
-                is_km_eligible=str(data.get('is_km_eligible')).lower() == 'true' or data.get('is_km_eligible') is True,
-                is_bag_eligible=str(data.get('is_bag_eligible')).lower() == 'true' or data.get('is_bag_eligible') is True,
-                user_id=user_id,
-                doj=doj_val,
-                aadhar_number=data.get('aadhar_number', ''),
-                pan_number=data.get('pan_number', ''),
-                bank_name=data.get('bank_name', ''),
-                bank_account_number=data.get('bank_account_number', ''),
-                bank_ifsc=data.get('bank_ifsc', '')
-            )
-            
-            # Handle photo uploads strictly to Cloudinary
-            doc_fields = ['employee_photo', 'aadhar_photo', 'pan_photo', 'bank_proof_photo']
-            for field in doc_fields:
-                if field in request.FILES:
-                    file_obj = request.FILES[field]
-                    cloudinary_url = _upload_employee_photo_to_cloudinary(file_obj, emp.id, field)
-                    setattr(emp, field, cloudinary_url)
-            emp.save()
-            
-            return send_success({
-                'id': emp.id,
-                'name': emp.name,
-                'employee_photo': _get_full_url(emp.employee_photo),
-                'aadhar_photo': _get_full_url(emp.aadhar_photo),
-                'pan_photo': _get_full_url(emp.pan_photo),
-                'bank_proof_photo': _get_full_url(emp.bank_proof_photo)
-            }, 'Employee created')
+            with transaction.atomic():
+                create_kwargs = {
+                    'name': name,
+                    'employee_type': data.get('employee_type', 'VARIABLE'),
+                    'companyid_id': company_id,
+                    'base_salary_monthly': _to_float(data.get('base_salary_monthly')),
+                    'dailywage': _to_float(data.get('dailywage')),
+                    'overtime_hourly_rate': _to_float(data.get('overtime_hourly_rate')),
+                    'late_deduction_rate': _to_float(data.get('late_deduction_rate')),
+                    'bike_allowance_per_km': _to_float(data.get('bike_allowance_per_km')),
+                    'car_allowance_per_km': _to_float(data.get('car_allowance_per_km')),
+                    'sales_incentive_pct': _to_float(data.get('sales_incentive_pct')),
+                    'bag_incentive_rate': _to_float(data.get('bag_incentive_rate')),
+                    'contactinfo': data.get('contactinfo', ''),
+                    'warehouseid_id': warehouse_id,
+                    'department': data.get('department') or None,
+                    'designation': data.get('designation') or None,
+                    'reports_to_id': reports_to_id,
+                    'is_ot_eligible': str(data.get('is_ot_eligible')).lower() == 'true' or data.get('is_ot_eligible') is True,
+                    'is_late_deduction_eligible': str(data.get('is_late_deduction_eligible')).lower() == 'true' or data.get('is_late_deduction_eligible') is True,
+                    'is_km_eligible': str(data.get('is_km_eligible')).lower() == 'true' or data.get('is_km_eligible') is True,
+                    'is_bag_eligible': str(data.get('is_bag_eligible')).lower() == 'true' or data.get('is_bag_eligible') is True,
+                    'user_id': user_id,
+                    'doj': doj_val,
+                    'aadhar_number': data.get('aadhar_number', ''),
+                    'pan_number': data.get('pan_number', ''),
+                    'bank_name': data.get('bank_name', ''),
+                    'bank_account_number': data.get('bank_account_number', ''),
+                    'bank_ifsc': data.get('bank_ifsc', '')
+                }
+                if req_emp_id:
+                    create_kwargs['employee_id'] = req_emp_id
+
+                emp = Labour.objects.create(**create_kwargs)
+
+                # Process photo uploads with safe dual-tier fallback
+                doc_fields = ['employee_photo', 'aadhar_photo', 'pan_photo', 'bank_proof_photo']
+                for field in doc_fields:
+                    if field in request.FILES:
+                        file_obj = request.FILES[field]
+                        uploaded_path = _upload_employee_photo(file_obj, emp.id, field)
+                        if uploaded_path:
+                            setattr(emp, field, uploaded_path)
+                emp.save()
+
+            return send_success(_serialize_employee(emp, request), 'Employee created')
+        except ValueError as val_err:
+            return send_error(str(val_err), 400)
         except Exception as e:
+            logger.exception("Failed to create employee")
             return send_error(f'Failed to create employee: {str(e)}', 400)
 
 @api_view(['PUT', 'POST', 'DELETE'])
@@ -298,127 +349,129 @@ def hr_employees_detail(request, pk):
                 return default
 
         try:
-            name = str(data.get('name', emp.name)).strip()
-            if not name:
-                return send_error('Employee name is required', 400)
-            existing_emp = Labour.objects.filter(name__iexact=name, companyid=emp.companyid).exclude(id=emp.id).first()
-            if existing_emp:
-                return send_error(f'Another employee with name "{name}" already exists', 400)
-            emp.name = name
+            with transaction.atomic():
+                name = str(data.get('name', emp.name)).strip()
+                if not name:
+                    return send_error('Employee name is required', 400)
+                existing_emp = Labour.objects.filter(name__iexact=name, companyid=emp.companyid).exclude(id=emp.id).first()
+                if existing_emp:
+                    return send_error(f'Another employee with name "{name}" already exists', 400)
+                emp.name = name
 
-            emp.employee_type = data.get('employee_type', emp.employee_type)
-            emp.base_salary_monthly = _to_float(data.get('base_salary_monthly'), emp.base_salary_monthly)
-            emp.dailywage = _to_float(data.get('dailywage'), emp.dailywage)
-            emp.overtime_hourly_rate = _to_float(data.get('overtime_hourly_rate'), emp.overtime_hourly_rate)
-            emp.late_deduction_rate = _to_float(data.get('late_deduction_rate'), emp.late_deduction_rate)
-            emp.bike_allowance_per_km = _to_float(data.get('bike_allowance_per_km'), emp.bike_allowance_per_km)
-            emp.car_allowance_per_km = _to_float(data.get('car_allowance_per_km'), emp.car_allowance_per_km)
-            emp.sales_incentive_pct = _to_float(data.get('sales_incentive_pct'), emp.sales_incentive_pct)
-            emp.bag_incentive_rate = _to_float(data.get('bag_incentive_rate'), emp.bag_incentive_rate)
-            emp.contactinfo = data.get('contactinfo', emp.contactinfo)
-            emp.department = data.get('department', emp.department) or None
-            emp.designation = data.get('designation', emp.designation) or None
-            
-            reports_to_val = data.get('reports_to', emp.reports_to_id)
-            if reports_to_val in (None, '', 'null', 'undefined', 'None'):
-                emp.reports_to_id = None
-            else:
-                try:
-                    emp.reports_to_id = int(reports_to_val)
-                except (ValueError, TypeError):
-                    pass
-            
-            if 'is_ot_eligible' in data: emp.is_ot_eligible = data.get('is_ot_eligible') == 'true' or data.get('is_ot_eligible') is True
-            if 'is_late_deduction_eligible' in data: emp.is_late_deduction_eligible = data.get('is_late_deduction_eligible') == 'true' or data.get('is_late_deduction_eligible') is True
-            if 'is_km_eligible' in data: emp.is_km_eligible = data.get('is_km_eligible') == 'true' or data.get('is_km_eligible') is True
-            if 'is_bag_eligible' in data: emp.is_bag_eligible = data.get('is_bag_eligible') == 'true' or data.get('is_bag_eligible') is True
-            
-            wh_val = data.get('warehouseid')
-            if wh_val in (None, '', 'null', 'undefined', 'None'):
-                emp.warehouseid_id = None
-            elif wh_val:
-                try:
-                    emp.warehouseid_id = int(wh_val)
-                except (ValueError, TypeError):
-                    pass
-                
-            if 'user_id' in data:
-                u_val = data.get('user_id')
-                user_id = str(u_val).strip() if u_val not in (None, '', 'null', 'undefined', 'None') else None
-                if user_id:
-                    existing_user_emp = Labour.objects.filter(user_id=user_id).exclude(id=emp.id).first()
-                    if existing_user_emp:
-                        return send_error(f'User account is already linked to employee {existing_user_emp.name}', 400)
-                emp.user_id = user_id
+                emp.employee_type = data.get('employee_type', emp.employee_type)
+                emp.base_salary_monthly = _to_float(data.get('base_salary_monthly'), emp.base_salary_monthly)
+                emp.dailywage = _to_float(data.get('dailywage'), emp.dailywage)
+                emp.overtime_hourly_rate = _to_float(data.get('overtime_hourly_rate'), emp.overtime_hourly_rate)
+                emp.late_deduction_rate = _to_float(data.get('late_deduction_rate'), emp.late_deduction_rate)
+                emp.bike_allowance_per_km = _to_float(data.get('bike_allowance_per_km'), emp.bike_allowance_per_km)
+                emp.car_allowance_per_km = _to_float(data.get('car_allowance_per_km'), emp.car_allowance_per_km)
+                emp.sales_incentive_pct = _to_float(data.get('sales_incentive_pct'), emp.sales_incentive_pct)
+                emp.bag_incentive_rate = _to_float(data.get('bag_incentive_rate'), emp.bag_incentive_rate)
+                emp.contactinfo = data.get('contactinfo', emp.contactinfo)
+                emp.department = data.get('department', emp.department) or None
+                emp.designation = data.get('designation', emp.designation) or None
 
-            if 'doj' in data:
-                doj_val = data.get('doj')
-                if doj_val not in (None, '', 'null', 'undefined', 'None'):
-                    try:
-                        emp.doj = datetime.datetime.strptime(str(doj_val).strip()[:10], '%Y-%m-%d').date()
-                    except ValueError:
-                        emp.doj = None
+                reports_to_val = data.get('reports_to', emp.reports_to_id)
+                if reports_to_val in (None, '', 'null', 'undefined', 'None'):
+                    emp.reports_to_id = None
                 else:
-                    emp.doj = None
+                    try:
+                        emp.reports_to_id = int(reports_to_val)
+                    except (ValueError, TypeError):
+                        pass
 
-            if 'aadhar_number' in data: emp.aadhar_number = data.get('aadhar_number')
-            if 'pan_number' in data: emp.pan_number = data.get('pan_number')
-            if 'bank_name' in data: emp.bank_name = data.get('bank_name')
-            if 'bank_account_number' in data: emp.bank_account_number = data.get('bank_account_number')
-            if 'bank_ifsc' in data: emp.bank_ifsc = data.get('bank_ifsc')
+                if 'is_ot_eligible' in data:
+                    emp.is_ot_eligible = str(data.get('is_ot_eligible')).lower() == 'true' or data.get('is_ot_eligible') is True
+                if 'is_late_deduction_eligible' in data:
+                    emp.is_late_deduction_eligible = str(data.get('is_late_deduction_eligible')).lower() == 'true' or data.get('is_late_deduction_eligible') is True
+                if 'is_km_eligible' in data:
+                    emp.is_km_eligible = str(data.get('is_km_eligible')).lower() == 'true' or data.get('is_km_eligible') is True
+                if 'is_bag_eligible' in data:
+                    emp.is_bag_eligible = str(data.get('is_bag_eligible')).lower() == 'true' or data.get('is_bag_eligible') is True
 
-            # Handle photo uploads strictly to Cloudinary
-            doc_fields = ['employee_photo', 'aadhar_photo', 'pan_photo', 'bank_proof_photo']
-            for field in doc_fields:
-                if field in request.FILES:
-                    file_obj = request.FILES[field]
-                    cloudinary_url = _upload_employee_photo_to_cloudinary(file_obj, emp.id, field)
-                    setattr(emp, field, cloudinary_url)
-                elif field in data and data.get(field) == '':
-                    setattr(emp, field, None)
+                wh_val = data.get('warehouseid')
+                if wh_val in (None, '', 'null', 'undefined', 'None'):
+                    emp.warehouseid_id = None
+                elif wh_val:
+                    try:
+                        emp.warehouseid_id = int(wh_val)
+                    except (ValueError, TypeError):
+                        pass
 
-            emp.save()
-            def _get_full_url(file_field):
-                if not file_field:
-                    return None
-                val_str = str(file_field)
-                is_ssl = request.is_secure() or request.headers.get('x-forwarded-proto') == 'https'
-                if val_str.startswith('http://') or val_str.startswith('https://'):
-                    if is_ssl and val_str.startswith('http://') and not ('localhost' in val_str or '127.0.0.1' in val_str):
-                        return val_str.replace('http://', 'https://', 1)
-                    return val_str
-                try:
-                    url = file_field.url if hasattr(file_field, 'url') else val_str
-                    if url.startswith('http://') or url.startswith('https://'):
-                        if is_ssl and url.startswith('http://') and not ('localhost' in url or '127.0.0.1' in url):
-                            return url.replace('http://', 'https://', 1)
-                        return url
-                    abs_url = request.build_absolute_uri(url)
-                    if is_ssl and abs_url.startswith('http://') and not ('localhost' in abs_url or '127.0.0.1' in abs_url):
-                        abs_url = abs_url.replace('http://', 'https://', 1)
-                    return abs_url
-                except Exception:
-                    if val_str.startswith('http://') or val_str.startswith('https://'):
-                        if is_ssl and val_str.startswith('http://') and not ('localhost' in val_str or '127.0.0.1' in val_str):
-                            return val_str.replace('http://', 'https://', 1)
-                        return val_str
-                    return None
+                if 'user_id' in data:
+                    u_val = data.get('user_id')
+                    user_id = str(u_val).strip() if u_val not in (None, '', 'null', 'undefined', 'None') else None
+                    if user_id:
+                        existing_user_emp = Labour.objects.filter(user_id=user_id).exclude(id=emp.id).first()
+                        if existing_user_emp:
+                            return send_error(f'User account is already linked to employee {existing_user_emp.name}', 400)
+                    emp.user_id = user_id
 
-            return send_success({
-                'id': emp.id,
-                'name': emp.name,
-                'employee_photo': _get_full_url(emp.employee_photo),
-                'aadhar_photo': _get_full_url(emp.aadhar_photo),
-                'pan_photo': _get_full_url(emp.pan_photo),
-                'bank_proof_photo': _get_full_url(emp.bank_proof_photo)
-            }, 'Employee updated')
+                if 'employee_id' in data:
+                    c_id = str(data.get('employee_id', '')).strip()
+                    if c_id and not Labour.objects.filter(employee_id=c_id).exclude(id=emp.id).exists():
+                        emp.employee_id = c_id
+
+                if 'doj' in data:
+                    doj_val = data.get('doj')
+                    if doj_val not in (None, '', 'null', 'undefined', 'None'):
+                        try:
+                            emp.doj = datetime.datetime.strptime(str(doj_val).strip()[:10], '%Y-%m-%d').date()
+                        except ValueError:
+                            emp.doj = None
+                    else:
+                        emp.doj = None
+
+                if 'aadhar_number' in data: emp.aadhar_number = data.get('aadhar_number')
+                if 'pan_number' in data: emp.pan_number = data.get('pan_number')
+                if 'bank_name' in data: emp.bank_name = data.get('bank_name')
+                if 'bank_account_number' in data: emp.bank_account_number = data.get('bank_account_number')
+                if 'bank_ifsc' in data: emp.bank_ifsc = data.get('bank_ifsc')
+                if 'active' in data:
+                    emp.active = str(data.get('active')).lower() == 'true' or data.get('active') is True
+
+                # Handle photo uploads with safe dual-tier fallback
+                doc_fields = ['employee_photo', 'aadhar_photo', 'pan_photo', 'bank_proof_photo']
+                for field in doc_fields:
+                    if field in request.FILES:
+                        file_obj = request.FILES[field]
+                        uploaded_path = _upload_employee_photo(file_obj, emp.id, field)
+                        if uploaded_path:
+                            setattr(emp, field, uploaded_path)
+                    elif field in data and data.get(field) == '':
+                        setattr(emp, field, None)
+
+                emp.save()
+
+            return send_success(_serialize_employee(emp, request), 'Employee updated')
+        except ValueError as val_err:
+            return send_error(str(val_err), 400)
         except Exception as e:
+            logger.exception("Failed to update employee")
             return send_error(f'Failed to update employee: {str(e)}', 400)
 
     elif request.method == 'DELETE':
+        # Soft-deactivate instead of hard delete
         emp.active = False
         emp.save()
-        return send_success(None, 'Employee deactivated')
+        return send_success(_serialize_employee(emp, request), f'Employee {emp.name} marked as Inactive (Relieved / Left Company)')
+
+@api_view(['POST'])
+def hr_employee_toggle_active(request, pk):
+    try:
+        emp = Labour.objects.get(id=pk)
+    except Labour.DoesNotExist:
+        return send_error('Employee not found', 404)
+
+    target_state = request.data.get('active')
+    if target_state is not None:
+        emp.active = str(target_state).lower() == 'true' or target_state is True
+    else:
+        emp.active = not emp.active
+    emp.save()
+
+    status_str = "activated (working in company)" if emp.active else "deactivated (left company / relieved)"
+    return send_success(_serialize_employee(emp, request), f'Employee {emp.name} has been {status_str}')
 
 @api_view(['POST'])
 def hr_employee_change_status(request, pk):
@@ -713,6 +766,12 @@ def hr_generate_payroll(request):
                     clean_e = piece.strip().strip('<>()[]').lower()
                     if clean_e:
                         emp_emails.add(clean_e)
+
+        if emp.employee_id:
+            emp_emails.add(str(emp.employee_id).strip().lower())
+        emp_emails.add(str(emp.id).strip().lower())
+        if emp.name:
+            emp_emails.add(emp.name.strip().lower())
 
         approved_expenses_total = 0.0
         expense_calc_parts = []

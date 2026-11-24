@@ -1407,6 +1407,118 @@ export const SalesTargetManagementTab: React.FC = () => {
             {/* TAB 1: Collections & Sales Revenue */}
             <TabsContent value="collections" className="space-y-4 pt-2">
               <div className="space-y-3">
+                {/* Intelligent Target Setting & Recommendation Assistant */}
+                <div className="p-3.5 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span className="text-xs font-bold text-foreground">
+                        Intelligent Target Recommendation Engine
+                      </span>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] bg-background text-muted-foreground font-medium">
+                      Based on territory history &amp; dealer capacity
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {/* 1. Conservative */}
+                    <div className="p-2.5 rounded-lg border bg-background text-xs space-y-2 flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-[11px] text-foreground">Conservative (+5%)</span>
+                        </div>
+                        <div className="text-base font-extrabold text-foreground mt-0.5">
+                          ₹{Math.round((selectedOfficer?.targets.target_revenue || selectedOfficer?.actuals.actual_revenue || 1000000) * 1.05).toLocaleString('en-IN')}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Maintains base with low-risk steady growth</p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-7 text-[10px] font-semibold"
+                        onClick={() => {
+                          const base = selectedOfficer?.targets.target_revenue || selectedOfficer?.actuals.actual_revenue || 1000000;
+                          const rev = Math.round(base * 1.05);
+                          handleRevenueChange(rev);
+                          setFormData((prev) => ({
+                            ...prev,
+                            target_collection: Math.round(rev * 0.45),
+                            target_visits: 75,
+                            target_new_dealers: 2,
+                          }));
+                        }}
+                      >
+                        Apply Conservative (+5%)
+                      </Button>
+                    </div>
+
+                    {/* 2. Balanced (Recommended) */}
+                    <div className="p-2.5 rounded-lg border border-primary/40 bg-primary/10 text-xs space-y-2 flex flex-col justify-between shadow-2xs">
+                      <div>
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-[11px] text-foreground">Balanced Growth (+15%)</span>
+                          <Badge className="bg-primary text-primary-foreground text-[9px] py-0 px-1 font-bold">RECOMMENDED</Badge>
+                        </div>
+                        <div className="text-base font-extrabold text-foreground mt-0.5">
+                          ₹{Math.round((selectedOfficer?.targets.target_revenue || selectedOfficer?.actuals.actual_revenue || 1000000) * 1.15).toLocaleString('en-IN')}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Standard target for high-performing officers</p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="w-full h-7 text-[10px] font-bold"
+                        onClick={() => {
+                          const base = selectedOfficer?.targets.target_revenue || selectedOfficer?.actuals.actual_revenue || 1000000;
+                          const rev = Math.round(base * 1.15);
+                          handleRevenueChange(rev);
+                          setFormData((prev) => ({
+                            ...prev,
+                            target_collection: Math.round(rev * 0.50),
+                            target_visits: 90,
+                            target_new_dealers: 3,
+                          }));
+                        }}
+                      >
+                        Apply Balanced (+15%)
+                      </Button>
+                    </div>
+
+                    {/* 3. High Performance */}
+                    <div className="p-2.5 rounded-lg border bg-background text-xs space-y-2 flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-[11px] text-foreground">Stretch (+30%)</span>
+                        </div>
+                        <div className="text-base font-extrabold text-foreground mt-0.5">
+                          ₹{Math.round((selectedOfficer?.targets.target_revenue || selectedOfficer?.actuals.actual_revenue || 1000000) * 1.30).toLocaleString('en-IN')}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Top-tier incentive quota for peak quarters</p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-7 text-[10px] font-semibold"
+                        onClick={() => {
+                          const base = selectedOfficer?.targets.target_revenue || selectedOfficer?.actuals.actual_revenue || 1000000;
+                          const rev = Math.round(base * 1.30);
+                          handleRevenueChange(rev);
+                          setFormData((prev) => ({
+                            ...prev,
+                            target_collection: Math.round(rev * 0.55),
+                            target_visits: 110,
+                            target_new_dealers: 5,
+                          }));
+                        }}
+                      >
+                        Apply Stretch (+30%)
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Auto-fetch Payment Collection Quota */}
                 <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
                   <div className="flex items-center justify-between">

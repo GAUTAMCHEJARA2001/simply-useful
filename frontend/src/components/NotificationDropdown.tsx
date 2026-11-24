@@ -144,6 +144,7 @@ export const NotificationDropdown: React.FC = () => {
   });
 
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const [rtgsRequests, setRtgsRequests] = useState<any[]>([]);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 440, maxHeight: 600 });
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -195,6 +196,15 @@ export const NotificationDropdown: React.FC = () => {
       }
     } catch (e) {
       console.error('Failed to load broadcasts', e);
+    }
+
+    try {
+      const rtgsRes = await api.get('/rtgs/requests/');
+      if (rtgsRes.data?.success && Array.isArray(rtgsRes.data.data)) {
+        setRtgsRequests(rtgsRes.data.data);
+      }
+    } catch (e) {
+      // Endpoint may be role-restricted
     }
   };
 
@@ -448,7 +458,80 @@ export const NotificationDropdown: React.FC = () => {
       });
     }
 
-    // 5. Broadcasts for target roles
+    // 5. RTGS Payment Requests: Maker-Checker approval queue & status updates
+    if (role === 'SUPERADMIN' || role === 'ADMIN' || role === 'DIRECTOR') {
+      rtgsRequests.filter(r => r.status === 'PENDING').forEach(r => {
+        const amt = Number(r.amount || 0).toLocaleString('en-IN');
+        list.push({
+          id: `rtgs-pending-${r.id}`,
+          title: `🏦 RTGS Approval Required: ₹${amt}`,
+          message: `${r.payee_category || 'Payment'} for ${r.beneficiary_name} submitted by ${r.requested_by_name || 'Staff'}. SuperAdmin authorization needed.`,
+          date: r.created_at || new Date().toISOString(),
+          icon: Receipt,
+          color: 'text-amber-600 bg-amber-500/10 dark:text-amber-400 dark:bg-amber-950/50',
+          link: '/bank-rtgs',
+          actionLabel: 'Review RTGS',
+          category: 'alerts',
+          priority: 'urgent',
+          badgeLabel: 'RTGS APPROVAL'
+        });
+      });
+    }
+
+    if (role === 'HR' || role === 'ACCOUNTS' || role === 'SUPERADMIN' || role === 'ADMIN') {
+      rtgsRequests.filter(r => r.status === 'APPROVED').slice(0, 10).forEach(r => {
+        const amt = Number(r.amount || 0).toLocaleString('en-IN');
+        list.push({
+          id: `rtgs-approved-${r.id}`,
+          title: `✅ RTGS Approved: ${r.beneficiary_name}`,
+          message: `₹${amt} (${r.payee_category}) has been authorized by SuperAdmin. Ready for bank slip download.`,
+          date: r.reviewed_at || r.created_at || new Date().toISOString(),
+          icon: CheckCircle2,
+          color: 'text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 dark:bg-emerald-950/50',
+          link: '/bank-rtgs',
+          actionLabel: 'Download Bank File',
+          category: 'general',
+          priority: 'high',
+          badgeLabel: 'RTGS READY'
+        });
+      });
+
+      rtgsRequests.filter(r => r.status === 'REJECTED').slice(0, 5).forEach(r => {
+        const amt = Number(r.amount || 0).toLocaleString('en-IN');
+        list.push({
+          id: `rtgs-rejected-${r.id}`,
+          title: `❌ RTGS Rejected: ${r.beneficiary_name}`,
+          message: `₹${amt} transfer was rejected by SuperAdmin.${r.review_notes ? ` Reason: ${r.review_notes}` : ''}`,
+          date: r.reviewed_at || r.created_at || new Date().toISOString(),
+          icon: AlertTriangle,
+          color: 'text-rose-600 bg-rose-500/10 dark:text-rose-400 dark:bg-rose-950/50',
+          link: '/bank-rtgs',
+          actionLabel: 'Check RTGS',
+          category: 'alerts',
+          priority: 'urgent',
+          badgeLabel: 'REJECTED'
+        });
+      });
+
+      rtgsRequests.filter(r => r.status === 'PAID').slice(0, 5).forEach(r => {
+        const amt = Number(r.amount || 0).toLocaleString('en-IN');
+        list.push({
+          id: `rtgs-paid-${r.id}`,
+          title: `💰 RTGS Paid: ${r.beneficiary_name}`,
+          message: `₹${amt} (${r.payee_category}) bank transfer cleared. UTR: ${r.utr_number || 'Confirmed'}. Automatically mapped to employee ledger.`,
+          date: r.reviewed_at || r.created_at || new Date().toISOString(),
+          icon: CheckCircle2,
+          color: 'text-blue-600 bg-blue-500/10 dark:text-blue-400 dark:bg-blue-950/50',
+          link: '/bank-rtgs',
+          actionLabel: 'View in Bank Hub',
+          category: 'general',
+          priority: 'normal',
+          badgeLabel: 'PAID & UTR'
+        });
+      });
+    }
+
+    // 6. Broadcasts for target roles
     broadcasts.forEach(b => {
       if (b.targetRole === 'ALL' || b.targetRole.toUpperCase() === role) {
         list.push({

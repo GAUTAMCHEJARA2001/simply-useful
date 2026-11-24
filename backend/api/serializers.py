@@ -1658,3 +1658,34 @@ class EstimateSerializer(serializers.ModelSerializer):
         items = EstimateItem.objects.filter(estimateid=instance)
         repr_dict['items'] = EstimateItemSerializer(items, many=True).data
         return repr_dict
+
+
+class RtgsPaymentRequestSerializer(serializers.ModelSerializer):
+    requested_by_name = serializers.SerializerMethodField()
+    reviewed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        from api.models import RtgsPaymentRequest
+        model = RtgsPaymentRequest
+        fields = [
+            'id', 'approval_code', 'payment_mode', 'payee_category',
+            'beneficiary_name', 'bank_name', 'account_number', 'ifsc_code', 'branch',
+            'amount', 'expense_head', 'split_lines', 'bill_date', 'payment_date',
+            'bill_number', 'cheque_number', 'narration', 'is_emergency_post_approval',
+            'exception_reason', 'bill_photo_url', 'status', 'utr_number', 'busy_voucher_no',
+            'source', 'company_account', 'company_bank', 'requested_at', 'reviewed_at',
+            'review_notes', 'companyid', 'requested_by', 'reviewed_by',
+            'requested_by_name', 'reviewed_by_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'approval_code', 'companyid', 'requested_by', 'reviewed_by', 'requested_at', 'reviewed_at', 'created_at', 'updated_at']
+
+    def get_requested_by_name(self, obj):
+        if obj.requested_by:
+            return getattr(obj.requested_by, 'name', None) or getattr(obj.requested_by, 'username', None) or obj.requested_by.email
+        return None
+
+    def get_reviewed_by_name(self, obj):
+        if obj.reviewed_by:
+            return getattr(obj.reviewed_by, 'name', None) or getattr(obj.reviewed_by, 'username', None) or obj.reviewed_by.email
+        return None
+

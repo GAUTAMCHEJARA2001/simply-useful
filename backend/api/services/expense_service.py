@@ -13,7 +13,11 @@ class ExpenseService:
     Handles verification, status transitions, role permission validation, and activity logging.
     """
 
-    VALID_CATEGORIES = {'Travel', 'Food', 'Accommodation', 'Fuel', 'Phone', 'Other'}
+    VALID_CATEGORIES = {
+        'Travel', 'Food', 'Accommodation', 'Fuel', 'Phone',
+        'Vehicle Maintenance', 'Toll / Parking', 'Stationery',
+        'Client Entertainment', 'Other'
+    }
     VALID_STATUSES = {'PENDING', 'APPROVED', 'REJECTED', 'PAID'}
     ALLOWED_REVIEW_ROLES = {'ADMIN', 'SUPERADMIN', 'HR', 'DIRECTOR', 'VP'}
 
@@ -53,11 +57,25 @@ class ExpenseService:
 
         if company_id:
             payload['companyId'] = company_id
-        if getattr(user, 'email', None):
+
+        target_email = data.get('soEmail') or data.get('so_email') or data.get('employee_email')
+        user_role = (getattr(user, 'role', '') or '').upper()
+        is_admin_or_hr = user_role in cls.ALLOWED_REVIEW_ROLES or getattr(user, 'is_superuser', False)
+
+        if is_admin_or_hr and target_email:
+            payload['soEmail'] = str(target_email).strip().lower()
+        elif getattr(user, 'email', None):
             payload['soEmail'] = user.email
 
         payload['category'] = category
-        payload['status'] = 'PENDING'
+
+        auto_approve = data.get('auto_approve') or data.get('autoApprove')
+        if is_admin_or_hr and (auto_approve is True or str(auto_approve).lower() == 'true'):
+            payload['status'] = 'APPROVED'
+            payload['verified_by'] = getattr(user, 'email', None)
+            payload['verified_at'] = timezone.now()
+        else:
+            payload['status'] = data.get('status') or 'PENDING'
         payload['km_travelled'] = float(payload.get('km_travelled') or payload.get('kmTravelled') or 0.0)
         if not payload.get('date'):
             payload['date'] = timezone.now().isoformat()

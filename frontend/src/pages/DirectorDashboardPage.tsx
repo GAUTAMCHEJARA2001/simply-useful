@@ -7,6 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
   TrendingUp,
   TrendingDown,
   DollarSign,
@@ -36,7 +43,13 @@ import {
   FileText,
   Percent,
   Check,
-  Briefcase
+  Briefcase,
+  Truck,
+  PackageCheck,
+  Receipt,
+  Flame,
+  ExternalLink,
+  X
 } from 'lucide-react';
 
 export const DirectorDashboardPage: React.FC = () => {
@@ -49,6 +62,7 @@ export const DirectorDashboardPage: React.FC = () => {
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [privacyMask, setPrivacyMask] = useState(false);
   const [unitMode, setUnitMode] = useState<'LAKHS' | 'FULL'>('LAKHS');
+  const [activePulseTab, setActivePulseTab] = useState<'production' | 'consumption' | 'purchases' | 'expenses' | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DirectorDashboardData | null>(null);
@@ -112,6 +126,7 @@ export const DirectorDashboardPage: React.FC = () => {
   const field = data?.operations?.field;
   const pending = data?.operations?.pending_actions;
   const meta = data?.meta;
+  const todayPulse = data?.today_pulse;
 
   if (!isPrivileged) {
     return (
@@ -334,6 +349,200 @@ export const DirectorDashboardPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* ── TODAY'S LIVE OPERATIONS & PLANT PULSE (PRODUCTION, CONSUMPTION, PURCHASES, OTHER EXPENSES) ── */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 px-0.5">
+          <div className="flex items-center gap-2">
+            <div className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </div>
+            <h2 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              Today's Live Plant & Operations Pulse
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                {todayPulse?.date_display || 'Today'}
+              </span>
+            </h2>
+          </div>
+          <span className="text-[11px] text-muted-foreground font-medium">
+            Live plant manufacturing, RM consumed in production, inward purchases & daily overhead
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {/* Card 1: Today Production */}
+          <Card
+            onClick={() => setActivePulseTab('production')}
+            className="cursor-pointer border border-indigo-200 dark:border-indigo-950 bg-gradient-to-b from-indigo-50/50 via-white to-sky-50/30 dark:from-slate-900 dark:to-indigo-950/20 hover:shadow-md hover:border-indigo-400 dark:hover:border-indigo-800 transition-all group relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl pointer-events-none group-hover:bg-indigo-500/20 transition-all" />
+            <CardContent className="p-4 space-y-2.5">
+              <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300">
+                <span className="flex items-center gap-1.5">
+                  <PackageCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  Today Production
+                </span>
+                <Badge className="bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200 text-[9px] px-1.5 py-0 font-bold border-indigo-200">
+                  {todayPulse?.production?.batches || 0} Batches
+                </Badge>
+              </div>
+
+              <div className="space-y-0.5">
+                <div className="text-2xl font-black text-indigo-950 dark:text-indigo-100 flex items-baseline gap-1.5">
+                  <span>{(todayPulse?.production?.units || 0).toLocaleString('en-IN')}</span>
+                  <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">Bags/Units</span>
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center justify-between">
+                  <span>Finished goods output</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {todayPulse?.production?.product_count || 0} SKUs
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/40 text-[11px] flex items-center justify-between text-indigo-800 dark:text-indigo-300 font-medium group-hover:text-indigo-600">
+                <span className="truncate max-w-[170px]" title={todayPulse?.production?.items?.[0]?.name}>
+                  {todayPulse?.production?.items?.[0]
+                    ? `Top: ${todayPulse.production.items[0].name}`
+                    : 'No production today'}
+                </span>
+                <span className="text-[10px] flex items-center gap-0.5 shrink-0 font-bold">
+                  Details <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Consumption in Production */}
+          <Card
+            onClick={() => setActivePulseTab('consumption')}
+            className="cursor-pointer border border-amber-200 dark:border-amber-950 bg-gradient-to-b from-amber-50/50 via-white to-orange-50/30 dark:from-slate-900 dark:to-amber-950/20 hover:shadow-md hover:border-amber-400 dark:hover:border-amber-800 transition-all group relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/20 transition-all" />
+            <CardContent className="p-4 space-y-2.5">
+              <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300">
+                <span className="flex items-center gap-1.5">
+                  <Flame className="w-3.5 h-3.5 text-amber-600" />
+                  Consumption in Production
+                </span>
+                <Badge className="bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[9px] px-1.5 py-0 font-bold border-amber-200">
+                  Real FIFO Cost
+                </Badge>
+              </div>
+
+              <div className="space-y-0.5">
+                <div className="text-2xl font-black text-amber-950 dark:text-amber-100">
+                  {formatCurrency(todayPulse?.consumption?.total_val)}
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center justify-between">
+                  <span>{(todayPulse?.consumption?.total_kg || 0).toLocaleString('en-IN')} kg RM consumed</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {todayPulse?.consumption?.materials_count || 0} Materials
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-amber-100 dark:border-amber-900/40 text-[11px] flex items-center justify-between text-amber-800 dark:text-amber-300 font-medium group-hover:text-amber-600">
+                <span className="truncate max-w-[170px]" title={todayPulse?.consumption?.items?.[0]?.name}>
+                  {todayPulse?.consumption?.items?.[0]
+                    ? `Top: ${todayPulse.consumption.items[0].name}`
+                    : 'No consumption today'}
+                </span>
+                <span className="text-[10px] flex items-center gap-0.5 shrink-0 font-bold">
+                  Details <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 3: Today Purchases */}
+          <Card
+            onClick={() => setActivePulseTab('purchases')}
+            className="cursor-pointer border border-emerald-200 dark:border-emerald-950 bg-gradient-to-b from-emerald-50/50 via-white to-teal-50/30 dark:from-slate-900 dark:to-emerald-950/20 hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-800 transition-all group relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/20 transition-all" />
+            <CardContent className="p-4 space-y-2.5">
+              <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300">
+                <span className="flex items-center gap-1.5">
+                  <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                  Today Purchases
+                </span>
+                <Badge className="bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 text-[9px] px-1.5 py-0 font-bold border-emerald-200">
+                  {todayPulse?.purchases?.bills_count || 0} Inward Bills
+                </Badge>
+              </div>
+
+              <div className="space-y-0.5">
+                <div className="text-2xl font-black text-emerald-950 dark:text-emerald-100">
+                  {formatCurrency(todayPulse?.purchases?.total_val)}
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center justify-between">
+                  <span>RM & Inventory Inward</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {todayPulse?.purchases?.items_count || 0} Items
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-emerald-100 dark:border-emerald-900/40 text-[11px] flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-medium group-hover:text-emerald-600">
+                <span className="truncate max-w-[170px]" title={todayPulse?.purchases?.bills?.[0]?.vendor_name}>
+                  {todayPulse?.purchases?.bills?.[0]
+                    ? `${todayPulse.purchases.bills[0].vendor_name}`
+                    : 'No purchases today'}
+                </span>
+                <span className="text-[10px] flex items-center gap-0.5 shrink-0 font-bold">
+                  Details <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 4: Today Other Expenses */}
+          <Card
+            onClick={() => setActivePulseTab('expenses')}
+            className="cursor-pointer border border-purple-200 dark:border-purple-950 bg-gradient-to-b from-purple-50/50 via-white to-rose-50/30 dark:from-slate-900 dark:to-purple-950/20 hover:shadow-md hover:border-purple-400 dark:hover:border-purple-800 transition-all group relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-xl pointer-events-none group-hover:bg-purple-500/20 transition-all" />
+            <CardContent className="p-4 space-y-2.5">
+              <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-purple-900 dark:text-purple-300">
+                <span className="flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-purple-600" />
+                  Today Other Expenses
+                </span>
+                <Badge className="bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200 text-[9px] px-1.5 py-0 font-bold border-purple-200">
+                  {todayPulse?.other_expenses?.count || 0} Vouchers
+                </Badge>
+              </div>
+
+              <div className="space-y-0.5">
+                <div className="text-2xl font-black text-purple-950 dark:text-purple-100">
+                  {formatCurrency(todayPulse?.other_expenses?.total_val)}
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center justify-between">
+                  <span>Appr: {formatCurrency(todayPulse?.other_expenses?.approved_val)}</span>
+                  <span className="text-amber-600 font-semibold">
+                    Pend: {formatCurrency(todayPulse?.other_expenses?.pending_val)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-purple-100 dark:border-purple-900/40 text-[11px] flex items-center justify-between text-purple-800 dark:text-purple-300 font-medium group-hover:text-purple-600">
+                <span className="truncate max-w-[170px]" title={todayPulse?.other_expenses?.categories?.[0]?.category}>
+                  {todayPulse?.other_expenses?.categories?.[0]
+                    ? `${todayPulse.other_expenses.categories[0].category} (${formatCurrency(todayPulse.other_expenses.categories[0].amount)})`
+                    : 'No expenses today'}
+                </span>
+                <span className="text-[10px] flex items-center gap-0.5 shrink-0 font-bold">
+                  Details <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {/* ── 1. THE BOARDROOM FINANCIAL TICKER (6 CORE ENTERPRISE PILLARS) ── */}
@@ -842,6 +1051,385 @@ export const DirectorDashboardPage: React.FC = () => {
           </table>
         </CardContent>
       </Card>
+
+      {/* ── TODAY'S OPERATIONS DRILLDOWN DIALOG ── */}
+      <Dialog open={activePulseTab !== null} onOpenChange={(open) => { if (!open) setActivePulseTab(null); }}>
+        <DialogContent className="max-w-4xl max-h-[88vh] overflow-y-auto p-0 gap-0 border-slate-200 dark:border-slate-800">
+          <DialogHeader className="p-5 pb-3 border-b border-border/80 bg-slate-900 text-white sticky top-0 z-10">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-base font-black flex items-center gap-2 text-white">
+                  {activePulseTab === 'production' && <PackageCheck className="w-5 h-5 text-indigo-400" />}
+                  {activePulseTab === 'consumption' && <Flame className="w-5 h-5 text-amber-400" />}
+                  {activePulseTab === 'purchases' && <Truck className="w-5 h-5 text-emerald-400" />}
+                  {activePulseTab === 'expenses' && <Receipt className="w-5 h-5 text-purple-400" />}
+                  <span>Today's Plant & Operations Drilldown</span>
+                  <Badge className="bg-white/20 text-white text-[10px] border-white/20">
+                    {todayPulse?.date_display || 'Today'}
+                  </Badge>
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-300 mt-1">
+                  Itemized operational audit trail for Plant Managers and Directors
+                </DialogDescription>
+              </div>
+            </div>
+
+            {/* Sub-tabs inside modal */}
+            <div className="flex items-center gap-2 mt-4 pt-2 border-t border-white/10 overflow-x-auto text-xs">
+              <button
+                type="button"
+                onClick={() => setActivePulseTab('production')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 ${activePulseTab === 'production' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:bg-white/10'}`}
+              >
+                <PackageCheck className="w-3.5 h-3.5" />
+                Today Production ({todayPulse?.production?.items?.length || 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePulseTab('consumption')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 ${activePulseTab === 'consumption' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-300 hover:bg-white/10'}`}
+              >
+                <Flame className="w-3.5 h-3.5" />
+                Consumption in Production ({todayPulse?.consumption?.items?.length || 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePulseTab('purchases')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 ${activePulseTab === 'purchases' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-white/10'}`}
+              >
+                <Truck className="w-3.5 h-3.5" />
+                Today Purchases ({todayPulse?.purchases?.bills?.length || 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePulseTab('expenses')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 ${activePulseTab === 'expenses' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-300 hover:bg-white/10'}`}
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                Today Other Expenses ({todayPulse?.other_expenses?.count || 0})
+              </button>
+            </div>
+          </DialogHeader>
+
+          <div className="p-5 space-y-4">
+            {/* TAB 1: PRODUCTION */}
+            {activePulseTab === 'production' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40">
+                  <div>
+                    <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200">Total Finished Goods Produced Today</span>
+                    <div className="text-2xl font-black text-indigo-900 dark:text-indigo-100 mt-0.5">
+                      {(todayPulse?.production?.units || 0).toLocaleString('en-IN')} <span className="text-sm font-semibold">Bags / Units</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-indigo-600 text-white font-bold text-xs">
+                      {todayPulse?.production?.batches || 0} Production Batches
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate('/inventory/manage?tab=productions')}
+                      className="text-xs h-8 font-semibold border-indigo-300"
+                    >
+                      Open Production Logs <ExternalLink className="w-3 h-3 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border rounded-xl">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-muted/50 text-muted-foreground uppercase font-bold text-[10px]">
+                      <tr>
+                        <th className="px-4 py-2.5">Finished Product / SKU</th>
+                        <th className="px-4 py-2.5">Item Code</th>
+                        <th className="px-4 py-2.5 text-right">Units / Bags Produced</th>
+                        <th className="px-4 py-2.5 text-right">Batches Logged</th>
+                        <th className="px-4 py-2.5 text-right">% of Today Output</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {todayPulse?.production?.items && todayPulse.production.items.length > 0 ? (
+                        todayPulse.production.items.map((prod, idx) => {
+                          const sharePct = (todayPulse.production.units || 0) > 0
+                            ? Math.round((prod.units / todayPulse.production.units) * 100)
+                            : 0;
+                          return (
+                            <tr key={idx} className="hover:bg-muted/30">
+                              <td className="px-4 py-2.5 font-semibold text-foreground flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                  {idx + 1}
+                                </span>
+                                {prod.name}
+                              </td>
+                              <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">{prod.code || '—'}</td>
+                              <td className="px-4 py-2.5 text-right font-bold text-foreground">
+                                {prod.units.toLocaleString('en-IN')}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-medium text-muted-foreground">
+                                {prod.batches}
+                              </td>
+                              <td className="px-4 py-2.5 text-right">
+                                <Badge variant="outline" className="text-[10px] font-bold border-indigo-200 text-indigo-800 dark:text-indigo-300">
+                                  {sharePct}%
+                                </Badge>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground italic">
+                            No finished goods production recorded yet for today ({todayPulse?.date_display}).
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: CONSUMPTION IN PRODUCTION */}
+            {activePulseTab === 'consumption' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
+                  <div>
+                    <span className="text-xs font-bold text-amber-950 dark:text-amber-200">Raw Material Consumed in Today's Batches</span>
+                    <div className="text-2xl font-black text-amber-900 dark:text-amber-100 mt-0.5">
+                      {formatCurrency(todayPulse?.consumption?.total_val)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-amber-600 text-white font-bold text-xs">
+                      {(todayPulse?.consumption?.total_kg || 0).toLocaleString('en-IN')} kg RM Used
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate('/inventory/manage?tab=productions')}
+                      className="text-xs h-8 font-semibold border-amber-300"
+                    >
+                      Plant Batch RM Slips <ExternalLink className="w-3 h-3 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border rounded-xl">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-muted/50 text-muted-foreground uppercase font-bold text-[10px]">
+                      <tr>
+                        <th className="px-4 py-2.5">Raw Material Name</th>
+                        <th className="px-4 py-2.5">Item Code</th>
+                        <th className="px-4 py-2.5 text-right">Quantity Consumed</th>
+                        <th className="px-4 py-2.5 text-right">Effective Rate (FIFO)</th>
+                        <th className="px-4 py-2.5 text-right">Total Valuation</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {todayPulse?.consumption?.items && todayPulse.consumption.items.length > 0 ? (
+                        todayPulse.consumption.items.map((mat, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="px-4 py-2.5 font-semibold text-foreground flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              {mat.name}
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">{mat.code || '—'}</td>
+                            <td className="px-4 py-2.5 text-right font-bold text-foreground">
+                              {mat.qty.toLocaleString('en-IN')} {mat.unit || 'KG'}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">
+                              ₹{mat.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-black text-amber-950 dark:text-amber-100">
+                              {formatCurrency(mat.total_val)}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground italic">
+                            No raw materials consumption recorded yet for today ({todayPulse?.date_display}).
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: TODAY PURCHASES */}
+            {activePulseTab === 'purchases' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40">
+                  <div>
+                    <span className="text-xs font-bold text-emerald-950 dark:text-emerald-200">Today's Inward Purchases & Raw Material Receipts</span>
+                    <div className="text-2xl font-black text-emerald-900 dark:text-emerald-100 mt-0.5">
+                      {formatCurrency(todayPulse?.purchases?.total_val)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-emerald-600 text-white font-bold text-xs">
+                      {todayPulse?.purchases?.bills_count || 0} Bills Logged
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate('/inventory/manage?tab=purchases')}
+                      className="text-xs h-8 font-semibold border-emerald-300"
+                    >
+                      Purchase Registers <ExternalLink className="w-3 h-3 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border rounded-xl">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-muted/50 text-muted-foreground uppercase font-bold text-[10px]">
+                      <tr>
+                        <th className="px-4 py-2.5">Bill / Challan Ref</th>
+                        <th className="px-4 py-2.5">Supplier / Vendor</th>
+                        <th className="px-4 py-2.5">Items Received</th>
+                        <th className="px-4 py-2.5">Vehicle</th>
+                        <th className="px-4 py-2.5">Status</th>
+                        <th className="px-4 py-2.5 text-right">Bill Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {todayPulse?.purchases?.bills && todayPulse.purchases.bills.length > 0 ? (
+                        todayPulse.purchases.bills.map((bill, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="px-4 py-2.5 font-bold font-mono text-foreground">
+                              {bill.purchase_id}
+                            </td>
+                            <td className="px-4 py-2.5 font-semibold text-foreground">
+                              {bill.vendor_name}
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground text-[11px] max-w-xs truncate" title={bill.items_preview}>
+                              {bill.items_preview}
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground font-mono text-[11px]">
+                              {bill.vehicle_number || '—'}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <Badge variant="outline" className="text-[10px] font-bold border-emerald-300 text-emerald-800 bg-emerald-50">
+                                {bill.status}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-black text-emerald-950 dark:text-emerald-100">
+                              {formatCurrency(bill.total)}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground italic">
+                            No inward purchase bills recorded yet for today ({todayPulse?.date_display}).
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: TODAY OTHER EXPENSES */}
+            {activePulseTab === 'expenses' && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40">
+                  <div>
+                    <span className="text-xs font-bold text-purple-950 dark:text-purple-200">Today's Operational & Field Expenses</span>
+                    <div className="text-2xl font-black text-purple-900 dark:text-purple-100 mt-0.5">
+                      {formatCurrency(todayPulse?.other_expenses?.total_val)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-purple-600 text-white font-bold text-xs">
+                      Appr: {formatCurrency(todayPulse?.other_expenses?.approved_val)}
+                    </Badge>
+                    <Badge variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 font-bold text-xs">
+                      Pend: {formatCurrency(todayPulse?.other_expenses?.pending_val)}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate('/hr/manage?tab=expenses')}
+                      className="text-xs h-8 font-semibold border-purple-300"
+                    >
+                      Expense Vouchers <ExternalLink className="w-3 h-3 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Category Pills */}
+                {todayPulse?.other_expenses?.categories && todayPulse.other_expenses.categories.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-muted-foreground">Category Split:</span>
+                    {todayPulse.other_expenses.categories.map((c, idx) => (
+                      <span key={idx} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border text-xs font-medium flex items-center gap-1.5">
+                        <span className="font-bold text-foreground">{c.category}:</span>
+                        <span className="font-mono text-purple-700 dark:text-purple-300 font-semibold">{formatCurrency(c.amount)}</span>
+                        <span className="text-[10px] text-muted-foreground">({c.count})</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="overflow-x-auto border rounded-xl">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-muted/50 text-muted-foreground uppercase font-bold text-[10px]">
+                      <tr>
+                        <th className="px-4 py-2.5">Category</th>
+                        <th className="px-4 py-2.5">Submitted By</th>
+                        <th className="px-4 py-2.5">Description / Remarks</th>
+                        <th className="px-4 py-2.5">Status</th>
+                        <th className="px-4 py-2.5 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {todayPulse?.other_expenses?.recent_expenses && todayPulse.other_expenses.recent_expenses.length > 0 ? (
+                        todayPulse.other_expenses.recent_expenses.map((exp, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="px-4 py-2.5 font-bold text-foreground">
+                              {exp.category}
+                            </td>
+                            <td className="px-4 py-2.5 font-medium text-foreground">
+                              {exp.user_name}
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground text-[11px] max-w-sm truncate" title={exp.remarks}>
+                              {exp.remarks || '—'}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <Badge
+                                className={exp.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 text-[10px]' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 text-[10px]'}
+                              >
+                                {exp.status}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-black text-purple-950 dark:text-purple-100">
+                              {formatCurrency(exp.amount)}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground italic">
+                            No other expenses recorded yet for today ({todayPulse?.date_display}).
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

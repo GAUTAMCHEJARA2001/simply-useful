@@ -52,3 +52,15 @@ export const useDailyReport = () => {
     },
   });
 };
+
+export const useInventorySuggestions = () => {
+  const { activeWarehouseId } = useWarehouse();
+  return useQuery({
+    queryKey: ['inventorySuggestions', activeWarehouseId],
+    queryFn: async () => {
+      const res = await inventoryService.getInventorySuggestions();
+      return res.data?.data || res.data;
+    },
+    refetchInterval: 30000, // Refresh every 30s for live dynamic suggestions
+  });
+};

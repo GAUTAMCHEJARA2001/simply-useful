@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
     SALES: '/reports/sales-summary',
     LOW_STOCK: '/reports/low-stock',
     DAILY: '/reports/daily',
+    INVENTORY_SUGGESTIONS: '/reports/inventory-suggestions',
   },
 
   MASTERS: {

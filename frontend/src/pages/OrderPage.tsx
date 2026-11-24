@@ -53,9 +53,22 @@ const OrderPage: React.FC = () => {
     if (!id && user?.email) {
       setSoEmail(user.email);
     }
+    // Prefill party from CRM or Territory navigation state
+    if (!id && location.state) {
+      const state = location.state as any;
+      if (state.partyName) {
+        setSelectedParty(state.partyName);
+      }
+      if (state.partyType) {
+        setPartyType(state.partyType);
+      }
+      if (state.narration) {
+        setNarration(state.narration);
+      }
+    }
     // Reset initialization if ID changes (navigating to a different order)
     setIsInitialized(false);
-  }, [id, user]);
+  }, [id, user, location.state]);
 
   useEffect(() => {
     if (!id || isInitialized) return;

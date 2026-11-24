@@ -6,6 +6,90 @@ export interface DirectorDashboardParams {
   end_date?: string;
 }
 
+export interface TodayPulseProductionItem {
+  product_id: string;
+  name: string;
+  code?: string;
+  units: number;
+  batches: number;
+}
+
+export interface TodayPulseConsumptionItem {
+  product_id: string;
+  name: string;
+  code?: string;
+  qty: number;
+  unit: string;
+  rate: number;
+  total_val: number;
+}
+
+export interface TodayPulsePurchaseBill {
+  id: string;
+  purchase_id: string;
+  vendor_name: string;
+  challan_number?: string;
+  vehicle_number?: string;
+  total: number;
+  status: string;
+  items_count: number;
+  items_preview: string;
+}
+
+export interface TodayPulsePurchaseItem {
+  product_name: string;
+  qty: number;
+  rate: number;
+  total: number;
+}
+
+export interface TodayPulseExpenseCategory {
+  category: string;
+  amount: number;
+  count: number;
+}
+
+export interface TodayPulseExpenseItem {
+  id: string;
+  category: string;
+  amount: number;
+  status: string;
+  user_name: string;
+  remarks: string;
+}
+
+export interface TodayPulseData {
+  date: string;
+  date_display: string;
+  production: {
+    units: number;
+    batches: number;
+    product_count: number;
+    items: TodayPulseProductionItem[];
+  };
+  consumption: {
+    total_kg: number;
+    total_val: number;
+    materials_count: number;
+    items: TodayPulseConsumptionItem[];
+  };
+  purchases: {
+    total_val: number;
+    bills_count: number;
+    items_count: number;
+    bills: TodayPulsePurchaseBill[];
+    top_items: TodayPulsePurchaseItem[];
+  };
+  other_expenses: {
+    total_val: number;
+    approved_val: number;
+    pending_val: number;
+    count: number;
+    categories: TodayPulseExpenseCategory[];
+    recent_expenses: TodayPulseExpenseItem[];
+  };
+}
+
 export interface DirectorDashboardData {
   meta: {
     period: string;
@@ -96,6 +180,7 @@ export interface DirectorDashboardData {
     cogs: number;
     surplus: number;
   }>;
+  today_pulse?: TodayPulseData;
 }
 
 export const directorService = {

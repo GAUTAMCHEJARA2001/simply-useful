@@ -2,13 +2,12 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useHRPayroll, useLedgerMutations } from '@/hooks/hr/useHR';
 import { SafeDataView } from '@/components/SafeDataView';
-import { Download, Search, FileText, Calculator } from 'lucide-react';
+import { Download, Search, FileText, Calculator, FileSpreadsheet } from 'lucide-react';
 import { SalarySlipPdfModal } from '@/components/PDF/SalarySlipPdfModal';
+import { SalaryRegisterReportModal } from '@/components/PDF/SalaryRegisterReportModal';
 import { useToast } from '@/hooks/use-toast';
 import { useSettings } from '@/hooks/inventory/useMasters';
-import { generateRTGSSlip, generateCombinedBulkRTGSPdf, RTGSData } from '@/utils/pdfGenerator';
-import { saveRtgsRecord, saveBulkRtgsRecords } from '@/utils/rtgsHistory';
-import { Landmark } from 'lucide-react';
+
 
 const Currency = (v: number) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -20,6 +19,7 @@ export const PayrollTab: React.FC = () => {
   const { data: payroll = [], isLoading, error, refetch } = useHRPayroll(fetchMonth);
 
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [salaryRegisterModalOpen, setSalaryRegisterModalOpen] = useState(false);
   const [modalSlips, setModalSlips] = useState<any[]>([]);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [overrides, setOverrides] = useState<Record<number, number>>({});
@@ -31,178 +31,6 @@ export const PayrollTab: React.FC = () => {
   const getNetPay = (slip: any) => {
     const adv = overrides[slip.labour_id] !== undefined ? overrides[slip.labour_id] : (slip.deductions?.advance || 0);
     return (slip.earnings?.gross || 0) - (slip.deductions?.late || 0) - adv;
-  };
-
-  const handlePrintRTGS = async (slip: any) => {
-    try {
-      const netPay = getNetPay(slip);
-      const mStr = slip.month || fetchMonth || '';
-      const rtgsPayload: RTGSData = {
-        beneficiaryName: slip.labour_name,
-        bankName: slip.bank_details?.bank_name || '',
-        accountNumber: slip.bank_details?.account_no || '',
-        ifscCode: slip.bank_details?.ifsc || '',
-        amount: netPay,
-        date: new Date().toISOString().slice(0, 10),
-        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
-        companyAccount: settings?.company_bank_account || '925030009706188',
-        companyBank: settings?.company_bank_name || 'AXIS BANK',
-        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
-        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
-        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
-        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
-        companyPhone: settings?.company_phone || '8866322700',
-        beneficiaryBranch: 'NAVSARI',
-        narration: `SALARY ${mStr ? mStr.toUpperCase() : ''}`
-      };
-      await generateRTGSSlip(rtgsPayload);
-      saveRtgsRecord({
-        date: rtgsPayload.date || new Date().toISOString().slice(0, 10),
-        beneficiaryName: slip.labour_name,
-        category: 'SALARY',
-        bankName: slip.bank_details?.bank_name || '',
-        accountNumber: slip.bank_details?.account_no || '',
-        ifscCode: slip.bank_details?.ifsc || '',
-        branch: 'NAVSARI',
-        amount: netPay,
-        narration: rtgsPayload.narration || 'SALARY',
-        source: 'PAYROLL_SINGLE',
-        companyAccount: rtgsPayload.companyAccount,
-        companyBank: rtgsPayload.companyBank,
-      });
-      toast({ title: 'RTGS Form Ready', description: `Axis Bank RTGS Form filled & recorded for ${slip.labour_name}` });
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message || 'Failed to generate RTGS form', variant: 'destructive' });
-    }
-  };
-
-  const handleBulkRTGS = async () => {
-    if (payroll.length === 0) return;
-    const mStr = fetchMonth || selectedMonth || '';
-    const dateStr = new Date().toISOString().slice(0, 10);
-
-    const eligibleSlips = payroll.filter((slip: any) => getNetPay(slip) > 0);
-    if (eligibleSlips.length === 0) {
-      toast({ title: 'No Payable Employees', description: 'All employees have ₹0 net payable for this month.', variant: 'destructive' });
-      return;
-    }
-
-    try {
-      toast({ title: 'Generating Bulk RTGS', description: `Preparing Axis Bank slips for ${eligibleSlips.length} employees...` });
-
-      const bulkItems: RTGSData[] = eligibleSlips.map((slip: any) => ({
-        beneficiaryName: slip.labour_name,
-        bankName: slip.bank_details?.bank_name || 'AXIS BANK',
-        accountNumber: slip.bank_details?.account_no || '',
-        ifscCode: slip.bank_details?.ifsc || 'UTIB0000047',
-        amount: getNetPay(slip),
-        date: dateStr,
-        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
-        companyAccount: settings?.company_bank_account || '925030009706188',
-        companyBank: settings?.company_bank_name || 'AXIS BANK',
-        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
-        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
-        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
-        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
-        companyPhone: settings?.company_phone || '8866322700',
-        beneficiaryBranch: 'NAVSARI',
-        narration: `SALARY ${mStr.toUpperCase()}`
-      }));
-
-      if (bulkItems.length === 1) {
-        await generateRTGSSlip(bulkItems[0]);
-      } else {
-        await generateCombinedBulkRTGSPdf(bulkItems, `AXIS_BULK_RTGS_SALARY_${mStr || 'PAYROLL'}.pdf`);
-      }
-
-      saveBulkRtgsRecords(bulkItems.map(item => ({
-        date: dateStr,
-        beneficiaryName: item.beneficiaryName,
-        category: 'SALARY',
-        bankName: item.bankName,
-        accountNumber: item.accountNumber,
-        ifscCode: item.ifscCode,
-        branch: item.beneficiaryBranch,
-        amount: item.amount,
-        narration: item.narration || `SALARY ${mStr.toUpperCase()}`,
-        source: 'PAYROLL_BULK',
-        companyAccount: item.companyAccount,
-        companyBank: item.companyBank,
-      })));
-
-      toast({
-        title: 'Bulk RTGS Complete!',
-        description: `Combined PDF downloaded for ${bulkItems.length} staff. Records saved to RTGS History.`
-      });
-    } catch (e: any) {
-      console.error('Bulk RTGS generation error:', e);
-      toast({ title: 'Bulk RTGS Error', description: e.message || 'Failed to generate bulk RTGS PDF', variant: 'destructive' });
-    }
-  };
-
-  const handleBulkRTGSIndividual = async () => {
-    if (payroll.length === 0) return;
-    const mStr = fetchMonth || selectedMonth || '';
-    const dateStr = new Date().toISOString().slice(0, 10);
-
-    const eligibleSlips = payroll.filter((slip: any) => getNetPay(slip) > 0);
-    if (eligibleSlips.length === 0) {
-      toast({ title: 'No Payable Employees', description: 'All employees have ₹0 net payable for this month.', variant: 'destructive' });
-      return;
-    }
-
-    try {
-      toast({ title: 'Downloading Individual RTGS Slips', description: `Preparing separate Axis Bank RTGS forms for ${eligibleSlips.length} employees...` });
-
-      const bulkItems: RTGSData[] = eligibleSlips.map((slip: any) => ({
-        beneficiaryName: slip.labour_name,
-        bankName: slip.bank_details?.bank_name || 'AXIS BANK',
-        accountNumber: slip.bank_details?.account_no || '',
-        ifscCode: slip.bank_details?.ifsc || 'UTIB0000047',
-        amount: getNetPay(slip),
-        date: dateStr,
-        companyName: settings?.company_name || settings?.companyName || 'KAMLA CONCHEM PVT.LTD',
-        companyAccount: settings?.company_bank_account || '925030009706188',
-        companyBank: settings?.company_bank_name || 'AXIS BANK',
-        companyBranch: settings?.company_bank_branch || 'LUNSIKUI, NAVSARI',
-        companyIfsc: settings?.company_bank_ifsc || 'UTIB0000047',
-        companyAddress: settings?.company_address || 'BLOCK NO:183BHATTAI NAVSARI',
-        companyPan: settings?.company_gst ? settings.company_gst.slice(2, 12) : 'AALCK3507C',
-        companyPhone: settings?.company_phone || '8866322700',
-        beneficiaryBranch: 'NAVSARI',
-        narration: `SALARY ${mStr.toUpperCase()}`
-      }));
-
-      for (let i = 0; i < bulkItems.length; i++) {
-        await generateRTGSSlip(bulkItems[i]);
-        if (bulkItems.length > 1 && i < bulkItems.length - 1) {
-          await new Promise(res => setTimeout(res, 500));
-        }
-      }
-
-      saveBulkRtgsRecords(bulkItems.map(item => ({
-        date: dateStr,
-        beneficiaryName: item.beneficiaryName,
-        category: 'SALARY',
-        bankName: item.bankName,
-        accountNumber: item.accountNumber,
-        ifscCode: item.ifscCode,
-        branch: item.beneficiaryBranch,
-        amount: item.amount,
-        narration: item.narration || `SALARY ${mStr.toUpperCase()}`,
-        source: 'PAYROLL_BULK',
-        companyAccount: item.companyAccount,
-        companyBank: item.companyBank,
-      })));
-
-      toast({
-        title: 'Individual RTGS Downloads Complete!',
-        description: `Downloaded ${bulkItems.length} individual single RTGS PDF files.`
-      });
-    } catch (e: any) {
-      console.error('Individual RTGS generation error:', e);
-      toast({ title: 'Individual RTGS Error', description: e.message || 'Failed to download individual RTGS PDFs', variant: 'destructive' });
-    }
   };
 
   const handleGenerate = () => {
@@ -258,22 +86,13 @@ export const PayrollTab: React.FC = () => {
           </Button>
           <Button onClick={handleGenerate} className="gap-2 cursor-pointer"><Search className="w-4 h-4" /> Run Payroll</Button>
           <Button 
-            variant="outline" 
+            variant="default" 
             disabled={payroll.length === 0} 
-            onClick={handleBulkRTGS}
-            className="gap-2 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 cursor-pointer font-medium text-xs"
-            title="Download 1 combined multi-page Axis Bank RTGS PDF containing all staff slips"
+            onClick={() => setSalaryRegisterModalOpen(true)}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-sm text-xs"
+            title="Download complete consolidated Master Salary & Calculation Register PDF in a single file"
           >
-            <Landmark className="w-4 h-4 text-blue-600" /> RTGS Combined ({payroll.length})
-          </Button>
-          <Button 
-            variant="outline" 
-            disabled={payroll.length === 0} 
-            onClick={handleBulkRTGSIndividual}
-            className="gap-2 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 cursor-pointer font-medium text-xs"
-            title="Download separate individual single RTGS PDF file for each employee"
-          >
-            <FileText className="w-4 h-4 text-blue-600" /> All Individual RTGS
+            <FileSpreadsheet className="w-4 h-4" /> Download Salary & Calculation Report (Single PDF)
           </Button>
           <Button 
             variant="outline" 
@@ -284,7 +103,7 @@ export const PayrollTab: React.FC = () => {
             }} 
             className="gap-2 border-primary/50 text-primary hover:bg-primary/10 cursor-pointer font-medium"
           >
-            <Download className="w-4 h-4" /> Download Slips (PDF)
+            <Download className="w-4 h-4" /> Individual Payslips (PDF)
           </Button>
         </div>
       </div>
@@ -351,7 +170,7 @@ export const PayrollTab: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex gap-2">
                 <Button 
                   variant="secondary" 
                   size="sm"
@@ -361,16 +180,7 @@ export const PayrollTab: React.FC = () => {
                     setPdfModalOpen(true);
                   }}
                 >
-                  <FileText className="w-3.5 h-3.5" /> Payslip
-                </Button>
-
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="w-full gap-1.5 cursor-pointer font-semibold text-xs h-9 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10" 
-                  onClick={() => handlePrintRTGS(slip)}
-                >
-                  <Landmark className="w-3.5 h-3.5 text-blue-600" /> RTGS Form
+                  <FileText className="w-3.5 h-3.5" /> View Payslip
                 </Button>
               </div>
             </div>
@@ -390,6 +200,14 @@ export const PayrollTab: React.FC = () => {
         slips={modalSlips}
         defaultSelectedMonth={fetchMonth}
         title={modalSlips.length === 1 ? `Salary Slip — ${modalSlips[0]?.labour_name}` : `Staff Salary Slips (${modalSlips.length})`}
+      />
+
+      {/* Consolidated Master Salary & Calculation Register PDF */}
+      <SalaryRegisterReportModal
+        open={salaryRegisterModalOpen}
+        onClose={() => setSalaryRegisterModalOpen(false)}
+        payroll={payroll}
+        month={fetchMonth || selectedMonth}
       />
     </div>
   );

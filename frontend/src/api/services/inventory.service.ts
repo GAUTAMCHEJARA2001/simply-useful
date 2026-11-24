@@ -42,4 +42,5 @@ export const inventoryService = {
   getSalesSummary: () => api.get(API_ENDPOINTS.REPORTS.SALES),
   getLowStock: () => api.get(API_ENDPOINTS.REPORTS.LOW_STOCK),
   getDailyReport: () => api.get(API_ENDPOINTS.REPORTS.DAILY),
+  getInventorySuggestions: () => api.get(API_ENDPOINTS.REPORTS.INVENTORY_SUGGESTIONS),
 };
