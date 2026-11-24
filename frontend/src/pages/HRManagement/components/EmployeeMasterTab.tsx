@@ -4,9 +4,10 @@ import {
   Plus, Edit2, Trash2, Check, ChevronsUpDown, Upload, Search, Filter, 
   Eye, FileText, Image as ImageIcon, ExternalLink, X, User, Phone, 
   Calendar, CreditCard, ShieldCheck, Download, CheckCircle2, Building, AlertCircle,
-  UserCheck, UserX
+  UserCheck, UserX, ReceiptText, Clock
 } from 'lucide-react';
-import { useHREmployees, useHREmployeeMutations, useHRDepartments, useHRDesignations, useHRUsers } from '@/hooks/hr/useHR';
+import { useHREmployees, useHREmployeeMutations, useHRDepartments, useHRDesignations, useHRUsers, useEmployeeLedger } from '@/hooks/hr/useHR';
+import { Badge } from '@/components/ui/badge';
 import { SafeDataView } from '@/components/SafeDataView';
 import { DataTable } from '@/components/DataTable';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -71,6 +72,221 @@ const SearchableSelect = ({ options, value, onChange, placeholder }: { options: 
   );
 };
 
+interface QuickLedgerModalProps {
+  employee: any;
+  onClose: () => void;
+  onOpenFullLedger: () => void;
+}
+
+const EmployeeQuickLedgerModal: React.FC<QuickLedgerModalProps> = ({ employee, onClose, onOpenFullLedger }) => {
+  const { data: ledgerData, isLoading } = useEmployeeLedger(employee.id);
+  const ledger = ledgerData?.ledger || [];
+  const pendingRtgs = ledgerData?.pending_rtgs || [];
+  const balance = ledgerData?.current_balance ?? 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-border bg-card">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600">
+              <ReceiptText className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-foreground">{employee.name} — Financial Ledger</h2>
+                {employee.employee_id && (
+                  <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">
+                    {employee.employee_id}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {employee.department || 'Staff'} · {employee.designation || 'Employee'} · {employee.employee_type === 'FIXED' ? `Fixed ₹${Number(employee.fixed_salary || 0).toLocaleString('en-IN')}/mo` : `Variable ₹${Number(employee.daily_wage || 0).toLocaleString('en-IN')}/day`}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3.5 bg-muted/40 border border-border rounded-xl">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase">Current Net Balance</span>
+              <div className={cn(
+                "text-xl font-bold mt-1",
+                balance > 0 ? "text-blue-600" : balance < 0 ? "text-amber-600" : "text-emerald-600"
+              )}>
+                ₹{Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <span className="text-xs font-normal ml-1 text-muted-foreground">
+                  {balance > 0 ? '(Company Payable)' : balance < 0 ? '(Advance Outstanding)' : '(Settled)'}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-muted/40 border border-border rounded-xl">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase">Registered Bank Account</span>
+              <div className="text-xs font-mono font-bold text-foreground mt-1 truncate">
+                {employee.bank_account_number || 'No Account Linked'}
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                {employee.bank_name || 'Bank'} · {employee.bank_ifsc || 'No IFSC'}
+              </span>
+            </div>
+
+            <div className="p-3.5 bg-muted/40 border border-border rounded-xl">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase">Auto-Sync Status</span>
+              <div className="text-xs font-bold text-emerald-600 flex items-center gap-1.5 mt-1">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Bank RTGS &amp; UTR Auto-Mapped
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                All approved bank transfers post directly
+              </span>
+            </div>
+          </div>
+
+          {/* In-Flight RTGS Requests (if any) */}
+          {pendingRtgs.length > 0 && (
+            <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="p-1 px-2 rounded-lg bg-amber-500/10 text-amber-600 font-bold text-xs flex items-center gap-1.5 border border-amber-500/20">
+                  <Clock className="w-3.5 h-3.5 animate-pulse" /> In-Flight Bank RTGS Requests ({pendingRtgs.length})
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Awaiting SuperAdmin approval or bank UTR payment
+                </span>
+              </div>
+              <div className="space-y-2">
+                {pendingRtgs.map((r: any) => (
+                  <div key={r.id} className="bg-background border border-amber-500/20 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-bold text-primary">{r.approval_code}</span>
+                      <Badge variant="outline" className={cn(
+                        "text-[10px] font-bold uppercase",
+                        r.status === 'PENDING' ? "bg-amber-500/10 text-amber-600 border-amber-300" : "bg-emerald-500/10 text-emerald-600 border-emerald-300"
+                      )}>
+                        {r.status === 'PENDING' ? 'Pending Approval' : 'Approved (Ready to Pay)'}
+                      </Badge>
+                      <Badge variant="secondary" className="text-[10px] font-medium">
+                        {r.payee_category}
+                      </Badge>
+                      <span className="text-muted-foreground">{r.narration || 'Advance / Salary Payout'}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-muted-foreground">Req by {r.requested_by_name} · {r.bill_date}</span>
+                      <span className="font-bold text-sm text-foreground">₹{r.amount.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ledger Table */}
+          <div className="border border-border rounded-xl overflow-hidden bg-background">
+            <div className="p-3 bg-muted/60 border-b border-border flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Transaction History ({ledger.length})
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Chronological salary credits, advances, and bank RTGS debits
+              </span>
+            </div>
+            <div className="max-h-[380px] overflow-y-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-muted/40 text-muted-foreground uppercase text-[10px] tracking-wider border-b border-border font-semibold sticky top-0 bg-background">
+                  <tr>
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">Type</th>
+                    <th className="py-2.5 px-3">Description / UTR Reference</th>
+                    <th className="py-2.5 px-3 text-right text-rose-600">Debit (-)</th>
+                    <th className="py-2.5 px-3 text-right text-emerald-600">Credit (+)</th>
+                    <th className="py-2.5 px-3 text-right">Balance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                        Loading employee ledger...
+                      </td>
+                    </tr>
+                  ) : ledger.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No financial ledger transactions recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    ledger.map((tx: any) => (
+                      <tr key={tx.id} className="hover:bg-muted/30">
+                        <td className="py-2.5 px-3 font-mono text-muted-foreground whitespace-nowrap">
+                          {tx.date}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "text-[10px] font-bold py-0.5 px-2",
+                              tx.type === 'ADVANCE' && "border-amber-500/30 bg-amber-500/10 text-amber-700",
+                              tx.type === 'SALARY' && "border-blue-500/30 bg-blue-500/10 text-blue-700",
+                              tx.type === 'PAYMENT' && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700",
+                              tx.type === 'ADJUSTMENT' && "border-purple-500/30 bg-purple-500/10 text-purple-700"
+                            )}
+                          >
+                            {tx.type}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-medium text-foreground">{tx.description}</div>
+                          {tx.payment_reference && (
+                            <div className="font-mono text-[10px] text-muted-foreground mt-0.5">
+                              {tx.payment_mode ? `${tx.payment_mode}: ` : ''}Ref #{tx.payment_reference}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-rose-600 whitespace-nowrap">
+                          {tx.amount < 0 ? `₹${Math.abs(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-emerald-600 whitespace-nowrap">
+                          {tx.amount > 0 ? `₹${Number(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap">
+                          ₹{Number(tx.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-border bg-card flex items-center justify-between">
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Close
+          </Button>
+          <Button 
+            variant="default" 
+            size="sm" 
+            className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+            onClick={onOpenFullLedger}
+          >
+            <ReceiptText className="w-3.5 h-3.5" /> Open Full HR Ledger Hub
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const EmployeeMasterTab: React.FC = () => {
   const { data: employees = [], isLoading, error, refetch } = useHREmployees();
   const { data: departments = [] } = useHRDepartments();
@@ -92,6 +308,7 @@ export const EmployeeMasterTab: React.FC = () => {
 
   // Viewing Window State & Lightbox State
   const [viewEmployee, setViewEmployee] = useState<any>(null);
+  const [ledgerEmployee, setLedgerEmployee] = useState<any>(null);
   const [lightboxDoc, setLightboxDoc] = useState<{ url: string; title: string; isPdf?: boolean } | null>(null);
   const [, setSearchParams] = useSearchParams();
 
@@ -783,6 +1000,15 @@ export const EmployeeMasterTab: React.FC = () => {
                 <Button 
                   variant="outline" 
                   size="sm" 
+                  className="h-8 text-xs text-indigo-600 hover:text-indigo-700 bg-indigo-50/50 hover:bg-indigo-50 border-indigo-200"
+                  onClick={(e) => { e.stopPropagation(); setLedgerEmployee(emp); }}
+                  title="View Live Employee Ledger & RTGS Bank Transfers"
+                >
+                  <ReceiptText className="w-3.5 h-3.5 mr-1" /> View Ledger
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
                   className="h-8 text-xs text-emerald-600 hover:text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 border-emerald-200"
                   onClick={(e) => { e.stopPropagation(); setViewEmployee(emp); }}
                   title="View Full Profile & Uploaded Documents"
@@ -828,6 +1054,18 @@ export const EmployeeMasterTab: React.FC = () => {
           }}
         />
       </SafeDataView>
+
+      {/* ── EMPLOYEE QUICK LEDGER & RTGS MODAL ── */}
+      {ledgerEmployee && (
+        <EmployeeQuickLedgerModal 
+          employee={ledgerEmployee} 
+          onClose={() => setLedgerEmployee(null)}
+          onOpenFullLedger={() => {
+            setSearchParams({ tab: 'ledger' });
+            setLedgerEmployee(null);
+          }}
+        />
+      )}
 
       {/* ── EMPLOYEE VIEWING WINDOW (FULL DETAILS & DOCUMENTS MODAL) ── */}
       {viewEmployee && (
@@ -903,6 +1141,16 @@ export const EmployeeMasterTab: React.FC = () => {
                 </div>
 
                 <div className="shrink-0 flex sm:flex-col gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      setLedgerEmployee(viewEmployee);
+                    }}
+                    className="text-xs text-indigo-600 border-indigo-200 hover:bg-indigo-50 gap-1.5"
+                  >
+                    <ReceiptText className="w-3.5 h-3.5" /> View Ledger &amp; RTGS
+                  </Button>
                   <Button 
                     size="sm" 
                     variant="outline"

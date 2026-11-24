@@ -199,7 +199,7 @@ export const NotificationDropdown: React.FC = () => {
     }
 
     try {
-      const rtgsRes = await api.get('/rtgs/requests/');
+      const rtgsRes = await api.get('/rtgs/requests');
       if (rtgsRes.data?.success && Array.isArray(rtgsRes.data.data)) {
         setRtgsRequests(rtgsRes.data.data);
       }
@@ -458,8 +458,8 @@ export const NotificationDropdown: React.FC = () => {
       });
     }
 
-    // 5. RTGS Payment Requests: Maker-Checker approval queue & status updates
-    if (role === 'SUPERADMIN' || role === 'ADMIN' || role === 'DIRECTOR') {
+    // 5. RTGS Payment Requests: Maker-Checker approval queue & status updates (notifies Concerned Department Officials & SuperAdmin)
+    if (role === 'SUPERADMIN' || role === 'ADMIN' || role === 'DIRECTOR' || role === 'ACCOUNTS' || role === 'HR') {
       rtgsRequests.filter(r => r.status === 'PENDING').forEach(r => {
         const amt = Number(r.amount || 0).toLocaleString('en-IN');
         list.push({

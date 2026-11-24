@@ -283,6 +283,8 @@ urlpatterns = [
 
     # Trailing slash compatibility
     path('expenses/', ExpenseViewSet.as_view({'get': 'list', 'post': 'create'}), name='expenses-slash'),
+    path('rtgs/requests/', RtgsPaymentRequestViewSet.as_view({'get': 'list', 'post': 'create'}), name='rtgs-requests-slash'),
+    re_path(r'^rtgs/requests/?$', RtgsPaymentRequestViewSet.as_view({'get': 'list', 'post': 'create'}), name='rtgs-requests-both'),
 
     # Router endpoints
     path('', include(router.urls)),

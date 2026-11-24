@@ -969,6 +969,26 @@ def hr_finalize_payroll(request):
 
 @api_view(['GET'])
 def hr_employee_ledger(request, labour_id):
+    emp = Labour.objects.filter(id=labour_id).first()
+
+    # 0. Self-healing check: Sync any PAID RTGS transfers for this employee that are not yet debited to ledger
+    if emp:
+        try:
+            from api.views_rtgs import _sync_rtgs_to_employee_ledger
+            rtgs_paid_qs = RtgsPaymentRequest.objects.filter(
+                companyid_id=emp.companyid_id,
+                status='PAID'
+            ).filter(
+                models.Q(account_number=emp.bank_account_number) |
+                models.Q(beneficiary_name__iexact=emp.name) |
+                models.Q(beneficiary_name__icontains=emp.name)
+            )
+            for r_paid in rtgs_paid_qs:
+                if r_paid.utr_number:
+                    _sync_rtgs_to_employee_ledger(r_paid, r_paid.utr_number)
+        except Exception as e:
+            print(f"[RTGS Auto-Sync Warning] {e}")
+
     # 1. Manual and system EmployeeLedger entries
     ledger = list(EmployeeLedger.objects.filter(labourid_id=labour_id).order_by('date', 'created_at'))
     
@@ -1041,8 +1061,37 @@ def hr_employee_ledger(request, labour_id):
             'payment_mode': e.get('payment_mode', ''),
             'payment_reference': e.get('payment_reference', '')
         })
+
+    # 3. In-flight / pending RTGS bank requests (awaiting maker-checker SuperAdmin approval or bank UTR payment)
+    pending_rtgs = []
+    if emp:
+        in_flight_qs = RtgsPaymentRequest.objects.filter(
+            companyid_id=emp.companyid_id,
+            status__in=['PENDING', 'APPROVED']
+        ).filter(
+            models.Q(account_number=emp.bank_account_number) |
+            models.Q(beneficiary_name__iexact=emp.name) |
+            models.Q(beneficiary_name__icontains=emp.name)
+        ).order_by('-requested_at')
+        for r in in_flight_qs:
+            pending_rtgs.append({
+                'id': r.id,
+                'approval_code': r.approval_code,
+                'status': r.status,
+                'payee_category': r.payee_category,
+                'expense_head': r.expense_head,
+                'amount': float(r.amount or 0),
+                'bill_date': str(r.bill_date),
+                'requested_at': r.requested_at.isoformat() if r.requested_at else None,
+                'requested_by_name': r.requested_by.email.split('@')[0] if r.requested_by else 'Staff',
+                'narration': r.narration or ''
+            })
     
-    return send_success({'ledger': data, 'current_balance': balance}, 'Ledger fetched')
+    return send_success({
+        'ledger': data,
+        'current_balance': balance,
+        'pending_rtgs': pending_rtgs
+    }, 'Ledger fetched')
 
 @api_view(['POST'])
 def hr_ledger_payment(request):

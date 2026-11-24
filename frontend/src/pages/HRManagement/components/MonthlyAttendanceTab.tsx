@@ -121,8 +121,8 @@ export const MonthlyAttendanceTab = () => {
         narration: `Salary Payout for ${month} - ${emp.labour_name}`,
       });
       toast({
-        title: 'RTGS Request Submitted to SuperAdmin',
-        description: `✓ RTGS transfer of ₹${Number(emp.net_pay).toLocaleString('en-IN')} for ${emp.labour_name} has been sent to SuperAdmin in Bank RTGS Hub for maker-checker approval.`,
+        title: 'RTGS Request Submitted',
+        description: `✓ RTGS transfer of ₹${Number(emp.net_pay).toLocaleString('en-IN')} for ${emp.labour_name} has been sent to Concerned Department Officials & SuperAdmin for maker-checker approval.`,
       });
     } catch (e: any) {
       toast({

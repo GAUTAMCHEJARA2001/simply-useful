@@ -32,7 +32,8 @@ import {
   TrendingDown, 
   RotateCcw,
   Receipt,
-  FileText
+  FileText,
+  Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -244,8 +245,8 @@ export const EmployeeLedgerTab: React.FC = () => {
         });
 
         toast({
-          title: 'RTGS Advance Request Submitted to SuperAdmin',
-          description: `✓ Advance request of ₹${amt.toLocaleString('en-IN')} for ${selectedEmp.name} has been sent to Bank RTGS Hub for maker-checker approval. Once SuperAdmin pays it with UTR, it will automatically debit ${selectedEmp.name}'s ledger and deduct EMI in upcoming payroll runs.`,
+          title: 'RTGS Advance Request Submitted',
+          description: `✓ Advance request of ₹${amt.toLocaleString('en-IN')} for ${selectedEmp.name} has been sent to Concerned Department Officials & SuperAdmin for maker-checker approval. Once SuperAdmin pays it with UTR, it will automatically debit ${selectedEmp.name}'s ledger and deduct EMI in upcoming payroll runs.`,
         });
       } else {
         await issueLoan({
@@ -710,6 +711,45 @@ export const EmployeeLedgerTab: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* In-Flight Bank RTGS Requests Section */}
+            {ledgerData?.pending_rtgs && ledgerData.pending_rtgs.length > 0 && (
+              <div className="mb-4 bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="p-1 px-2 rounded-lg bg-amber-500/10 text-amber-600 font-bold text-xs flex items-center gap-1.5 border border-amber-500/20">
+                      <Clock className="w-3.5 h-3.5 animate-pulse" /> Pending RTGS Transfers ({ledgerData.pending_rtgs.length})
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Submitted to Concerned Department Officials &amp; SuperAdmin · Awaiting maker-checker authorization or bank payment
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {ledgerData.pending_rtgs.map((r: any) => (
+                    <div key={r.id} className="bg-background/90 border border-amber-500/20 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="font-mono font-bold text-primary">{r.approval_code}</span>
+                        <Badge variant="outline" className={cn(
+                          "text-[10px] font-bold uppercase",
+                          r.status === 'PENDING' ? "bg-amber-500/10 text-amber-600 border-amber-300" : "bg-emerald-500/10 text-emerald-600 border-emerald-300"
+                        )}>
+                          {r.status === 'PENDING' ? 'Pending Approval' : 'Approved (Ready to Pay)'}
+                        </Badge>
+                        <Badge variant="secondary" className="text-[10px] font-medium">
+                          {r.payee_category}
+                        </Badge>
+                        <span className="text-muted-foreground">{r.narration || 'Advance / Salary Payout'}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-muted-foreground">Req by {r.requested_by_name} · {r.bill_date}</span>
+                        <span className="font-bold text-sm text-foreground">₹{r.amount.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Table */}
             <div className="border border-border/80 rounded-lg overflow-x-auto bg-background">

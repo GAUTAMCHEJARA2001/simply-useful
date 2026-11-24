@@ -716,6 +716,7 @@ def director_boardroom_command_center(request):
         })
 
     # 16. Today's Live Plant & Operations Pulse (Production, Consumption, Purchases, Other Expenses)
+    today = timezone.now().astimezone(IST).date()
     today_start_dt, today_end_dt = _ist_day_bounds(today, today)
 
     # 16a. Today Production
