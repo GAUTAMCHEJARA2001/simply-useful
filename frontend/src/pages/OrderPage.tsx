@@ -247,9 +247,10 @@ const OrderPage: React.FC = () => {
     }); */
   }, [user, userRole, isAdmin, settings, isPriceInputDisabled, can]);
 
-  const getBagWeight = (bag_size: string): number => {
-    const m = (bag_size || '').match(/(\d+)/);
-    return m ? parseInt(m[1]) : 0;
+  const getBagWeight = (bag_size?: string, name?: string): number => {
+    const str = `${bag_size || ''} ${name || ''}`;
+    const m = str.match(/(\d+)\s*(?:kg|kgs|kilo|bag)/i) || str.match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
   };
 
   const getItemWeight = (item: OrderItem) => {
@@ -258,7 +259,8 @@ const OrderPage: React.FC = () => {
     const prod = products.find(p => p.id === prodId);
     if (!prod) return 0;
     if (prod.weight && prod.weight > 0) return prod.weight * (item.qty || 0);
-    return getBagWeight(prod.bagSize) * (item.qty || 0);
+    const bagStr = prod.bagSize || (prod as any).bag_size || (prod as any).bagsize || '';
+    return getBagWeight(bagStr, prod.name || (prod as any).productName) * (item.qty || 0);
   };
 
   const getTotalWeight = () => {
