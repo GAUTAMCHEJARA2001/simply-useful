@@ -50,6 +50,10 @@ export const ExpenseApprovalsTab: React.FC = () => {
   const [rejectModal, setRejectModal] = useState<{ id: string; employee: string; amount: number } | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
   
+  // Single/batch processing loaders
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [batchLoading, setBatchLoading] = useState(false);
+
   // Admin Add Spend Bill (on behalf of older/field staff)
   const { data: hrEmployees = [] } = useHREmployees();
   const [addSpendModalOpen, setAddSpendModalOpen] = useState(false);
