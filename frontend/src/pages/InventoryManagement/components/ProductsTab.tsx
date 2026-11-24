@@ -153,6 +153,7 @@ export const ProductsTab: React.FC = () => {
     const { brand, unit, categoryRef, ...cleanForm } = form as any;
     const payload: Partial<Product> = {
       ...cleanForm,
+      bagSize: cleanForm.bagSize || cleanForm.bag_size || '50 KG',
       rate: Number(cleanForm.rate) || 0,
       gst: cleanForm.gst !== undefined && cleanForm.gst !== null ? Number(cleanForm.gst) : 18,
       openingStock: Number(cleanForm.openingStock) || 0,
@@ -182,7 +183,7 @@ export const ProductsTab: React.FC = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Products</h1>
         {canManage && (
-          <Button size="sm" onClick={() => { setForm({}); setModal(true); }}>
+          <Button size="sm" onClick={() => { setForm({ bagSize: '50 KG' }); setModal(true); }}>
             <Plus className="w-4 h-4 mr-1.5" /> Add Product
           </Button>
         )}
@@ -221,7 +222,7 @@ export const ProductsTab: React.FC = () => {
       >
         <DataTable
           columns={[
-            'SKU', 'Name', 'Category', 'Unit', 
+            'SKU', 'Name', 'Category', 'Bag Size / Weight', 'Unit', 
             isSuperAdmin ? 'Shortage' : 'Available Stock', 
             ...(isSuperAdmin ? ['Avg Cost (WAC/FIFO)'] : []), 
             'Base Rate (Excl. GST)'
@@ -237,6 +238,9 @@ export const ProductsTab: React.FC = () => {
               p.productCode || p.sku || '—', 
               p.name || p.productName || '—', 
               p.categoryRef?.name || p.categoryName || p.category?.name || '—',
+              <span key="bagSize" className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                {p.bagSize || p.bag_size || '—'}
+              </span>,
               p.unit?.name || p.unit || '—', 
               isSuperAdmin ? (
                 <span className={`font-bold ${shortage > 0 ? 'text-destructive' : 'text-success'}`}>
@@ -264,7 +268,11 @@ export const ProductsTab: React.FC = () => {
             );
             return rowCells;
           })}
-          onEdit={canManage ? (i: number) => { setForm(filtered[i]); setModal(true); } : undefined}
+          onEdit={canManage ? (i: number) => { 
+            const item = filtered[i];
+            setForm({ ...item, bagSize: item.bagSize || item.bag_size || '' }); 
+            setModal(true); 
+          } : undefined}
           onDelete={canManage ? (i: number) => { setDeleteTarget(filtered[i].id!); setDeleteDialogOpen(true); } : undefined} 
           onRowClick={(i: number) => setViewProduct(filtered[i])}
         />
@@ -292,6 +300,7 @@ export const ProductsTab: React.FC = () => {
                         name: p.name || p.productName || '',
                         productCode: p.productCode || p.sku || '',
                         sku: p.sku || p.productCode || '',
+                        bagSize: p.bagSize || p.bag_size || '',
                         brandId: brId ? Number(brId) : undefined,
                         categoryId: String(catId || ''),
                         unitId: unId ? Number(unId) : undefined,
@@ -348,21 +357,31 @@ export const ProductsTab: React.FC = () => {
             </div>
 
             {[
-              { key: 'productCode', label: 'SKU', type: 'text', readOnly: true },
-              { key: 'name', label: 'Product Name', type: 'text' },
-              { key: 'openingStock', label: 'Opening Stock', type: 'number' },
-              { key: 'minimumStock', label: 'Minimum Stock', type: 'number' },
-              { key: 'rate', label: 'Price', type: 'number' }
+              { key: 'productCode', label: 'SKU', type: 'text', readOnly: true, placeholder: 'Auto-assigned by system on save' },
+              { key: 'name', label: 'Product Name', type: 'text', placeholder: 'Enter product name' },
+              { key: 'bagSize', label: 'Bag Size / Unit Weight (e.g. 50 KG, 20 KG)', type: 'text', placeholder: 'e.g. 50 KG, 20 KG, 10 KG, 1 LTR' },
+              { key: 'openingStock', label: 'Opening Stock', type: 'number', placeholder: '0' },
+              { key: 'minimumStock', label: 'Minimum Stock', type: 'number', placeholder: '0' },
+              { key: 'rate', label: 'Price (Excl. GST)', type: 'number', placeholder: '0' }
             ].map((field) => (
               <div key={field.key}>
                 <label className="text-sm font-medium block mb-1">{field.label}</label>
                  <input 
                   type={field.type} 
-                  value={String((form as any)[field.key] !== undefined && (form as any)[field.key] !== null && !Number.isNaN((form as any)[field.key]) ? (form as any)[field.key] : '')} 
-                  onChange={e => setForm({ ...form, [field.key]: field.type === 'number' ? (e.target.value === '' ? 0 : Number(e.target.value) || 0) : e.target.value })}
+                  value={
+                    field.key === 'bagSize'
+                      ? (form.bagSize !== undefined ? form.bagSize : (form as any).bag_size || '')
+                      : String((form as any)[field.key] !== undefined && (form as any)[field.key] !== null && !Number.isNaN((form as any)[field.key]) ? (form as any)[field.key] : '')
+                  } 
+                  onChange={e => setForm({ 
+                    ...form, 
+                    [field.key]: field.type === 'number' 
+                      ? (e.target.value === '' ? 0 : Number(e.target.value) || 0) 
+                      : e.target.value 
+                  })}
                   onWheel={field.type === 'number' ? e => e.currentTarget.blur() : undefined}
                   readOnly={field.readOnly}
-                  placeholder={field.key === 'productCode' ? 'Auto-assigned by system on save' : ''}
+                  placeholder={field.placeholder || ''}
                   className={`w-full border border-border rounded-lg px-3 py-2 bg-background text-sm ${field.readOnly ? 'bg-muted cursor-not-allowed font-mono' : ''}`} 
                 />
               </div>
@@ -437,6 +456,7 @@ export const ProductsTab: React.FC = () => {
             <div><span className="font-semibold text-muted-foreground">Name:</span> {viewProduct.name || viewProduct.productName}</div>
             <div><span className="font-semibold text-muted-foreground">Brand:</span> {viewProduct.brand?.name || viewProduct.brandName || '—'}</div>
             <div><span className="font-semibold text-muted-foreground">Category:</span> {viewProduct.categoryRef?.name || viewProduct.category?.name || viewProduct.categoryName || '—'}</div>
+            <div><span className="font-semibold text-muted-foreground">Bag Size / Weight:</span> <span className="font-semibold text-primary">{viewProduct.bagSize || viewProduct.bag_size || '—'}</span></div>
             <div><span className="font-semibold text-muted-foreground">Unit:</span> {viewProduct.unit?.name || viewProduct.unit || '—'}</div>
             <div><span className="font-semibold text-muted-foreground">Opening Stock:</span> {viewProduct.openingStock || 0}</div>
             <div><span className="font-semibold text-muted-foreground">Stock:</span> {viewProduct.availableStock || viewProduct.stockQty || 0}</div>

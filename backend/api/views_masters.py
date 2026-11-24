@@ -235,6 +235,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         from django.utils import timezone
         now = timezone.now()
         data = request.data.copy()
+        if 'bagsize' in data and 'bagSize' not in data:
+            data['bagSize'] = data['bagsize']
+        elif 'bag_size' in data and 'bagSize' not in data:
+            data['bagSize'] = data['bag_size']
         if _get_company_id(request):
             data['companyId'] = _get_company_id(request)
         unit_name = data.get('unit')
@@ -305,6 +309,9 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         if existing_product:
             product_obj = existing_product
+            if data.get('bagSize'):
+                product_obj.bagsize = data.get('bagSize')
+                product_obj.save(update_fields=['bagsize'])
             opening_val = int(data.get('openingStock', 0) or data.get('openingstock', 0) or 0)
             if opening_val > 0:
                 wh_id = request.headers.get('x-warehouse-id')
@@ -341,6 +348,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', True)
         instance = self.get_object()
         data = request.data.copy()
+        if 'bagsize' in data and 'bagSize' not in data:
+            data['bagSize'] = data['bagsize']
+        elif 'bag_size' in data and 'bagSize' not in data:
+            data['bagSize'] = data['bag_size']
         unit_name = data.get('unit')
         if unit_name:
             try:

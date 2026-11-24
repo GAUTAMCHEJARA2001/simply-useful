@@ -266,6 +266,7 @@ class ProductSerializer(serializers.ModelSerializer):
     productCode = serializers.CharField(source='productcode', required=False)
     productName = serializers.CharField(source='name', read_only=True)
     bagSize = serializers.CharField(source='bagsize', required=False, default='50kg')
+    bag_size = serializers.CharField(source='bagsize', read_only=True)
     brandId = serializers.IntegerField(source='brandid_id', required=False, allow_null=True)
     unitId = serializers.IntegerField(source='unitid_id', required=False, allow_null=True)
     companyId = serializers.CharField(source='companyid_id', required=False)
@@ -292,7 +293,7 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            'id', 'productCode', 'name', 'productName', 'bagSize', 'brandId', 'unitId', 'rate', 'gst', 
+            'id', 'productCode', 'name', 'productName', 'bagSize', 'bag_size', 'brandId', 'unitId', 'rate', 'gst', 
             'active', 'companyId', 'createdAt', 'updatedAt', 'categoryId', 'openingStock', 
             'minimumStock', 'defaultWarehouseId', 'brand', 'unit', 'categoryRef', 'availableStock', 'stockQty',
             'avgCost', 'fifoCost', 'weightedAvgCost', 'inventoryValue'
