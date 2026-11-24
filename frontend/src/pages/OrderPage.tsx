@@ -49,26 +49,27 @@ const OrderPage: React.FC = () => {
   const [orderDate, setOrderDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState<string>('');
 
+  const locationState = location.state as any;
+
   useEffect(() => {
     if (!id && user?.email) {
       setSoEmail(user.email);
     }
     // Prefill party from CRM or Territory navigation state
-    if (!id && location.state) {
-      const state = location.state as any;
-      if (state.partyName) {
-        setSelectedParty(state.partyName);
+    if (!id && locationState) {
+      if (locationState.partyName) {
+        setSelectedParty(locationState.partyName);
       }
-      if (state.partyType) {
-        setPartyType(state.partyType);
+      if (locationState.partyType) {
+        setPartyType(locationState.partyType);
       }
-      if (state.narration) {
-        setNarration(state.narration);
+      if (locationState.narration) {
+        setNarration(locationState.narration);
       }
     }
     // Reset initialization if ID changes (navigating to a different order)
     setIsInitialized(false);
-  }, [id, user, location.state]);
+  }, [id, user, locationState]);
 
   useEffect(() => {
     if (!id || isInitialized) return;
@@ -902,15 +903,19 @@ const OrderPage: React.FC = () => {
               <p className="text-sm text-muted-foreground italic text-center py-4">No creation history found.</p>
             )}
             
-            {location.state?.order?.lastEditedBy && (
+            {locationState?.order?.lastEditedBy && (
               <div className="flex items-start gap-3 bg-secondary/30 p-3 rounded-xl border border-border">
                 <div className="p-2 bg-blue-500/10 rounded-full shrink-0"><Edit className="w-4 h-4 text-blue-500" /></div>
                 <div>
                   <p className="text-[10px] uppercase font-bold text-muted-foreground mb-0.5">Last Edited By</p>
-                  <p className="text-sm font-semibold">{location.state.order.lastEditedBy.name}</p>
-                  <p className="text-xs text-muted-foreground">{location.state.order.lastEditedBy.email}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">{new Date(location.state.order.lastEditedBy.at).toLocaleString('en-IN')}</p>
-                  <p className="text-[9px] font-bold text-blue-500/70 mt-1 uppercase tracking-wider">Total Edits: {location.state.order.lastEditedBy.count}</p>
+                  <p className="text-sm font-semibold">{locationState.order.lastEditedBy.name}</p>
+                  <p className="text-xs text-muted-foreground">{locationState.order.lastEditedBy.email}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {locationState.order.lastEditedBy.at ? new Date(locationState.order.lastEditedBy.at).toLocaleString('en-IN') : ''}
+                  </p>
+                  <p className="text-[9px] font-bold text-blue-500/70 mt-1 uppercase tracking-wider">
+                    Total Edits: {locationState.order.lastEditedBy.count}
+                  </p>
                 </div>
               </div>
             )}
