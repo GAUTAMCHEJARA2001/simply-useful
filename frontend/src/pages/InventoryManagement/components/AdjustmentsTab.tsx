@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
-import { Plus, Search, X, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
+import { Plus, Search, X, SlidersHorizontal, ArrowLeftRight } from 'lucide-react';
 import { useAdjustments, useAdjustmentMutations } from '@/hooks/inventory/useAdjustments';
 import { useProducts } from '@/hooks/inventory/useProducts';
 import { useWarehouses } from '@/hooks/inventory/useMasters';
@@ -16,9 +16,33 @@ export const AdjustmentsTab: React.FC = () => {
   const { data: products = [] } = useProducts({ global: true });
   const { data: warehouses = [] } = useWarehouses();
   const { data: aggregateStock = [] } = useAggregateStock();
-  const { saveAdjustment, deleteAdjustment } = useAdjustmentMutations();
+  const { saveAdjustment, deleteAdjustment, convertCoupon, isConvertingCoupon } = useAdjustmentMutations();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<any>({});
+  const [convertModalOpen, setConvertModalOpen] = useState(false);
+  const [convertForm, setConvertForm] = useState<{
+    direction: 'WITH_TO_WITHOUT' | 'WITHOUT_TO_WITH';
+    sourceProductId: string;
+    targetProductId: string;
+    couponProductId: string;
+    warehouseId: string;
+    quantity: string;
+    couponQtyPerBag: string;
+    damagedProductId: string;
+    damagedQty: string;
+    reason: string;
+  }>({
+    direction: 'WITH_TO_WITHOUT',
+    sourceProductId: '',
+    targetProductId: '',
+    couponProductId: '',
+    warehouseId: '',
+    quantity: '',
+    couponQtyPerBag: '1',
+    damagedProductId: '',
+    damagedQty: '',
+    reason: '',
+  });
 
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +59,51 @@ export const AdjustmentsTab: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this adjustment?')) return;
     await deleteAdjustment(id);
+  };
+
+  const getProductStock = (pid: string) => {
+    if (!pid) return 0;
+    const stock = aggregateStock.find((s: any) => String(s.productId) === String(pid));
+    return stock ? Math.round(parseFloat(stock.quantity || stock.totalStock || 0) * 100) / 100 : 0;
+  };
+
+  const openConvertModal = () => {
+    const defaultWh = warehouses.length === 1 ? String(warehouses[0].id) : '';
+    const defaultCoupon = products.find((p: any) => /coupo?n|coupen/i.test(p.name || ''));
+    setConvertForm({
+      direction: 'WITH_TO_WITHOUT',
+      sourceProductId: '',
+      targetProductId: '',
+      couponProductId: defaultCoupon ? String(defaultCoupon.id) : '',
+      warehouseId: defaultWh,
+      quantity: '',
+      couponQtyPerBag: '1',
+      damagedProductId: '',
+      damagedQty: '',
+      reason: '',
+    });
+    setConvertModalOpen(true);
+  };
+
+  const handleConvertCoupon = async () => {
+    const qty = parseFloat(convertForm.quantity || '0');
+    const perBag = parseFloat(convertForm.couponQtyPerBag || '1') || 1;
+    const dmgQty = parseFloat(convertForm.damagedQty || '0') || 0;
+    if (!qty || qty <= 0) return;
+    await convertCoupon({
+      direction: convertForm.direction,
+      sourceProductId: convertForm.sourceProductId,
+      targetProductId: convertForm.targetProductId,
+      couponProductId: convertForm.couponProductId,
+      warehouseId: convertForm.warehouseId,
+      quantity: qty,
+      couponQtyPerBag: perBag,
+      ...(dmgQty > 0 && convertForm.damagedProductId
+        ? { damagedProductId: convertForm.damagedProductId, damagedQty: dmgQty }
+        : {}),
+      reason: convertForm.reason,
+    });
+    setConvertModalOpen(false);
   };
 
   // Distinct product options for the searchable dropdown filter
@@ -131,9 +200,19 @@ export const AdjustmentsTab: React.FC = () => {
             Audit log of manual inventory additions, reductions, and conversions
           </p>
         </div>
-        <Button size="sm" onClick={() => { setForm({}); setModalOpen(true); }} className="h-9">
-          <Plus className="w-4 h-4 mr-1.5" /> New Adjustment
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openConvertModal}
+            className="h-9 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+          >
+            <ArrowLeftRight className="w-4 h-4 mr-1.5" /> Convert Coupon
+          </Button>
+          <Button size="sm" onClick={() => { setForm({}); setModalOpen(true); }} className="h-9">
+            <Plus className="w-4 h-4 mr-1.5" /> New Adjustment
+          </Button>
+        </div>
       </div>
 
       {/* Filter and Search Bar Controls */}
@@ -311,6 +390,273 @@ export const AdjustmentsTab: React.FC = () => {
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={!form.productId || !form.warehouseId || !form.quantityChange || !form.reason}>Save</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Coupon Conversion Modal (With Coupon <-> Without Coupon) */}
+      <Modal
+        isOpen={convertModalOpen}
+        title="Convert With Coupon ↔ Without Coupon"
+        onClose={() => setConvertModalOpen(false)}
+      >
+        <div className="space-y-4">
+          {/* Direction Toggle */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setConvertForm(prev => ({
+                ...prev,
+                direction: 'WITH_TO_WITHOUT',
+                sourceProductId: prev.targetProductId,
+                targetProductId: prev.sourceProductId,
+              }))}
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                convertForm.direction === 'WITH_TO_WITHOUT'
+                  ? 'border-indigo-500 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 shadow-2xs'
+                  : 'border-border bg-background hover:bg-muted/40'
+              }`}
+            >
+              <div className="text-xs font-bold">With Coupon → Without Coupon</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                Remove coupon: Coupon stock <strong>+Plus</strong>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setConvertForm(prev => ({
+                ...prev,
+                direction: 'WITHOUT_TO_WITH',
+                sourceProductId: prev.targetProductId,
+                targetProductId: prev.sourceProductId,
+              }))}
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                convertForm.direction === 'WITHOUT_TO_WITH'
+                  ? 'border-indigo-500 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 shadow-2xs'
+                  : 'border-border bg-background hover:bg-muted/40'
+              }`}
+            >
+              <div className="text-xs font-bold">Without Coupon → With Coupon</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                Add coupon: Coupon stock <strong>-Minus</strong>
+              </div>
+            </button>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium block mb-1">Warehouse</label>
+            <select
+              value={convertForm.warehouseId}
+              onChange={e => setConvertForm({ ...convertForm, warehouseId: e.target.value })}
+              className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm"
+            >
+              <option value="">-- Choose Warehouse --</option>
+              {warehouses.map((w: any) => <option key={w.id} value={String(w.id)}>{w.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium block mb-1">
+              {convertForm.direction === 'WITH_TO_WITHOUT'
+                ? 'Source Product (With Coupon — will Minus)'
+                : 'Source Product (Without Coupon — will Minus)'}
+            </label>
+            <SearchableSelect
+              options={products.map((p: any) => ({
+                value: String(p.id),
+                label: p.name,
+                subtitle: `Available Qty: ${getProductStock(p.id)}`,
+              }))}
+              value={convertForm.sourceProductId}
+              onChange={val => setConvertForm({ ...convertForm, sourceProductId: val })}
+              placeholder="-- Select Source Finished Good --"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium block mb-1">
+              {convertForm.direction === 'WITH_TO_WITHOUT'
+                ? 'Target Product (Without Coupon — will Plus)'
+                : 'Target Product (With Coupon — will Plus)'}
+            </label>
+            <SearchableSelect
+              options={products.map((p: any) => ({
+                value: String(p.id),
+                label: p.name,
+                subtitle: `Available Qty: ${getProductStock(p.id)}`,
+              }))}
+              value={convertForm.targetProductId}
+              onChange={val => setConvertForm({ ...convertForm, targetProductId: val })}
+              placeholder="-- Select Target Finished Good --"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium block mb-1">
+              Coupon Item ({convertForm.direction === 'WITH_TO_WITHOUT' ? 'will Plus / Return to stock' : 'will Minus / Consume from stock'})
+            </label>
+            <SearchableSelect
+              options={[...products]
+                .sort((a: any, b: any) => {
+                  const aIsC = /coupo?n|coupen/i.test(a.name || '') ? 0 : 1;
+                  const bIsC = /coupo?n|coupen/i.test(b.name || '') ? 0 : 1;
+                  return aIsC - bIsC || (a.name || '').localeCompare(b.name || '');
+                })
+                .map((p: any) => ({
+                  value: String(p.id),
+                  label: p.name,
+                  subtitle: `Available Qty: ${getProductStock(p.id)}`,
+                }))}
+              value={convertForm.couponProductId}
+              onChange={val => setConvertForm({ ...convertForm, couponProductId: val })}
+              placeholder="-- Select Coupon Product --"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium block mb-1">Bags / Units to Convert</label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={convertForm.quantity}
+                onChange={e => setConvertForm({ ...convertForm, quantity: e.target.value })}
+                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm"
+                placeholder="e.g. 10"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1">Coupons per Bag</label>
+              <input
+                type="number"
+                min="0.01"
+                step="any"
+                value={convertForm.couponQtyPerBag}
+                onChange={e => setConvertForm({ ...convertForm, couponQtyPerBag: e.target.value })}
+                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm"
+                placeholder="1"
+              />
+            </div>
+          </div>
+
+          {/* Damaged Bag During Conversion (Optional) */}
+          <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-3 space-y-2.5">
+            <div className="text-xs font-bold text-amber-700 dark:text-amber-300">
+              Damaged Bags During Conversion (Optional)
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="sm:col-span-2">
+                <label className="text-[11px] font-medium block mb-1 text-muted-foreground">Damaged Bag / Packaging Item</label>
+                <SearchableSelect
+                  options={[
+                    { value: '', label: 'None (0 damaged)' },
+                    ...products.map((p: any) => ({
+                      value: String(p.id),
+                      label: p.name,
+                      subtitle: `Available Qty: ${getProductStock(p.id)}`,
+                    })),
+                  ]}
+                  value={convertForm.damagedProductId}
+                  onChange={val => setConvertForm({ ...convertForm, damagedProductId: val })}
+                  placeholder="-- Select Bag Item --"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium block mb-1 text-muted-foreground">Damaged Qty</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={convertForm.damagedQty}
+                  onChange={e => setConvertForm({ ...convertForm, damagedQty: e.target.value })}
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Live Stock Impact Preview */}
+          {parseFloat(convertForm.quantity || '0') > 0 && convertForm.sourceProductId && convertForm.targetProductId && convertForm.couponProductId && (
+            <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-1.5 text-xs">
+              <div className="font-bold text-foreground uppercase tracking-wider text-[10px]">
+                Stock Impact Preview
+              </div>
+              {(() => {
+                const qty = parseFloat(convertForm.quantity || '0');
+                const perBag = parseFloat(convertForm.couponQtyPerBag || '1') || 1;
+                const dmgQty = parseFloat(convertForm.damagedQty || '0') || 0;
+                const couponDelta = convertForm.direction === 'WITH_TO_WITHOUT' ? qty * perBag : -(qty * perBag);
+                const srcName = products.find((p: any) => String(p.id) === convertForm.sourceProductId)?.name || 'Source';
+                const tgtName = products.find((p: any) => String(p.id) === convertForm.targetProductId)?.name || 'Target';
+                const cpnName = products.find((p: any) => String(p.id) === convertForm.couponProductId)?.name || 'Coupon';
+                const dmgName = products.find((p: any) => String(p.id) === convertForm.damagedProductId)?.name || 'Damaged Bag';
+                const srcNow = getProductStock(convertForm.sourceProductId);
+                const tgtNow = getProductStock(convertForm.targetProductId);
+                const cpnNow = getProductStock(convertForm.couponProductId);
+                const dmgNow = getProductStock(convertForm.damagedProductId);
+                return (
+                  <div className="space-y-1">
+                    <div className="flex justify-between gap-2">
+                      <span className="truncate">{srcName}</span>
+                      <span className="font-mono font-semibold text-rose-600 dark:text-rose-400 shrink-0">
+                        {srcNow} → {srcNow - qty} (-{qty})
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="truncate">{tgtName}</span>
+                      <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
+                        {tgtNow} → {tgtNow + qty} (+{qty})
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="truncate">{cpnName}</span>
+                      <span className={`font-mono font-semibold shrink-0 ${couponDelta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {cpnNow} → {cpnNow + couponDelta} ({couponDelta >= 0 ? `+${couponDelta}` : couponDelta})
+                      </span>
+                    </div>
+                    {dmgQty > 0 && convertForm.damagedProductId && (
+                      <div className="flex justify-between gap-2">
+                        <span className="truncate">{dmgName} (Damaged)</span>
+                        <span className="font-mono font-semibold text-rose-600 dark:text-rose-400 shrink-0">
+                          {dmgNow} → {dmgNow - dmgQty} (-{dmgQty})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          <div>
+            <label className="text-sm font-medium block mb-1">Note / Reason (Optional)</label>
+            <input
+              value={convertForm.reason}
+              onChange={e => setConvertForm({ ...convertForm, reason: e.target.value })}
+              className="w-full border border-border rounded-lg px-3 py-2 bg-background text-sm"
+              placeholder="e.g. Party requested without coupon bags"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setConvertModalOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleConvertCoupon}
+              disabled={
+                isConvertingCoupon ||
+                !convertForm.warehouseId ||
+                !convertForm.sourceProductId ||
+                !convertForm.targetProductId ||
+                !convertForm.couponProductId ||
+                convertForm.sourceProductId === convertForm.targetProductId ||
+                !(parseFloat(convertForm.quantity || '0') > 0) ||
+                ((parseFloat(convertForm.damagedQty || '0') > 0) && !convertForm.damagedProductId)
+              }
+            >
+              {isConvertingCoupon ? 'Converting...' : 'Convert Stock'}
+            </Button>
           </div>
         </div>
       </Modal>

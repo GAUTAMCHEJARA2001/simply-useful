@@ -48,8 +48,43 @@ export const useAdjustmentMutations = () => {
     }
   });
 
+  const convertCouponMutation = useMutation({
+    mutationFn: (payload: {
+      direction: 'WITH_TO_WITHOUT' | 'WITHOUT_TO_WITH';
+      sourceProductId: string;
+      targetProductId: string;
+      couponProductId: string;
+      warehouseId: string | number;
+      quantity: number;
+      couponQtyPerBag?: number;
+      damagedProductId?: string;
+      damagedQty?: number;
+      reason?: string;
+    }) => api.post('/transactions/adjustments/coupon-convert', payload),
+    onSuccess: (res: any) => {
+      queryClient.invalidateQueries({ queryKey: ['adjustments'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      toast({
+        title: 'Conversion Completed',
+        description: res?.data?.message || 'Coupon conversion recorded',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Conversion Failed',
+        description: error?.response?.data?.message || error.message,
+        variant: 'destructive',
+      });
+    }
+  });
+
   return {
     saveAdjustment: saveMutation.mutateAsync,
     deleteAdjustment: deleteMutation.mutateAsync,
+    convertCoupon: convertCouponMutation.mutateAsync,
+    isConvertingCoupon: convertCouponMutation.isPending,
   };
 };

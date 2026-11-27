@@ -1793,7 +1793,7 @@ from api.views_inventory_ops import (
     resolve_product_for_db, check_negative_raw_materials,
     fix_old_productions, transaction_productions,
     transaction_production_materials, transaction_productions_detail,
-    transaction_adjustments, transaction_adjustments_detail,
+    transaction_adjustments, transaction_adjustments_detail, transaction_coupon_convert,
     transaction_attendance, transaction_attendance_detail,
     transaction_returns
 )

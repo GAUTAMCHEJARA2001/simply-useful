@@ -955,6 +955,94 @@ class DirectorPayrollAccuracyTests(TenantAwareTestCase):
         self.assertEqual(res['total_payroll'], 5310.0)
 
 
+class CouponConversionTests(TenantAwareTestCase):
+    def setUp(self):
+        super().setUp()
+        from api.models import Warehouse
+        self.wh = Warehouse.objects.create(name="Main WH", active=True, companyid=self.company)
+        self.brand = Brand.objects.create(name="Brand C", active=True, companyid=self.company)
+        self.cat = Category.objects.create(name="Finished", active=True, companyid=self.company)
+        self.prod_with = Product.objects.create(
+            id="prod-with", productcode="PW1", name="Tile Bond (With Coupon)",
+            bagsize="20kg", brandid=self.brand, categoryid=self.cat,
+            rate=200.0, gst=18.0, active=True, companyid=self.company,
+            openingstock=100, minimumstock=5,
+        )
+        self.prod_without = Product.objects.create(
+            id="prod-without", productcode="PWO1", name="Tile Bond (Without Coupon)",
+            bagsize="20kg", brandid=self.brand, categoryid=self.cat,
+            rate=190.0, gst=18.0, active=True, companyid=self.company,
+            openingstock=0, minimumstock=5,
+        )
+        self.coupon = Product.objects.create(
+            id="prod-cpn", productcode="CPN1", name="50Rs Coupon",
+            bagsize="1pc", brandid=self.brand, categoryid=self.cat,
+            rate=50.0, gst=0.0, active=True, companyid=self.company,
+            openingstock=20, minimumstock=5,
+        )
+        self.user = User.objects.create(
+            id="inv-user", email="inv@example.com", name="Inv User",
+            role="SUPERADMIN", active=True, companyid=self.company,
+        )
+
+    def test_with_to_without_and_without_to_with_conversion(self):
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from api.views_inventory_ops import transaction_coupon_convert
+        from api.models import Stocktransaction
+
+        rf = APIRequestFactory()
+
+        # 1. Convert 10 bags With Coupon -> Without Coupon (Source -10, Target +10, Coupon +10)
+        req1 = rf.post('/api/v1/transactions/adjustments/coupon-convert', {
+            'direction': 'WITH_TO_WITHOUT',
+            'sourceProductId': self.prod_with.id,
+            'targetProductId': self.prod_without.id,
+            'couponProductId': self.coupon.id,
+            'warehouseId': self.wh.id,
+            'quantity': 10,
+            'couponQtyPerBag': 1,
+        }, format='json')
+        force_authenticate(req1, user=self.user)
+        res1 = transaction_coupon_convert(req1)
+        self.assertEqual(res1.status_code, 200)
+
+        ref1 = res1.data['data']['referenceId']
+        txs1 = {t.productid_id: t.quantity for t in Stocktransaction.objects.filter(referenceid=ref1)}
+        self.assertEqual(txs1[self.prod_with.id], -10.0)
+        self.assertEqual(txs1[self.prod_without.id], 10.0)
+        self.assertEqual(txs1[self.coupon.id], 10.0)
+
+        # 2. Convert 4 bags Without Coupon -> With Coupon with 2 damaged empty bags
+        empty_bag = Product.objects.create(
+            id="prod-bag", productcode="BAG1", name="Empty 20kg Bag",
+            bagsize="1pc", brandid=self.brand, categoryid=self.cat,
+            rate=15.0, gst=18.0, active=True, companyid=self.company,
+            openingstock=50, minimumstock=5,
+        )
+        req2 = rf.post('/api/v1/transactions/adjustments/coupon-convert', {
+            'direction': 'WITHOUT_TO_WITH',
+            'sourceProductId': self.prod_without.id,
+            'targetProductId': self.prod_with.id,
+            'couponProductId': self.coupon.id,
+            'warehouseId': self.wh.id,
+            'quantity': 4,
+            'couponQtyPerBag': 1,
+            'damagedProductId': empty_bag.id,
+            'damagedQty': 2,
+        }, format='json')
+        force_authenticate(req2, user=self.user)
+        res2 = transaction_coupon_convert(req2)
+        self.assertEqual(res2.status_code, 200)
+
+        ref2 = res2.data['data']['referenceId']
+        txs2 = {t.productid_id: t.quantity for t in Stocktransaction.objects.filter(referenceid=ref2)}
+        self.assertEqual(txs2[self.prod_without.id], -4.0)
+        self.assertEqual(txs2[self.prod_with.id], 4.0)
+        self.assertEqual(txs2[self.coupon.id], -4.0)
+        self.assertEqual(txs2[empty_bag.id], -2.0)
+
+
+
 
 
 

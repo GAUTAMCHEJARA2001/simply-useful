@@ -529,6 +529,146 @@ def transaction_adjustments_detail(request, pk):
             pass
         return send_success(None, 'Adjustment deleted')
 
+
+@api_view(['POST'])
+def transaction_coupon_convert(request):
+    """
+    Atomically convert finished goods between With-Coupon and Without-Coupon variants
+    and adjust the underlying Coupon item stock accordingly:
+      - WITH_TO_WITHOUT: source (-qty), target (+qty), coupon (+qty * coupon_per_bag)
+      - WITHOUT_TO_WITH: source (-qty), target (+qty), coupon (-qty * coupon_per_bag)
+    """
+    from api.models import Stocktransaction
+    import uuid
+    from django.utils import timezone
+    from django.db import transaction
+
+    data = request.data
+    direction = (data.get('direction') or '').upper().strip()
+    if direction not in ('WITH_TO_WITHOUT', 'WITHOUT_TO_WITH'):
+        return Response(
+            {'success': False, 'message': 'Invalid conversion direction. Use WITH_TO_WITHOUT or WITHOUT_TO_WITH.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        qty = float(data.get('quantity') or 0)
+    except (TypeError, ValueError):
+        qty = 0.0
+    if qty <= 0:
+        return Response({'success': False, 'message': 'Quantity must be greater than 0.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        coupon_per_bag = float(data.get('couponQtyPerBag') or data.get('coupon_qty_per_bag') or 1.0)
+    except (TypeError, ValueError):
+        coupon_per_bag = 1.0
+    if coupon_per_bag <= 0:
+        return Response({'success': False, 'message': 'Coupons per bag must be greater than 0.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    wh_id = data.get('warehouse_id') or data.get('warehouseId') or 1
+    try:
+        wh_id = int(wh_id)
+    except (TypeError, ValueError):
+        wh_id = 1
+    wh = resolve_warehouse(wh_id)
+    if not wh:
+        return Response({'success': False, 'message': 'Invalid warehouse.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    source_prod = resolve_product_for_db(data.get('sourceProductId') or data.get('source_product_id'))
+    target_prod = resolve_product_for_db(data.get('targetProductId') or data.get('target_product_id'))
+    coupon_prod = resolve_product_for_db(data.get('couponProductId') or data.get('coupon_product_id'))
+
+    try:
+        damaged_qty = float(data.get('damagedQty') or data.get('damaged_qty') or 0)
+    except (TypeError, ValueError):
+        damaged_qty = 0.0
+    damaged_prod = None
+    if damaged_qty > 0:
+        damaged_prod = resolve_product_for_db(data.get('damagedProductId') or data.get('damaged_product_id'))
+        if not damaged_prod:
+            return Response(
+                {'success': False, 'message': 'Select the damaged bag/product item when Damaged Qty > 0.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    if not source_prod or not target_prod or not coupon_prod:
+        return Response(
+            {'success': False, 'message': 'Source product, Target product, and Coupon item are all required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if source_prod.id == target_prod.id:
+        return Response(
+            {'success': False, 'message': 'Source and Target finished goods must be different products.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    coupon_delta = qty * coupon_per_bag if direction == 'WITH_TO_WITHOUT' else -(qty * coupon_per_bag)
+    dir_label = 'With Coupon -> Without Coupon' if direction == 'WITH_TO_WITHOUT' else 'Without Coupon -> With Coupon'
+    custom_reason = (data.get('reason') or '').strip()
+    reason_prefix = f"Coupon Conversion ({dir_label})"
+    if custom_reason:
+        reason_prefix = f"{reason_prefix} - {custom_reason}"
+
+    ref_id = f"CONV-{uuid.uuid4().hex[:12].upper()}"
+    now = timezone.now()
+
+    with transaction.atomic():
+        Stocktransaction.objects.create(
+            id='st_' + uuid.uuid4().hex[:20],
+            productid=source_prod,
+            warehouseid_id=wh.id,
+            transactiontype='ADJUSTMENT',
+            quantity=-qty,
+            reason=f"{reason_prefix} [Source -> {target_prod.name}]",
+            referenceid=ref_id,
+            createdat=now,
+        )
+        Stocktransaction.objects.create(
+            id='st_' + uuid.uuid4().hex[:20],
+            productid=target_prod,
+            warehouseid_id=wh.id,
+            transactiontype='ADJUSTMENT',
+            quantity=qty,
+            reason=f"{reason_prefix} [Target <- {source_prod.name}]",
+            referenceid=ref_id,
+            createdat=now,
+        )
+        Stocktransaction.objects.create(
+            id='st_' + uuid.uuid4().hex[:20],
+            productid=coupon_prod,
+            warehouseid_id=wh.id,
+            transactiontype='ADJUSTMENT',
+            quantity=coupon_delta,
+            reason=f"{reason_prefix} [Coupon {'Returned' if coupon_delta > 0 else 'Consumed'}]",
+            referenceid=ref_id,
+            createdat=now,
+        )
+        if damaged_prod and damaged_qty > 0:
+            Stocktransaction.objects.create(
+                id='st_' + uuid.uuid4().hex[:20],
+                productid=damaged_prod,
+                warehouseid_id=wh.id,
+                transactiontype='ADJUSTMENT',
+                quantity=-damaged_qty,
+                reason=f"{reason_prefix} [Damaged Bag/Unit]",
+                referenceid=ref_id,
+                createdat=now,
+            )
+
+    return send_success(
+        {
+            'referenceId': ref_id,
+            'direction': direction,
+            'quantity': qty,
+            'couponDelta': coupon_delta,
+            'sourceProduct': source_prod.name,
+            'targetProduct': target_prod.name,
+            'couponProduct': coupon_prod.name,
+            'warehouseName': wh.name,
+        },
+        f"Converted {qty:g} units ({dir_label})",
+    )
+
 @api_view(['GET', 'POST'])
 def transaction_attendance(request):
     if request.method == 'GET':

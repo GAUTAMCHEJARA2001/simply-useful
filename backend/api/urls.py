@@ -32,6 +32,7 @@ from api.views import (
     transaction_purchases, transaction_purchase_detail,
     transaction_productions, transaction_productions_detail,
     transaction_production_materials, fix_old_productions, transaction_adjustments, transaction_adjustments_detail,
+    transaction_coupon_convert,
     transaction_attendance, transaction_attendance_detail, transaction_returns,
     transaction_purchase_orders, transaction_purchase_order_items, transaction_purchase_order_detail,
     
@@ -218,6 +219,7 @@ urlpatterns = [
     re_path(r'^hr/workforce-intelligence/?$', hr_workforce_intelligence, name='hr-workforce-intelligence-slash'),
 
     path('transactions/adjustments', transaction_adjustments, name='tx-adjustments'),
+    path('transactions/adjustments/coupon-convert', transaction_coupon_convert, name='tx-coupon-convert'),
     path('transactions/adjustments/<str:pk>', transaction_adjustments_detail, name='tx-adjustment-detail'),
     # Note: the old transactions/attendance was replaced by hr/attendance, but keeping dummy routes to prevent old frontend breakage
     path('transactions/attendance', transaction_attendance, name='tx-attendance'),
