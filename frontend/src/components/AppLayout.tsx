@@ -168,7 +168,11 @@ const DOMAIN_SECTIONS: DomainSection[] = [
     id: 'SUPPLY_CHAIN', 
     label: 'Supply Chain & Stock', 
     icon: Truck,
+    badge: 'Stock Suite',
+    badgeClass: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20',
     iconColor: 'text-indigo-500',
+    dividerAbove: true,
+    dividerLabel: 'Supply Chain & Stock',
   },
   { 
     id: 'HR', 
@@ -1189,6 +1193,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {domainGroups.map(group => {
               const hasActiveChild = group.items.some(i => isItemActive(i.path));
               const isCollapsed = Boolean(collapsedSections[group.id]);
+              const isSupplyChain = group.id === 'SUPPLY_CHAIN';
               const isHR = group.id === 'HR';
               const isAdmin = group.id === 'ADMIN';
 
@@ -1225,7 +1230,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     onClick={() => toggleSection(group.id)}
                     className={cn(
                       "w-full flex items-center justify-between px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all cursor-pointer",
-                      isHR
+                      isSupplyChain
+                        ? "text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/20 shadow-2xs"
+                        : isHR
                         ? "text-teal-600 dark:text-teal-400 bg-teal-500/5 hover:bg-teal-500/10 border border-teal-500/20 shadow-2xs"
                         : isAdmin
                         ? "text-purple-600 dark:text-purple-400 bg-purple-500/5 hover:bg-purple-500/10 border border-purple-500/20 shadow-2xs"
@@ -1260,7 +1267,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   {!isCollapsed && (
                     <div className={cn(
                       "space-y-1 pl-1.5 pt-0.5",
-                      isHR && "border-l-2 border-teal-500/30 ml-2 pl-2"
+                      isSupplyChain && "border-l-2 border-indigo-500/30 ml-2 pl-2",
+                      isHR && "border-l-2 border-teal-500/30 ml-2 pl-2",
+                      isAdmin && "border-l-2 border-purple-500/30 ml-2 pl-2"
                     )}>
                       {subgroups.map(sg => {
                         // Direct items without subgroup

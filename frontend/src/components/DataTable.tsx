@@ -1,8 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Trash2, Edit, ChevronUp, ChevronDown, Eye, Search, 
-  ChevronLeft, ChevronRight, Inbox, X, RefreshCw 
+  ChevronLeft, ChevronRight, Inbox, X, RefreshCw,
+  Table2, LayoutList, LayoutGrid
 } from 'lucide-react';
+
+type ViewMode = 'auto' | 'table' | 'cards' | 'grid';
 
 interface DataTableProps {
   columns: string[];
@@ -17,6 +20,7 @@ interface DataTableProps {
   searchable?: boolean;
   searchPlaceholder?: string;
   pageSize?: number;
+  defaultViewMode?: ViewMode;
 }
 
 const getCellValue = (cell: any): string | number => {
@@ -61,10 +65,27 @@ export const DataTable: React.FC<DataTableProps> = ({
   columnWidths,
   searchable = false,
   searchPlaceholder = 'Search records...',
-  pageSize
+  pageSize,
+  defaultViewMode = 'auto'
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 639px)');
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    setIsMobile(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const resolvedView: 'table' | 'cards' | 'grid' =
+    viewMode === 'auto' ? (isMobile ? 'cards' : 'table') : viewMode;
 
   const storageKey = useMemo(() => {
     return `datatable_sort_${columns.join('_').replace(/[^a-zA-Z0-9]/g, '_')}`;
@@ -175,12 +196,14 @@ export const DataTable: React.FC<DataTableProps> = ({
     return sortedMappedRows.slice(start, start + effectivePageSize);
   }, [sortedMappedRows, effectivePageSize, currentPage]);
 
+  const hasActions = Boolean(onView || onDelete || onEdit || customActions);
+
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
-      {/* Optional Search Bar Header */}
-      {searchable && (
-        <div className="p-3 border-b border-border bg-muted/20 flex items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-sm">
+      {/* Toolbar: Search + Record Count + Table / Cards / Grid Switcher */}
+      <div className="p-2.5 sm:p-3 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-2.5">
+        {searchable ? (
+          <div className="relative flex-1 min-w-[180px] sm:max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
@@ -190,180 +213,244 @@ export const DataTable: React.FC<DataTableProps> = ({
               className="w-full pl-8 pr-8 py-1.5 text-xs rounded-lg border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary transition-all"
             />
             {searchTerm && (
-              <button 
-                onClick={() => setSearchTerm('')} 
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
-          <div className="text-xs text-muted-foreground">
+        ) : (
+          <div className="text-xs font-medium text-muted-foreground">
             {sortedMappedRows.length} {sortedMappedRows.length === 1 ? 'record' : 'records'}
           </div>
+        )}
+
+        <div className="flex items-center gap-2.5 ml-auto">
+          {searchable && (
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {sortedMappedRows.length} {sortedMappedRows.length === 1 ? 'record' : 'records'}
+            </span>
+          )}
+          <div
+            className="inline-flex items-center rounded-lg border border-border bg-background p-0.5 shadow-2xs"
+            role="group"
+            aria-label="Layout view"
+          >
+            {(
+              [
+                { id: 'table', label: 'Table', Icon: Table2 },
+                { id: 'cards', label: 'Cards', Icon: LayoutList },
+                { id: 'grid', label: 'Grid', Icon: LayoutGrid },
+              ] as const
+            ).map(({ id, label, Icon }) => {
+              const active = resolvedView === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setViewMode(id)}
+                  title={`${label} view`}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                    active
+                      ? 'bg-primary text-primary-foreground shadow-2xs'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline sm:inline">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Table View */}
+      {resolvedView === 'table' && (
+        <div className="overflow-x-auto overflow-y-auto max-h-[80vh]">
+          <table className="w-full text-sm" data-datatable="true">
+            <thead className="sticky top-0 bg-muted/95 backdrop-blur z-10 border-b border-border shadow-xs">
+              <tr className="bg-muted/50 border-b border-border">
+                {columns.map((c, colIndex) => {
+                  const isSorted = sortCol === colIndex;
+                  return (
+                    <th
+                      key={c}
+                      onClick={() => handleSort(colIndex)}
+                      style={columnWidths?.[colIndex] ? { width: columnWidths[colIndex] } : undefined}
+                      className="px-4 py-3 text-left text-muted-foreground font-semibold hover:text-foreground cursor-pointer select-none transition-colors group whitespace-nowrap"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        {c}
+                        {isSorted ? (
+                          sortAsc ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-primary" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-primary" />
+                          )
+                        ) : (
+                          <ChevronUp className="w-3.5 h-3.5 text-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
+                {hasActions && (
+                  <th className="px-4 py-3 text-right text-muted-foreground font-medium whitespace-nowrap">Action</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={columns.length + (hasActions ? 1 : 0)} className="px-4 py-16 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <RefreshCw className="w-7 h-7 text-primary animate-spin" />
+                      <p className="font-semibold text-sm text-foreground">Loading records...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length + (hasActions ? 1 : 0)} className="px-4 py-12 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Inbox className="w-8 h-8 text-muted-foreground/40" />
+                      <p className="font-medium text-sm text-foreground">No records found</p>
+                      {searchTerm && (
+                        <p className="text-xs text-muted-foreground">No results matching "{searchTerm}"</p>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedRows.map(({ row, index }) => (
+                  <tr
+                    key={index}
+                    className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                    onClick={(e) => {
+                      if (e.target instanceof HTMLElement && e.target.closest('button')) return;
+                      onRowClick?.(index);
+                    }}
+                  >
+                    {row.map((cell, j) => (
+                      <td
+                        key={j}
+                        style={columnWidths?.[j] ? { width: columnWidths[j] } : undefined}
+                        className={`px-4 py-3 whitespace-nowrap ${columnWidths?.[j] ? 'max-w-0' : ''}`}
+                      >
+                        <div className={columnWidths?.[j] ? 'truncate' : ''}>{cell ?? '—'}</div>
+                      </td>
+                    ))}
+                    {hasActions && (
+                      <td className="px-4 py-3 text-right flex justify-end gap-1">
+                        {customActions && customActions(index)}
+                        {onView && (
+                          <button type="button" onClick={(e) => { e.stopPropagation(); onView(index); }} className="p-1.5 rounded-lg hover:bg-blue-500/10 text-blue-500 transition-colors" title="View details">
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {onEdit && (
+                          <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(index); }} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Edit">
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {onDelete && (
+                          <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(index); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* Desktop View */}
-      <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-[80vh]">
-        <table className="w-full text-sm" data-datatable="true">
-          <thead className="sticky top-0 bg-muted/95 backdrop-blur z-10 border-b border-border shadow-xs">
-            <tr className="bg-muted/50 border-b border-border">
-              {columns.map((c, colIndex) => {
-                const isSorted = sortCol === colIndex;
-                return (
-                  <th 
-                    key={c} 
-                    onClick={() => handleSort(colIndex)}
-                    style={columnWidths?.[colIndex] ? { width: columnWidths[colIndex] } : undefined}
-                    className="px-4 py-3 text-left text-muted-foreground font-semibold hover:text-foreground cursor-pointer select-none transition-colors group"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      {c}
-                      {isSorted ? (
-                        sortAsc ? (
-                          <ChevronUp className="w-3.5 h-3.5 text-primary" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5 text-primary" />
-                        )
-                      ) : (
-                        <ChevronUp className="w-3.5 h-3.5 text-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      )}
-                    </div>
-                  </th>
-                );
-              })}
-              {(onView || onDelete || onEdit || customActions) && (
-                <th className="px-4 py-3 text-right text-muted-foreground font-medium">Action</th>
+      {/* Cards & Grid Views */}
+      {resolvedView !== 'table' && (
+        <div>
+          {loading ? (
+            <div className="px-4 py-12 text-center text-muted-foreground text-sm flex flex-col items-center justify-center gap-2">
+              <RefreshCw className="w-7 h-7 text-primary animate-spin" />
+              <p className="font-semibold text-sm text-foreground">Loading records...</p>
+            </div>
+          ) : paginatedRows.length === 0 ? (
+            <div className="px-4 py-10 text-center text-muted-foreground text-sm flex flex-col items-center justify-center gap-2">
+              <Inbox className="w-7 h-7 text-muted-foreground/40" />
+              <p className="font-medium text-sm text-foreground">No records found</p>
+              {searchTerm && (
+                <p className="text-xs text-muted-foreground">No results matching "{searchTerm}"</p>
               )}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={columns.length + (onDelete || onEdit || customActions ? 1 : 0)} className="px-4 py-16 text-center text-muted-foreground">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <RefreshCw className="w-7 h-7 text-primary animate-spin" />
-                    <p className="font-semibold text-sm text-foreground">Loading records...</p>
-                  </div>
-                </td>
-              </tr>
-            ) : paginatedRows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length + (onDelete || onEdit || customActions ? 1 : 0)} className="px-4 py-12 text-center text-muted-foreground">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <Inbox className="w-8 h-8 text-muted-foreground/40" />
-                    <p className="font-medium text-sm text-foreground">No records found</p>
-                    {searchTerm && (
-                      <p className="text-xs text-muted-foreground">No results matching "{searchTerm}"</p>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paginatedRows.map(({ row, index }) => (
-                <tr 
+            </div>
+          ) : (
+            <div
+              className={
+                resolvedView === 'grid'
+                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-3'
+                  : 'flex flex-col divide-y divide-border/50'
+              }
+            >
+              {paginatedRows.map(({ row, index }) => (
+                <div
                   key={index}
-                  className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                  className={
+                    resolvedView === 'grid'
+                      ? `rounded-xl border border-border/70 bg-background/60 p-3.5 shadow-2xs hover:shadow-sm hover:border-primary/30 transition-all flex flex-col justify-between gap-3 ${onRowClick ? 'cursor-pointer active:bg-muted/30' : ''}`
+                      : `p-3.5 sm:p-4 space-y-3 ${onRowClick ? 'cursor-pointer active:bg-muted/30 hover:bg-muted/20 transition-colors' : ''}`
+                  }
                   onClick={(e) => {
                     if (e.target instanceof HTMLElement && e.target.closest('button')) return;
                     onRowClick?.(index);
                   }}
                 >
-                  {row.map((cell, j) => (
-                    <td 
-                      key={j} 
-                      style={columnWidths?.[j] ? { width: columnWidths[j] } : undefined}
-                      className={`px-4 py-3 whitespace-nowrap ${columnWidths?.[j] ? 'max-w-0' : ''}`}
-                    >
-                      <div className={columnWidths?.[j] ? 'truncate' : ''}>{cell ?? '—'}</div>
-                    </td>
-                  ))}
-                  {(onView || onDelete || onEdit || customActions) && (
-                    <td className="px-4 py-3 text-right flex justify-end gap-1">
+                  <div className={`grid gap-2.5 w-full ${resolvedView === 'grid' ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}>
+                    {row.map((cell, j) => (
+                      <div key={j} className={j === 0 ? 'col-span-full border-b border-border/40 pb-2 mb-0.5 min-w-0' : 'flex flex-col min-w-0'}>
+                        <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider truncate block">
+                          {columns[j]}
+                        </span>
+                        <div className={`break-words whitespace-pre-wrap ${j === 0 ? 'font-bold text-foreground text-sm sm:text-base' : 'text-xs sm:text-sm font-medium'}`}>
+                          {cell ?? '—'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {hasActions && (
+                    <div className="flex flex-wrap gap-2 pt-2.5 border-t border-border/30">
                       {customActions && customActions(index)}
                       {onView && (
-                        <button onClick={(e) => { e.stopPropagation(); onView(index); }} className="p-1.5 rounded-lg hover:bg-blue-500/10 text-blue-500 transition-colors" title="View details">
-                          <Eye className="w-3.5 h-3.5" />
+                        <button type="button" onClick={(e) => { e.stopPropagation(); onView(index); }} className="flex-1 min-w-[70px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold text-xs transition-colors hover:bg-blue-500/20">
+                          <Eye className="w-3.5 h-3.5" /> View
                         </button>
                       )}
                       {onEdit && (
-                        <button onClick={(e) => { e.stopPropagation(); onEdit(index); }} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Edit">
-                          <Edit className="w-3.5 h-3.5" />
+                        <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(index); }} className="flex-1 min-w-[70px] flex justify-center items-center gap-1.5 py-2 px-3 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors active:scale-[0.98]">
+                          <Edit className="w-3.5 h-3.5" /> Edit
                         </button>
                       )}
                       {onDelete && (
-                        <button onClick={(e) => { e.stopPropagation(); onDelete(index); }} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Delete">
-                          <Trash2 className="w-3.5 h-3.5" />
+                        <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(index); }} className="flex-1 min-w-[70px] flex justify-center items-center gap-1.5 py-2 px-3 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-semibold transition-colors active:scale-[0.98]">
+                          <Trash2 className="w-3.5 h-3.5" /> Delete
                         </button>
                       )}
-                    </td>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Mobile View */}
-      <div className="sm:hidden flex flex-col divide-y divide-border/50">
-        {loading ? (
-          <div className="px-4 py-12 text-center text-muted-foreground text-sm flex flex-col items-center justify-center gap-2">
-            <RefreshCw className="w-7 h-7 text-primary animate-spin" />
-            <p className="font-semibold text-sm text-foreground">Loading records...</p>
-          </div>
-        ) : paginatedRows.length === 0 ? (
-          <div className="px-4 py-10 text-center text-muted-foreground text-sm flex flex-col items-center justify-center gap-2">
-            <Inbox className="w-7 h-7 text-muted-foreground/40" />
-            <p className="font-medium text-sm text-foreground">No records found</p>
-          </div>
-        ) : (
-          paginatedRows.map(({ row, index }) => (
-            <div 
-              key={index} 
-              className={`p-4 space-y-3 ${onRowClick ? 'cursor-pointer active:bg-muted/30' : ''}`}
-              onClick={(e) => {
-                if (e.target instanceof HTMLElement && e.target.closest('button')) return;
-                onRowClick?.(index);
-              }}
-            >
-              <div className="grid grid-cols-2 gap-2 w-full">
-                {row.map((cell, j) => (
-                  <div key={j} className={j === 0 ? 'col-span-2 border-b border-border/30 pb-2 mb-1 min-w-0' : 'flex flex-col min-w-0'}>
-                    <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider truncate block">{columns[j]}</span>
-                    <div className={`text-sm break-words whitespace-pre-wrap ${j === 0 ? 'font-bold text-foreground text-base' : 'font-medium'}`}>{cell ?? '—'}</div>
-                  </div>
-                ))}
-              </div>
-              {(onView || onDelete || onEdit || customActions) && (
-                <div className="flex flex-wrap gap-2 pt-3 mt-2 border-t border-border/30">
-                  {customActions && customActions(index)}
-                  {onView && (
-                    <button onClick={(e) => { e.stopPropagation(); onView(index); }} className="flex-1 flex items-center justify-center gap-2 py-2 rounded-md bg-blue-500/10 text-blue-600 font-semibold text-xs transition-colors hover:bg-blue-500/20">
-                      <Eye className="w-3.5 h-3.5" /> View
-                    </button>
-                  )}
-                  {onEdit && (
-                    <button onClick={() => onEdit(index)} className="flex-1 flex justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-sm font-semibold transition-colors active:scale-[0.98]">
-                      <Edit className="w-4 h-4" /> Edit
-                    </button>
-                  )}
-                  {onDelete && (
-                    <button onClick={() => onDelete(index)} className="flex-1 flex justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm font-semibold transition-colors active:scale-[0.98]">
-                      <Trash2 className="w-4 h-4" /> Delete
-                    </button>
+                    </div>
                   )}
                 </div>
-              )}
+              ))}
             </div>
-          ))
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Pagination Footer (when effectivePageSize is active and rows exist) */}
       {effectivePageSize && sortedMappedRows.length > effectivePageSize && (
-        <div className="p-3 border-t border-border bg-muted/20 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="p-3 border-t border-border bg-muted/20 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           <div>
             Showing {((currentPage - 1) * effectivePageSize) + 1} to {Math.min(currentPage * effectivePageSize, sortedMappedRows.length)} of {sortedMappedRows.length} entries
           </div>

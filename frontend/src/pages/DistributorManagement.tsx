@@ -230,7 +230,7 @@ const DistributorManagement: React.FC = () => {
           </div>
 
           <Card className="hidden lg:block">
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
