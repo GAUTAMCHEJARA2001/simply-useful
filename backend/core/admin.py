@@ -1,4 +1,6 @@
+from django import forms
 from django.contrib import admin, messages
+from django.db import models
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.urls import path
@@ -40,8 +42,26 @@ def _su_each_context(request):
 admin.site.each_context = _su_each_context
 
 
+class CompanyAdminForm(forms.ModelForm):
+    class Meta:
+        model = Company
+        fields = '__all__'
+        widgets = {
+            'name': forms.TextInput(attrs={'placeholder': 'Company / Organization Name'}),
+            'skuprefix': forms.TextInput(attrs={'placeholder': 'e.g. KCPL'}),
+            'schemaname': forms.TextInput(attrs={'readonly': 'readonly'}),
+            'stockmethod': forms.Select(choices=[
+                ('FIFO', 'FIFO (First In, First Out)'),
+                ('LIFO', 'LIFO (Last In, First Out)'),
+                ('AVG', 'Weighted Average'),
+            ]),
+            'settings_json': forms.Textarea(attrs={'rows': 4}),
+        }
+
+
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
+    form = CompanyAdminForm
     list_display = (
         'name',
         'skuprefix',
@@ -309,6 +329,9 @@ class CompanyAdmin(admin.ModelAdmin):
 
 @admin.register(TenantUserMapping)
 class TenantUserMappingAdmin(admin.ModelAdmin):
+    formfield_overrides = {
+        models.TextField: {'widget': forms.TextInput()},
+    }
     list_display = (
         'email',
         'company_name_display',
