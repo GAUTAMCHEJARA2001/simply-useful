@@ -729,15 +729,18 @@ def director_boardroom_command_center(request):
             'surplus': round(m_sales - m_cogs, 2),
         })
 
-    # 16. Today's Live Plant & Operations Pulse (Production, Consumption, Purchases, Other Expenses)
-    today = timezone.now().astimezone(IST).date()
-    today_start_dt, today_end_dt = _ist_day_bounds(today, today)
+    # 16. Filtered Period Live Plant & Operations Pulse (Production, Consumption, Purchases, Other Expenses)
+    pulse_date_display = (
+        start_date.strftime('%d %b %Y')
+        if start_date == end_date
+        else f"{start_date.strftime('%d %b')} – {end_date.strftime('%d %b %Y')}"
+    )
 
-    # 16a. Today Production
+    # 16a. Filtered Production
     today_prod_qs = Stocktransaction.objects.filter(
         transactiontype='PRODUCTION',
         is_deleted=False,
-        createdat__range=(today_start_dt, today_end_dt)
+        createdat__range=(start_dt, end_dt)
     ).exclude(reason='REJECTED')
     if company_id:
         today_prod_qs = today_prod_qs.filter(productid__companyid_id=company_id)
@@ -761,11 +764,11 @@ def director_boardroom_command_center(request):
 
     today_prod_items = sorted(list(today_prod_by_prod.values()), key=lambda x: x['units'], reverse=True)
 
-    # 16b. Today Consumption in Production
+    # 16b. Filtered Consumption in Production
     today_cons_qs = Stocktransaction.objects.filter(
         transactiontype='CONSUMED',
         is_deleted=False,
-        createdat__range=(today_start_dt, today_end_dt)
+        createdat__range=(start_dt, end_dt)
     ).exclude(reason='REJECTED')
     if company_id:
         today_cons_qs = today_cons_qs.filter(productid__companyid_id=company_id)
@@ -801,9 +804,9 @@ def director_boardroom_command_center(request):
         item['qty'] = round(item['qty'], 2)
         item['total_val'] = round(item['total_val'], 2)
 
-    # 16c. Today Purchases (Inward Goods & Raw Materials)
+    # 16c. Filtered Purchases (Inward Goods & Raw Materials)
     today_purch_qs = Purchase.objects.filter(
-        Q(date__range=(today_start_dt, today_end_dt)) | Q(createdat__range=(today_start_dt, today_end_dt))
+        Q(date__range=(start_dt, end_dt)) | Q(createdat__range=(start_dt, end_dt))
     )
     if company_id:
         today_purch_qs = today_purch_qs.filter(companyid_id=company_id)
@@ -847,9 +850,9 @@ def director_boardroom_command_center(request):
 
     top_purch_items = sorted(top_purch_items, key=lambda x: x['total'], reverse=True)
 
-    # 16d. Today Other Expenses (Travel, Factory, Utilities, Miscellaneous)
+    # 16d. Filtered Other Expenses (Travel, Factory, Utilities, Miscellaneous)
     today_exp_qs = Expense.objects.filter(
-        Q(date__range=(today_start_dt, today_end_dt)) | Q(createdat__range=(today_start_dt, today_end_dt))
+        Q(date__range=(start_dt, end_dt)) | Q(createdat__range=(start_dt, end_dt))
     )
     if company_id:
         today_exp_qs = today_exp_qs.filter(companyid_id=company_id)
@@ -890,8 +893,8 @@ def director_boardroom_command_center(request):
         })
 
     today_pulse_data = {
-        'date': today.strftime('%Y-%m-%d'),
-        'date_display': today.strftime('%d %b %Y'),
+        'date': start_date.strftime('%Y-%m-%d'),
+        'date_display': pulse_date_display,
         'production': {
             'units': round(today_prod_units, 1),
             'batches': today_prod_batches,
