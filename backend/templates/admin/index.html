@@ -1,0 +1,293 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block content %}
+<style>
+  .su-dash-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .su-hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 22px;
+    border-radius: 14px;
+    background: var(--su-surface);
+    border: 1px solid var(--su-border);
+    box-shadow: var(--su-shadow);
+  }
+  .su-hero h2 {
+    margin: 0 0 4px 0;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--su-text);
+    letter-spacing: -0.02em;
+  }
+  .su-hero p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--su-muted);
+  }
+  .su-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .su-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: #fff !important;
+    font-weight: 700;
+    font-size: 13px;
+    text-decoration: none !important;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  .su-btn-primary:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.06);
+  }
+  .su-btn-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    background: var(--su-surface-2);
+    border: 1px solid var(--su-border);
+    color: var(--su-text) !important;
+    font-weight: 600;
+    font-size: 13px;
+    text-decoration: none !important;
+  }
+  .su-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .su-kpi-card {
+    padding: 18px;
+    border-radius: 14px;
+    background: var(--su-surface);
+    border: 1px solid var(--su-border);
+    box-shadow: var(--su-shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .su-kpi-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--su-muted);
+  }
+  .su-kpi-val {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--su-text);
+    line-height: 1.1;
+  }
+  .su-kpi-sub {
+    font-size: 12px;
+    color: var(--su-muted);
+  }
+  .su-grid-2 {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  .su-app-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    padding: 16px;
+  }
+  .su-model-card {
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--su-border);
+    background: var(--su-bg);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 12px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .su-model-card:hover {
+    border-color: var(--su-primary);
+    box-shadow: var(--su-shadow);
+  }
+  .su-model-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--su-text) !important;
+    text-decoration: none !important;
+  }
+  .su-model-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .su-model-actions a {
+    flex: 1;
+    text-align: center;
+    padding: 6px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none !important;
+    border: 1px solid var(--su-border);
+    background: var(--su-surface);
+    color: var(--su-text) !important;
+  }
+  .su-model-actions a.add-btn {
+    background: var(--su-primary-soft);
+    border-color: transparent;
+    color: var(--su-primary) !important;
+  }
+  .su-recent-list {
+    list-style: none !important;
+    margin: 0 !important;
+    padding: 12px 16px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .su-recent-list li {
+    padding: 10px 12px;
+    border-radius: 9px;
+    background: var(--su-bg);
+    border: 1px solid var(--su-border);
+    font-size: 12.5px;
+    color: var(--su-text);
+  }
+  @media (max-width: 1024px) {
+    .su-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .su-grid-2 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 540px) {
+    .su-kpi-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="su-dash-wrap">
+  <!-- Hero / Quick Actions -->
+  <div class="su-hero">
+    <div>
+      <h2>Platform Command Center</h2>
+      <p>Onboard tenant organizations, manage subscriptions &amp; schemas, and monitor superadmin accounts.</p>
+    </div>
+    <div class="su-hero-actions">
+      <a href="{% url 'admin:core_company_onboard' %}" class="su-btn-primary">
+        <span>+ Onboard New Company</span>
+      </a>
+      <a href="{% url 'admin:core_company_changelist' %}" class="su-btn-outline">
+        <span>Manage Companies</span>
+      </a>
+      <a href="{% url 'admin:core_tenantusermapping_changelist' %}" class="su-btn-outline">
+        <span>Tenant Superadmins</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Live Platform KPIs -->
+  <div class="su-kpi-grid">
+    <div class="su-kpi-card">
+      <span class="su-kpi-label">Total Companies</span>
+      <span class="su-kpi-val">{{ su_stats.total_companies|default:"0" }}</span>
+      <span class="su-kpi-sub">Registered organizations</span>
+    </div>
+    <div class="su-kpi-card">
+      <span class="su-kpi-label">Active Workspaces</span>
+      <span class="su-kpi-val" style="color: #10b981;">{{ su_stats.active_companies|default:"0" }}</span>
+      <span class="su-kpi-sub">Currently enabled</span>
+    </div>
+    <div class="su-kpi-card">
+      <span class="su-kpi-label">Suspended / Expired</span>
+      <span class="su-kpi-val" style="color: #ef4444;">{{ su_stats.inactive_or_expired|default:"0" }}</span>
+      <span class="su-kpi-sub">Needs renewal or activation</span>
+    </div>
+    <div class="su-kpi-card">
+      <span class="su-kpi-label">Tenant Superadmins</span>
+      <span class="su-kpi-val" style="color: #6366f1;">{{ su_stats.superadmin_count|default:"0" }}</span>
+      <span class="su-kpi-sub">Active owner accounts</span>
+    </div>
+  </div>
+
+  <!-- Modules & Recent Activity -->
+  <div class="su-grid-2">
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      {% if app_list %}
+        {% for app in app_list %}
+          <div class="module">
+            <h2>{{ app.name }}</h2>
+            <div class="su-app-cards">
+              {% for model in app.models %}
+                <div class="su-model-card">
+                  <div>
+                    {% if model.admin_url %}
+                      <a href="{{ model.admin_url }}" class="su-model-title">{{ model.name }}</a>
+                    {% else %}
+                      <span class="su-model-title">{{ model.name }}</span>
+                    {% endif %}
+                  </div>
+                  <div class="su-model-actions">
+                    {% if model.admin_url %}
+                      <a href="{{ model.admin_url }}">View / Manage</a>
+                    {% endif %}
+                    {% if model.add_url %}
+                      {% if model.object_name == 'Company' %}
+                        <a href="{% url 'admin:core_company_onboard' %}" class="add-btn">+ Onboard</a>
+                      {% else %}
+                        <a href="{{ model.add_url }}" class="add-btn">+ Add</a>
+                      {% endif %}
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <div class="module">
+      <h2>{% translate 'Recent actions' %}</h2>
+      {% load log %}
+      {% get_admin_log 8 as admin_log for_user user %}
+      {% if not admin_log %}
+        <p style="padding: 16px; color: var(--su-muted); font-size: 13px; margin: 0;">{% translate 'No recent admin actions yet.' %}</p>
+      {% else %}
+        <ul class="su-recent-list">
+          {% for entry in admin_log %}
+            <li>
+              <div style="font-weight: 600;">
+                {% if entry.is_deletion or not entry.get_admin_url %}
+                  {{ entry.object_repr }}
+                {% else %}
+                  <a href="{{ entry.get_admin_url }}" style="color: var(--su-primary); text-decoration: none;">{{ entry.object_repr }}</a>
+                {% endif %}
+              </div>
+              <div style="font-size: 11px; color: var(--su-muted); margin-top: 2px;">
+                {% if entry.content_type %}{{ entry.content_type }}{% endif %} • {{ entry.action_time|timesince }} ago
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

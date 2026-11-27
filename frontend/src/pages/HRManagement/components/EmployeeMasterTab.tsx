@@ -553,6 +553,9 @@ export const EmployeeMasterTab: React.FC = () => {
     );
   };
 
+  const activeCount = useMemo(() => employees.filter((emp: any) => emp.active !== false).length, [employees]);
+  const inactiveCount = useMemo(() => employees.filter((emp: any) => emp.active === false).length, [employees]);
+
   if (isEditing) {
     return (
       <div className="bg-card border border-border rounded-xl p-6 shadow-sm max-w-4xl mx-auto space-y-6">
@@ -831,9 +834,6 @@ export const EmployeeMasterTab: React.FC = () => {
       </div>
     );
   }
-
-  const activeCount = useMemo(() => employees.filter((emp: any) => emp.active !== false).length, [employees]);
-  const inactiveCount = useMemo(() => employees.filter((emp: any) => emp.active === false).length, [employees]);
 
   const columns = ['Employee', 'Department', 'Post', 'Type', 'Status', 'Base Pay', 'OT Rate', 'KM Rate'];
   

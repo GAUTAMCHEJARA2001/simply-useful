@@ -734,9 +734,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     };
   }, [sidebarOpen]);
 
-  if (!user) return null;
-
-  const filteredNav = navItems.filter(item => {
+  const filteredNav = useMemo(() => {
+    if (!user) return [];
+    return navItems.filter(item => {
     if (item.path === '/finance/ledger' || item.path === '/finance/cn-requests') {
       return ['SUPERADMIN', 'ADMIN', 'SALES', 'ACCOUNTANT', 'MANAGER'].includes(user.role) || can(item.feature);
     }
@@ -779,7 +779,8 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       return ['SUPERADMIN', 'ADMIN', 'INVENTORY'].includes(user.role);
     }
     return can(item.feature);
-  });
+    });
+  }, [user, can]);
 
   // Group nav items into enterprise domains prioritized by user domain
   const domainGroups = useMemo(() => {
@@ -870,6 +871,8 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       }
     }
   }, [location.pathname, location.search, domainGroups, collapsedSections, collapsedSubgroups]);
+
+  if (!user) return null;
 
   const isItemActive = (itemPath: string) => {
     const [itemBase, itemQuery] = itemPath.split('?');

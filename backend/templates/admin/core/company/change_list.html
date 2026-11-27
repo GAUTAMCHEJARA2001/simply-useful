@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  <li>
+    <a href="{% url 'admin:core_company_onboard' %}" style="background: linear-gradient(135deg, #4f46e5, #6366f1) !important;">
+      + Onboard New Company (Full Setup)
+    </a>
+  </li>
+  {{ block.super }}
+{% endblock %}

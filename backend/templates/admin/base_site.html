@@ -1,0 +1,404 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | Simply Useful Platform Admin{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --su-bg: #f8fafc;
+    --su-surface: #ffffff;
+    --su-surface-2: #f1f5f9;
+    --su-border: #e2e8f0;
+    --su-text: #0f172a;
+    --su-muted: #64748b;
+    --su-primary: #4f46e5;
+    --su-primary-hover: #4338ca;
+    --su-primary-soft: rgba(79, 70, 229, 0.1);
+    --su-success: #10b981;
+    --su-warning: #f59e0b;
+    --su-danger: #ef4444;
+    --su-header-bg: linear-gradient(135deg, #0f172a 0%, #1e1b4b 55%, #312e81 100%);
+    --su-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --su-shadow-md: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 4px 10px -6px rgba(15, 23, 42, 0.04);
+  }
+
+  html[data-theme="dark"] {
+    --su-bg: #090d16;
+    --su-surface: #111827;
+    --su-surface-2: #1e293b;
+    --su-border: #1f2937;
+    --su-text: #f8fafc;
+    --su-muted: #94a3b8;
+    --su-primary: #6366f1;
+    --su-primary-hover: #818cf8;
+    --su-primary-soft: rgba(99, 102, 241, 0.16);
+    --su-header-bg: linear-gradient(135deg, #020617 0%, #0f172a 55%, #1e1b4b 100%);
+    --su-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --su-shadow-md: 0 12px 28px -6px rgba(0, 0, 0, 0.45);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] {
+      --su-bg: #090d16;
+      --su-surface: #111827;
+      --su-surface-2: #1e293b;
+      --su-border: #1f2937;
+      --su-text: #f8fafc;
+      --su-muted: #94a3b8;
+      --su-primary: #6366f1;
+      --su-primary-hover: #818cf8;
+      --su-primary-soft: rgba(99, 102, 241, 0.16);
+      --su-header-bg: linear-gradient(135deg, #020617 0%, #0f172a 55%, #1e1b4b 100%);
+      --su-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+      --su-shadow-md: 0 12px 28px -6px rgba(0, 0, 0, 0.45);
+    }
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    background: var(--su-bg) !important;
+    color: var(--su-text) !important;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header */
+  #header {
+    background: var(--su-header-bg) !important;
+    color: #fff !important;
+    padding: 12px 24px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    min-height: 60px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  #branding h1, #branding h1 a:link, #branding h1 a:visited {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    font-size: 16px !important;
+    letter-spacing: -0.02em;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .su-brand-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #6366f1, #10b981);
+    color: #fff;
+    font-weight: 800;
+    font-size: 14px;
+    box-shadow: 0 2px 10px rgba(99, 102, 241, 0.4);
+  }
+
+  .su-top-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .su-top-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #e2e8f0 !important;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    text-decoration: none !important;
+    transition: all 0.15s ease;
+  }
+
+  .su-top-link:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff !important;
+  }
+
+  .su-top-link.primary {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    border-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35);
+  }
+
+  .su-top-link.primary:hover {
+    filter: brightness(1.08);
+  }
+
+  #user-tools {
+    font-size: 12px !important;
+    color: #cbd5e1 !important;
+  }
+
+  #user-tools a {
+    color: #e2e8f0 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.25) !important;
+  }
+
+  /* Breadcrumbs */
+  div.breadcrumbs {
+    background: var(--su-surface) !important;
+    border-bottom: 1px solid var(--su-border) !important;
+    color: var(--su-muted) !important;
+    padding: 10px 24px !important;
+    font-size: 12px !important;
+    font-weight: 500;
+  }
+
+  div.breadcrumbs a {
+    color: var(--su-primary) !important;
+    font-weight: 600;
+  }
+
+  /* Main Content */
+  #content {
+    padding: 24px !important;
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+
+  #content > h1 {
+    font-size: 22px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.02em;
+    color: var(--su-text) !important;
+    margin-bottom: 18px !important;
+  }
+
+  /* Cards & Modules */
+  .module, .inline-group, #changelist, fieldset.module, .submit-row, #content-related .module {
+    background: var(--su-surface) !important;
+    border: 1px solid var(--su-border) !important;
+    border-radius: 12px !important;
+    box-shadow: var(--su-shadow) !important;
+    overflow: hidden;
+  }
+
+  .module h2, .module caption, .inline-group h2 {
+    background: var(--su-surface-2) !important;
+    color: var(--su-text) !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 12px 16px !important;
+    border-bottom: 1px solid var(--su-border) !important;
+  }
+
+  .module caption a.section:link, .module caption a.section:visited {
+    color: var(--su-text) !important;
+  }
+
+  /* Tables */
+  table {
+    border-collapse: collapse !important;
+    width: 100%;
+  }
+
+  #result_list thead th, .module table thead th {
+    background: var(--su-surface-2) !important;
+    color: var(--su-muted) !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 10px 14px !important;
+    border-bottom: 1px solid var(--su-border) !important;
+  }
+
+  #result_list tbody td, #result_list tbody th, .module table td, .module table th {
+    padding: 11px 14px !important;
+    border-bottom: 1px solid var(--su-border) !important;
+    color: var(--su-text) !important;
+    font-size: 13px !important;
+    vertical-align: middle !important;
+  }
+
+  #result_list tbody tr:hover, .module table tbody tr:hover {
+    background: var(--su-primary-soft) !important;
+  }
+
+  .results {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Sidebar Filters */
+  #changelist-filter {
+    background: var(--su-surface) !important;
+    border: 1px solid var(--su-border) !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+    box-shadow: var(--su-shadow) !important;
+  }
+
+  #changelist-filter h2 {
+    background: transparent !important;
+    border-bottom: 1px solid var(--su-border) !important;
+    padding: 6px 8px 10px !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+  }
+
+  #changelist-filter li.selected a {
+    color: var(--su-primary) !important;
+    font-weight: 700 !important;
+  }
+
+  /* Search & Toolbar */
+  #changelist #toolbar {
+    background: var(--su-surface-2) !important;
+    border-bottom: 1px solid var(--su-border) !important;
+    padding: 12px 16px !important;
+  }
+
+  #changelist .actions {
+    background: var(--su-surface) !important;
+    border-bottom: 1px solid var(--su-border) !important;
+    padding: 10px 16px !important;
+  }
+
+  /* Forms & Inputs */
+  input[type="text"], input[type="password"], input[type="email"], input[type="number"],
+  input[type="url"], textarea, select, .vTextField, .vIntegerField {
+    background: var(--su-bg) !important;
+    color: var(--su-text) !important;
+    border: 1px solid var(--su-border) !important;
+    border-radius: 8px !important;
+    padding: 8px 11px !important;
+    font-size: 13px !important;
+    font-family: inherit !important;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    outline: none !important;
+    border-color: var(--su-primary) !important;
+    box-shadow: 0 0 0 3px var(--su-primary-soft) !important;
+  }
+
+  /* Buttons */
+  .button, input[type="submit"], input[type="button"], .submit-row input, a.button {
+    background: var(--su-surface-2) !important;
+    color: var(--su-text) !important;
+    border: 1px solid var(--su-border) !important;
+    border-radius: 8px !important;
+    padding: 8px 15px !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    text-decoration: none !important;
+  }
+
+  .button.default, input[type="submit"].default, .submit-row input.default {
+    background: var(--su-primary) !important;
+    color: #ffffff !important;
+    border-color: var(--su-primary) !important;
+  }
+
+  .button.default:hover, input[type="submit"].default:hover {
+    background: var(--su-primary-hover) !important;
+  }
+
+  .object-tools a:link, .object-tools a:visited {
+    background: var(--su-primary) !important;
+    color: #fff !important;
+    border-radius: 8px !important;
+    padding: 7px 14px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+  }
+
+  .submit-row {
+    padding: 14px 16px !important;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* Messages */
+  ul.messagelist {
+    padding: 12px 24px 0 !important;
+    margin: 0 !important;
+  }
+
+  ul.messagelist li {
+    border-radius: 10px !important;
+    padding: 12px 16px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* Mobile Responsiveness */
+  @media (max-width: 768px) {
+    #header {
+      padding: 12px 14px !important;
+    }
+    #content {
+      padding: 14px !important;
+    }
+    div.breadcrumbs {
+      padding: 8px 14px !important;
+    }
+    #changelist.filtered {
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    #changelist-filter {
+      width: 100% !important;
+      margin: 12px 0 0 0 !important;
+      position: static !important;
+    }
+    .form-row {
+      padding: 10px 12px !important;
+    }
+    .form-row > div {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+  <a href="{% url 'admin:index' %}">
+    <span class="su-brand-pill">SU</span>
+    <span>Simply Useful • Platform Admin</span>
+  </a>
+</h1>
+{% endblock %}
+
+{% block nav-global %}
+<div class="su-top-nav">
+  <a href="{% url 'admin:core_company_onboard' %}" class="su-top-link primary">+ Onboard Company</a>
+  <a href="{% url 'admin:core_company_changelist' %}" class="su-top-link">Companies</a>
+  <a href="{% url 'admin:core_tenantusermapping_changelist' %}" class="su-top-link">Superadmins</a>
+  <a href="{% url 'admin:core_broadcast_changelist' %}" class="su-top-link">Broadcasts</a>
+</div>
+{% endblock %}
