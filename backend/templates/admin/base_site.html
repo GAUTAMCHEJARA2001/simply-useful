@@ -332,11 +332,131 @@
   }
 
   .submit-row {
-    padding: 14px 16px !important;
-    display: flex;
+    background: var(--su-surface) !important;
+    border: 1px solid var(--su-border) !important;
+    border-radius: 14px !important;
+    padding: 14px 18px !important;
+    box-shadow: var(--su-shadow) !important;
+    display: flex !important;
     flex-wrap: wrap;
     gap: 10px;
     align-items: center;
+  }
+
+  .submit-row a.deletelink {
+    background: rgba(239, 68, 68, 0.12) !important;
+    color: #ef4444 !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+    border-radius: 8px !important;
+    padding: 8px 15px !important;
+    height: auto !important;
+    line-height: 1.4 !important;
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
+    margin-left: auto !important;
+    text-decoration: none !important;
+  }
+
+  .submit-row a.deletelink:hover {
+    background: #ef4444 !important;
+    color: #ffffff !important;
+  }
+
+  /* Add / Change Form Fieldsets & Aligned Rows */
+  #content-main form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  fieldset.module.aligned {
+    border-radius: 14px !important;
+    margin: 0 !important;
+  }
+
+  fieldset.module.aligned .description {
+    padding: 10px 18px !important;
+    margin: 0 !important;
+    font-size: 12.5px !important;
+    color: var(--su-muted) !important;
+    background: var(--su-bg) !important;
+    border-bottom: 1px solid var(--su-border) !important;
+  }
+
+  .aligned .form-row {
+    padding: 14px 18px !important;
+    border-bottom: 1px solid var(--su-border) !important;
+    margin: 0 !important;
+  }
+
+  .aligned .form-row:last-child {
+    border-bottom: none !important;
+  }
+
+  .aligned .form-row .flex-container {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .aligned label {
+    width: 190px !important;
+    min-width: 190px !important;
+    padding: 0 !important;
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
+    color: var(--su-text) !important;
+    float: none !important;
+  }
+
+  .aligned .form-row input[type="text"],
+  .aligned .form-row input[type="password"],
+  .aligned .form-row input[type="email"],
+  .aligned .form-row input[type="number"],
+  .aligned .form-row input[type="url"],
+  .aligned .form-row select,
+  .aligned .form-row textarea {
+    flex: 1;
+    min-width: 220px;
+    max-width: 540px;
+  }
+
+  .aligned .form-row .readonly {
+    padding: 7px 12px !important;
+    border-radius: 8px;
+    background: var(--su-surface-2);
+    border: 1px solid var(--su-border);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12.5px;
+    color: var(--su-text) !important;
+    margin: 0 !important;
+  }
+
+  .aligned .form-row .help,
+  .aligned .form-row div.help {
+    flex-basis: 100%;
+    margin: 4px 0 0 200px !important;
+    padding: 0 !important;
+    font-size: 11.5px !important;
+    color: var(--su-muted) !important;
+  }
+
+  .aligned .vCheckboxLabel {
+    width: auto !important;
+    min-width: 0 !important;
+    font-weight: 600 !important;
+    margin-left: 6px !important;
+  }
+
+  .datetimeshortcuts {
+    font-size: 11.5px !important;
+    color: var(--su-muted) !important;
+  }
+
+  .datetimeshortcuts a {
+    color: var(--su-primary) !important;
+    font-weight: 600;
   }
 
   /* Messages */
@@ -380,6 +500,30 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+    }
+    .aligned label {
+      width: 100% !important;
+      min-width: 0 !important;
+    }
+    .aligned .form-row input[type="text"],
+    .aligned .form-row input[type="password"],
+    .aligned .form-row input[type="email"],
+    .aligned .form-row input[type="number"],
+    .aligned .form-row input[type="url"],
+    .aligned .form-row select,
+    .aligned .form-row textarea {
+      min-width: 0;
+      width: 100% !important;
+      max-width: 100%;
+    }
+    .aligned .form-row .help,
+    .aligned .form-row div.help {
+      margin-left: 0 !important;
+    }
+    .submit-row a.deletelink {
+      margin-left: 0 !important;
+      width: 100%;
+      text-align: center;
     }
   }
 </style>
