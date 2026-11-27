@@ -158,18 +158,60 @@ def _parse_director_date_range(request):
     return start_dt, end_dt, start_date, end_date, prev_start_dt, prev_end_dt, period_name, period_days
 
 
+def _days_in_record_month(rec_date, fallback_date: datetime.date) -> int:
+    """Return calendar days in the month of rec_date (date or YYYY-MM-DD str)."""
+    if isinstance(rec_date, (datetime.date, datetime.datetime)):
+        return calendar.monthrange(rec_date.year, rec_date.month)[1]
+    if isinstance(rec_date, str) and len(rec_date) >= 7:
+        try:
+            y, m = int(rec_date[:4]), int(rec_date[5:7])
+            return calendar.monthrange(y, m)[1]
+        except ValueError:
+            pass
+    return calendar.monthrange(fallback_date.year, fallback_date.month)[1]
+
+
+def _calc_attendance_extras(emp, att, base_hourly: float) -> float:
+    """Compute net attendance extras (OT + bag/sales incentives + bike/car/other travel - late deduction)."""
+    ot_hours = float(getattr(att, 'ot_hours', 0.0) or 0.0)
+    ot_pay = ot_hours * (base_hourly * float(getattr(emp, 'overtime_hourly_rate', 0.0) or 0.0))
+
+    late_hours = float(getattr(att, 'late_hours', 0.0) or 0.0)
+    late_deduction = late_hours * (base_hourly * float(getattr(emp, 'late_deduction_rate', 0.0) or 0.0))
+
+    bags = float(getattr(att, 'bags_produced', 0.0) or 0.0)
+    bag_pay = bags * float(getattr(emp, 'bag_incentive_rate', 0.0) or 0.0)
+
+    sales = float(getattr(att, 'sales_achieved', 0.0) or 0.0)
+    sales_incentive = sales * float(getattr(emp, 'sales_incentive_pct', 0.0) or 0.0)
+
+    tv = (getattr(att, 'travel_vehicle', None) or '').upper()
+    km = float(getattr(att, 'km_travelled', 0.0) or 0.0)
+    if tv == 'BIKE':
+        travel_pay = km * float(getattr(emp, 'bike_allowance_per_km', 0.0) or 0.0)
+    elif tv == 'CAR':
+        travel_pay = km * float(getattr(emp, 'car_allowance_per_km', 0.0) or 0.0)
+    elif tv == 'OTHER':
+        travel_pay = float(getattr(att, 'actual_travel_amount', 0.0) or 0.0)
+    else:
+        travel_pay = 0.0
+
+    return ot_pay + bag_pay + sales_incentive + travel_pay - late_deduction
+
+
 def _compute_accurate_payroll(company_id, start_date: datetime.date, end_date: datetime.date):
     """
-    Computes exact payroll liability for [start_date, end_date] matching HR PayrollTab rules:
-      - FIXED staff: monthly salary prorated by exact calendar days in each day's month,
-        minus ABSENT (-1 day) and HALF_DAY (-0.5 day) deductions from DailyAttendance,
-        plus OT pay and bag incentives.
+    Computes exact actual payroll liability for [start_date, end_date] matching HR PayrollTab rules:
+      - FIXED staff: only actual inputted DailyAttendance (PRESENT=1.0, WEEKLY_OFF=1.0, HALF_DAY=0.5)
+        and paid LeaveRecord (FULL_DAY=1.0, HALF_DAY=0.5) multiplied by (base_salary_monthly / days_in_month),
+        plus OT pay, bag/sales incentives, and bike/car/other travel expenses. Days without inputted data count as 0.
       - VARIABLE staff: actual DailyAttendance PRESENT (1.0) + HALF_DAY (0.5) + Paid Leaves
-        multiplied by dailywage, plus OT pay and bag incentives.
-    Returns dict with fixed_payroll, variable_payroll, total_payroll, fixed_count, var_count,
+        multiplied by dailywage, plus OT pay, bag/sales incentives, and bike/car/other travel expenses.
+        Days without inputted data count as 0.
+    Returns dict with fixed_payroll, variable_payroll, total_payroll, fixed_headcount, variable_headcount,
     present_variable_days, labour_by_user_id, labour_by_name.
     """
-    labour_qs = Labour.objects.filter(active=True)
+    labour_qs = Labour.objects.filter(active=True).exclude(employee_type='NONE')
     if company_id:
         labour_qs = labour_qs.filter(companyid_id=company_id)
 
@@ -185,11 +227,8 @@ def _compute_accurate_payroll(company_id, start_date: datetime.date, end_date: d
         if l.name:
             labour_by_name[l.name.strip().lower()] = l
 
-    start_str = start_date.strftime('%Y-%m-%d')
-    end_str = end_date.strftime('%Y-%m-%d')
-
-    # Fetch DailyAttendance records in date range (DailyAttendance.date is CharField 'YYYY-MM-DD' or DateField)
-    att_qs = DailyAttendance.objects.filter(date__gte=start_str, date__lte=end_str)
+    # Fetch DailyAttendance records in date range
+    att_qs = DailyAttendance.objects.filter(date__range=(start_date, end_date))
     if company_id:
         att_qs = att_qs.filter(labourid__companyid_id=company_id)
 
@@ -198,86 +237,61 @@ def _compute_accurate_payroll(company_id, start_date: datetime.date, end_date: d
         att_by_emp.setdefault(att.labourid_id, []).append(att)
 
     # Fetch Paid Leaves in date range
-    leave_qs = LeaveRecord.objects.filter(date__gte=start_str, date__lte=end_str, is_paid=True)
+    leave_qs = LeaveRecord.objects.filter(date__range=(start_date, end_date), is_paid=True)
     if company_id:
         leave_qs = leave_qs.filter(labourid__companyid_id=company_id)
-    paid_leave_by_emp = {}
+    leaves_by_emp = {}
     for lv in leave_qs:
-        val = 0.5 if lv.status == 'HALF_DAY' else 1.0
-        paid_leave_by_emp[lv.labourid_id] = paid_leave_by_emp.get(lv.labourid_id, 0.0) + val
-
-    # Compute exact fractional months covered by [start_date, end_date]
-    # e.g. 1 day in Nov (30 days) = 1/30; full Nov = 30/30 = 1.0; spans Oct+Nov = exact per-month fraction
-    month_day_counts = {}
-    cur = start_date
-    while cur <= end_date:
-        ym = (cur.year, cur.month)
-        month_day_counts[ym] = month_day_counts.get(ym, 0) + 1
-        cur += datetime.timedelta(days=1)
-
-    total_month_fraction = 0.0
-    for (y, m), cnt in month_day_counts.items():
-        dim = calendar.monthrange(y, m)[1]
-        total_month_fraction += (cnt / float(dim))
-
-    # Average days per month in window for single-day absence deduction
-    period_days = max(1, (end_date - start_date).days + 1)
-    avg_dim = period_days / total_month_fraction if total_month_fraction > 0 else 30.0
+        leaves_by_emp.setdefault(lv.labourid_id, []).append(lv)
 
     fixed_payroll = 0.0
     for emp in fixed_staff:
         monthly_sal = float(emp.base_salary_monthly or 0.0)
-        daily_rate = monthly_sal / avg_dim if avg_dim > 0 else (monthly_sal / 30.0)
-        base_hourly = daily_rate / 8.0
+        accrued_base = 0.0
+        extras = 0.0
 
-        emp_att = att_by_emp.get(emp.id, [])
-        absent_days = 0.0
-        ot_hours = 0.0
-        bags = 0.0
-        for a in emp_att:
+        for a in att_by_emp.get(emp.id, []):
+            dim = _days_in_record_month(a.date, start_date)
+            daily_rate = monthly_sal / float(dim)
+            base_hourly = daily_rate / 8.0
+
             st = (a.status or '').upper()
-            if st == 'ABSENT':
-                absent_days += 1.0
+            if st in ('PRESENT', 'WEEKLY_OFF'):
+                accrued_base += daily_rate
             elif st == 'HALF_DAY':
-                absent_days += 0.5
-            ot_hours += float(getattr(a, 'ot_hours', 0.0) or 0.0)
-            bags += float(getattr(a, 'bags_produced', 0.0) or 0.0)
+                accrued_base += 0.5 * daily_rate
 
-        # Deduct unpaid absences (offset by paid leave if any)
-        paid_lv = paid_leave_by_emp.get(emp.id, 0.0)
-        net_unpaid_absent = max(0.0, absent_days - paid_lv)
+            extras += _calc_attendance_extras(emp, a, base_hourly)
 
-        accrued_base = max(0.0, (monthly_sal * total_month_fraction) - (net_unpaid_absent * daily_rate))
-        ot_pay = ot_hours * (base_hourly * float(getattr(emp, 'overtime_hourly_rate', 0.0) or 0.0))
-        bag_pay = bags * float(getattr(emp, 'bag_incentive_rate', 0.0) or 0.0)
-        fixed_payroll += (accrued_base + ot_pay + bag_pay)
+        for lv in leaves_by_emp.get(emp.id, []):
+            dim = _days_in_record_month(lv.date, start_date)
+            daily_rate = monthly_sal / float(dim)
+            val = 0.5 if (lv.status or '').upper() == 'HALF_DAY' else 1.0
+            accrued_base += val * daily_rate
+
+        fixed_payroll += max(0.0, accrued_base + extras)
 
     variable_payroll = 0.0
     present_var_days = 0.0
     for emp in var_staff:
         daily_wage = float(getattr(emp, 'dailywage', 0.0) or 0.0)
         base_hourly = daily_wage / 8.0
-        emp_att = att_by_emp.get(emp.id, [])
 
         payable_days = 0.0
-        ot_hours = 0.0
-        bags = 0.0
-        for a in emp_att:
+        extras = 0.0
+        for a in att_by_emp.get(emp.id, []):
             st = (a.status or '').upper()
             if st == 'PRESENT':
                 payable_days += 1.0
             elif st == 'HALF_DAY':
                 payable_days += 0.5
-            ot_hours += float(getattr(a, 'ot_hours', 0.0) or 0.0)
-            bags += float(getattr(a, 'bags_produced', 0.0) or 0.0)
+            extras += _calc_attendance_extras(emp, a, base_hourly)
 
-        payable_days += paid_leave_by_emp.get(emp.id, 0.0)
+        for lv in leaves_by_emp.get(emp.id, []):
+            payable_days += 0.5 if (lv.status or '').upper() == 'HALF_DAY' else 1.0
         present_var_days += payable_days
 
-        wages = payable_days * daily_wage
-        ot_pay = ot_hours * (base_hourly * float(getattr(emp, 'overtime_hourly_rate', 0.0) or 0.0))
-        bag_pay = bags * float(getattr(emp, 'bag_incentive_rate', 0.0) or 0.0)
-        variable_payroll += (wages + ot_pay + bag_pay)
+        variable_payroll += max(0.0, (payable_days * daily_wage) + extras)
 
     return {
         'fixed_payroll': round(fixed_payroll, 2),

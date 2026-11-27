@@ -831,6 +831,131 @@ class OfflineTravelSyncTests(TenantAwareTestCase):
         self.assertEqual(end_res.json()['data']['total_km'], 60.0)
 
 
+class DirectorPayrollAccuracyTests(TenantAwareTestCase):
+    def setUp(self):
+        super().setUp()
+        from api.models import Labour
+        self.fixed_emp = Labour.objects.create(
+            name="Fixed Staff",
+            employee_type="FIXED",
+            base_salary_monthly=30000.0,
+            dailywage=0.0,
+            overtime_hourly_rate=1.0,
+            bag_incentive_rate=5.0,
+            sales_incentive_pct=0.02,
+            bike_allowance_per_km=4.0,
+            car_allowance_per_km=10.0,
+            active=True,
+            companyid=self.company,
+        )
+        self.var_emp = Labour.objects.create(
+            name="Variable Staff",
+            employee_type="VARIABLE",
+            base_salary_monthly=0.0,
+            dailywage=500.0,
+            overtime_hourly_rate=1.0,
+            bag_incentive_rate=2.0,
+            sales_incentive_pct=0.01,
+            bike_allowance_per_km=3.0,
+            car_allowance_per_km=8.0,
+            active=True,
+            companyid=self.company,
+        )
+
+    def test_no_attendance_inputted_counts_zero(self):
+        import datetime
+        from api.views_director import _compute_accurate_payroll
+        res = _compute_accurate_payroll(
+            self.company.id,
+            datetime.date(2026, 11, 27),
+            datetime.date(2026, 11, 27),
+        )
+        self.assertEqual(res['fixed_payroll'], 0.0)
+        self.assertEqual(res['variable_payroll'], 0.0)
+        self.assertEqual(res['total_payroll'], 0.0)
+        self.assertEqual(res['fixed_headcount'], 1)
+        self.assertEqual(res['variable_headcount'], 1)
+
+    def test_actual_attendance_and_paid_leaves_counted_accurately(self):
+        import datetime
+        from api.models import DailyAttendance, LeaveRecord
+        from api.views_director import _compute_accurate_payroll
+
+        # Nov 2026 has 30 days -> Fixed daily_rate = 30000 / 30 = 1000/day, base_hourly = 125/hr
+        DailyAttendance.objects.create(
+            labourid=self.fixed_emp,
+            date=datetime.date(2026, 11, 1),
+            status='PRESENT',
+            ot_hours=2.0,           # 2 * 125 = 250
+            bags_produced=10.0,     # 10 * 5 = 50
+            sales_achieved=10000.0, # 10000 * 0.02 = 200
+            travel_vehicle='BIKE',
+            km_travelled=20.0,      # 20 * 4 = 80
+        )
+        DailyAttendance.objects.create(
+            labourid=self.fixed_emp,
+            date=datetime.date(2026, 11, 2),
+            status='HALF_DAY',      # 500
+            travel_vehicle='CAR',
+            km_travelled=15.0,      # 15 * 10 = 150
+        )
+        DailyAttendance.objects.create(
+            labourid=self.fixed_emp,
+            date=datetime.date(2026, 11, 3),
+            status='WEEKLY_OFF',    # 1000
+        )
+        DailyAttendance.objects.create(
+            labourid=self.fixed_emp,
+            date=datetime.date(2026, 11, 4),
+            status='ABSENT',        # 0
+            travel_vehicle='OTHER',
+            actual_travel_amount=120.0,  # 120
+        )
+        # Paid leave on Nov 5 (half day) -> 500
+        LeaveRecord.objects.create(
+            labourid=self.fixed_emp,
+            date=datetime.date(2026, 11, 5),
+            is_paid=True,
+            status='HALF_DAY',
+        )
+        # Days 6..30 have no data inputted -> 0
+
+        # Variable: 1 PRESENT (500 + 100 sales incentive + 30 bike) + 1 HALF_DAY (250 + 80 other) + 1 paid FULL_DAY leave (500) = 1460
+        DailyAttendance.objects.create(
+            labourid=self.var_emp,
+            date=datetime.date(2026, 11, 1),
+            status='PRESENT',
+            sales_achieved=10000.0, # 10000 * 0.01 = 100
+            travel_vehicle='BIKE',
+            km_travelled=10.0,      # 10 * 3 = 30
+        )
+        DailyAttendance.objects.create(
+            labourid=self.var_emp,
+            date=datetime.date(2026, 11, 2),
+            status='HALF_DAY',
+            travel_vehicle='OTHER',
+            actual_travel_amount=80.0,
+        )
+        LeaveRecord.objects.create(
+            labourid=self.var_emp,
+            date=datetime.date(2026, 11, 3),
+            is_paid=True,
+            status='FULL_DAY',
+        )
+
+        res = _compute_accurate_payroll(
+            self.company.id,
+            datetime.date(2026, 11, 1),
+            datetime.date(2026, 11, 30),
+        )
+        # Fixed: (1000 + 250 + 50 + 200 + 80) + (500 + 150) + 1000 + 120 + 500 = 3850.0
+        self.assertEqual(res['fixed_payroll'], 3850.0)
+        # Variable: (500 + 100 + 30) + (250 + 80) + 500 = 1460.0
+        self.assertEqual(res['variable_payroll'], 1460.0)
+        self.assertEqual(res['total_payroll'], 5310.0)
+
+
+
 
 
 
