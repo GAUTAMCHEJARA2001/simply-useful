@@ -70,4 +70,27 @@ describe('order.adapter test', () => {
     expect(result.totals.taxAmount).toBe(220);
     expect(result.totals.grandTotal).toBe(3720);
   });
+
+  it('should group and sum items with the same GST rate into separate tax summary rows', () => {
+    const rawOrder = {
+      order_id: 'ORD-MULTI',
+      party: { name: 'Test', gst: '24AAAAA0000A1Z5' },
+      items: [
+        { productName: 'A (5%)', qty: 2, rate: 500, tax_percent: 5 },
+        { productName: 'B (5%)', qty: 1, rate: 1000, tax_percent: 5 },
+        { productName: 'C (12%)', qty: 1, rate: 1000, tax_percent: 12 },
+        { productName: 'D (12%)', qty: 2, rate: 500, tax_percent: 12 },
+      ],
+    };
+    const result = adaptOrderToPrintable(rawOrder, { name: 'Co', gst: '27BBBBB0000B1Z6' }, 'SALES ORDER');
+    expect(result.taxes).toHaveLength(2);
+    const gst5 = result.taxes.find(t => t.taxPercent === 5);
+    const gst12 = result.taxes.find(t => t.taxPercent === 12);
+    expect(gst5?.taxableValue).toBe(2000);
+    expect(gst5?.igstAmount).toBe(100);
+    expect(gst12?.taxableValue).toBe(2000);
+    expect(gst12?.igstAmount).toBe(240);
+    expect(result.totals.taxAmount).toBe(340);
+    expect(result.totals.grandTotal).toBe(4340);
+  });
 });

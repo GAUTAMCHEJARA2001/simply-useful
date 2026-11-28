@@ -651,14 +651,19 @@ class OrderitemSerializer(serializers.ModelSerializer):
                         'productCode': p.productcode,
                         'name': p.name,
                         'productName': p.name,
+                        'gst': float(p.gst) if p.gst is not None else 18.0,
                     }
             except Exception:
                 pass
 
         if 'tax_percent' not in ret or ret.get('tax_percent') is None:
-            prod_gst = None
-            if hasattr(instance, 'productid') and instance.productid:
-                prod_gst = getattr(instance.productid, 'gst', None)
+            prod_gst = ret['product'].get('gst') if isinstance(ret.get('product'), dict) else None
+            if prod_gst is None:
+                try:
+                    if instance.productid_id and instance.productid:
+                        prod_gst = getattr(instance.productid, 'gst', None)
+                except Exception:
+                    prod_gst = None
             ret['tax_percent'] = float(prod_gst) if prod_gst is not None else 18.0
 
         return ret
