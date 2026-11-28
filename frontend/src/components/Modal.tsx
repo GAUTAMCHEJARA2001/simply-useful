@@ -2,12 +2,24 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 
+const MODAL_SIZE_MAP = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
+  '3xl': 'max-w-3xl',
+  '4xl': 'max-w-4xl',
+  full: 'max-w-6xl',
+} as const;
+
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   maxWidth?: string;
+  size?: keyof typeof MODAL_SIZE_MAP;
 }
 
 export const Modal: React.FC<ModalProps> = ({ 
@@ -15,8 +27,10 @@ export const Modal: React.FC<ModalProps> = ({
   onClose, 
   title, 
   children, 
-  maxWidth = 'max-w-2xl' 
+  maxWidth,
+  size
 }) => {
+  const resolvedMaxWidth = maxWidth || (size ? MODAL_SIZE_MAP[size] : 'max-w-2xl');
   return (
     <AnimatePresence>
       {isOpen && (
@@ -25,7 +39,7 @@ export const Modal: React.FC<ModalProps> = ({
             initial={{ scale: 0.95, opacity: 0 }} 
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className={`bg-card border border-border rounded-2xl shadow-2xl w-full ${maxWidth} max-h-[90vh] overflow-y-auto`}
+            className={`bg-card border border-border rounded-2xl shadow-2xl w-full ${resolvedMaxWidth} max-h-[90vh] overflow-y-auto`}
           >
             <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-card z-10">
               <h2 className="text-lg font-bold">{title}</h2>
