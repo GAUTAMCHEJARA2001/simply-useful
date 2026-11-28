@@ -362,7 +362,8 @@ export const PurchaseOrdersTab: React.FC = () => {
                     qty: it.quantity || it.qty || 0,
                     unit: 'Bags',
                     rate: it.rate || 0,
-                    total: it.line_total || it.lineTotal || (it.quantity * it.rate * (1 + it.tax_percent / 100)),
+                    tax_percent: it.tax_percent ?? it.taxPercent ?? it.gst ?? (typeof it.product === 'object' && it.product ? (it.product as any).gst : undefined) ?? 0,
+                    total: it.line_total || it.lineTotal || (it.quantity * it.rate * (1 + (it.tax_percent ?? 0) / 100)),
                     remark: it.remark || ''
                   }))
                 }}

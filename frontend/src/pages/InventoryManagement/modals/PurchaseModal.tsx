@@ -157,7 +157,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({ isOpen, onClose, p
                     productId: it.product_id || it.productId || '',
                     quantity: numberInputValue(it.quantity ?? it.qty),
                     rate: numberInputValue(it.rate),
-                    tax_percent: numberInputValue(it.tax_percent ?? it.taxPercent) || 18,
+                    tax_percent: it.tax_percent ?? it.taxPercent ?? 18,
                     remark: it.remark || ''
                   }))
                 });

@@ -105,7 +105,15 @@ export const adaptOrderToPrintable = (
   const items: PrintableInvoiceItem[] = rawItems.map((i: any, idx: number) => {
     const qty = Number(i.qty || i.quantity || 0) || 0;
     const rate = Number(i.price || i.rate || 0) || 0;
-    const taxPercent = Number(i.tax_percent || i.taxPercent || 18); // Default 18% standard GST
+    const rawTax =
+      i.tax_percent ??
+      i.taxPercent ??
+      i.tax_rate ??
+      i.taxRate ??
+      i.gst ??
+      (i.product && typeof i.product === 'object' ? (i.product as any).gst : undefined);
+    const parsedTax = rawTax !== undefined && rawTax !== null && rawTax !== '' ? Number(rawTax) : NaN;
+    const taxPercent = Number.isFinite(parsedTax) ? parsedTax : 18;
     const discountPercent = Number(i.discount_percent || i.discountPercent || 0) || 0;
 
     // Apply strict GST math via services

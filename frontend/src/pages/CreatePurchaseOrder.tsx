@@ -213,7 +213,8 @@ const CreatePurchaseOrder: React.FC = () => {
                   grandTotal: submittedPO.net_amount,
                 },
                 items: items.map(it => {
-                  const u = products.find(p => p.id === it.product_id)?.unit;
+                  const matchedProd = products.find(p => p.id === it.product_id);
+                  const u = matchedProd?.unit;
                   const unitStr = u?.name || (typeof u === 'string' ? u : '') || 'Bags';
                   return {
                     product_id: it.product_id,
@@ -221,6 +222,7 @@ const CreatePurchaseOrder: React.FC = () => {
                     qty: it.quantity,
                     unit: unitStr,
                     rate: it.rate,
+                    tax_percent: it.tax_percent ?? matchedProd?.gst ?? 0,
                     total: it.line_total,
                     remark: it.remark
                   };

@@ -35,4 +35,39 @@ describe('order.adapter test', () => {
     expect(result.customer.shippingState).toBe('Rajasthan');
     expect(result.customer.shippingStateCode).toBe('08');
   });
+
+  it('should calculate product-wise GST (5%, 0%, and nested product.gst) instead of hardcoding 18%', () => {
+    const rawOrder = {
+      order_id: 'ORD-005',
+      party: {
+        name: 'Test Dealer',
+        gst: '24AAAAA0000A1Z5',
+      },
+      items: [
+        { productName: 'Item 5%', qty: 2, rate: 1000, tax_percent: 5 },
+        { productName: 'Item 0%', qty: 1, rate: 500, tax_percent: 0 },
+        { productName: 'Item Product GST 12%', qty: 1, rate: 1000, product: { gst: 12 } },
+      ],
+    };
+    const companyInfo = {
+      name: 'KAMLA',
+      gst: '24BBBBB0000B1Z6',
+    };
+
+    const result = adaptOrderToPrintable(rawOrder, companyInfo, 'SALES ORDER');
+    expect(result.items[0].taxPercent).toBe(5);
+    expect(result.items[0].taxAmount).toBe(100);
+    expect(result.items[0].total).toBe(2100);
+
+    expect(result.items[1].taxPercent).toBe(0);
+    expect(result.items[1].taxAmount).toBe(0);
+    expect(result.items[1].total).toBe(500);
+
+    expect(result.items[2].taxPercent).toBe(12);
+    expect(result.items[2].taxAmount).toBe(120);
+    expect(result.items[2].total).toBe(1120);
+
+    expect(result.totals.taxAmount).toBe(220);
+    expect(result.totals.grandTotal).toBe(3720);
+  });
 });

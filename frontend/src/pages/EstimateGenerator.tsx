@@ -131,12 +131,13 @@ const EstimateGenerator: React.FC = () => {
       items: items.filter(i => i.product && (i.qty || 0) > 0).map(i => {
         const prodId = typeof i.product === 'object' ? (i.product as any)?.id : i.product;
         const prod = products.find(p => p.id === prodId);
+        const prodGst = prod?.gst !== undefined && prod?.gst !== null ? Number(prod.gst) : 18;
         return {
           ...i,
           productName: prod?.name || 'Unknown Product',
           productCode: prod?.productCode || 'PRD',
-          taxPercent: prod?.gst || 18,
-          tax_percent: prod?.gst || 18
+          taxPercent: prodGst,
+          tax_percent: prodGst
         }
       }),
       grandTotal: grandTotal,

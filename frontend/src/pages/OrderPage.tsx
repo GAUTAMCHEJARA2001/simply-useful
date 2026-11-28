@@ -395,7 +395,15 @@ const OrderPage: React.FC = () => {
               date: new Date().toISOString().split('T')[0],
               partyName: selectedParty,
               grandTotal: grandTotal,
-              items: items.filter(i => i.product)
+              items: items.filter(i => i.product).map(i => {
+                const prod = productsById.get(i.product);
+                return {
+                  ...i,
+                  productName: prod?.productName || i.product,
+                  productCode: prod?.productCode || '',
+                  tax_percent: prod?.gst !== undefined && prod?.gst !== null ? Number(prod.gst) : 18,
+                };
+              })
             }}
             filename={`Order_${id}.pdf`}
             buttonLabel="Print Sales Order"
@@ -871,7 +879,15 @@ const OrderPage: React.FC = () => {
                   date: new Date().toISOString().split('T')[0],
                   partyName: selectedParty,
                   grandTotal: grandTotal,
-                  items: items.filter(i => i.product)
+                  items: items.filter(i => i.product).map(i => {
+                const prod = productsById.get(i.product);
+                return {
+                  ...i,
+                  productName: prod?.productName || i.product,
+                  productCode: prod?.productCode || '',
+                  tax_percent: prod?.gst !== undefined && prod?.gst !== null ? Number(prod.gst) : 18,
+                };
+              })
                 }}
                 filename={`Order_${id || 'New'}.pdf`}
                 buttonLabel="Preview PDF"

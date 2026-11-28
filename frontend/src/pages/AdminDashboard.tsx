@@ -1006,9 +1006,11 @@ const AdminDashboard: React.FC = () => {
                             },
                             items: (o.items || []).map((it: any) => ({
                               product_name: it.productName || it.product_name || (typeof it.product === 'object' && it.product ? (it.product as any).name || (it.product as any).productName : it.product),
+                              productCode: it.productCode || it.product_code || (typeof it.product === 'object' && it.product ? (it.product as any).productCode : undefined),
                               qty: it.qty,
                               unit: it.unit || 'Bags',
                               rate: it.price || it.rate || 0,
+                              tax_percent: it.tax_percent ?? it.taxPercent ?? it.gst ?? (typeof it.product === 'object' && it.product ? (it.product as any).gst : undefined),
                               total: it.total || (it.qty * (it.price || it.rate || 0)),
                               remark: it.item_remark || it.remark
                             })),
@@ -1509,9 +1511,11 @@ const AdminDashboard: React.FC = () => {
                   },
                   items: (confirmOrder.order.items || []).map((it: any) => ({
                     product_name: it.productName || it.product_name || (typeof it.product === 'object' && it.product ? (it.product as any).name || (it.product as any).productName : it.product),
+                    productCode: it.productCode || it.product_code || (typeof it.product === 'object' && it.product ? (it.product as any).productCode : undefined),
                     qty: it.qty,
                     unit: it.unit || 'Bags',
                     rate: it.price || it.rate || 0,
+                    tax_percent: it.tax_percent ?? it.taxPercent ?? it.gst ?? (typeof it.product === 'object' && it.product ? (it.product as any).gst : undefined),
                     total: it.total || (it.qty * (it.price || it.rate || 0)),
                     remark: it.item_remark || it.remark
                   })),

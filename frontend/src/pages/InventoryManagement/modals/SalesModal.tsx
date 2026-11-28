@@ -135,7 +135,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         productId: it.productId || it.product_id || it.productid_id || it.product?.id || '',
         quantity: it.qty || 0,
         rate: it.price || 0,
-        tax_percent: it.tax_percent || 18,
+        tax_percent: it.tax_percent ?? it.taxPercent ?? 18,
         returnedQty: it.returnedQty || 0,
         itemRemark: it.itemRemark || it.item_remark || it.remark || ''
       }));
@@ -209,7 +209,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         ...updated[index],
         productId: value,
         rate: selectedProd ? selectedProd.rate || 0 : 0,
-        tax_percent: selectedProd ? selectedProd.gst || 18 : 18
+        tax_percent: selectedProd && selectedProd.gst !== undefined && selectedProd.gst !== null ? Number(selectedProd.gst) : 18
       };
     } else {
       updated[index] = { ...updated[index], [field]: value };
@@ -245,7 +245,7 @@ export const SalesModal: React.FC<SalesModalProps> = ({ isOpen, onClose, sale, r
         qty: it.quantity,
         price: it.rate,
         total: (it.quantity || 0) * (it.rate || 0),
-        tax_percent: it.tax_percent || 18,
+        tax_percent: it.tax_percent ?? it.taxPercent ?? 18,
         returnedQty: it.returnedQty || 0,
         itemRemark: it.itemRemark || ''
       }));
